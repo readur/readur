@@ -1,0 +1,35 @@
+.mark {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--s-2);
+  white-space: nowrap;
+  line-height: 1;
+  border-radius: var(--radius-pill);
+}
+
+.glyph {
+  flex: none;
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.word {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm { height: 20px; font-size: var(--fs-xs); }
+.md { height: 22px; font-size: var(--fs-xs); }
+
+.neutral { color: var(--fg-2); background: var(--surface-sunken); }
+.active { color: var(--accent); background: var(--accent-soft); }
+.ok { color: var(--ok); background: var(--ok-soft); }
+.warn { color: var(--warn); background: var(--warn-soft); }
+.danger { color: var(--danger); background: var(--danger-soft); }

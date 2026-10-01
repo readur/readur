@@ -1,0 +1,51 @@
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--s-3);
+  display: inline-flex;
+  color: var(--fg-meta);
+  pointer-events: none;
+}
+
+.input {
+  padding-left: 36px;
+  padding-right: 40px;
+}
+
+/* Hide the native clear affordance; we render our own button. */
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear {
+  position: absolute;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-meta);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.clear[data-hovered] {
+  color: var(--fg);
+}
+
+.clear[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* RAC marks the field empty; hide the clear button then. */
+.field[data-empty] .clear {
+  display: none;
+}

@@ -4,10 +4,12 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
 use serde_json;
+use ts_rs::TS;
 
 use super::responses::DocumentResponse;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema, TS)]
+#[ts(export)]
 pub enum SourceType {
     #[serde(rename = "webdav")]
     WebDAV,
@@ -40,7 +42,8 @@ impl TryFrom<String> for SourceType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum SourceStatus {
     #[serde(rename = "idle")]
     Idle,
@@ -73,7 +76,8 @@ impl TryFrom<String> for SourceStatus {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct Source {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -103,7 +107,8 @@ pub struct Source {
     pub validation_issues: Option<String>, // JSON array of validation issues
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceResponse {
     pub id: Uuid,
     pub name: String,
@@ -136,7 +141,8 @@ pub struct SourceResponse {
     pub validation_issues: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateSource {
     pub name: String,
     pub source_type: SourceType,
@@ -144,21 +150,24 @@ pub struct CreateSource {
     pub config: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateSource {
     pub name: Option<String>,
     pub enabled: Option<bool>,
     pub config: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceWithStats {
     pub source: SourceResponse,
     pub recent_documents: Vec<DocumentResponse>,
     pub sync_progress: Option<f32>,
 }
 
-#[derive(Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVSourceConfig {
     pub server_url: String,
     pub username: String,
@@ -170,7 +179,8 @@ pub struct WebDAVSourceConfig {
     pub server_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct LocalFolderSourceConfig {
     pub watch_folders: Vec<String>,
     pub file_extensions: Vec<String>,
@@ -180,7 +190,8 @@ pub struct LocalFolderSourceConfig {
     pub follow_symlinks: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct S3SourceConfig {
     pub bucket_name: String,
     pub region: String,
@@ -199,7 +210,8 @@ pub struct S3SourceConfig {
 }
 
 // WebDAV-related structs
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVFolderInfo {
     pub path: String,
     pub total_files: i64,
@@ -208,7 +220,8 @@ pub struct WebDAVFolderInfo {
     pub total_size_mb: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVCrawlEstimate {
     pub folders: Vec<WebDAVFolderInfo>,
     pub total_files: i64,
@@ -217,7 +230,8 @@ pub struct WebDAVCrawlEstimate {
     pub total_size_mb: f64,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct WebDAVTestConnection {
     pub server_url: String,
     pub username: String,
@@ -225,7 +239,8 @@ pub struct WebDAVTestConnection {
     pub server_type: Option<String>, // "nextcloud", "owncloud", "generic"
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVConnectionResult {
     pub success: bool,
     pub message: String,
@@ -233,7 +248,8 @@ pub struct WebDAVConnectionResult {
     pub server_type: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVSyncStatus {
     pub is_running: bool,
     pub last_sync: Option<DateTime<Utc>>,
@@ -330,7 +346,8 @@ pub struct UpdateWebDAVDirectory {
 
 // WebDAV Scan Failure Tracking Models
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum WebDAVScanFailureType {
     Timeout,
@@ -385,7 +402,8 @@ impl TryFrom<String> for WebDAVScanFailureType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum WebDAVScanFailureSeverity {
     Low,
@@ -419,7 +437,8 @@ impl TryFrom<String> for WebDAVScanFailureSeverity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVScanFailure {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -474,7 +493,8 @@ pub struct WebDAVScanFailure {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CreateWebDAVScanFailure {
     pub user_id: Uuid,
     pub directory_path: String,
@@ -490,7 +510,8 @@ pub struct CreateWebDAVScanFailure {
     pub estimated_item_count: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVScanFailureResponse {
     pub id: Uuid,
     pub directory_path: String,
@@ -509,7 +530,8 @@ pub struct WebDAVScanFailureResponse {
     pub diagnostic_summary: WebDAVFailureDiagnostics,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct WebDAVFailureDiagnostics {
     pub path_length: Option<i32>,
     pub directory_depth: Option<i32>,
@@ -523,7 +545,8 @@ pub struct WebDAVFailureDiagnostics {
 }
 
 // Notification-related structs
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct Notification {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -536,7 +559,8 @@ pub struct Notification {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CreateNotification {
     pub notification_type: String,
     pub title: String,
@@ -545,7 +569,8 @@ pub struct CreateNotification {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct NotificationSummary {
     pub unread_count: i64,
     pub recent_notifications: Vec<Notification>,

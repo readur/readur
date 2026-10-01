@@ -1,0 +1,270 @@
+/*
+ * The text pane: toolbar on top, the text scrolling beneath it, a quiet stats line at the foot.
+ * The pane has a fixed height from the reading area, so only the text scrolls.
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  margin-left: auto;
+}
+
+/* Find: field, count and previous/next as one control. */
+
+.find {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+  max-width: 420px;
+  min-width: 0;
+  height: 32px;
+  padding-left: var(--s-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--fg-meta);
+}
+
+.find:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.findIcon {
+  display: inline-flex;
+  flex: none;
+  font-size: 16px;
+}
+
+.findInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--s-2);
+  font: inherit;
+  font-size: var(--fs-md);
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.findInput::placeholder {
+  color: var(--fg-meta);
+}
+
+/* The browser's own clear button would duplicate ours. */
+.findInput::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.readout {
+  flex: none;
+  padding: 0 var(--s-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.readout:empty {
+  display: none;
+}
+
+.find[data-empty] .readout {
+  color: var(--fg-meta);
+}
+
+.findDivider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+}
+
+.findButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 18px;
+  color: var(--fg-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.findButton[data-hovered] {
+  color: var(--fg);
+  background: var(--surface-sunken);
+}
+
+.findButton[data-disabled] {
+  color: var(--fg-meta);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.findButton[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The text itself. */
+
+.scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: var(--s-6);
+}
+
+.scroller:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.prose {
+  max-width: 72ch;
+  margin: 0 auto;
+  padding: var(--s-5) var(--s-5) var(--s-6);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+  hyphens: manual;
+}
+
+.prose p {
+  margin: 0 0 0.85em;
+  white-space: pre-wrap;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.mono {
+  max-width: 88ch;
+  font-family: var(--font-data);
+  font-size: 13px;
+  line-height: 1.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.mark {
+  padding: 0 1px;
+  color: var(--fg);
+  background: var(--warn-soft);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--warn-soft);
+}
+
+.mark[data-current='true'] {
+  box-shadow: 0 0 0 2px var(--warn);
+}
+
+.stats {
+  flex: none;
+  margin: 0;
+  padding: var(--s-2) var(--s-4);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-meta);
+  border-top: 1px solid var(--line);
+}
+
+.notice {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin: 0;
+  padding: var(--s-5);
+  color: var(--fg-2);
+}
+
+.notice p {
+  margin: 0;
+  max-width: 60ch;
+}
+
+.raw {
+  max-width: 100%;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.raw summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.raw summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.raw pre {
+  margin: var(--s-2) 0 0;
+  padding: var(--s-3);
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 719px) {
+  .toolbar {
+    padding: var(--s-2);
+  }
+
+  .find {
+    flex-basis: 100%;
+    max-width: none;
+    height: 44px;
+  }
+
+  .findButton {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .prose {
+    padding: var(--s-4);
+  }
+}

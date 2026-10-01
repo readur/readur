@@ -6,9 +6,11 @@ use std::fmt;
 use uuid::Uuid;
 use anyhow::Result;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 /// Generic source types that can be monitored for errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type, ToSchema, TS)]
+#[ts(export)]
 #[sqlx(type_name = "source_error_source_type", rename_all = "lowercase")]
 pub enum ErrorSourceType {
     #[sqlx(rename = "webdav")]
@@ -39,7 +41,8 @@ impl fmt::Display for ErrorSourceType {
 }
 
 /// Generic error types that can occur across all source types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema, TS)]
+#[ts(export)]
 #[sqlx(type_name = "source_error_type", rename_all = "lowercase")]
 pub enum SourceErrorType {
     #[sqlx(rename = "timeout")]
@@ -103,7 +106,8 @@ impl fmt::Display for SourceErrorType {
 }
 
 /// Error severity levels for determining retry strategy and user notification priority
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema, TS)]
+#[ts(export)]
 #[sqlx(type_name = "source_error_severity", rename_all = "lowercase")]
 pub enum SourceErrorSeverity {
     #[sqlx(rename = "low")]
@@ -233,7 +237,8 @@ pub struct CreateSourceScanFailure {
 }
 
 /// Response model for API endpoints with enhanced diagnostics
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceScanFailureResponse {
     pub id: Uuid,
     pub source_type: ErrorSourceType,
@@ -255,7 +260,8 @@ pub struct SourceScanFailureResponse {
 }
 
 /// Diagnostic information for helping users understand and resolve failures
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceFailureDiagnostics {
     pub resource_depth: Option<i32>,
     pub estimated_item_count: Option<i32>,
@@ -359,7 +365,8 @@ impl ErrorContext {
 }
 
 /// Statistics for source scan failures
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SourceScanFailureStats {
     pub active_failures: i64,
     pub resolved_failures: i64,
@@ -374,14 +381,16 @@ pub struct SourceScanFailureStats {
 }
 
 /// Request model for retrying a failed resource
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct RetryFailureRequest {
     pub reset_consecutive_count: Option<bool>,
     pub notes: Option<String>,
 }
 
 /// Request model for excluding a resource from scanning
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct ExcludeResourceRequest {
     pub reason: String,
     pub notes: Option<String>,
@@ -389,7 +398,8 @@ pub struct ExcludeResourceRequest {
 }
 
 /// Query parameters for listing failures
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct ListFailuresQuery {
     pub source_type: Option<ErrorSourceType>,
     pub source_id: Option<Uuid>,

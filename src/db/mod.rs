@@ -20,6 +20,7 @@ pub mod comments;
 pub mod api_keys;
 pub mod auth_ephemeral;
 pub mod server_secrets;
+pub mod arrivals;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DatabasePoolHealth {

@@ -164,7 +164,6 @@ mod tests {
     }
 }
 
-
 /// Simplified test context with individual database per test
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestContext {
@@ -409,7 +408,7 @@ impl TestContext {
             return Ok(());
         }
         
-        println!("Found {} test users to clean up", test_user_ids.len());
+        println!("Cleaning up test user data");
         
         // For performance tests, we can safely truncate global tables since they're test-only
         let global_truncate_queries = vec![
@@ -439,7 +438,7 @@ impl TestContext {
             return Ok(());
         }
         
-        println!("Found {} test users to clean up", test_user_ids.len());
+        println!("Cleaning up test user data");
         
         // Clean up global test data first
         let global_cleanup_queries = vec![
@@ -469,18 +468,18 @@ impl TestContext {
             return Ok(());
         }
         
-        println!("Found {} test users to clean up", test_user_ids.len());
-        
-        // Count records before cleanup for reporting
-        let counts_before = self.count_test_records(&test_user_ids).await;
-        println!("Records before cleanup: {:?}", counts_before);
+        println!("Cleaning up test user data");
         
         // Clean up with detailed progress tracking
         self.cleanup_user_specific_data_with_progress(&test_user_ids).await?;
         
         // Verify cleanup completed
         let counts_after = self.count_test_records(&test_user_ids).await;
-        println!("Records after cleanup: {:?}", counts_after);
+        if counts_after.values().all(|count| *count == 0) {
+            println!("Cleanup verified: no test records remain");
+        } else {
+            println!("Cleanup incomplete: some test records remain");
+        }
         
         Ok(())
     }
@@ -493,7 +492,7 @@ impl TestContext {
         match tokio::time::timeout(std::time::Duration::from_secs(10), 
                                    sqlx::query_scalar::<_, String>(query).fetch_all(self.state.db.get_pool())).await {
             Ok(Ok(user_ids)) => {
-                println!("Retrieved {} test user IDs in {:?}", user_ids.len(), start_time.elapsed());
+                println!("Retrieved test user IDs in {:?}", start_time.elapsed());
                 Ok(user_ids)
             }
             Ok(Err(e)) => {
@@ -808,7 +807,7 @@ impl TestConfigBuilder {
         self
     }
     
-    fn build(self, database_url: String) -> crate::config::Config {
+    pub(crate) fn build(self, database_url: String) -> crate::config::Config {
         crate::config::Config {
             database_url,
             server_address: "127.0.0.1:0".to_string(),

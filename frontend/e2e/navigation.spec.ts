@@ -1,79 +1,74 @@
 import { test, expect } from './fixtures/auth';
-import { TestHelpers } from './utils/test-helpers';
+
+/** `heading: null` means the page names itself (Home greets, Search shows the query). */
+const DESTINATIONS: { name: string; path: string; heading: string | null }[] = [
+  { name: 'Home', path: '/home', heading: null },
+  { name: 'Search', path: '/search', heading: null },
+  { name: 'Library', path: '/documents', heading: 'Library' },
+  { name: 'Intake', path: '/intake', heading: 'Intake' },
+  { name: 'Settings', path: '/settings', heading: 'Settings' },
+];
+
+const title = (page: import('@playwright/test').Page, heading: string | null) =>
+  heading ? page.getByRole('heading', { level: 1, name: heading }) : page.getByRole('heading', { level: 1 });
 
 test.describe('Navigation', () => {
-  let helpers: TestHelpers;
+  test('should reach every destination after login', async ({ dynamicAdminPage: page }) => {
+    for (const d of DESTINATIONS) {
+      await page.goto(d.path);
+      await expect(title(page, d.heading)).toBeVisible();
+      // Exactly one page title per destination
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    }
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
+    // The upload section has a file input behind its "Choose files" button
+    await page.goto('/intake?section=upload');
+    await expect(page.locator('input[type="file"]')).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Choose files' }).first()).toBeVisible();
   });
 
-  test('should check available routes after login', async ({ dynamicAdminPage: page }) => {
-    // Check current URL after login
-    console.log('Current URL after login:', page.url());
-    
-    // Try to navigate to various pages and see what works
-    const routes = ['/dashboard', '/upload', '/search', '/documents', '/sources', '/settings'];
-    
-    for (const route of routes) {
-      console.log(`\nTesting route: ${route}`);
-      
-      try {
-        await page.goto(route);
-        await page.waitForLoadState('networkidle', { timeout: 5000 });
-        
-        const title = await page.title();
-        const currentUrl = page.url();
-        console.log(`✅ ${route} -> ${currentUrl} (title: ${title})`);
-        
-        // Check if there are any obvious error messages
-        const errorElements = page.locator(':has-text("Error"), :has-text("Not found"), :has-text("404")');
-        const hasError = await errorElements.count() > 0;
-        if (hasError) {
-          console.log(`⚠️  Possible error on ${route}`);
-        }
-        
-        // Check for file input on upload page
-        if (route === '/upload') {
-          const fileInputs = await page.locator('input[type="file"]').count();
-          const dropzones = await page.locator(':has-text("Drag"), :has-text("Choose"), [role="button"]').count();
-          console.log(`  File inputs: ${fileInputs}, Dropzones: ${dropzones}`);
-          
-          // Get page content for debugging
-          const bodyText = await page.locator('body').textContent();
-          console.log(`  Upload page content preview: ${bodyText?.substring(0, 200)}...`);
-        }
-        
-      } catch (error) {
-        console.log(`❌ ${route} failed: ${error}`);
-      }
+  test('should navigate with the main navigation and mark the current page', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/home');
+    const nav = page.getByRole('navigation', { name: 'Main' });
+
+    for (const d of DESTINATIONS) {
+      await nav.getByRole('link', { name: d.name }).click();
+      await expect(page).toHaveURL(new RegExp(`${d.path}(\\?|$|/)`));
+      await expect(title(page, d.heading)).toBeVisible();
+      await expect(nav.getByRole('link', { name: d.name })).toHaveAttribute('aria-current', 'page');
     }
+
+    // The wordmark goes home
+    await page.getByRole('link', { name: 'Readur home' }).click();
+    await expect(page).toHaveURL(/\/home$/);
   });
 
-  test('should check what elements are on dashboard', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle', { timeout: 5000 });
-    
-    console.log('Dashboard URL:', page.url());
-    
-    // Check for welcome message
-    const welcomeMessage = await page.locator('h4:has-text("Welcome back,")').isVisible();
-    console.log('Welcome message present:', welcomeMessage);
-    
-    // Check for common navigation elements
-    const navLinks = await page.locator('a, button').allTextContents();
-    console.log('Navigation elements:', navLinks);
-    
-    // Check for any upload-related elements on dashboard
-    const uploadElements = await page.locator(':has-text("Upload"), :has-text("File"), input[type="file"]').count();
-    console.log('Upload elements on dashboard:', uploadElements);
-    
-    if (uploadElements > 0) {
-      const uploadTexts = await page.locator(':has-text("Upload"), :has-text("File")').allTextContents();
-      console.log('Upload-related text:', uploadTexts);
-    }
-    
-    // Verify we're properly logged in
-    await expect(page.locator('h4:has-text("Welcome back,")')).toBeVisible();
+  test('the sidebar lists collections and sources and links into them', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/home');
+    const collections = page.getByRole('navigation', { name: 'Collections' });
+    await expect(collections.getByRole('link', { name: 'All collections' })).toHaveAttribute('href', '/settings/labels');
+
+    const sources = page.getByRole('navigation', { name: 'Sources' });
+    await sources.getByRole('link', { name: 'Watch folder' }).click();
+    await expect(page).toHaveURL(/\/intake\?section=watch/);
+    await expect(sources.getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page');
+    await sources.getByRole('link', { name: 'Uploads' }).click();
+    await expect(page).toHaveURL(/\/intake\?section=upload/);
+  });
+
+  test('should offer a skip link to the main content', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/home');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const skip = page.getByRole('link', { name: 'Skip to content' });
+    await expect(skip).toHaveAttribute('href', '#main');
+    await skip.focus();
+    await expect(skip).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('main')).toBeFocused();
+  });
+
+  test('should send unknown paths home', async ({ dynamicAdminPage: page }) => {
+    await page.goto('/no-such-page');
+    await expect(page).toHaveURL(/\/home$/);
   });
 });

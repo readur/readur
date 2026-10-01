@@ -11,92 +11,68 @@ test.describe('Per-User Watch Directory Feature Flag', () => {
 
   test.describe('Auth Config Endpoint', () => {
     test('should return enable_per_user_watch field in auth config', async ({ dynamicAdminPage: page }) => {
-      // Make a direct API call to check the auth config endpoint
       const response = await page.request.get('/api/auth/config');
-
       expect(response.ok()).toBe(true);
 
       const config = await response.json();
-
-      // Verify the enable_per_user_watch field exists (should be false by default in test environment)
       expect(config).toHaveProperty('enable_per_user_watch');
       expect(typeof config.enable_per_user_watch).toBe('boolean');
     });
   });
 
-  test.describe('Settings Page - User Management Tab (Feature Disabled)', () => {
+  test.describe('Settings → Users (Feature Disabled)', () => {
     test.beforeEach(async ({ dynamicAdminPage }) => {
       helpers = new TestHelpers(dynamicAdminPage);
+      const config = await (await dynamicAdminPage.request.get('/api/auth/config')).json();
+      test.skip(config.enable_per_user_watch === true, 'Server has per-user watch directories enabled');
     });
 
     test('should hide Watch Directory column when feature is disabled', async ({ dynamicAdminPage: page }) => {
-      // Navigate to Settings page
-      await helpers.navigateToPage('/settings');
+      await page.goto('/settings/users');
 
-      // Click on User Management tab using text-based selection
-      const userManagementTab = page.getByRole('tab', { name: /User Management/i });
-      await userManagementTab.click();
-
-      // Wait for the user table to be visible
-      await expect(page.locator('table')).toBeVisible({ timeout: TIMEOUTS.medium });
-
-      // Verify the "Watch Directory" table header is NOT visible
-      const watchDirectoryHeader = page.locator('th:has-text("Watch Directory")');
-      await expect(watchDirectoryHeader).not.toBeVisible({ timeout: TIMEOUTS.short });
+      const table = page.getByRole('grid', { name: 'User Management' });
+      await expect(table).toBeVisible({ timeout: TIMEOUTS.medium });
+      await expect(table.getByRole('columnheader', { name: 'Username' })).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: /Watch Directory/i })).toHaveCount(0);
     });
 
     test('should hide watch directory action buttons when feature is disabled', async ({ dynamicAdminPage: page }) => {
-      // Navigate to Settings page
-      await helpers.navigateToPage('/settings');
+      await page.goto('/settings/users');
 
-      // Click on User Management tab using text-based selection
-      const userManagementTab = page.getByRole('tab', { name: /User Management/i });
-      await userManagementTab.click();
+      const table = page.getByRole('grid', { name: 'User Management' });
+      await expect(table).toBeVisible({ timeout: TIMEOUTS.medium });
+      await expect(table.getByRole('button', { name: /watch directory/i })).toHaveCount(0);
 
-      // Wait for the user table to be visible
-      await expect(page.locator('table')).toBeVisible({ timeout: TIMEOUTS.medium });
-
-      // Verify watch directory action buttons are NOT visible
-      // These include CreateNewFolderIcon for creating watch directories
-      const createFolderButton = page.locator('[data-testid="CreateNewFolderIcon"]');
-      await expect(createFolderButton).not.toBeVisible({ timeout: TIMEOUTS.short });
-
-      // Verify the table still has user rows (sanity check that page loaded correctly)
-      const tableRows = page.locator('tbody tr');
-      await expect(tableRows.first()).toBeVisible({ timeout: TIMEOUTS.short });
+      // Sanity check: user rows with their normal actions are there
+      await expect(table.getByRole('button', { name: /^Edit / }).first()).toBeVisible();
     });
   });
 
-  test.describe('Watch Folder Page (Feature Disabled)', () => {
+  test.describe('Intake → Watch folder (Feature Disabled)', () => {
     test.beforeEach(async ({ dynamicAdminPage }) => {
       helpers = new TestHelpers(dynamicAdminPage);
+      const config = await (await dynamicAdminPage.request.get('/api/auth/config')).json();
+      test.skip(config.enable_per_user_watch === true, 'Server has per-user watch directories enabled');
     });
 
     test('should hide Personal Watch Directory card when feature is disabled', async ({ dynamicAdminPage: page }) => {
-      // Navigate to Watch Folder page
-      await helpers.navigateToPage('/watch');
+      // The legacy /watch URL lands on Intake → Watch folder
+      await page.goto('/watch');
+      await expect(page).toHaveURL(/\/intake\?section=watch/);
 
-      // Wait for the page to load by checking for the global watch folder section
-      const globalWatchSection = page.locator('h6:has-text("Global Watch Folder")');
-      await expect(globalWatchSection).toBeVisible({ timeout: TIMEOUTS.medium });
-
-      // Verify the "Personal Watch Directory" card is NOT visible
-      const personalWatchCard = page.locator('h6:has-text("Personal Watch Directory")');
-      await expect(personalWatchCard).not.toBeVisible({ timeout: TIMEOUTS.short });
+      const folders = page.getByRole('grid', { name: 'Watched folders' });
+      await expect(folders).toBeVisible({ timeout: TIMEOUTS.medium });
+      await expect(folders.getByRole('gridcell', { name: 'Server', exact: true })).toBeVisible();
+      await expect(folders.getByRole('gridcell', { name: /Personal/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /personal/i })).toHaveCount(0);
     });
 
     test('should show global watch folder section when feature is disabled', async ({ dynamicAdminPage: page }) => {
-      // Navigate to Watch Folder page
-      await helpers.navigateToPage('/watch');
+      await helpers.openIntake('watch');
 
-      // Verify the global watch folder configuration section IS visible
-      // This confirms the page loaded correctly even when per-user watch is disabled
-      const globalWatchSection = page.locator('h6:has-text("Global Watch Folder")');
-      await expect(globalWatchSection).toBeVisible({ timeout: TIMEOUTS.medium });
-
-      // Also verify key elements of the global section are present
-      const watchedDirectoryLabel = page.locator('text=Watched Directory');
-      await expect(watchedDirectoryLabel).toBeVisible({ timeout: TIMEOUTS.short });
+      await expect(page.getByRole('region', { name: 'Watched folders' })).toBeVisible({ timeout: TIMEOUTS.medium });
+      await expect(page.getByRole('region', { name: 'Processing queue' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'How the watch folder works' })).toBeVisible();
     });
   });
 });

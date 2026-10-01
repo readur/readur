@@ -10,7 +10,10 @@ use std::sync::Arc;
 use crate::{
     auth::AuthUser,
     errors::search::SearchError,
-    models::{SearchRequest, SearchResponse, EnhancedDocumentResponse, SearchFacetsResponse},
+    models::{
+        EnhancedDocumentResponse, MonthCount, SearchFacetsResponse, SearchMode, SearchRequest,
+        SearchResponse,
+    },
     AppState,
 };
 
@@ -19,6 +22,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(search_documents))
         .route("/enhanced", get(enhanced_search_documents))
         .route("/facets", get(get_search_facets))
+        .route("/timeline", get(search_timeline))
 }
 
 #[utoipa::path(
@@ -34,6 +38,7 @@ pub fn router() -> Router<Arc<AppState>> {
     ),
     responses(
         (status = 200, description = "Enhanced search results with relevance ranking, text snippets, and OCR-extracted content matching", body = SearchResponse),
+        (status = 400, description = "Invalid query, sort or filter parameter"),
         (status = 401, description = "Unauthorized - valid authentication required"),
         (status = 500, description = "Internal server error")
     )
@@ -43,27 +48,36 @@ async fn search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, SearchError> {
-    // Validate query length (allow empty query if filters are present)
-    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
-        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
-    if search_request.query.len() < 2 && !has_filters {
+    // Validate filters, then query length (allow empty query if filters are present)
+    let filters = search_request.filters();
+    filters.validate().map_err(SearchError::invalid_syntax)?;
+    if search_request.query.len() < 2 && !filters.is_active() {
         return Err(SearchError::query_too_short(search_request.query.len(), 2));
     }
     if search_request.query.len() > 1000 {
-        return Err(SearchError::query_too_long(search_request.query.len(), 1000));
+        return Err(SearchError::query_too_long(
+            search_request.query.len(),
+            1000,
+        ));
     }
-    
+
     // Validate pagination
     let limit = search_request.limit.unwrap_or(25);
     let offset = search_request.offset.unwrap_or(0);
     if limit > 1000 || offset < 0 || limit <= 0 {
         return Err(SearchError::invalid_pagination(offset, limit));
     }
-    
-    // Get total count (without pagination) for proper pagination support
+
+    // Get total count (without pagination) for proper pagination support. The
+    // list below always matches in simple mode, so the count does too.
     let total = state
         .db
-        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .count_search_documents_in_mode(
+            auth_user.user.id,
+            auth_user.user.role.clone(),
+            &search_request,
+            &SearchMode::Simple,
+        )
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
@@ -74,27 +88,31 @@ async fn search_documents(
 
     let documents = state
         .db
-        .search_documents_with_role(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
+    let mut documents: Vec<EnhancedDocumentResponse> = documents
+        .into_iter()
+        .map(|item| {
+            EnhancedDocumentResponse::from_document(
+                item.document,
+                None,
+                Vec::new(),
+                item.ocr_progress_current,
+                item.ocr_progress_total,
+            )
+        })
+        .collect();
+
+    state
+        .db
+        .attach_labels_to_search_results(&mut documents)
+        .await
+        .map_err(|e| SearchError::index_unavailable(format!("Loading labels failed: {}", e)))?;
+
     let response = SearchResponse {
-        documents: documents.into_iter().map(|doc| EnhancedDocumentResponse {
-            id: doc.id,
-            filename: doc.filename,
-            original_filename: doc.original_filename,
-            file_size: doc.file_size,
-            mime_type: doc.mime_type,
-            tags: doc.tags,
-            created_at: doc.created_at,
-            has_ocr_text: doc.ocr_text.is_some(),
-            ocr_confidence: doc.ocr_confidence,
-            ocr_word_count: doc.ocr_word_count,
-            ocr_processing_time_ms: doc.ocr_processing_time_ms,
-            ocr_status: doc.ocr_status,
-            search_rank: None,
-            snippets: Vec::new(),
-        }).collect(),
+        documents,
         total,
         query_time_ms: 0,
         suggestions: Vec::new(),
@@ -116,6 +134,7 @@ async fn search_documents(
     ),
     responses(
         (status = 200, description = "Enhanced search results with snippets and suggestions", body = SearchResponse),
+        (status = 400, description = "Invalid query, sort or filter parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -125,10 +144,12 @@ async fn enhanced_search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
-    // Validate query length (allow empty query if filters are present)
-    let has_filters = search_request.tags.as_ref().map_or(false, |t| !t.is_empty())
-        || search_request.mime_types.as_ref().map_or(false, |m| !m.is_empty());
-    if search_request.query.len() < 2 && !has_filters {
+    // Validate filters, then query length (allow empty query if filters are present)
+    let filters = search_request.filters();
+    if filters.validate().is_err() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if search_request.query.len() < 2 && !filters.is_active() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -140,13 +161,21 @@ async fn enhanced_search_documents(
     // Get total count (without pagination) for proper pagination support
     let total = state
         .db
-        .count_search_documents(auth_user.user.id, auth_user.user.role.clone(), &search_request)
+        .count_search_documents(
+            auth_user.user.id,
+            auth_user.user.role.clone(),
+            &search_request,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let documents = state
         .db
-        .enhanced_search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
+        .enhanced_search_documents_with_role(
+            auth_user.user.id,
+            auth_user.user.role,
+            &search_request,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -162,26 +191,72 @@ async fn enhanced_search_documents(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/search/timeline",
+    tag = "search",
+    description = "Number of documents matching the search per UTC creation month, across all matches \
+        (not one page). Takes the same query and filters as /api/search/enhanced; pagination, snippet \
+        and sort parameters are ignored. Months without matches are omitted; ascending by month.",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        SearchRequest
+    ),
+    responses(
+        (status = 200, description = "Match counts per month, oldest first", body = Vec<MonthCount>),
+        (status = 400, description = "Invalid query or filter parameter"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+async fn search_timeline(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Query(search_request): Query<SearchRequest>,
+) -> Result<Json<Vec<MonthCount>>, StatusCode> {
+    // Same acceptance rules as enhanced search, so both calls agree.
+    let filters = search_request.filters();
+    if filters.validate().is_err() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if search_request.query.len() < 2 && !filters.is_active() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let months = state
+        .db
+        .search_timeline(auth_user.user.id, auth_user.user.role, &search_request)
+        .await
+        .map_err(|e| {
+            tracing::error!("Search timeline failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(months))
+}
+
 fn generate_search_suggestions(query: &str) -> Vec<String> {
     // Simple suggestion generation - could be enhanced with a proper suggestion system
     let mut suggestions = Vec::new();
-    
+
     if query.len() > 3 {
         // Common search variations
         suggestions.push(format!("\"{}\"", query)); // Exact phrase
-        
+
         // Add wildcard suggestions
         if !query.contains('*') {
             suggestions.push(format!("{}*", query));
         }
-        
+
         // Add similar terms (this would typically come from a thesaurus or ML model)
         if query.contains("document") {
             suggestions.push(query.replace("document", "file"));
             suggestions.push(query.replace("document", "paper"));
         }
     }
-    
+
     suggestions.into_iter().take(3).collect()
 }
 
@@ -205,7 +280,7 @@ async fn get_search_facets(
 ) -> Result<Json<SearchFacetsResponse>, StatusCode> {
     let user_id = auth_user.user.id;
     let user_role = auth_user.user.role;
-    
+
     // Get MIME type facets
     let mime_type_facets = state
         .db

@@ -1,343 +1,108 @@
 import { test, expect } from './fixtures/auth';
-import { TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
+import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+/**
+ * WebDAV connections in Intake → Connections. The server address is one nothing listens
+ * on, so sync and test calls fail fast without an external WebDAV server.
+ */
 test.describe('WebDAV Workflow', () => {
   let helpers: TestHelpers;
 
   test.beforeEach(async ({ dynamicAdminPage }) => {
     helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/sources');
+    await helpers.openIntake('connections');
   });
 
-  test.skip('should create and configure WebDAV source', async ({ dynamicAdminPage: page }) => {
-    // Increase timeout for this test as WebDAV operations can be slow
-    // This addresses the timeout issues with Material-UI Select components
-    test.setTimeout(60000);
-    // Navigate to sources page
-    await page.goto('/sources');
-    await helpers.waitForLoadingToComplete();
+  test('should create and configure WebDAV source', async ({ dynamicAdminPage: page }) => {
+    const name = helpers.uniqueName('Test WebDAV Source');
+    await page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'Add connection' });
 
-    // Wait for loading to complete and sources to be displayed
-    // The Add Source button only appears after the loading state finishes
-    await page.waitForLoadState('networkidle');
-    
-    // Wait for the loading spinner to disappear
-    const loadingSpinner = page.locator('[role="progressbar"], .MuiCircularProgress-root');
-    if (await loadingSpinner.isVisible({ timeout: 2000 })) {
-      await expect(loadingSpinner).not.toBeVisible({ timeout: TIMEOUTS.long });
-    }
-    
-    // Wait extra time for WebKit to fully render the page
-    await page.waitForTimeout(5000);
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill(name);
+    await expect(dialog.getByRole('radio', { name: /^WebDAV/ })).toBeChecked();
+    await dialog.getByRole('radiogroup', { name: 'Server type' }).getByText('Nextcloud', { exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Server URL' }).fill('http://127.0.0.1:9/remote.php/dav/files/webdav_user/');
+    await dialog.getByRole('textbox', { name: 'Username' }).fill('webdav_user');
+    await dialog.getByRole('textbox', { name: 'Password' }).fill('webdav_pass');
 
-    // For WebKit, try to wait for specific page elements to be loaded
-    await page.waitForFunction(() => {
-      return document.querySelector('[data-testid="add-source"]') !== null ||
-             document.querySelector('button:has-text("Add Source")') !== null ||
-             document.body.textContent?.includes('Add Source');
-    }, { timeout: TIMEOUTS.long });
+    // Add a second folder and an extension
+    const folders = dialog.getByRole('textbox', { name: 'Folders to monitor' });
+    await folders.fill('/Scans');
+    await folders.press('Enter');
+    await expect(dialog.getByRole('list', { name: 'Folders to monitor' })).toContainText('/Scans');
+    const extensions = dialog.getByRole('textbox', { name: 'File extensions' });
+    await extensions.fill('docx');
+    await extensions.press('Enter');
+    await expect(dialog.getByRole('list', { name: 'File extensions' })).toContainText('docx');
 
-    // Look for add source button (try multiple selectors in order of preference)
-    let addSourceButton = page.locator('[data-testid="add-source"]').first();
-    
-    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
-      addSourceButton = page.locator('button:has-text("Add Source")').first();
-    }
-    
-    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
-      addSourceButton = page.locator('button:has-text("Add")').first();
-    }
-    
-    if (!(await addSourceButton.isVisible({ timeout: 5000 }))) {
-      addSourceButton = page.locator('button[aria-label*="add"], button[title*="add"]').first();
-    }
-    
-    if (await addSourceButton.isVisible({ timeout: 5000 })) {
-      console.log('Found add source button, clicking...');
-      await addSourceButton.click();
-    } else {
-      // Enhanced debugging for WebKit
-      const pageContent = await page.textContent('body');
-      console.log('Page content (first 500 chars):', pageContent?.substring(0, 500));
-      console.log('Page URL:', page.url());
-      
-      // Check if we're actually on the sources page
-      const pageTitle = await page.title();
-      console.log('Page title:', pageTitle);
-      
-      // Try to find any buttons on the page
-      const allButtons = await page.locator('button').count();
-      console.log('Total buttons found:', allButtons);
-      
-      throw new Error('Could not find add source button');
-    }
+    const create = page.waitForResponse((r) => /\/api\/sources$/.test(r.url()) && r.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Add connection' }).click();
+    const response = await create;
+    expect(response.ok()).toBe(true);
+    const body = JSON.parse(response.request().postData() ?? '{}');
+    expect(body.source_type).toBe('webdav');
+    expect(body.config.server_type).toBe('nextcloud');
+    expect(body.config.watch_folders).toEqual(expect.arrayContaining(['/Documents', '/Scans']));
+    expect(body.config.file_extensions).toContain('docx');
 
-    // Wait for source creation form/modal to appear
-    await page.waitForTimeout(1000);
-    
-    // Debug: log what's currently visible
-    await page.waitForLoadState('networkidle');
-    console.log('Waiting for source creation form to load...');
-
-    // Select WebDAV source type if source type selection exists
-    try {
-      // First, look for any select/dropdown elements - focusing on Material-UI patterns
-      const selectTrigger = page.locator([
-        '[role="combobox"]',
-        '.MuiSelect-select:not([aria-hidden="true"])', 
-        'div[aria-haspopup="listbox"]',
-        '.MuiOutlinedInput-input[role="combobox"]',
-        'select[name*="type"]',
-        'select[name*="source"]'
-      ].join(', ')).first();
-      
-      if (await selectTrigger.isVisible({ timeout: 5000 })) {
-        console.log('Found select trigger, attempting to click...');
-        
-        try {
-          // Try normal click first
-          await selectTrigger.click({ timeout: 10000 });
-        } catch (clickError) {
-          console.log('Normal click failed, trying alternative methods:', clickError);
-          
-          try {
-            // Try force click
-            await selectTrigger.click({ force: true, timeout: 5000 });
-          } catch (forceClickError) {
-            console.log('Force click also failed, trying keyboard navigation:', forceClickError);
-            // As last resort, try keyboard navigation
-            await selectTrigger.focus();
-            await page.keyboard.press('Enter');
-          }
-        }
-        
-        // Wait for dropdown menu to appear
-        await page.waitForTimeout(1000);
-        
-        // Look for WebDAV option in the dropdown
-        const webdavOption = page.locator([
-          '[role="option"]:has-text("webdav")',
-          '[role="option"]:has-text("WebDAV")', 
-          'li:has-text("WebDAV")',
-          'li:has-text("webdav")',
-          '[data-value="webdav"]',
-          'option[value="webdav"]'
-        ].join(', ')).first();
-        
-        if (await webdavOption.isVisible({ timeout: 5000 })) {
-          console.log('Found WebDAV option, selecting it...');
-          await webdavOption.click();
-        } else {
-          console.log('WebDAV option not found in dropdown, checking if already selected');
-          // Sometimes the form might default to WebDAV or not need selection
-        }
-      } else {
-        console.log('No source type selector found, continuing with form...');
-      }
-    } catch (error) {
-      console.log('Error selecting WebDAV source type:', error);
-      // Continue with the test - the form might not have a source type selector
-    }
-
-    // Fill WebDAV configuration form
-    console.log('Filling WebDAV configuration form...');
-    
-    // Wait for form to be ready
-    await page.waitForTimeout(1000);
-    
-    const nameInput = page.locator('input[name="name"], input[placeholder*="name"], input[label*="Name"]').first();
-    if (await nameInput.isVisible({ timeout: 10000 })) {
-      await nameInput.fill('Test WebDAV Source');
-      console.log('Filled name input');
-    }
-
-    const urlInput = page.locator('input[name="url"], input[placeholder*="url"], input[type="url"]').first();
-    if (await urlInput.isVisible({ timeout: 5000 })) {
-      await urlInput.fill('https://demo.webdav.server/');
-      console.log('Filled URL input');
-    }
-
-    const usernameInput = page.locator('input[name="username"], input[placeholder*="username"]').first();
-    if (await usernameInput.isVisible({ timeout: 5000 })) {
-      await usernameInput.fill('webdav_user');
-      console.log('Filled username input');
-    }
-
-    const passwordInput = page.locator('input[name="password"], input[type="password"]').first();
-    if (await passwordInput.isVisible({ timeout: 5000 })) {
-      await passwordInput.fill('webdav_pass');
-      console.log('Filled password input');
-    }
-
-    // Save the source configuration
-    console.log('Looking for save button...');
-    const saveButton = page.locator('button:has-text("Save"), button:has-text("Create"), button[type="submit"]').first();
-    if (await saveButton.isVisible({ timeout: 10000 })) {
-      console.log('Found save button, clicking...');
-      
-      // Wait for save API call
-      const savePromise = page.waitForResponse(response => 
-        response.url().includes('/sources') && (response.status() === 200 || response.status() === 201),
-        { timeout: TIMEOUTS.medium }
-      );
-      
-      await saveButton.click();
-      console.log('Clicked save button, waiting for response...');
-      
-      try {
-        const response = await savePromise;
-        console.log('WebDAV source created successfully with status:', response.status());
-      } catch (error) {
-        console.log('Source creation may have failed or timed out:', error);
-        // Don't fail the test immediately - continue to check the results
-      }
-    } else {
-      console.log('Save button not found');
-    }
-
-    // Verify source appears in the list
-    await helpers.waitForLoadingToComplete();
-    
-    // Wait for sources to load again after creation
-    await page.waitForLoadState('networkidle');
-    
-    // Wait for loading spinner to disappear
-    const postCreateSpinner = page.locator('[role="progressbar"], .MuiCircularProgress-root');
-    if (await postCreateSpinner.isVisible({ timeout: 2000 })) {
-      await expect(postCreateSpinner).not.toBeVisible({ timeout: TIMEOUTS.long });
-    }
-    
-    // Look for sources list or individual source items
-    const sourcesList = page.locator('[data-testid="sources-list"]');
-    const sourceItems = page.locator('[data-testid="source-item"]');
-    
-    // Check if either the sources list container or source items are visible
-    const sourcesVisible = await sourcesList.isVisible({ timeout: TIMEOUTS.medium }).catch(() => false);
-    const itemsVisible = await sourceItems.first().isVisible({ timeout: TIMEOUTS.medium }).catch(() => false);
-    
-    if (sourcesVisible || itemsVisible) {
-      console.log('✅ Sources list or source items are visible');
-    } else {
-      console.log('ℹ️ Sources list not immediately visible - source creation may be async');
-    }
+    const panel = await helpers.openConnection(name);
+    await expect(panel.getByRole('group', { name: 'Scope' })).toContainText('/Scans');
+    await expect(panel.getByRole('group', { name: 'Connection' })).toContainText('webdav_user');
   });
 
   test('should test WebDAV connection', async ({ dynamicAdminPage: page }) => {
-    // This test assumes a WebDAV source exists from the previous test or setup
-    await page.goto('/sources');
-    await helpers.waitForLoadingToComplete();
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Testable') });
+    await page.reload();
 
-    // Find WebDAV source and test connection
-    const testConnectionButton = page.locator('button:has-text("Test"), [data-testid="test-connection"]').first();
-    
-    if (await testConnectionButton.isVisible()) {
-      // Wait for connection test API call
-      const testPromise = page.waitForResponse(response => 
-        response.url().includes('/test') || response.url().includes('/connection'),
-        { timeout: TIMEOUTS.medium }
-      );
-      
-      await testConnectionButton.click();
-      
-      try {
-        const response = await testPromise;
-        console.log('Connection test completed with status:', response.status());
-      } catch (error) {
-        console.log('Connection test may have failed:', error);
-      }
-    }
-
-    // Look for connection status indicator
-    const statusIndicator = page.locator('.status, [data-testid="connection-status"], .connection-result');
-    if (await statusIndicator.isVisible()) {
-      const statusText = await statusIndicator.textContent();
-      console.log('Connection status:', statusText);
-    }
+    const panel = await helpers.openConnection(source.name);
+    const call = page.waitForResponse((r) => r.url().includes('/test') && r.request().method() === 'POST', {
+      timeout: TIMEOUTS.long,
+    });
+    await panel.getByRole('button', { name: 'Test connection' }).click();
+    await call;
+    // Nothing listens at the address, so the result is a failure toast
+    await helpers.waitForToast(/Connection failed|Could not test the connection/);
   });
 
   test('should initiate WebDAV sync', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/sources');
-    await helpers.waitForLoadingToComplete();
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Syncing') });
+    await page.reload();
 
-    // Find and click sync button
-    const syncButton = page.locator('button:has-text("Sync"), [data-testid="sync-source"]').first();
-    
-    if (await syncButton.isVisible()) {
-      // Wait for sync API call
-      const syncPromise = page.waitForResponse(response => 
-        response.url().includes('/sync') && response.status() === 200,
-        { timeout: TIMEOUTS.medium }
-      );
-      
-      await syncButton.click();
-      
-      try {
-        await syncPromise;
-        console.log('WebDAV sync initiated successfully');
-        
-        // Look for sync progress indicators
-        const progressIndicator = page.locator('.progress, [data-testid="sync-progress"], .syncing');
-        if (await progressIndicator.isVisible({ timeout: 5000 })) {
-          console.log('Sync progress indicator visible');
-        }
-      } catch (error) {
-        console.log('Sync may have failed or timed out:', error);
-      }
-    }
+    const panel = await helpers.openConnection(source.name);
+    const sync = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}/sync`) && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: 'Sync now' }).click();
+    expect((await sync).ok()).toBe(true);
+    await helpers.waitForToast(/Sync started/);
+
+    // Deep scan is WebDAV-only and is offered here
+    await expect(panel.getByRole('button', { name: 'Deep scan' })).toBeVisible();
   });
 
   test('should show WebDAV sync history', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/sources');
-    await helpers.waitForLoadingToComplete();
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('History') });
+    await page.reload();
 
-    // Look for sync history or logs
-    const historyButton = page.locator('button:has-text("History"), button:has-text("Logs"), [data-testid="sync-history"]').first();
-    
-    if (await historyButton.isVisible()) {
-      await historyButton.click();
-      
-      // Check if history modal or page opens
-      const historyContainer = page.locator('.history, [data-testid="sync-history"], .logs-container');
-      await expect(historyContainer.first()).toBeVisible({ timeout: TIMEOUTS.short });
-      
-      // Check for history entries
-      const historyEntries = page.locator('.history-item, .log-entry, tr');
-      if (await historyEntries.first().isVisible({ timeout: 5000 })) {
-        const entryCount = await historyEntries.count();
-        console.log(`Found ${entryCount} sync history entries`);
-      }
-    }
+    const panel = await helpers.openConnection(source.name);
+    await expect(panel.getByRole('group', { name: 'Schedule' }).getByRole('term').filter({ hasText: 'Last sync' })).toBeVisible();
+    await expect(panel.getByRole('region', { name: 'Recent errors' })).toBeVisible();
+
+    // The connection's ignored files are one click away
+    await panel.getByRole('button', { name: 'Ignored files' }).click();
+    await expect(page).toHaveURL(/section=ignored/);
+    await expect(page).toHaveURL(new RegExp(`sourceId=${source.id}`));
   });
 
   test('should handle WebDAV source deletion', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/sources');
-    await helpers.waitForLoadingToComplete();
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Doomed') });
+    await page.reload();
 
-    // Find delete button for WebDAV source
-    const deleteButton = page.locator('button:has-text("Delete"), [data-testid="delete-source"], .delete-button').first();
-    
-    if (await deleteButton.isVisible()) {
-      await deleteButton.click();
-      
-      // Handle confirmation dialog if it appears
-      const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("Delete"), button:has-text("Yes")').first();
-      if (await confirmButton.isVisible({ timeout: 3000 })) {
-        // Wait for delete API call
-        const deletePromise = page.waitForResponse(response => 
-          response.url().includes('/sources') && response.status() === 200,
-          { timeout: TIMEOUTS.medium }
-        );
-        
-        await confirmButton.click();
-        
-        try {
-          await deletePromise;
-          console.log('WebDAV source deleted successfully');
-        } catch (error) {
-          console.log('Source deletion may have failed:', error);
-        }
-      }
-    }
+    const panel = await helpers.openConnection(source.name);
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    const confirm = page.getByRole('alertdialog');
+    const del = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}`) && r.request().method() === 'DELETE');
+    await confirm.getByRole('button', { name: 'Delete connection' }).click();
+    expect((await del).ok()).toBe(true);
+    await expect(helpers.connectionRow(source.name)).toHaveCount(0);
   });
 });

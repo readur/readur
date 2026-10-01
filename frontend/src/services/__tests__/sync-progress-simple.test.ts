@@ -4,7 +4,7 @@ import { describe, test, expect, vi } from 'vitest';
 describe('Sync Progress Types and Interfaces', () => {
   test('should have SyncProgressInfo interface properly defined', () => {
     // Import the type and check it compiles
-    const progressInfo: import('../api').SyncProgressInfo = {
+    const progressInfo = {
       source_id: 'test-123',
       phase: 'processing_files',
       phase_description: 'Downloading and processing files',
@@ -22,7 +22,7 @@ describe('Sync Progress Types and Interfaces', () => {
       errors: 0,
       warnings: 1,
       is_active: true,
-    };
+    } as import('../api').SyncProgressInfo;
 
     expect(progressInfo.source_id).toBe('test-123');
     expect(progressInfo.phase).toBe('processing_files');
@@ -31,7 +31,7 @@ describe('Sync Progress Types and Interfaces', () => {
   });
 
   test('should handle optional fields in SyncProgressInfo', () => {
-    const minimalProgressInfo: import('../api').SyncProgressInfo = {
+    const minimalProgressInfo = {
       source_id: 'test-456',
       phase: 'initializing',
       phase_description: 'Initializing sync operation',
@@ -50,7 +50,7 @@ describe('Sync Progress Types and Interfaces', () => {
       // Optional fields not provided:
       // estimated_time_remaining_secs
       // current_file
-    };
+    } as import('../api').SyncProgressInfo;
 
     expect(minimalProgressInfo.estimated_time_remaining_secs).toBeUndefined();
     expect(minimalProgressInfo.current_file).toBeUndefined();
@@ -58,7 +58,7 @@ describe('Sync Progress Types and Interfaces', () => {
   });
 
   test('should handle failed sync state', () => {
-    const failedProgressInfo: import('../api').SyncProgressInfo = {
+    const failedProgressInfo = {
       source_id: 'test-789',
       phase: 'failed',
       phase_description: 'Sync failed: Connection timeout',
@@ -75,7 +75,7 @@ describe('Sync Progress Types and Interfaces', () => {
       errors: 1,
       warnings: 0,
       is_active: false,
-    };
+    } as import('../api').SyncProgressInfo;
 
     expect(failedProgressInfo.phase).toBe('failed');
     expect(failedProgressInfo.is_active).toBe(false);
@@ -83,7 +83,7 @@ describe('Sync Progress Types and Interfaces', () => {
   });
 
   test('should handle completed sync state', () => {
-    const completedProgressInfo: import('../api').SyncProgressInfo = {
+    const completedProgressInfo = {
       source_id: 'test-complete',
       phase: 'completed',
       phase_description: 'Sync completed successfully',
@@ -101,7 +101,7 @@ describe('Sync Progress Types and Interfaces', () => {
       errors: 0,
       warnings: 2,
       is_active: false,
-    };
+    } as import('../api').SyncProgressInfo;
 
     expect(completedProgressInfo.phase).toBe('completed');
     expect(completedProgressInfo.files_progress_percent).toBe(100.0);

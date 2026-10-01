@@ -1,25 +1,29 @@
 use axum::{
+    body::Body,
     extract::{Multipart, Path, Query, State},
     http::StatusCode,
-    response::{Json, Response, IntoResponse},
-    body::Body,
+    response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+use super::types::{
+    DocumentPaginationInfo, DocumentUploadResponse, PaginatedDocumentsResponse, PaginationQuery,
+};
 use crate::{
     auth::AuthUser,
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     models::DocumentResponse,
     AppState,
 };
-use super::types::{PaginationQuery, DocumentUploadResponse, PaginatedDocumentsResponse, DocumentPaginationInfo};
 
 /// Custom error type for document operations
 #[derive(Debug)]
 pub enum DocumentError {
     BadRequest(String),
+    /// A list or filter query parameter failed validation.
+    InvalidQuery(String),
     NotFound,
     Conflict(String),
     PayloadTooLarge(String),
@@ -35,24 +39,53 @@ impl IntoResponse for DocumentError {
     fn into_response(self) -> Response {
         let (status, message, error_code) = match self {
             DocumentError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "UPLOAD_BAD_REQUEST"),
-            DocumentError::NotFound => (StatusCode::NOT_FOUND, "Document not found".to_string(), "UPLOAD_NOT_FOUND"),
+            DocumentError::InvalidQuery(msg) => (StatusCode::BAD_REQUEST, msg, "INVALID_QUERY"),
+            DocumentError::NotFound => (
+                StatusCode::NOT_FOUND,
+                "Document not found".to_string(),
+                "UPLOAD_NOT_FOUND",
+            ),
             DocumentError::Conflict(msg) => (StatusCode::CONFLICT, msg, "UPLOAD_CONFLICT"),
-            DocumentError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg, "UPLOAD_TOO_LARGE"),
-            DocumentError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg, "UPLOAD_INTERNAL_ERROR"),
-            DocumentError::UploadTimeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg, "UPLOAD_TIMEOUT"),
-            DocumentError::DatabaseConstraintViolation(msg) => (StatusCode::CONFLICT, msg, "UPLOAD_DB_CONSTRAINT"),
-            DocumentError::OcrProcessingError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_OCR_ERROR"),
-            DocumentError::FileProcessingError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_FILE_PROCESSING_ERROR"),
-            DocumentError::ConcurrentUploadError(msg) => (StatusCode::TOO_MANY_REQUESTS, msg, "UPLOAD_CONCURRENT_ERROR"),
+            DocumentError::PayloadTooLarge(msg) => {
+                (StatusCode::PAYLOAD_TOO_LARGE, msg, "UPLOAD_TOO_LARGE")
+            }
+            DocumentError::InternalServerError(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                msg,
+                "UPLOAD_INTERNAL_ERROR",
+            ),
+            DocumentError::UploadTimeout(msg) => {
+                (StatusCode::REQUEST_TIMEOUT, msg, "UPLOAD_TIMEOUT")
+            }
+            DocumentError::DatabaseConstraintViolation(msg) => {
+                (StatusCode::CONFLICT, msg, "UPLOAD_DB_CONSTRAINT")
+            }
+            DocumentError::OcrProcessingError(msg) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_OCR_ERROR")
+            }
+            DocumentError::FileProcessingError(msg) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                msg,
+                "UPLOAD_FILE_PROCESSING_ERROR",
+            ),
+            DocumentError::ConcurrentUploadError(msg) => (
+                StatusCode::TOO_MANY_REQUESTS,
+                msg,
+                "UPLOAD_CONCURRENT_ERROR",
+            ),
         };
-        
-        (status, Json(json!({
-            "error": message,
-            "status": status.as_u16(),
-            "error_code": error_code,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "request_id": uuid::Uuid::new_v4()
-        }))).into_response()
+
+        (
+            status,
+            Json(json!({
+                "error": message,
+                "status": status.as_u16(),
+                "error_code": error_code,
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "request_id": uuid::Uuid::new_v4()
+            })),
+        )
+            .into_response()
     }
 }
 
@@ -81,7 +114,7 @@ pub async fn upload_document(
     let mut uploaded_file = None;
     let mut ocr_language: Option<String> = None;
     let mut ocr_languages: Vec<String> = Vec::new();
-    
+
     // First pass: collect all multipart fields
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         let error_msg = format!("Failed to get multipart field: {}", e);
@@ -89,9 +122,11 @@ pub async fn upload_document(
         DocumentError::BadRequest(error_msg)
     })? {
         let name = field.name().unwrap_or("").to_string();
-        
+
         if name == "ocr_language" {
-            let language = field.text().await.map_err(|_| DocumentError::BadRequest("Failed to read language field".to_string()))?;
+            let language = field.text().await.map_err(|_| {
+                DocumentError::BadRequest("Failed to read language field".to_string())
+            })?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -101,10 +136,13 @@ pub async fn upload_document(
                         info!("OCR language specified and validated: {}", language);
                     }
                     Err(e) => {
-                        let available_languages = health_checker.get_available_languages().unwrap_or_default();
+                        let available_languages =
+                            health_checker.get_available_languages().unwrap_or_default();
                         let error_msg = format!(
                             "Invalid OCR language '{}': {}. Available languages: {}",
-                            language, e, available_languages.join(", ")
+                            language,
+                            e,
+                            available_languages.join(", ")
                         );
                         warn!("{}", error_msg);
                         return Err(DocumentError::BadRequest(error_msg));
@@ -112,7 +150,9 @@ pub async fn upload_document(
                 }
             }
         } else if name == "ocr_languages" || name.starts_with("ocr_languages[") {
-            let language = field.text().await.map_err(|_| DocumentError::BadRequest("Failed to read language field".to_string()))?;
+            let language = field.text().await.map_err(|_| {
+                DocumentError::BadRequest("Failed to read language field".to_string())
+            })?;
             if !language.trim().is_empty() {
                 // Validate that the language is available
                 let health_checker = crate::ocr::health::OcrHealthChecker::new();
@@ -123,10 +163,13 @@ pub async fn upload_document(
                         info!("OCR language added to list: {}", language);
                     }
                     Err(e) => {
-                        let available_languages = health_checker.get_available_languages().unwrap_or_default();
+                        let available_languages =
+                            health_checker.get_available_languages().unwrap_or_default();
                         let error_msg = format!(
                             "Invalid OCR language '{}': {}. Available languages: {}",
-                            language, e, available_languages.join(", ")
+                            language,
+                            e,
+                            available_languages.join(", ")
                         );
                         warn!("{}", error_msg);
                         return Err(DocumentError::BadRequest(error_msg));
@@ -134,49 +177,56 @@ pub async fn upload_document(
                 }
             }
         } else if name == "file" {
-            let filename = field.file_name()
+            let filename = field
+                .file_name()
                 .ok_or_else(|| {
                     let error_msg = "No filename provided in upload".to_string();
                     error!("{}", error_msg);
                     DocumentError::BadRequest(error_msg)
                 })?
                 .to_string();
-            
-            let content_type = field.content_type()
+
+            let content_type = field
+                .content_type()
                 .unwrap_or("application/octet-stream")
                 .to_string();
-            
+
             let data = field.bytes().await.map_err(|e| {
                 let error_msg = format!("Failed to read file data: {}", e);
                 error!("{}", error_msg);
                 DocumentError::BadRequest(error_msg)
             })?;
-            
+
             uploaded_file = Some((filename, content_type, data.to_vec()));
         }
     }
-    
+
     let (filename, content_type, data) = uploaded_file.ok_or_else(|| {
         let error_msg = "No file found in upload".to_string();
         error!("{}", error_msg);
         DocumentError::BadRequest(error_msg)
     })?;
-    
+
     // Validate file size against configured limit
     let max_file_size_bytes = state.config.max_file_size_mb as usize * 1024 * 1024;
     if data.len() > max_file_size_bytes {
-        let error_msg = format!("File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)", 
-               filename, data.len(), max_file_size_bytes, state.config.max_file_size_mb);
+        let error_msg = format!(
+            "File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)",
+            filename,
+            data.len(),
+            max_file_size_bytes,
+            state.config.max_file_size_mb
+        );
         error!("{}", error_msg);
         return Err(DocumentError::PayloadTooLarge(error_msg));
     }
-    
+
     info!("Uploading document: {} ({} bytes)", filename, data.len());
-    
+
     // Create FileIngestionInfo from uploaded data
     use crate::models::FileIngestionInfo;
     use chrono::Utc;
-    
+
     let mut file_info = FileIngestionInfo {
         relative_path: format!("upload/{}", filename), // Virtual path for web uploads
         full_path: format!("upload/{}", filename), // For web uploads, relative and full are the same
@@ -189,38 +239,43 @@ pub async fn upload_document(
         etag: format!("{}-{}", data.len(), Utc::now().timestamp()),
         is_directory: false,
         created_at: Some(Utc::now()), // Upload time as creation time
-        permissions: None, // Web uploads don't have filesystem permissions
+        permissions: None,            // Web uploads don't have filesystem permissions
         owner: Some(auth_user.user.username.clone()), // Uploader as owner
-        group: None, // Web uploads don't have filesystem groups
-        metadata: None, // Will be populated with extracted metadata below
+        group: None,                  // Web uploads don't have filesystem groups
+        metadata: None,               // Will be populated with extracted metadata below
     };
-    
+
     // Extract content-based metadata from uploaded file
-    if let Ok(Some(content_metadata)) = crate::metadata_extraction::extract_content_metadata(&data, &content_type, &filename).await {
+    if let Ok(Some(content_metadata)) =
+        crate::metadata_extraction::extract_content_metadata(&data, &content_type, &filename).await
+    {
         file_info.metadata = Some(content_metadata);
     }
-    
+
     // Create ingestion service
     let file_service_clone = state.file_service.as_ref().clone();
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        file_service_clone,
+    let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service_clone);
+
+    debug!(
+        "[UPLOAD_DEBUG] Calling ingestion service for file: {}",
+        filename
     );
-    
-    debug!("[UPLOAD_DEBUG] Calling ingestion service for file: {}", filename);
     let ingestion_start = std::time::Instant::now();
-    
-    match ingestion_service.ingest_from_file_info(
-        &file_info, 
-        data, 
-        auth_user.user.id, 
-        crate::ingestion::document_ingestion::DeduplicationPolicy::Skip, 
-        "web_upload", 
-        None
-    ).await {
+
+    match ingestion_service
+        .ingest_from_file_info(
+            &file_info,
+            data,
+            auth_user.user.id,
+            crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,
+            "web_upload",
+            None,
+        )
+        .await
+    {
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
-            
+
             // Update user's OCR language settings based on what was provided
             if !ocr_languages.is_empty() {
                 // Multi-language support: update preferred languages
@@ -232,35 +287,59 @@ pub async fn upload_document(
                             ocr_languages[0].clone(), // First language as primary
                             ocr_languages[0].clone(), // Backward compatibility
                         );
-                        
-                        if let Err(e) = state.db.create_or_update_settings(auth_user.user.id, &settings_update).await {
-                            warn!("Failed to update user preferred languages to {:?}: {}", ocr_languages, e);
+
+                        if let Err(e) = state
+                            .db
+                            .create_or_update_settings(auth_user.user.id, &settings_update)
+                            .await
+                        {
+                            warn!(
+                                "Failed to update user preferred languages to {:?}: {}",
+                                ocr_languages, e
+                            );
                         } else {
-                            info!("Updated user {} preferred languages to: {:?}", auth_user.user.id, ocr_languages);
+                            info!(
+                                "Updated user {} preferred languages to: {:?}",
+                                auth_user.user.id, ocr_languages
+                            );
                         }
                     }
                     Err(e) => {
-                        warn!("Invalid language combination provided, not updating user settings: {}", e);
+                        warn!(
+                            "Invalid language combination provided, not updating user settings: {}",
+                            e
+                        );
                     }
                 }
             } else if let Some(lang) = &ocr_language {
                 // Single language (backward compatibility)
-                if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {
+                if let Err(e) = state
+                    .db
+                    .update_user_ocr_language(auth_user.user.id, lang)
+                    .await
+                {
                     warn!("Failed to update user OCR language to {}: {}", lang, e);
                 } else {
-                    info!("Updated user {} OCR language to: {}", auth_user.user.id, lang);
+                    info!(
+                        "Updated user {} OCR language to: {}",
+                        auth_user.user.id, lang
+                    );
                 }
             }
-            
+
             // Auto-enqueue document for OCR processing
             let priority = 5; // Normal priority for direct uploads
-            if let Err(e) = state.queue_service.enqueue_document(document.id, priority, document.file_size).await {
+            if let Err(e) = state
+                .queue_service
+                .enqueue_document(document.id, priority, document.file_size)
+                .await
+            {
                 error!("Failed to enqueue document {} for OCR: {}", document.id, e);
                 // Don't fail the upload if OCR queueing fails, just log the error
             } else {
                 info!("Document {} enqueued for OCR processing", document.id);
             }
-            
+
             Ok(Json(DocumentUploadResponse {
                 id: document.id,
                 filename: document.filename,
@@ -281,32 +360,55 @@ pub async fn upload_document(
                 message: "Document already exists".to_string(),
             }))
         }
-        Ok(IngestionResult::Skipped { existing_document_id, reason }) => {
-            let error_msg = format!("Document upload skipped - {}: {}", reason, existing_document_id);
+        Ok(IngestionResult::Skipped {
+            existing_document_id,
+            reason,
+        }) => {
+            let error_msg = format!(
+                "Document upload skipped - {}: {}",
+                reason, existing_document_id
+            );
             info!("{}", error_msg);
             Err(DocumentError::Conflict(error_msg))
         }
-        Ok(IngestionResult::TrackedAsDuplicate { existing_document_id }) => {
+        Ok(IngestionResult::TrackedAsDuplicate {
+            existing_document_id,
+        }) => {
             let error_msg = format!("Document tracked as duplicate: {}", existing_document_id);
             info!("{}", error_msg);
             Err(DocumentError::Conflict(error_msg))
         }
         Err(e) => {
             let ingestion_duration = ingestion_start.elapsed();
-            let error_msg = format!("Failed to ingest document: {} (failed after {:?})", e, ingestion_duration);
+            let error_msg = format!(
+                "Failed to ingest document: {} (failed after {:?})",
+                e, ingestion_duration
+            );
             error!("[UPLOAD_DEBUG] {}", error_msg);
-            
+
             // Categorize the error for better client handling
             if e.to_string().contains("constraint") || e.to_string().contains("duplicate") {
-                return Err(DocumentError::DatabaseConstraintViolation(format!("Database constraint violation during upload: {}", e)));
+                return Err(DocumentError::DatabaseConstraintViolation(format!(
+                    "Database constraint violation during upload: {}",
+                    e
+                )));
             } else if e.to_string().contains("timeout") {
-                return Err(DocumentError::UploadTimeout(format!("Upload processing timed out: {}", e)));
+                return Err(DocumentError::UploadTimeout(format!(
+                    "Upload processing timed out: {}",
+                    e
+                )));
             } else if e.to_string().contains("ocr") || e.to_string().contains("processing") {
-                return Err(DocumentError::OcrProcessingError(format!("OCR processing error: {}", e)));
+                return Err(DocumentError::OcrProcessingError(format!(
+                    "OCR processing error: {}",
+                    e
+                )));
             } else if e.to_string().contains("file") || e.to_string().contains("read") {
-                return Err(DocumentError::FileProcessingError(format!("File processing error: {}", e)));
+                return Err(DocumentError::FileProcessingError(format!(
+                    "File processing error: {}",
+                    e
+                )));
             }
-            
+
             Err(DocumentError::InternalServerError(error_msg))
         }
     }
@@ -396,6 +498,7 @@ pub async fn get_document_by_id(
     params(PaginationQuery),
     responses(
         (status = 200, description = "Paginated list of documents", body = PaginatedDocumentsResponse),
+        (status = 400, description = "Invalid sort or filter parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
     )
@@ -404,88 +507,72 @@ pub async fn list_documents(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<PaginatedDocumentsResponse>, StatusCode> {
+) -> Result<Json<PaginatedDocumentsResponse>, DocumentError> {
     let limit = query.limit.unwrap_or(25);
     let offset = query.offset.unwrap_or(0);
 
-    // Get total count for pagination
-    let total_count = if let Some(ocr_status) = query.ocr_status.as_deref() {
-        state
-            .db
-            .count_documents_by_user_with_role_and_filter(
-                auth_user.user.id,
-                auth_user.user.role,
-                Some(ocr_status),
-            )
-            .await
-    } else {
-        state
-            .db
-            .count_documents_by_user_with_role(
-                auth_user.user.id,
-                auth_user.user.role,
-            )
-            .await
-    }
-    .map_err(|e| {
-        error!("Database error counting documents: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let filters = query.filters();
+    filters.validate().map_err(DocumentError::InvalidQuery)?;
 
-    let documents = if let Some(ocr_status) = query.ocr_status.as_deref() {
-        state
-            .db
-            .get_documents_by_user_with_role_and_filter(
-                auth_user.user.id,
-                auth_user.user.role,
-                Some(ocr_status),
-                limit,
-                offset,
-            )
-            .await
-    } else {
-        state
-            .db
-            .get_documents_by_user_with_role(
-                auth_user.user.id,
-                auth_user.user.role,
-                limit,
-                offset,
-            )
-            .await
-    }
-    .map_err(|e| {
-        error!("Database error listing documents: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    // Get total count for pagination
+    let total_count = state
+        .db
+        .count_documents_filtered(auth_user.user.id, auth_user.user.role, &filters)
+        .await
+        .map_err(|e| {
+            error!("Database error counting documents: {}", e);
+            DocumentError::InternalServerError("Failed to count documents".to_string())
+        })?;
+
+    let documents = state
+        .db
+        .list_documents_filtered(
+            auth_user.user.id,
+            auth_user.user.role,
+            &filters,
+            query.sort_by,
+            query.sort_order,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(|e| {
+            error!("Database error listing documents: {}", e);
+            DocumentError::InternalServerError("Failed to list documents".to_string())
+        })?;
 
     // Get document IDs for batch label fetching
-    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|d| d.id).collect();
-    
+    let document_ids: Vec<uuid::Uuid> = documents.iter().map(|d| d.document.id).collect();
+
     // Get labels for all documents in batch
-    let labels_map = if !document_ids.is_empty() {
+    let mut labels_map = if !document_ids.is_empty() {
         let labels = state
             .db
             .get_labels_for_documents(&document_ids)
             .await
             .map_err(|e| {
                 error!("Failed to get labels for documents: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
+                DocumentError::InternalServerError("Failed to load document labels".to_string())
             })?;
-        
-        labels.into_iter().collect::<std::collections::HashMap<_, _>>()
+
+        labels
+            .into_iter()
+            .collect::<std::collections::HashMap<_, _>>()
     } else {
         std::collections::HashMap::new()
     };
 
-    // Convert to response format with labels
+    // Convert to response format with labels and OCR progress
     let responses: Vec<DocumentResponse> = documents
         .into_iter()
-        .map(|doc| {
-            let mut response = DocumentResponse::from(doc.clone());
-            if let Some(labels) = labels_map.get(&doc.id) {
-                response.labels = labels.clone();
+        .map(|item| {
+            let doc_id = item.document.id;
+            let mut response = DocumentResponse::from(item.document);
+            if let Some(labels) = labels_map.remove(&doc_id) {
+                response.labels = labels;
             }
+            response.ocr_progress_current = item.ocr_progress_current;
+            response.ocr_progress_total = item.ocr_progress_total;
             response
         })
         .collect();
@@ -710,7 +797,7 @@ pub async fn get_user_duplicates(
             error!("Failed to get user duplicates: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    
+
     let total_count = duplicates.len() as i64;
 
     let response = serde_json::json!({

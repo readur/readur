@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{
     auth::{AdminUser, AuthUser},
@@ -18,7 +19,8 @@ use crate::{
     AppState,
 };
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct UserWatchDirectoryResponse {
     pub user_id: Uuid,
     pub username: String,
@@ -27,12 +29,14 @@ pub struct UserWatchDirectoryResponse {
     pub enabled: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateUserWatchDirectoryRequest {
     pub ensure_created: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct UserWatchDirectoryOperationResponse {
     pub success: bool,
     pub message: String,

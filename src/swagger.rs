@@ -1,32 +1,34 @@
-use utoipa::{OpenApi, Modify};
-use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, Http};
-use utoipa_swagger_ui::SwaggerUi;
 use axum::Router;
 use std::sync::Arc;
+use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    models::{
-        CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
-        DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
-        SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
-        FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
-        Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
-        WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
-        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
-        DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
-        BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
-    },
     models::source::{
-        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
+        WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus, WebDAVTestConnection,
+    },
+    models::{
+        BulkDeleteResponse, CreateNotification, CreateProcessedImage, CreateSource, CreateUser,
+        DayCount, DocumentDuplicatesResponse, DocumentFilters, DocumentListResponse,
+        DocumentOcrResponse, DocumentOperationResponse, DocumentResponse, DocumentSortField,
+        EnhancedDocumentResponse, FacetItem, HighlightRange, IgnoredFileResponse,
+        IgnoredFilesQuery, LocalFolderSourceConfig, LoginRequest, LoginResponse, MonthCount,
+        Notification, NotificationSummary, PaginationInfo, ProcessedImage, S3SourceConfig,
+        SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse, SearchSnippet,
+        SettingsResponse, SortOrder, Source, SourceArrivals, SourceResponse, SourceWithStats,
+        UpdateSettings, UpdateSource, UpdateUser, UserResponse, WebDAVSourceConfig,
     },
     routes::{
-        metrics::{
-            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
-        },
+        documents::BulkDeleteRequest,
         labels::{
-            Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, BulkUpdateRequest as LabelBulkUpdateRequest
+            BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
+            LabelQuery, UpdateLabel,
         },
-        documents::BulkDeleteRequest
+        metrics::{
+            DatabaseMetrics, DocumentMetrics, GeneralSystemMetrics, OcrMetrics, SystemMetrics,
+            UserMetrics,
+        },
     },
     AppState,
 };
@@ -73,6 +75,7 @@ use crate::{
         crate::routes::search::search_documents,
         crate::routes::search::enhanced_search_documents,
         crate::routes::search::get_search_facets,
+        crate::routes::search::search_timeline,
         // Settings endpoints
         crate::routes::settings::get_settings,
         crate::routes::settings::update_settings,
@@ -100,6 +103,7 @@ use crate::{
         crate::routes::notifications::delete_notification,
         // Sources endpoints
         crate::routes::sources::crud::list_sources,
+        crate::routes::sources::arrivals::get_source_arrivals,
         crate::routes::sources::crud::create_source,
         crate::routes::sources::crud::get_source,
         crate::routes::sources::crud::update_source,
@@ -169,6 +173,7 @@ use crate::{
             CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
             DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
             SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
+            DocumentSortField, SortOrder, DocumentFilters, MonthCount, SourceArrivals, DayCount,
             FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
             Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
             WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
@@ -229,7 +234,7 @@ impl Modify for SecurityAddon {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearer_auth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer))
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
             )
         }
     }

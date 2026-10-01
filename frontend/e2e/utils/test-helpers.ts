@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import { Page, expect, type Locator } from '@playwright/test';
 import { TEST_FILES } from './test-data';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -8,12 +8,25 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** Files in TEST_FILES are relative to frontend/. */
+export function resolveTestFile(filePath: string): string {
+  return path.resolve(__dirname, '../..', filePath);
+}
+
+export type IntakeSection = 'upload' | 'connections' | 'watch' | 'attention' | 'ignored';
+
+export interface WebdavSourceInput {
+  name: string;
+  serverUrl?: string;
+  enabled?: boolean;
+}
+
 export class TestHelpers {
   constructor(private page: Page) {}
 
-  /**
-   * Get auth token from localStorage (must be logged in via UI first)
-   */
+  // ---------------------------------------------------------------- API
+
+  /** Bearer token of the signed-in user (the app keeps it in localStorage). */
   async getAuthToken(): Promise<string> {
     const token = await this.page.evaluate(() => localStorage.getItem('token'));
     if (!token) {
@@ -22,158 +35,132 @@ export class TestHelpers {
     return token;
   }
 
-  /**
-   * Upload a document via API (faster and more reliable than UI)
-   * Returns the document ID
-   */
+  private async authHeaders(): Promise<Record<string, string>> {
+    return { Authorization: `Bearer ${await this.getAuthToken()}` };
+  }
+
+  /** Upload a file from disk through the API. Returns the document id. */
   async uploadDocumentViaAPI(filePath: string): Promise<string> {
-    const token = await this.getAuthToken();
-
-    // Resolve the file path relative to the frontend directory (two levels up from e2e/utils/)
-    const absolutePath = path.resolve(__dirname, '../..', filePath);
-
+    const absolutePath = resolveTestFile(filePath);
     if (!fs.existsSync(absolutePath)) {
       throw new Error(`Test file not found: ${absolutePath}`);
     }
+    const name = path.basename(absolutePath);
+    return this.uploadBufferViaAPI(name, fs.readFileSync(absolutePath), this.getMimeType(name));
+  }
 
-    const fileBuffer = fs.readFileSync(absolutePath);
-    const fileName = path.basename(absolutePath);
-
+  /** Upload in-memory content through the API under the given filename. Returns the document id. */
+  async uploadBufferViaAPI(name: string, buffer: Buffer, mimeType = this.getMimeType(name)): Promise<string> {
     const response = await this.page.request.post('/api/documents', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      multipart: {
-        file: {
-          name: fileName,
-          mimeType: this.getMimeType(fileName),
-          buffer: fileBuffer,
-        }
-      },
-      timeout: 60000
+      headers: await this.authHeaders(),
+      multipart: { file: { name, mimeType, buffer } },
+      timeout: 60000,
     });
-
     if (!response.ok()) {
-      const errorText = await response.text();
-      throw new Error(`Failed to upload document via API: ${response.status()} - ${errorText}`);
+      throw new Error(`Failed to upload document via API: ${response.status()} - ${await response.text()}`);
     }
-
     const result = await response.json();
-    console.log(`✅ Uploaded document via API: ${fileName} (ID: ${result.id || result.document_id})`);
     return result.id || result.document_id;
   }
 
-  /**
-   * Get document details via API
-   */
   async getDocumentViaAPI(documentId: string): Promise<any> {
-    const token = await this.getAuthToken();
-
     const response = await this.page.request.get(`/api/documents/${documentId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      timeout: 10000
+      headers: await this.authHeaders(),
+      timeout: 10000,
     });
-
     if (!response.ok()) {
       throw new Error(`Failed to get document: ${response.status()}`);
     }
-
     return response.json();
   }
 
-  /**
-   * Wait for OCR processing to complete on a document
-   */
+  /** Poll until OCR finishes (completed or failed). Returns the document. */
   async waitForOCRComplete(documentId: string, timeoutMs: number = 120000): Promise<any> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
       const doc = await this.getDocumentViaAPI(documentId);
-
-      if (doc.ocr_status === 'completed' || doc.ocr_status === 'success') {
-        console.log(`✅ OCR completed for document ${documentId}`);
+      if (['completed', 'success', 'failed', 'error'].includes(doc.ocr_status)) {
         return doc;
       }
-
-      if (doc.ocr_status === 'failed' || doc.ocr_status === 'error') {
-        console.log(`❌ OCR failed for document ${documentId}`);
-        return doc;
-      }
-
-      // Wait before checking again
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(1000);
     }
-
     throw new Error(`OCR did not complete within ${timeoutMs}ms for document ${documentId}`);
   }
 
-  /**
-   * Delete a document via API
-   */
   async deleteDocumentViaAPI(documentId: string): Promise<void> {
-    const token = await this.getAuthToken();
-
     const response = await this.page.request.delete(`/api/documents/${documentId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      timeout: 10000
+      headers: await this.authHeaders(),
+      timeout: 10000,
     });
-
     if (!response.ok()) {
       console.warn(`Failed to delete document ${documentId}: ${response.status()}`);
-    } else {
-      console.log(`🗑️ Deleted document ${documentId}`);
     }
   }
 
-  /**
-   * Get OCR languages via API
-   */
   async getOCRLanguagesViaAPI(): Promise<any[]> {
-    const token = await this.getAuthToken();
-
     const response = await this.page.request.get('/api/ocr/languages', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      timeout: 10000
+      headers: await this.authHeaders(),
+      timeout: 10000,
     });
-
     if (!response.ok()) {
       throw new Error(`Failed to get OCR languages: ${response.status()}`);
     }
-
     return response.json();
   }
 
-  /**
-   * Update settings via API
-   */
+  async getSettingsViaAPI(): Promise<Record<string, any>> {
+    const response = await this.page.request.get('/api/settings', { headers: await this.authHeaders() });
+    if (!response.ok()) throw new Error(`Failed to read settings: ${response.status()}`);
+    return response.json();
+  }
+
   async updateSettingsViaAPI(settings: Record<string, any>): Promise<void> {
-    const token = await this.getAuthToken();
-
     const response = await this.page.request.put('/api/settings', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { ...(await this.authHeaders()), 'Content-Type': 'application/json' },
       data: settings,
-      timeout: 10000
+      timeout: 10000,
     });
-
     if (!response.ok()) {
       throw new Error(`Failed to update settings: ${response.status()}`);
     }
-
-    console.log('✅ Settings updated via API');
   }
 
-  /**
-   * Get MIME type for a file
-   */
+  /** Create a WebDAV connection through the API (the server is never contacted on create). */
+  async createWebdavSourceViaAPI(input: WebdavSourceInput): Promise<{ id: string; name: string }> {
+    const response = await this.page.request.post('/api/sources', {
+      headers: await this.authHeaders(),
+      data: {
+        name: input.name,
+        source_type: 'webdav',
+        enabled: input.enabled ?? true,
+        config: {
+          server_url: input.serverUrl ?? 'http://127.0.0.1:9/dav/',
+          username: 'e2e',
+          password: 'e2e-password',
+          watch_folders: ['/Documents'],
+          file_extensions: ['pdf', 'png'],
+          auto_sync: false,
+          sync_interval_minutes: 60,
+          server_type: 'generic',
+        },
+      },
+    });
+    if (!response.ok()) {
+      throw new Error(`Failed to create source: ${response.status()} - ${await response.text()}`);
+    }
+    const body = await response.json();
+    return { id: body.id, name: body.name };
+  }
+
+  async deleteSourceViaAPI(sourceId: string): Promise<void> {
+    await this.page.request.delete(`/api/sources/${sourceId}`, { headers: await this.authHeaders() });
+  }
+
+  /** A unique name for data created by a test. */
+  uniqueName(base: string): string {
+    return `${base}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
   private getMimeType(fileName: string): string {
     const ext = path.extname(fileName).toLowerCase();
     const mimeTypes: Record<string, string> = {
@@ -189,296 +176,193 @@ export class TestHelpers {
     return mimeTypes[ext] || 'application/octet-stream';
   }
 
+  // ---------------------------------------------------------------- UI
+
   async waitForApiCall(urlPattern: string | RegExp, timeout = 10000) {
-    return this.page.waitForResponse(resp => 
-      typeof urlPattern === 'string' 
-        ? resp.url().includes(urlPattern)
-        : urlPattern.test(resp.url()), 
-      { timeout }
+    return this.page.waitForResponse(
+      (resp) => (typeof urlPattern === 'string' ? resp.url().includes(urlPattern) : urlPattern.test(resp.url())),
+      { timeout },
     );
   }
 
-  async uploadFile(inputSelector: string, filePath: string) {
-    const fileInput = this.page.locator(inputSelector);
-    await fileInput.setInputFiles(filePath);
+  /** The toast region; toasts are alertdialogs named "<Tone>: <title>". */
+  toasts(): Locator {
+    return this.page.getByRole('region', { name: 'Notifications' });
   }
 
-  async clearAndType(selector: string, text: string) {
-    await this.page.fill(selector, '');
-    await this.page.type(selector, text);
-  }
-
-  async waitForToast(message?: string) {
-    const toast = this.page.locator('[data-testid="toast"], .toast, [role="alert"]').first();
-    await expect(toast).toBeVisible({ timeout: 5000 });
-    
-    if (message) {
-      await expect(toast).toContainText(message);
-    }
-    
+  async waitForToast(message?: string | RegExp): Promise<Locator> {
+    const toast = message
+      ? this.toasts().getByRole('alertdialog', { name: message })
+      : this.toasts().getByRole('alertdialog').first();
+    await expect(toast).toBeVisible({ timeout: 10000 });
     return toast;
   }
 
+  /** Wait for skeletons to go (they carry role=status with a "Loading" name). */
   async waitForLoadingToComplete() {
-    // Wait for any loading spinners to disappear
-    await this.page.waitForFunction(() => 
-      !document.querySelector('[data-testid="loading"], .loading, [aria-label*="loading" i]')
-    );
+    await this.page.waitForLoadState('domcontentloaded');
+    await expect(this.page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 }).catch(() => undefined);
   }
 
-  async waitForWebKitStability() {
-    const browserName = await this.page.evaluate(() => navigator.userAgent);
-    const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
-    
-    if (isWebKit) {
-      console.log('WebKit stability waiting initiated...');
-      
-      // Wait for network to be completely idle
-      await this.page.waitForLoadState('networkidle');
-      await this.page.waitForTimeout(3000);
-      
-      // Wait for JavaScript to finish executing
-      await this.page.waitForFunction(() => {
-        return document.readyState === 'complete' && 
-               typeof window !== 'undefined';
-      }, { timeout: 15000 });
-      
-      // Extra stability wait
-      await this.page.waitForTimeout(2000);
-      console.log('WebKit stability waiting completed');
-    }
+  async navigateToPage(pathname: string) {
+    await this.page.goto(pathname);
+    await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
   }
 
-  async waitForBrowserStability() {
-    const browserName = await this.page.context().browser()?.browserType().name() || '';
-    
-    switch (browserName) {
-      case 'webkit':
-        await this.waitForWebKitStability();
-        break;
-      case 'firefox':
-        // Firefox-specific stability wait
-        console.log('Firefox stability waiting initiated...');
-        await this.page.waitForLoadState('networkidle');
-        await this.page.waitForTimeout(2000);
-        // Firefox sometimes needs extra time for form validation
-        await this.page.waitForFunction(() => {
-          return document.readyState === 'complete' && 
-                 typeof window !== 'undefined' &&
-                 !document.querySelector('.MuiCircularProgress-root');
-        }, { timeout: 15000 });
-        console.log('Firefox stability waiting completed');
-        break;
-      default:
-        // Chromium and others
-        await this.page.waitForLoadState('networkidle');
-        await this.page.waitForTimeout(500);
-        break;
-    }
+  async openIntake(section: IntakeSection) {
+    await this.page.goto(`/intake?section=${section}`);
+    await expect(this.page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible({ timeout: 15000 });
   }
 
-  async navigateToPage(path: string) {
-    await this.page.goto(path);
-    await this.waitForLoadingToComplete();
-    
-    // WebKit-specific stability waiting
-    const browserName = await this.page.evaluate(() => navigator.userAgent);
-    const isWebKit = browserName.includes('WebKit') && !browserName.includes('Chrome');
-    
-    if (isWebKit) {
-      console.log('WebKit detected - adding stability waiting for page:', path);
-      
-      // Wait for network to be completely idle
-      await this.page.waitForLoadState('networkidle');
-      await this.page.waitForTimeout(3000);
-      
-      // Wait for JavaScript to finish executing and ensure we're not stuck on login
-      await this.page.waitForFunction(() => {
-        return document.readyState === 'complete' && 
-               typeof window !== 'undefined' && 
-               !window.location.href.includes('/login') &&
-               !window.location.pathname.includes('/login');
-      }, { timeout: 20000 });
-      
-      // Extra stability wait
-      await this.page.waitForTimeout(2000);
-      console.log('WebKit stability waiting completed for:', path);
-    }
+  /**
+   * Switch the Library to the given layout. It opens as thumbnail cards; the table (and its
+   * columns, sorting headers and row cells) only exists after choosing "Table". The choice is
+   * remembered in this browser.
+   */
+  async useLibraryView(view: 'table' | 'grid') {
+    await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
+    const toggle = this.page.getByRole('radiogroup', { name: 'Layout' }).getByRole('radio', { name: view === 'table' ? 'Table' : 'Grid' });
+    if (!(await toggle.isChecked())) await toggle.click();
+    await expect(toggle).toBeChecked();
+  }
+
+  /** The Library table (only in the Table layout; see `useLibraryView`). */
+  documentsGrid(): Locator {
+    return this.page.getByRole('grid', { name: 'Documents' });
+  }
+
+  /** Body rows of the Library table (header row excluded). Table layout only. */
+  documentRows(): Locator {
+    return this.documentsGrid().getByRole('rowgroup').nth(1).getByRole('row');
+  }
+
+  /** Document cards of the Library's default grid layout: one list item per document. */
+  documentCards(): Locator {
+    return this.page
+      .getByRole('main')
+      .getByRole('listitem')
+      .filter({ has: this.page.getByRole('checkbox', { name: /^Select / }) });
+  }
+
+  /** The Library card for one document, by file name. */
+  documentCard(name: string): Locator {
+    return this.documentCards().filter({ has: this.page.getByRole('checkbox', { name: `Select ${name}`, exact: true }) });
+  }
+
+  /** Open a document's slideout from its Library card and return the panel. */
+  async openDocumentCard(name: string): Promise<Locator> {
+    await this.documentCard(name).getByRole('button', { name: new RegExp(escapeRegExp(name)) }).click();
+    const panel = this.page.getByRole('dialog', { name: new RegExp(escapeRegExp(name)) });
+    await expect(panel).toBeVisible();
+    return panel;
+  }
+
+  /**
+   * The OCR text on the document page. Wide screens show preview and text side by side;
+   * narrower ones put them behind "Preview" / "Text" tabs.
+   */
+  async extractedText(): Promise<Locator> {
+    await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible();
+    const tab = this.page.getByRole('tab', { name: 'Text' });
+    if (await tab.isVisible()) await tab.click();
+    const region = this.page.getByRole('region', { name: 'Extracted text' });
+    await expect(region).toBeVisible();
+    return region;
   }
 
   async takeScreenshotOnFailure(testName: string) {
-    await this.page.screenshot({ 
-      path: `test-results/screenshots/${testName}-${Date.now()}.png`,
-      fullPage: true 
-    });
+    await this.page.screenshot({ path: `test-results/screenshots/${testName}-${Date.now()}.png`, fullPage: true });
   }
 
+  /** Upload one file through Intake → Add documents and wait for it to finish uploading. */
   async uploadTestDocument(fileName: string = 'test1.png') {
-    try {
-      console.log(`Uploading test document: ${fileName}`);
-      
-      // Navigate to upload page
-      await this.page.goto('/upload');
-      await this.waitForLoadingToComplete();
-      
-      // Look for file input - react-dropzone creates hidden inputs
-      const fileInput = this.page.locator('input[type="file"]').first();
-      await expect(fileInput).toBeAttached({ timeout: 10000 });
-      
-      // Upload the test file using the proper path from TEST_FILES
-      const filePath = fileName === 'test1.png' ? TEST_FILES.test1 : `../tests/test_images/${fileName}`;
-      await fileInput.setInputFiles(filePath);
-      
-      // Verify file is added to the list by looking for the filename
-      await expect(this.page.getByText(fileName)).toBeVisible({ timeout: 5000 });
-      
-      // Look for the "Upload All" button which appears after files are selected
-      const uploadButton = this.page.locator('button:has-text("Upload All"), button:has-text("Upload")');
-      if (await uploadButton.isVisible({ timeout: 5000 })) {
-        // Wait for upload API call
-        const uploadPromise = this.waitForApiCall('/api/documents', 30000);
-        
-        await uploadButton.click();
-        
-        // Wait for upload to complete
-        await uploadPromise;
-        console.log('Upload completed successfully');
-      } else {
-        console.log('Upload button not found, file may have been uploaded automatically');
-      }
-      
-      // Return to documents page
-      await this.page.goto('/documents');
-      await this.waitForLoadingToComplete();
-      
-      console.log('Returned to documents page after upload');
-    } catch (error) {
-      console.error('Error uploading test document:', error);
-      // Return to documents page even if upload failed
-      await this.page.goto('/documents');
-      await this.waitForLoadingToComplete();
-    }
+    await this.openIntake('upload');
+    const filePath = fileName === 'test1.png' ? TEST_FILES.test1 : `../tests/test_images/${fileName}`;
+    await this.page.locator('input[type="file"]').first().setInputFiles(filePath);
+    const queue = this.page.getByRole('grid', { name: 'Files to upload' });
+    await expect(queue.getByRole('row', { name: new RegExp(fileName) })).toBeVisible();
+    const upload = this.waitForApiCall('/api/documents', 30000);
+    await this.page.getByRole('button', { name: /^Upload all/ }).click();
+    await upload;
   }
 
+  /** Make sure the signed-in user has at least one document (uploads test1.png through the API). */
   async ensureTestDocumentsExist() {
-    try {
-      // Give the page time to load before checking for documents
-      await this.waitForLoadingToComplete();
-      
-      // Check if there are any documents - use multiple selectors to be safe
-      const documentSelectors = [
-        '[data-testid="document-item"]',
-        '.document-item', 
-        '.document-card',
-        '.MuiCard-root', // Material-UI cards commonly used for documents
-        '[role="article"]' // Semantic role for document items
-      ];
-      
-      let documentCount = 0;
-      for (const selector of documentSelectors) {
-        const count = await this.page.locator(selector).count();
-        if (count > 0) {
-          documentCount = count;
-          break;
-        }
-      }
-      
-      console.log(`Found ${documentCount} documents on the page`);
-      
-      if (documentCount === 0) {
-        console.log('No documents found, attempting to upload a test document...');
-        // Upload a test document
-        await this.uploadTestDocument('test1.png');
-      }
-    } catch (error) {
-      console.log('Error checking for test documents:', error);
-      // Don't fail the test if document check fails, just log it
+    const response = await this.page.request.get('/api/documents?limit=1', { headers: await this.authHeaders() });
+    const body = response.ok() ? await response.json() : null;
+    const count = Array.isArray(body) ? body.length : (body?.documents?.length ?? 0);
+    if (count === 0) {
+      const id = await this.uploadDocumentViaAPI(TEST_FILES.test1);
+      await this.waitForOCRComplete(id);
     }
   }
 
-  async createTestSource(baseName: string, type: string, options?: {
-    mockResponse?: boolean;
-    responseData?: any;
-    uniqueSuffix?: string;
-  }) {
-    // Generate unique source name to avoid conflicts in concurrent tests
-    const timestamp = Date.now();
-    const randomSuffix = options?.uniqueSuffix || Math.random().toString(36).substring(7);
-    const sourceName = `${baseName}_${timestamp}_${randomSuffix}`;
-    
-    // Set up mock if requested
-    if (options?.mockResponse) {
-      const responseData = options.responseData || {
-        id: `source_${timestamp}`,
-        name: sourceName,
-        type: type,
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      // Mock the POST request to create source
-      await this.page.route('**/api/sources', async (route, request) => {
-        if (request.method() === 'POST') {
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(responseData)
-          });
-        } else {
-          await route.continue();
-        }
-      });
-    }
-    
-    // Click the add source button
-    await this.page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    // Wait for dialog to appear - target the specific dialog paper element
-    await expect(this.page.getByRole('dialog')).toBeVisible();
-    
-    // Fill in source details - use more reliable selectors
-    const nameInput = this.page.getByLabel('Source Name');
-    await nameInput.fill(sourceName);
-    
-    // For Material-UI Select, we need to click and then select the option
-    const typeSelect = this.page.getByLabel('Source Type');
-    if (await typeSelect.isVisible()) {
-      await typeSelect.click();
-      await this.page.getByRole('option', { name: new RegExp(type, 'i') }).click();
-    }
-    
-    // Add type-specific fields using label-based selectors
+  /**
+   * Create a connection through Intake → Connections → Add connection.
+   * The page must already be on the Connections section. Returns the unique name used.
+   */
+  async createTestSource(
+    baseName: string,
+    type: 'webdav' | 'local_folder' | 's3',
+    options?: { uniqueSuffix?: string; serverUrl?: string; watchFolder?: string },
+  ): Promise<string> {
+    const suffix = options?.uniqueSuffix || Math.random().toString(36).substring(7);
+    const sourceName = `${baseName}_${Date.now()}_${suffix}`;
+
+    await this.page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = this.page.getByRole('dialog', { name: 'Add connection' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill(sourceName);
+
     if (type === 'webdav') {
-      await this.page.getByLabel('Server URL').fill('https://test.webdav.server');
-      await this.page.getByLabel('Username').fill('testuser');
-      await this.page.getByLabel('Password').fill('testpass');
+      await dialog.getByRole('radio', { name: /^WebDAV/ }).check({ force: true });
+      await dialog.getByRole('textbox', { name: 'Server URL' }).fill(options?.serverUrl ?? 'http://127.0.0.1:9/dav/');
+      await dialog.getByRole('textbox', { name: 'Username' }).fill('testuser');
+      await dialog.getByRole('textbox', { name: 'Password' }).fill('testpass');
     } else if (type === 's3') {
-      await this.page.getByLabel('Bucket Name').fill('test-bucket');
-      await this.page.getByLabel('Region').fill('us-east-1');
-      await this.page.getByLabel('Access Key ID').fill('test-access-key');
-      await this.page.getByLabel('Secret Access Key').fill('test-secret-key');
-    } else if (type === 'local_folder') {
-      // For local folder, we need to add a directory path
-      const addFolderInput = this.page.getByLabel(/Add.*Path/i);
-      if (await addFolderInput.isVisible()) {
-        await addFolderInput.fill('/test/path');
-        await this.page.getByRole('button', { name: /Add.*Folder/i }).click();
+      await dialog.getByRole('radio', { name: /^S3-compatible/ }).check({ force: true });
+      await dialog.getByRole('textbox', { name: 'Bucket name' }).fill('test-bucket');
+      await dialog.getByRole('textbox', { name: 'Access key ID' }).fill('AKIATESTKEY0000');
+      await dialog.getByRole('textbox', { name: 'Secret access key' }).fill('test-secret-key');
+    } else {
+      await dialog.getByRole('radio', { name: /^Local folder/ }).check({ force: true });
+      if (options?.watchFolder) {
+        // Replace the placeholder folder with one that exists on the server
+        const folders = dialog.getByRole('list', { name: 'Directories to monitor' });
+        const remove = folders.getByRole('button', { name: /^Remove / });
+        while ((await remove.count()) > 0) await remove.first().click();
+        await dialog.getByRole('textbox', { name: 'Directories to monitor' }).fill(options.watchFolder);
+        await dialog.getByRole('button', { name: 'Add to Directories to monitor' }).click();
+        await expect(folders.getByText(options.watchFolder, { exact: true })).toBeVisible();
       }
     }
-    
-    // Submit the form
-    const createPromise = this.waitForApiCall('/api/sources', 10000);
-    await this.page.getByRole('button', { name: /Create|Save/i }).click();
-    
-    // Wait for source to be created
-    await createPromise;
-    await this.waitForToast();
-    
-    // Verify the source appears in the list
-    await expect(this.page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`)).toBeVisible();
-    
-    // Return the generated source name so tests can reference it
+
+    const create = this.page.waitForResponse(
+      (r) => /\/api\/sources$/.test(r.url()) && r.request().method() === 'POST',
+      { timeout: 10000 },
+    );
+    await dialog.getByRole('button', { name: 'Add connection' }).click();
+    const response = await create;
+    expect(response.ok(), `create source returned ${response.status()}`).toBe(true);
+    await expect(dialog).toBeHidden();
+    await expect(this.connectionRow(sourceName)).toBeVisible();
     return sourceName;
   }
+
+  /** A row of the Intake → Connections board. */
+  connectionRow(name: string): Locator {
+    return this.page.getByRole('grid', { name: 'Connections' }).getByRole('row', { name: new RegExp(escapeRegExp(name)) });
+  }
+
+  /** Open a connection's detail panel from its row. Returns the panel. */
+  async openConnection(name: string): Promise<Locator> {
+    await this.connectionRow(name).click();
+    const panel = this.page.getByRole('dialog', { name });
+    await expect(panel).toBeVisible();
+    return panel;
+  }
+}
+
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

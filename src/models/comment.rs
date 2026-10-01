@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct DocumentComment {
     pub id: Uuid,
     pub document_id: Uuid,
@@ -16,7 +18,8 @@ pub struct DocumentComment {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct CommentWithAuthor {
     pub id: Uuid,
     pub document_id: Uuid,
@@ -30,7 +33,8 @@ pub struct CommentWithAuthor {
     pub user_role: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CommentThread {
     #[serde(flatten)]
     pub comment: CommentWithAuthor,
@@ -38,13 +42,15 @@ pub struct CommentThread {
     pub replies: Vec<CommentWithAuthor>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateCommentRequest {
     pub content: String,
     pub parent_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateCommentRequest {
     pub content: String,
 }

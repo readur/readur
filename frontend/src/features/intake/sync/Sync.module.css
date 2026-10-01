@@ -1,0 +1,98 @@
+.display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+
+.display[data-active='true'] {
+  border-color: var(--accent);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.titles {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-ui);
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.connectionWord {
+  font-family: var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.connectionWord[data-tone='ok'] > [aria-hidden='true'] {
+  color: var(--ok);
+}
+
+.connectionWord[data-tone='danger'] > [aria-hidden='true'] {
+  color: var(--danger);
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.problems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.problem {
+  display: inline-flex;
+  gap: var(--s-1);
+}
+
+.problemError {
+  color: var(--danger);
+}

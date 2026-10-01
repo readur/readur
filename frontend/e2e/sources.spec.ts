@@ -1,641 +1,263 @@
 import { test, expect } from './fixtures/auth';
-import { TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
+import type { Page } from '@playwright/test';
+import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+/**
+ * Sources are now Intake → Connections (/intake?section=connections; /sources redirects).
+ * A row opens the connection's detail panel with its actions. Every test signs in as a fresh
+ * user, so the board only holds connections the test creates. WebDAV connections point at
+ * an address nothing listens on, so no test depends on an external server.
+ */
 test.describe('Source Management', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/sources');
+  test.beforeEach(async ({ dynamicUserPage }) => {
+    helpers = new TestHelpers(dynamicUserPage);
+    await helpers.openIntake('connections');
   });
 
-  test.skip('should display sources interface', async ({ dynamicAdminPage: page }) => {
-    // Check for sources page components
-    await expect(page.locator('[data-testid="sources-list"], .sources-list, .sources-container')).toBeVisible();
-    await expect(page.locator('button:has-text("Add Source"), [data-testid="add-source"]')).toBeVisible();
+  const addDialog = (page: Page) => page.getByRole('dialog', { name: 'Add connection' });
+
+  test('should display sources interface', async ({ dynamicUserPage: page }) => {
+    await page.goto('/sources');
+    await expect(page).toHaveURL(/\/intake\?section=connections/);
+    await expect(page.getByRole('tab', { name: 'Connections', selected: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add connection' }).first()).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'No connections yet' })).toBeVisible();
   });
 
-  test.skip('should create a new local folder source', async ({ dynamicAdminPage: page }) => {
-    // Click add source button
-    await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    // Should show add source form/modal
-    await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
-    
-    // Fill in source details
-    await page.fill('input[name="name"], [data-testid="source-name"]', 'Test Local Folder');
-    
-    // Select source type
-    const typeSelector = page.locator('select[name="type"], [data-testid="source-type"]');
-    if (await typeSelector.isVisible()) {
-      await typeSelector.selectOption('local_folder');
-    }
-    
-    // Fill in folder path
-    await page.fill('input[name="path"], [data-testid="folder-path"]', '/tmp/test-folder');
-    
-    // Wait for source creation API call
-    const createResponse = helpers.waitForApiCall('/api/sources', TIMEOUTS.medium);
-    
-    // Submit form
-    await page.click('button[type="submit"], button:has-text("Create"), [data-testid="create-source"]');
-    
-    // Verify source was created
-    await createResponse;
-    
-    // Should show success message
-    await helpers.waitForToast();
-    
-    // Should appear in sources list
-    await expect(page.locator(':has-text("Test Local Folder")')).toBeVisible({ timeout: TIMEOUTS.medium });
+  test('should refuse a local folder source for a regular user', async ({ dynamicUserPage: page }) => {
+    // A local folder reads the server's own disk, so only admins may add one unless
+    // LOCAL_SOURCE_ALLOWED_PATHS names folders users are allowed to watch.
+    await page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = addDialog(page);
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill(helpers.uniqueName('Test Local Folder'));
+    await dialog.getByRole('radio', { name: /^Local folder/ }).check({ force: true });
+
+    const create = page.waitForResponse((r) => /\/api\/sources$/.test(r.url()) && r.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Add connection' }).click();
+    expect((await create).status()).toBe(403);
+    const toast = await helpers.waitForToast(/Could not save the connection/);
+    await expect(toast).toContainText('Only an administrator can add local folders.');
+    await expect(dialog).toBeVisible();
   });
 
-  test.skip('should create a new WebDAV source', async ({ dynamicAdminPage: page }) => {
-    await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
-    
-    // Fill in WebDAV source details
-    await page.fill('input[name="name"], [data-testid="source-name"]', 'Test WebDAV');
-    
-    const typeSelector = page.locator('select[name="type"], [data-testid="source-type"]');
-    if (await typeSelector.isVisible()) {
-      await typeSelector.selectOption('webdav');
-    }
-    
-    // Fill WebDAV specific fields
-    await page.fill('input[name="url"], [data-testid="webdav-url"]', 'https://example.com/webdav');
-    await page.fill('input[name="username"], [data-testid="webdav-username"]', 'testuser');
-    await page.fill('input[name="password"], [data-testid="webdav-password"]', 'testpass');
-    
-    const createResponse = helpers.waitForApiCall('/api/sources');
-    
-    await page.click('button[type="submit"], button:has-text("Create"), [data-testid="create-source"]');
-    
-    await createResponse;
-    await helpers.waitForToast();
-    
-    await expect(page.locator(':has-text("Test WebDAV")')).toBeVisible({ timeout: TIMEOUTS.medium });
+  test('should create a new WebDAV source', async ({ dynamicUserPage: page }) => {
+    const name = await helpers.createTestSource('Test WebDAV', 'webdav');
+    await expect(helpers.connectionRow(name)).toContainText('WebDAV');
+    await expect(helpers.connectionRow(name)).toContainText('never');
   });
 
-  test.skip('should create a new S3 source', async ({ dynamicAdminPage: page }) => {
-    await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    await expect(page.locator('[data-testid="add-source-form"], .add-source-modal, .source-form')).toBeVisible();
-    
-    // Fill in S3 source details
-    await page.fill('input[name="name"], [data-testid="source-name"]', 'Test S3 Bucket');
-    
-    const typeSelector = page.locator('select[name="type"], [data-testid="source-type"]');
-    if (await typeSelector.isVisible()) {
-      await typeSelector.selectOption('s3');
-    }
-    
-    // Fill S3 specific fields
-    await page.fill('input[name="bucket"], [data-testid="s3-bucket"]', 'test-bucket');
-    await page.fill('input[name="region"], [data-testid="s3-region"]', 'us-east-1');
-    await page.fill('input[name="accessKey"], [data-testid="s3-access-key"]', 'AKIATEST');
-    await page.fill('input[name="secretKey"], [data-testid="s3-secret-key"]', 'secretkey123');
-    
-    const createResponse = helpers.waitForApiCall('/api/sources');
-    
-    await page.click('button[type="submit"], button:has-text("Create"), [data-testid="create-source"]');
-    
-    await createResponse;
-    await helpers.waitForToast();
-    
-    await expect(page.locator(':has-text("Test S3 Bucket")')).toBeVisible({ timeout: TIMEOUTS.medium });
+  test('should create a new S3 source', async ({ dynamicUserPage: page }) => {
+    const name = await helpers.createTestSource('Test S3 Bucket', 's3');
+    await expect(helpers.connectionRow(name)).toContainText(/S3/);
+
+    // The secret is never shown; the access key is masked
+    const panel = await helpers.openConnection(name);
+    await expect(panel).not.toContainText('test-secret-key');
+    await expect(panel).not.toContainText('AKIATESTKEY0000');
   });
 
-  test('should edit existing source', async ({ dynamicAdminPage: page }) => {
-    // Look for existing source to edit
-    const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
-    
-    if (await firstSource.isVisible()) {
-      // Click edit button
-      const editButton = firstSource.locator('button:has-text("Edit"), [data-testid="edit-source"], .edit-button');
-      if (await editButton.isVisible()) {
-        await editButton.click();
-        
-        // Should show edit form
-        await expect(page.locator('[data-testid="edit-source-form"], .edit-source-modal, .source-form')).toBeVisible();
-        
-        // Modify source name
-        const nameInput = page.locator('input[name="name"], [data-testid="source-name"]');
-        await nameInput.fill('Updated Source Name');
-        
-        const updateResponse = helpers.waitForApiCall('/api/sources');
-        
-        await page.click('button[type="submit"], button:has-text("Save"), [data-testid="save-source"]');
-        
-        await updateResponse;
-        await helpers.waitForToast();
-        
-        // Should show updated name
-        await expect(page.locator(':has-text("Updated Source Name")')).toBeVisible({ timeout: TIMEOUTS.medium });
-      }
-    }
+  test('should edit existing source', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Editable') });
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Edit connection' });
+    await expect(dialog).toBeVisible();
+    const newName = helpers.uniqueName('Updated Source Name');
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill(newName);
+
+    const update = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}`) && r.request().method() === 'PUT');
+    await dialog.getByRole('button', { name: 'Save changes' }).click();
+    expect((await update).ok()).toBe(true);
+    await helpers.waitForToast(/Connection updated/);
+
+    await expect(helpers.connectionRow(newName)).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test('should delete source', async ({ dynamicAdminPage: page }) => {
-    // First wait for sources list to load
-    await helpers.waitForLoadingToComplete();
-    
-    // Check if we can see the sources page
-    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
-    if (isOnLoginPage) {
-      throw new Error('Test is stuck on login page - authentication failed');
-    }
-    
-    // Look for sources using the known working selectors from artifact
-    const sourceSelectors = [
-      '[data-testid="source-item"]',
-      '.source-item',
-      '.source-card',
-      '.MuiCard-root' // Based on the artifact showing Material-UI components
-    ];
-    
-    let firstSource = null;
-    for (const selector of sourceSelectors) {
-      const sources = page.locator(selector);
-      if (await sources.count() > 0) {
-        firstSource = sources.first();
-        console.log(`Found source using selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (firstSource && await firstSource.isVisible({ timeout: 5000 })) {
-      // Try to get source name for verification - from artifacts we know the structure
-      // The source name appears to be "WEBDAV" from the context, but let's be more specific
-      let sourceName = null;
-      
-      try {
-        // Look for the source name in the source card header area - be very specific to avoid strict mode
-        const sourceNameElement = firstSource.locator('text=WEBDAV').first();
-        if (await sourceNameElement.isVisible({ timeout: 2000 })) {
-          sourceName = await sourceNameElement.textContent();
-          console.log(`Found source name: ${sourceName}`);
-        } else {
-          // Fallback - just use a generic identifier 
-          sourceName = 'test source';
-          console.log('Using generic source name for verification');
-        }
-      } catch (error) {
-        console.log('Could not get source name, continuing without name verification');
-        sourceName = null;
-      }
-      
-      // Look for delete button with flexible selectors
-      const deleteButtonSelectors = [
-        'button:has-text("Delete")',
-        '[data-testid="delete-source"]',
-        '.delete-button',
-        'button[aria-label*="delete" i]',
-        'button[title*="delete" i]'
-      ];
-      
-      let deleteButton = null;
-      for (const buttonSelector of deleteButtonSelectors) {
-        const button = firstSource.locator(buttonSelector);
-        if (await button.isVisible({ timeout: 2000 })) {
-          deleteButton = button;
-          console.log(`Found delete button using: ${buttonSelector}`);
-          break;
-        }
-      }
-      
-      if (deleteButton) {
-        await deleteButton.click();
-        
-        // Look for Material-UI delete confirmation dialog
-        const deleteDialog = page.locator('[role="dialog"]:has-text("Delete Source")');
-        await expect(deleteDialog).toBeVisible({ timeout: 5000 });
-        console.log('Delete confirmation dialog is visible');
-        
-        // Look for the delete button in the dialog
-        const confirmButton = deleteDialog.locator('button:has-text("Delete")').last();
-        await expect(confirmButton).toBeVisible({ timeout: 2000 });
-        console.log('Found delete confirmation button');
-        
-        // Wait for delete API call
-        const deleteResponse = helpers.waitForApiCall('/api/sources', 10000);
-        
-        await confirmButton.click();
-        
-        try {
-          await deleteResponse;
-          console.log('Delete API call completed');
-        } catch (error) {
-          console.log('Delete API call may have failed or timed out:', error);
-        }
-        
-        // Wait for any success toast/notification
-        try {
-          await helpers.waitForToast();
-        } catch (error) {
-          console.log('No toast notification found');
-        }
-        
-        // Wait for the UI to update (sources list should refresh)
-        await page.waitForTimeout(3000);
-        
-        // Count sources before and after to verify deletion worked
-        const initialSourceCount = await page.locator('[data-testid="source-item"], .source-item, .source-card').count();
-        console.log(`Sources remaining after delete: ${initialSourceCount}`);
-        
-        // Check if the specific source (with the same name) is gone by trying to find it
-        let sourceStillExists = false;
-        if (sourceName) {
-          try {
-            const specificSource = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`);
-            sourceStillExists = await specificSource.isVisible({ timeout: 2000 });
-          } catch (e) {
-            sourceStillExists = false;
-          }
-        }
-        
-        if (sourceStillExists) {
-          console.log(`Source '${sourceName}' still visible - checking if UI needs refresh`);
-          
-          // Try clicking the refresh button to update the UI
-          const refreshButton = page.locator('button:has-text("Refresh")');
-          if (await refreshButton.isVisible({ timeout: 2000 })) {
-            await refreshButton.click();
-            console.log('Clicked refresh button');
-            await page.waitForTimeout(2000);
-          }
-          
-          // Check again after refresh
-          const specificSourceAfterRefresh = page.locator(`[data-testid="source-item"]:has-text("${sourceName}")`);
-          const stillExistsAfterRefresh = await specificSourceAfterRefresh.isVisible({ timeout: 2000 });
-          
-          if (stillExistsAfterRefresh) {
-            console.log('Source still exists after refresh - deletion may have failed');
-          } else {
-            console.log('Source successfully removed after refresh');
-          }
-        } else {
-          console.log('Source successfully removed from list');
-        }
-        
-        // Always check final state - if no sources remain, verify empty state shows
-        const finalSourceCount = await page.locator('[data-testid="source-item"], .source-item, .source-card').count();
-        console.log(`Final source count: ${finalSourceCount}`);
-        
-        if (finalSourceCount === 0) {
-          await expect(page.locator('h5:has-text("No Sources Configured")')).toBeVisible({ timeout: 10000 });
-          console.log('Empty state message is visible - no sources remaining');
-        } else {
-          console.log(`${finalSourceCount} sources still present - empty state not expected`);
-        }
-      } else {
-        console.log('No delete button found - test will pass but delete was not performed');
-      }
-    } else {
-      console.log('No sources found to delete - test will pass but no action was performed');
-    }
+  test('should delete source', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Deletable') });
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    const confirm = page.getByRole('alertdialog', { name: /Delete “.*”\?/ });
+    await expect(confirm).toBeVisible();
+    const del = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}`) && r.request().method() === 'DELETE');
+    await confirm.getByRole('button', { name: 'Delete connection' }).click();
+    expect((await del).ok()).toBe(true);
+    await helpers.waitForToast(/Connection deleted/);
+
+    await expect(helpers.connectionRow(source.name)).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'No connections yet' })).toBeVisible();
   });
 
-  test.skip('should start source sync', async ({ dynamicAdminPage: page }) => {
-    const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
-    
-    if (await firstSource.isVisible()) {
-      // Look for sync button
-      const syncButton = firstSource.locator('button:has-text("Sync"), [data-testid="sync-source"], .sync-button');
-      if (await syncButton.isVisible()) {
-        const syncResponse = helpers.waitForApiCall('/api/sources/*/sync');
-        
-        await syncButton.click();
-        
-        await syncResponse;
-        
-        // Should show sync status
-        await expect(firstSource.locator(':has-text("Syncing"), [data-testid="sync-status"], .sync-status')).toBeVisible({ 
-          timeout: TIMEOUTS.medium 
-        });
-      }
-    }
+  test('should start source sync', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Syncable') });
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    const sync = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}/sync`) && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: 'Sync now' }).click();
+    expect((await sync).ok()).toBe(true);
+    await helpers.waitForToast(/Sync started/);
   });
 
-  test('should stop source sync', async ({ dynamicAdminPage: page }) => {
-    const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
-    
-    if (await firstSource.isVisible()) {
-      // First start sync if not running
-      const syncButton = firstSource.locator('button:has-text("Sync"), [data-testid="sync-source"]');
-      if (await syncButton.isVisible()) {
-        await syncButton.click();
-        await helpers.waitForLoadingToComplete();
-      }
-      
-      // Look for stop button
-      const stopButton = firstSource.locator('button:has-text("Stop"), [data-testid="stop-sync"], .stop-button');
-      if (await stopButton.isVisible()) {
-        const stopResponse = helpers.waitForApiCall('/api/sources/*/stop');
-        
-        await stopButton.click();
-        
-        await stopResponse;
-        
-        // Should show stopped status
-        await expect(firstSource.locator(':has-text("Stopped"), :has-text("Idle")')).toBeVisible({ 
-          timeout: TIMEOUTS.medium 
-        });
-      }
-    }
+  test('should stop source sync', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Stoppable') });
+    await page.reload();
+
+    // Pretend the connection is mid-sync so the panel offers "Stop sync"
+    await page.route('**/api/sources', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const response = await route.fetch();
+      const list = await response.json();
+      for (const s of list) if (s.id === source.id) s.status = 'syncing';
+      await route.fulfill({ response, json: list });
+    });
+    await page.route(`**/api/sources/${source.id}/sync/stop`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+    );
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    await expect(panel).toContainText('Syncing');
+    const stop = page.waitForRequest((r) => r.url().includes(`/api/sources/${source.id}/sync/stop`) && r.method() === 'POST');
+    await panel.getByRole('button', { name: 'Stop sync' }).click();
+    await stop;
+    await helpers.waitForToast(/Sync stopped/);
   });
 
-  test('should display source status and statistics', async ({ dynamicAdminPage: page }) => {
-    // First wait for sources list to load
-    await helpers.waitForLoadingToComplete();
-    
-    // Check if we can see the sources page
-    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
-    if (isOnLoginPage) {
-      throw new Error('Test is stuck on login page - authentication failed');
+  test('should display source status and statistics', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Stats') });
+    await page.reload();
+
+    const grid = page.getByRole('grid', { name: 'Connections' });
+    for (const col of ['Name', 'Type', 'Status', 'Last sync', 'Files', 'Next']) {
+      await expect(grid.getByRole('columnheader', { name: col })).toBeVisible();
     }
-    
-    const firstSource = page.locator('[data-testid="source-item"]').first();
-    
-    if (await firstSource.isVisible()) {
-      console.log('Found source item - checking for status and statistics');
-      
-      // From the artifact, we can see these elements are present
-      // Look for status information - be more specific to avoid strict mode violations
-      const statusElements = [
-        '.MuiChip-root:has-text("Error")',
-        '.MuiChip-root:has-text("Warning")', 
-        '.MuiChip-root:has-text("Idle")',
-        '.MuiChip-root:has-text("Syncing")',
-        '.MuiChip-root'
-      ];
-      
-      let foundStatus = false;
-      for (const statusSelector of statusElements) {
-        try {
-          const elements = firstSource.locator(statusSelector);
-          if (await elements.count() > 0 && await elements.first().isVisible({ timeout: 2000 })) {
-            console.log(`Found status element: ${statusSelector}`);
-            foundStatus = true;
-            break;
-          }
-        } catch (error) {
-          // Skip if selector has issues
-          console.log(`Status selector ${statusSelector} had issues, trying next...`);
-        }
-      }
-      
-      // Should show statistics - from artifact we can see these specific texts
-      // Use more specific selectors to avoid strict mode violations
-      const statisticsElements = [
-        'p:has-text("Documents Stored")',
-        'p:has-text("OCR Processed")', 
-        'p:has-text("Last Sync")',
-        'p:has-text("Files Pending")',
-        'p:has-text("Total Size")',
-        ':has-text("0 docs")', // From artifact
-        ':has-text("Never")' // From artifact for Last Sync
-      ];
-      
-      let foundStats = 0;
-      for (const statSelector of statisticsElements) {
-        try {
-          const elements = firstSource.locator(statSelector);
-          if (await elements.count() > 0 && await elements.first().isVisible({ timeout: 2000 })) {
-            console.log(`Found statistic: ${statSelector}`);
-            foundStats++;
-          }
-        } catch (error) {
-          // Skip if selector has issues
-          console.log(`Statistic selector ${statSelector} had issues, trying next...`);
-        }
-      }
-      
-      console.log(`Found ${foundStats} statistics elements and status: ${foundStatus}`);
-      console.log('Source status and statistics test completed successfully');
-    } else {
-      console.log('No sources found - test completed without verification');
+    const row = helpers.connectionRow(source.name);
+    await expect(row).toContainText('Healthy');
+    await expect(row).toContainText('never');
+
+    const panel = await helpers.openConnection(source.name);
+    for (const group of ['Connection', 'Schedule', 'Counts', 'Scope']) {
+      await expect(panel.getByRole('group', { name: group })).toBeVisible();
     }
+    const counts = panel.getByRole('group', { name: 'Counts' });
+    for (const term of ['Documents', 'OCR done', 'Pending', 'Size']) {
+      await expect(counts.getByRole('term').filter({ hasText: term })).toBeVisible();
+    }
+    // The password is never shown
+    await expect(panel.getByRole('group', { name: 'Connection' })).toContainText('password set');
+    await expect(panel).not.toContainText('e2e-password');
   });
 
-  test.skip('should test source connection', async ({ dynamicAdminPage: page }) => {
-    await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
-    
-    // Fill in source details
-    await page.fill('input[name="name"], [data-testid="source-name"]', 'Test Connection');
-    
-    const typeSelector = page.locator('select[name="type"], [data-testid="source-type"]');
-    if (await typeSelector.isVisible()) {
-      await typeSelector.selectOption('webdav');
-    }
-    
-    await page.fill('input[name="url"], [data-testid="webdav-url"]', 'https://example.com/webdav');
-    await page.fill('input[name="username"], [data-testid="webdav-username"]', 'testuser');
-    await page.fill('input[name="password"], [data-testid="webdav-password"]', 'testpass');
-    
-    // Look for test connection button
-    const testButton = page.locator('button:has-text("Test"), [data-testid="test-connection"], .test-button');
-    if (await testButton.isVisible()) {
-      const testResponse = helpers.waitForApiCall('/api/sources/test');
-      
-      await testButton.click();
-      
-      await testResponse;
-      
-      // Should show test result
-      await helpers.waitForToast();
-    }
+  test('should test source connection', async ({ dynamicUserPage: page }) => {
+    await page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = addDialog(page);
+    await expect(dialog.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+
+    await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Test Connection');
+    await dialog.getByRole('textbox', { name: 'Server URL' }).fill('http://127.0.0.1:9/dav/');
+    await dialog.getByRole('textbox', { name: 'Username' }).fill('testuser');
+    await dialog.getByRole('textbox', { name: 'Password' }).fill('testpass');
+
+    const testCall = page.waitForResponse((r) => r.url().includes('/test') && r.request().method() === 'POST', {
+      timeout: TIMEOUTS.long,
+    });
+    await dialog.getByRole('button', { name: 'Test connection' }).click();
+    await testCall;
+    // Nothing listens there, so the dialog reports the server's coarse failure category inline
+    await expect(dialog.getByRole('alert')).toContainText(/Server is unreachable|Connection timed out/, {
+      timeout: TIMEOUTS.long,
+    });
   });
 
-  test('should filter sources by type', async ({ dynamicAdminPage: page }) => {
-    // Look for filter dropdown
-    const filterDropdown = page.locator('[data-testid="source-filter"], select[name="filter"], .source-filter');
-    if (await filterDropdown.isVisible()) {
-      await filterDropdown.selectOption('webdav');
-      
-      await helpers.waitForLoadingToComplete();
-      
-      // Should show only WebDAV sources
-      const sourceItems = page.locator('[data-testid="source-item"], .source-item');
-      if (await sourceItems.count() > 0) {
-        await expect(sourceItems.first().locator(':has-text("WebDAV"), .webdav-icon')).toBeVisible();
-      }
-    }
+  test('should sort connections by name', async ({ dynamicUserPage: page }) => {
+    // The old page's type filter is gone (Type is a column); the board sorts instead.
+    const run = Math.random().toString(36).slice(2, 6);
+    await helpers.createWebdavSourceViaAPI({ name: `b-conn-${run}` });
+    await helpers.createWebdavSourceViaAPI({ name: `a-conn-${run}` });
+    await page.reload();
+
+    const rows = page.getByRole('grid', { name: 'Connections' }).getByRole('rowgroup').nth(1).getByRole('row');
+    await expect(rows.first()).toContainText(`a-conn-${run}`);
+    await page.getByRole('grid', { name: 'Connections' }).getByRole('columnheader', { name: 'Name' }).click();
+    await expect(rows.first()).toContainText(`b-conn-${run}`);
   });
 
-  test('should display sync history', async ({ dynamicAdminPage: page }) => {
-    const firstSource = page.locator('[data-testid="source-item"], .source-item, .source-card').first();
-    
-    if (await firstSource.isVisible()) {
-      await firstSource.click();
-      
-      // Look for sync history section
-      const historySection = page.locator('[data-testid="sync-history"], .sync-history, .history-section');
-      if (await historySection.isVisible()) {
-        // Should show sync runs
-        await expect(historySection.locator('[data-testid="sync-run"], .sync-run, .history-item')).toBeVisible();
-      }
-    }
+  test('should display sync history', async ({ dynamicUserPage: page }) => {
+    // Per-connection history is the "Recent errors" list in the detail panel
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('History') });
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    const errors = panel.getByRole('region', { name: 'Recent errors' });
+    await expect(errors).toBeVisible();
+    await expect(errors.getByText(/No recent errors|errors?/i).first()).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
-  test.skip('should validate required fields in source creation', async ({ dynamicAdminPage: page }) => {
-    await page.click('button:has-text("Add Source"), [data-testid="add-source"]');
-    
-    await expect(page.locator('[data-testid="add-source-form"], .add-source-modal')).toBeVisible();
-    
-    // Try to submit without filling required fields
-    await page.click('button[type="submit"], button:has-text("Create"), [data-testid="create-source"]');
-    
-    // Should show validation errors
-    const nameInput = page.locator('input[name="name"], [data-testid="source-name"]');
-    await expect(nameInput).toBeVisible();
-    
-    // Check for validation messages
-    const validationMessages = page.locator('.error, .validation-error, [data-testid="validation-error"]');
-    if (await validationMessages.count() > 0) {
-      await expect(validationMessages.first()).toBeVisible();
-    }
+  test('should validate required fields in source creation', async ({ dynamicUserPage: page }) => {
+    await page.getByRole('button', { name: 'Add connection' }).first().click();
+    const dialog = addDialog(page);
+
+    let created = false;
+    page.on('request', (r) => {
+      if (/\/api\/sources$/.test(r.url()) && r.method() === 'POST') created = true;
+    });
+    await dialog.getByRole('button', { name: 'Add connection' }).click();
+
+    await expect(dialog.getByText('Fix the highlighted fields before saving.')).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toHaveAttribute('aria-invalid', 'true');
+    await expect(dialog.getByRole('textbox', { name: 'Server URL' })).toHaveAttribute('aria-invalid', 'true');
+    expect(created).toBe(false);
+    await expect(dialog).toBeVisible();
   });
 
-  test('should schedule automatic sync', async ({ dynamicAdminPage: page }) => {
-    // First wait for sources list to load
-    await helpers.waitForLoadingToComplete();
-    
-    // Check if we can see the sources page
-    const isOnLoginPage = await page.locator('h3:has-text("Welcome to Readur")').isVisible({ timeout: 2000 });
-    if (isOnLoginPage) {
-      throw new Error('Test is stuck on login page - authentication failed');
-    }
-    
-    // Look for sources using flexible selectors
-    const sourceSelectors = [
-      '[data-testid="source-item"]',
-      '.source-item',
-      '.source-card',
-      '.MuiCard-root'
-    ];
-    
-    let firstSource = null;
-    for (const selector of sourceSelectors) {
-      const sources = page.locator(selector);
-      if (await sources.count() > 0) {
-        firstSource = sources.first();
-        console.log(`Found source using selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (firstSource && await firstSource.isVisible({ timeout: 5000 })) {
-      // Look for settings, edit, or sync configuration button
-      const actionButtonSelectors = [
-        'button:has-text("Settings")',
-        'button:has-text("Edit")',
-        'button:has-text("Configure")',
-        '[data-testid="source-settings"]',
-        '[data-testid="edit-source"]',
-        'button[aria-label*="settings" i]',
-        'button[aria-label*="edit" i]'
-      ];
-      
-      let actionButton = null;
-      for (const buttonSelector of actionButtonSelectors) {
-        const button = firstSource.locator(buttonSelector);
-        if (await button.isVisible({ timeout: 2000 })) {
-          actionButton = button;
-          console.log(`Found action button using: ${buttonSelector}`);
-          break;
-        }
-      }
-      
-      if (actionButton) {
-        await actionButton.click();
-        
-        // Look for scheduling options in modal or expanded section
-        const scheduleSelectors = [
-          '[data-testid="schedule-section"]',
-          '.schedule-options',
-          '.sync-schedule',
-          'text=Schedule',
-          'text=Automatic',
-          'text=Interval'
-        ];
-        
-        let scheduleSection = null;
-        for (const scheduleSelector of scheduleSelectors) {
-          if (await page.locator(scheduleSelector).isVisible({ timeout: 5000 })) {
-            scheduleSection = page.locator(scheduleSelector);
-            console.log(`Found schedule section using: ${scheduleSelector}`);
-            break;
-          }
-        }
-        
-        if (scheduleSection) {
-          console.log('Found schedule section - verifying automatic sync checkbox is visible');
-          
-          // Look for the checkbox or its label - from artifact we know it exists
-          const syncCheckboxText = await page.locator('text=Enable Automatic Sync').isVisible({ timeout: 5000 });
-          if (syncCheckboxText) {
-            console.log('✅ Found "Enable Automatic Sync" option in the Edit Source dialog');
-            console.log('Schedule automatic sync test completed successfully - dialog interaction verified');
-          } else {
-            console.log('Could not find automatic sync text, but schedule section was found');
-          }
-          
-          // Save the settings - from artifact we can see "Save Changes" button
-          const saveButtonSelectors = [
-            'button:has-text("Save Changes")', // From artifact
-            'button[type="submit"]',
-            'button:has-text("Save")',
-            'button:has-text("Update")',
-            '[data-testid="save-source"]'
-          ];
-          
-          let saveButton = null;
-          for (const saveSelector of saveButtonSelectors) {
-            const button = page.locator(saveSelector);
-            if (await button.isVisible({ timeout: 2000 })) {
-              saveButton = button;
-              console.log(`Found save button using: ${saveSelector}`);
-              break;
-            }
-          }
-          
-          if (saveButton) {
-            const saveResponse = helpers.waitForApiCall('/api/sources', 10000);
-            
-            await saveButton.click();
-            console.log('Clicked save button');
-            
-            try {
-              await saveResponse;
-              console.log('Save API call completed');
-            } catch (error) {
-              console.log('Save API call may have failed or timed out:', error);
-              // Don't fail the test - the UI interaction was successful
-            }
-            
-            try {
-              await helpers.waitForToast();
-            } catch (error) {
-              console.log('No toast notification found');
-            }
-            
-            console.log('Schedule automatic sync test completed successfully');
-          } else {
-            console.log('No save button found - but dialog interaction was successful');
-          }
-        } else {
-          console.log('No schedule options found - test completed without action');
-        }
-      } else {
-        console.log('No settings/edit button found - test completed without action');
-      }
-    } else {
-      console.log('No sources found - test completed without action');
-    }
+  test('should schedule automatic sync', async ({ dynamicUserPage: page }) => {
+    const source = await helpers.createWebdavSourceViaAPI({ name: helpers.uniqueName('Scheduled') });
+    await page.reload();
+
+    const panel = await helpers.openConnection(source.name);
+    await expect(panel.getByRole('group', { name: 'Schedule' })).toContainText('manual');
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Edit connection' });
+    await dialog.getByText('Automatic sync', { exact: true }).click();
+    const interval = dialog.getByRole('textbox', { name: 'Sync interval (minutes)' }).or(
+      dialog.getByRole('spinbutton', { name: 'Sync interval (minutes)' }),
+    );
+    await expect(interval).toBeVisible();
+    await interval.fill('45');
+
+    const update = page.waitForResponse((r) => r.url().includes(`/api/sources/${source.id}`) && r.request().method() === 'PUT');
+    await dialog.getByRole('button', { name: 'Save changes' }).click();
+    const response = await update;
+    expect(response.ok()).toBe(true);
+    const body = JSON.parse(response.request().postData() ?? '{}');
+    expect(body.config.auto_sync).toBe(true);
+    expect(body.config.sync_interval_minutes).toBe(45);
+
+    await expect(page.getByRole('dialog', { name: source.name }).getByRole('group', { name: 'Schedule' })).toContainText('every 45 min', {
+      timeout: TIMEOUTS.medium,
+    });
+  });
+});
+
+test.describe('Source Management (admin)', () => {
+  test('should create a new local folder source', async ({ dynamicAdminPage: page }) => {
+    const helpers = new TestHelpers(page);
+    await helpers.openIntake('connections');
+    // Admins may watch any folder that exists on the server
+    const name = await helpers.createTestSource('Test Local Folder', 'local_folder', { watchFolder: '/tmp' });
+    await expect(helpers.connectionRow(name)).toContainText('Local folder');
+    await helpers.waitForToast(/Connection added/);
   });
 });

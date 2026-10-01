@@ -1,0 +1,186 @@
+.tabPanel {
+  padding-top: var(--s-4);
+}
+
+.panelTitle,
+.blockTitle {
+  font-family: var(--font-ui);
+  margin: 0;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.panelTitle {
+  font-size: var(--fs-md);
+}
+
+.blockTitle {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.panelIntro {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.searchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-2);
+}
+
+.searchField {
+  flex: 1 1 320px;
+}
+
+.progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: var(--s-2);
+  accent-color: var(--fg);
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+  margin: 0;
+}
+
+.previewImage {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.frame {
+  width: 100%;
+  height: 300px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.preview {
+  margin: 0;
+  padding: var(--s-2);
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.resultHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.overall {
+  font-family: var(--font-ui);
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.overall[data-state='completed'] > span,
+.step[data-state='completed'] .stepGlyph {
+  color: var(--ok);
+}
+
+.overall[data-state='failed'] > span,
+.step[data-state='failed'] .stepGlyph {
+  color: var(--danger);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.stepper {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--line-strong);
+}
+
+.step {
+  position: relative;
+  padding: 0 0 var(--s-5) var(--s-5);
+}
+
+.stepHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+
+.stepGlyph {
+  position: absolute;
+  left: -9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  color: var(--fg-2);
+  background: var(--bg);
+}
+
+.stepName {
+  font-weight: 600;
+}
+
+.stepStatus {
+  font-family: var(--font-ui);
+  padding: 0 var(--s-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--fg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.stepBody {
+  min-width: 0;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.errorCell {
+  min-width: 200px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.previewCanvas {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}

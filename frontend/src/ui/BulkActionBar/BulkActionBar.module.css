@@ -1,0 +1,80 @@
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--s-5);
+  z-index: var(--z-dock);
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--s-4);
+  pointer-events: none;
+}
+
+/* Phones: sit above the 56px bottom tab bar (and the home-indicator inset), never over it. */
+@media (max-width: 899px) {
+  .dock {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px) + var(--s-3));
+  }
+}
+
+/* An inverse bar: ink on light pages, light on dark ones, so it reads above any content. */
+.bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  max-width: 100%;
+  padding: var(--s-2) var(--s-3);
+  color: var(--bg);
+  background: var(--fg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  pointer-events: auto;
+}
+
+.count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  padding-right: var(--s-2);
+  white-space: nowrap;
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.word {
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.clearIcon {
+  display: inline-flex;
+  font-size: var(--fs-lg);
+}
+
+.actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.bar .clear {
+  color: var(--bg);
+  background: transparent;
+  border-color: transparent;
+}
+
+.bar .clear[data-hovered] {
+  color: var(--bg);
+  background: color-mix(in srgb, var(--bg) 16%, transparent);
+}
+
+/* Rings on the inverse bar use the bar's text colour so they stay visible. */
+.dock .bar [data-focus-visible] {
+  outline-color: var(--bg);
+}

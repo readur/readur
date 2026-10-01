@@ -1,218 +1,165 @@
 import { test, expect } from './fixtures/auth';
-import { TIMEOUTS, API_ENDPOINTS } from './utils/test-data';
+import type { Page } from '@playwright/test';
+import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
+/**
+ * Failed OCR now lives in Intake → Needs attention (/intake?section=attention; the old
+ * /documents/management URL redirects there). Each test signs in as a fresh user and seeds
+ * PDFs that are not really PDFs, which the OCR pipeline always fails.
+ */
 test.describe('OCR Retry Workflow', () => {
   let helpers: TestHelpers;
 
-  test.beforeEach(async ({ dynamicAdminPage }) => {
-    helpers = new TestHelpers(dynamicAdminPage);
-    await helpers.navigateToPage('/documents');
+  async function seedFailedDocument(name: string): Promise<string> {
+    const id = await helpers.uploadBufferViaAPI(name, Buffer.from(`%PDF-1.4\nnot a real pdf ${name} ${Math.random()}\n`), 'application/pdf');
+    const doc = await helpers.waitForOCRComplete(id);
+    expect(doc.ocr_status).toBe('failed');
+    return id;
+  }
+
+  const failedGrid = (page: Page) => page.getByRole('grid', { name: 'Failed documents' });
+  const failedRow = (page: Page, name: string) => failedGrid(page).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) });
+
+  async function openAttention(page: Page) {
+    await helpers.openIntake('attention');
+    await expect(page.getByRole('tab', { name: /Needs attention/, selected: true })).toBeVisible();
+  }
+
+  test.beforeEach(async ({ dynamicUserPage }) => {
+    helpers = new TestHelpers(dynamicUserPage);
   });
 
-  test('should display failed OCR documents', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should display failed OCR documents', async ({ dynamicUserPage: page }) => {
+    await seedFailedDocument('broken-a.pdf');
 
-    // Look for failed documents filter or section
-    const failedFilter = page.locator('button:has-text("Failed"), [data-testid="failed-filter"], .filter-failed').first();
-    
-    if (await failedFilter.isVisible()) {
-      await failedFilter.click();
-      await helpers.waitForLoadingToComplete();
-    } else {
-      // Alternative: look for a dedicated failed documents page
-      const failedTab = page.locator('tab:has-text("Failed"), [role="tab"]:has-text("Failed")').first();
-      if (await failedTab.isVisible()) {
-        await failedTab.click();
-        await helpers.waitForLoadingToComplete();
-      }
-    }
+    // The legacy management URL lands here
+    await page.goto('/documents/management');
+    await expect(page).toHaveURL(/\/intake\?section=attention/);
+    await expect(page.getByRole('radio', { name: 'Failed OCR' })).toBeChecked();
 
-    // Check if failed documents are displayed
-    const documentList = page.locator('[data-testid="document-list"], .document-list, .documents-grid');
-    if (await documentList.isVisible({ timeout: 5000 })) {
-      const documents = page.locator('.document-item, .document-card, [data-testid="document-item"]');
-      const documentCount = await documents.count();
-      console.log(`Found ${documentCount} documents in failed OCR view`);
-    }
+    const row = failedRow(page, 'broken-a.pdf');
+    await expect(row).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(row).toContainText('Failed');
+    // The tab carries the count
+    await expect(page.getByRole('tab', { name: /Needs attention\s*,\s*1/ })).toBeVisible();
   });
 
-  test('should retry individual failed OCR document', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should retry individual failed OCR document', async ({ dynamicUserPage: page }) => {
+    test.setTimeout(150000);
+    const id = await seedFailedDocument('broken-b.pdf');
+    await openAttention(page);
 
-    // Navigate to failed documents
-    const failedFilter = page.locator('button:has-text("Failed"), [data-testid="failed-filter"]').first();
-    if (await failedFilter.isVisible()) {
-      await failedFilter.click();
-      await helpers.waitForLoadingToComplete();
-    }
+    await failedRow(page, 'broken-b.pdf').getByRole('rowheader').click();
+    const panel = page.getByRole('dialog', { name: 'broken-b.pdf' });
+    await expect(panel).toBeVisible();
 
-    // Find a failed document and its retry button
-    const retryButton = page.locator('button:has-text("Retry"), [data-testid="retry-ocr"], .retry-button').first();
-    
-    if (await retryButton.isVisible()) {
-      // Wait for retry API call
-      const retryPromise = page.waitForResponse(response => 
-        response.url().includes('/retry') && response.status() === 200,
-        { timeout: TIMEOUTS.medium }
+    // Retry with an explicit language (the default-language path has its own test below)
+    const languages = panel.getByRole('region', { name: 'Retry with languages' });
+    await languages.getByRole('button', { name: /Select OCR languages/ }).click();
+    await languages.getByRole('group', { name: 'Available Languages' }).getByText('English', { exact: true }).click();
+
+    // The server keeps auto-retrying a failed job for a while and refuses a manual retry
+    // (500, "queue item already exists") until it gives up, so press Retry until it is accepted.
+    // The error toasts from refused attempts sit beside the panel, clear of its footer.
+    await expect(async () => {
+      const retry = page.waitForResponse(
+        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
+        { timeout: TIMEOUTS.medium },
       );
-      
-      await retryButton.click();
-      
-      try {
-        await retryPromise;
-        console.log('OCR retry initiated successfully');
-        
-        // Look for success message or status change
-        const successMessage = page.locator('.success, [data-testid="success-message"], .notification');
-        if (await successMessage.isVisible({ timeout: 5000 })) {
-          console.log('Retry success message displayed');
-        }
-      } catch (error) {
-        console.log('OCR retry may have failed:', error);
-      }
-    }
+      await panel.getByRole('button', { name: 'Retry OCR' }).click();
+      expect((await retry).ok()).toBe(true);
+    }).toPass({ timeout: 90000, intervals: [5000] });
+    await helpers.waitForToast(/OCR retry queued/);
   });
 
-  test('should bulk retry multiple failed OCR documents', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should retry a failed OCR document with the default language', async ({ dynamicUserPage: page }) => {
+    test.setTimeout(150000);
+    const id = await seedFailedDocument('broken-h.pdf');
+    await openAttention(page);
+    await failedRow(page, 'broken-h.pdf').getByRole('rowheader').click();
+    const panel = page.getByRole('dialog', { name: 'broken-h.pdf' });
+    await expect(panel).toBeVisible();
 
-    // Navigate to failed documents
-    const failedFilter = page.locator('button:has-text("Failed"), [data-testid="failed-filter"]').first();
-    if (await failedFilter.isVisible()) {
-      await failedFilter.click();
-      await helpers.waitForLoadingToComplete();
-    }
-
-    // Select multiple documents
-    const selectAllCheckbox = page.locator('input[type="checkbox"]:has-text("Select All"), [data-testid="select-all"]').first();
-    if (await selectAllCheckbox.isVisible()) {
-      await selectAllCheckbox.click();
-    } else {
-      // Alternative: select individual checkboxes
-      const documentCheckboxes = page.locator('.document-item input[type="checkbox"], [data-testid="document-checkbox"]');
-      const checkboxCount = await documentCheckboxes.count();
-      if (checkboxCount > 0) {
-        // Select first 3 documents
-        for (let i = 0; i < Math.min(3, checkboxCount); i++) {
-          await documentCheckboxes.nth(i).click();
-        }
-      }
-    }
-
-    // Find bulk retry button
-    const bulkRetryButton = page.locator('button:has-text("Retry Selected"), button:has-text("Bulk Retry"), [data-testid="bulk-retry"]').first();
-    
-    if (await bulkRetryButton.isVisible()) {
-      // Wait for bulk retry API call
-      const bulkRetryPromise = page.waitForResponse(response => 
-        response.url().includes('/retry/bulk') || response.url().includes('/retry'),
-        { timeout: TIMEOUTS.long }
+    // No languages picked: the request still carries a JSON body (it used to be empty, which
+    // the server refused with 415). The server may refuse a manual retry with 500 while its own
+    // automatic retries are pending, so press Retry until it is accepted, as above.
+    await expect(async () => {
+      const retry = page.waitForResponse(
+        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
+        { timeout: TIMEOUTS.medium },
       );
-      
-      await bulkRetryButton.click();
-      
-      try {
-        await bulkRetryPromise;
-        console.log('Bulk OCR retry initiated successfully');
-        
-        // Look for progress indicator or success message
-        const progressIndicator = page.locator('.progress, [data-testid="retry-progress"], .bulk-retry-progress');
-        if (await progressIndicator.isVisible({ timeout: 5000 })) {
-          console.log('Bulk retry progress indicator visible');
-        }
-      } catch (error) {
-        console.log('Bulk OCR retry may have failed:', error);
-      }
-    }
+      await panel.getByRole('button', { name: 'Retry OCR' }).click();
+      const response = await retry;
+      expect(response.status()).not.toBe(415);
+      expect(response.request().headers()['content-type']).toMatch(/^application\/json/);
+      expect(response.request().postDataJSON()).toEqual({});
+      expect(response.ok()).toBe(true);
+    }).toPass({ timeout: 90000, intervals: [5000] });
+    await helpers.waitForToast(/OCR retry queued/);
   });
 
-  test('should show OCR retry history', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should bulk retry multiple failed OCR documents', async ({ dynamicUserPage: page }) => {
+    await seedFailedDocument('broken-c.pdf');
+    await seedFailedDocument('broken-d.pdf');
+    await openAttention(page);
 
-    // Look for retry history or logs
-    const historyButton = page.locator('button:has-text("Retry History"), [data-testid="retry-history"], .history-button').first();
-    
-    if (await historyButton.isVisible()) {
-      await historyButton.click();
-      
-      // Check if history modal or panel opens
-      const historyContainer = page.locator('.retry-history, [data-testid="retry-history-panel"], .history-container');
-      await expect(historyContainer.first()).toBeVisible({ timeout: TIMEOUTS.short });
-      
-      // Check for history entries
-      const historyEntries = page.locator('.history-item, .retry-entry, tr');
-      if (await historyEntries.first().isVisible({ timeout: 5000 })) {
-        const entryCount = await historyEntries.count();
-        console.log(`Found ${entryCount} retry history entries`);
-      }
-    }
+    await failedRow(page, 'broken-c.pdf').getByRole('checkbox').check({ force: true });
+    await failedRow(page, 'broken-d.pdf').getByRole('checkbox').check({ force: true });
+
+    await page.getByRole('button', { name: 'Retry…' }).click();
+    const modal = page.getByRole('dialog', { name: 'Bulk OCR retry' });
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText(/Retry selected documents \(2 selected\)/)).toBeVisible();
+
+    await modal.getByRole('button', { name: 'Preview' }).click();
+    const execute = modal.getByRole('button', { name: /^Retry \d+ documents$/ });
+    await expect(execute).toBeEnabled({ timeout: TIMEOUTS.medium });
+    const bulk = helpers.waitForApiCall('/api/documents/ocr/retry/bulk', TIMEOUTS.long);
+    await execute.click();
+    expect((await bulk).ok()).toBe(true);
   });
 
-  test('should display OCR failure reasons', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should show OCR retry history', async ({ dynamicUserPage: page }) => {
+    await seedFailedDocument('broken-e.pdf');
+    await openAttention(page);
 
-    // Navigate to failed documents
-    const failedFilter = page.locator('button:has-text("Failed"), [data-testid="failed-filter"]').first();
-    if (await failedFilter.isVisible()) {
-      await failedFilter.click();
-      await helpers.waitForLoadingToComplete();
-    }
-
-    // Click on a failed document to view details
-    const failedDocument = page.locator('.document-item, .document-card, [data-testid="document-item"]').first();
-    
-    if (await failedDocument.isVisible()) {
-      await failedDocument.click();
-      
-      // Look for failure reason or error details
-      const errorDetails = page.locator('.error-details, [data-testid="failure-reason"], .ocr-error');
-      if (await errorDetails.isVisible({ timeout: 5000 })) {
-        const errorText = await errorDetails.textContent();
-        console.log('OCR failure reason:', errorText);
-      }
-      
-      // Look for retry recommendations
-      const recommendations = page.locator('.retry-recommendations, [data-testid="retry-suggestions"], .recommendations');
-      if (await recommendations.isVisible({ timeout: 5000 })) {
-        console.log('Retry recommendations displayed');
-      }
-    }
+    await failedRow(page, 'broken-e.pdf').getByRole('rowheader').click();
+    const panel = page.getByRole('dialog', { name: 'broken-e.pdf' });
+    const history = panel.getByRole('region', { name: 'OCR retry history' });
+    await expect(history).toBeVisible();
+    await expect(history.getByRole('button', { name: 'Refresh' })).toBeVisible();
   });
 
-  test('should filter failed documents by failure type', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/documents');
-    await helpers.waitForLoadingToComplete();
+  test('should display OCR failure reasons', async ({ dynamicUserPage: page }) => {
+    await seedFailedDocument('broken-f.pdf');
+    await openAttention(page);
 
-    // Navigate to failed documents
-    const failedFilter = page.locator('button:has-text("Failed"), [data-testid="failed-filter"]').first();
-    if (await failedFilter.isVisible()) {
-      await failedFilter.click();
-      await helpers.waitForLoadingToComplete();
-    }
+    const row = failedRow(page, 'broken-f.pdf');
+    await expect(row.getByRole('gridcell').nth(2)).not.toBeEmpty();
 
-    // Look for failure type filters
-    const filterDropdown = page.locator('select[name="failure-type"], [data-testid="failure-filter"]').first();
-    
-    if (await filterDropdown.isVisible()) {
-      await filterDropdown.click();
-      
-      // Select a specific failure type
-      const timeoutOption = page.locator('option:has-text("Timeout"), [value="timeout"]').first();
-      if (await timeoutOption.isVisible()) {
-        await timeoutOption.click();
-        await helpers.waitForLoadingToComplete();
-        
-        // Verify filtered results
-        const filteredDocuments = page.locator('.document-item, .document-card');
-        const documentCount = await filteredDocuments.count();
-        console.log(`Found ${documentCount} documents with timeout failures`);
-      }
-    }
+    await row.getByRole('rowheader').click();
+    const panel = page.getByRole('dialog', { name: 'broken-f.pdf' });
+    await expect(panel.getByRole('group', { name: 'Failure' }).getByRole('term').filter({ hasText: 'Reason' })).toBeVisible();
+    const message = panel.getByRole('region', { name: 'Error message' });
+    await expect(message).toBeVisible();
+    await expect(message).not.toBeEmpty();
+    await expect(panel.getByRole('region', { name: 'Retry recommendations' })).toBeVisible();
+  });
+
+  test('should filter failed documents by failure type', async ({ dynamicUserPage: page }) => {
+    await seedFailedDocument('broken-g.pdf');
+    await openAttention(page);
+    await expect(failedRow(page, 'broken-g.pdf')).toBeVisible();
+
+    // Low-confidence documents are a separate view with their own threshold
+    const show = page.getByRole('radiogroup', { name: 'Show' });
+    await show.getByText('Low confidence', { exact: true }).click();
+    await expect(page).toHaveURL(/view=/);
+    await expect(failedGrid(page)).toHaveCount(0);
+    await expect(page.getByRole('slider').first()).toBeVisible();
+
+    await show.getByText('Failed OCR', { exact: true }).click();
+    await expect(failedRow(page, 'broken-g.pdf')).toBeVisible();
   });
 });

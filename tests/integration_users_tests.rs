@@ -17,7 +17,7 @@ mod tests {
             // Create admin user using TestAuthHelper for unique credentials
             let auth_helper = ctx.auth_helper();
             let admin = auth_helper.create_admin_user().await;
-            let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+            let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
             // Create another user using TestAuthHelper for unique credentials
             let user2 = auth_helper.create_test_user().await;
@@ -65,7 +65,7 @@ mod tests {
         let result: Result<()> = async {
             let auth_helper = ctx.auth_helper();
             let admin = auth_helper.create_admin_user().await;
-            let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+            let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
             let response = ctx.app.clone()
                 .oneshot(
@@ -106,7 +106,7 @@ mod tests {
         let ctx = TestContext::new().await;
         let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
         let unique_suffix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -118,7 +118,7 @@ mod tests {
         let new_user_data = CreateUser {
             username: username.clone(),
             email: email.clone(),
-            password: "newpassword".to_string(),
+            password: readur::test_utils::test_password(),
             role: Some(readur::models::UserRole::User),
         };
 
@@ -153,7 +153,7 @@ mod tests {
         // Create admin user using TestAuthHelper for unique credentials
         let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
         
         // Create a regular user using TestAuthHelper for unique credentials
         let user = auth_helper.create_test_user().await;
@@ -203,15 +203,16 @@ mod tests {
         // Create admin user using TestAuthHelper for unique credentials
         let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
         
         // Create a regular user using TestAuthHelper for unique credentials
         let user = auth_helper.create_test_user().await;
 
+        let new_password = readur::test_utils::test_password();
         let update_data = UpdateUser {
             username: None,
             email: None,
-            password: Some("newpassword456".to_string()),
+            password: Some(new_password.clone()),
             is_active: None,
         };
 
@@ -232,7 +233,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // Verify new password works
-        let new_token = auth_helper.login_user(&user.username, "newpassword456").await;
+        let new_token = auth_helper.login_user(&user.username, &new_password).await;
         assert!(!new_token.is_empty());
     }
 
@@ -241,13 +242,13 @@ mod tests {
         let ctx = TestContext::new().await;
         let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
         // Create another user to delete
         let user2_data = json!({
             "username": "deleteuser",
             "email": "delete@example.com",
-            "password": "password456"
+            "password": readur::test_utils::test_password()
         });
         
         let response = ctx.app
@@ -305,7 +306,7 @@ mod tests {
         let ctx = TestContext::new().await;
         let auth_helper = ctx.auth_helper();
         let admin = auth_helper.create_admin_user().await;
-        let token = auth_helper.login_user(&admin.username, "adminpass123").await;
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
         let response = ctx.app.clone()
             .oneshot(
@@ -355,7 +356,7 @@ mod tests {
         let create_user = CreateUser {
             username: test_username.clone(),
             email: test_email.clone(),
-            password: "".to_string(), // Not used for OIDC
+            password: String::new(), // Not used for OIDC
             role: Some(UserRole::User),
         };
 
@@ -390,7 +391,7 @@ mod tests {
         let create_user = CreateUser {
             username: test_username,
             email: test_email.clone(),
-            password: "".to_string(),
+            password: String::new(),
             role: Some(UserRole::User),
         };
 
@@ -445,7 +446,7 @@ mod tests {
         let create_user = CreateUser {
             username: test_username,
             email: test_email.clone(),
-            password: "".to_string(),
+            password: String::new(),
             role: Some(UserRole::User),
         };
 
@@ -477,11 +478,12 @@ mod tests {
             .as_nanos();
         let username = format!("localuser_{}", unique_suffix);
         let email = format!("local_{}@example.com", unique_suffix);
+        let password = readur::test_utils::test_password();
         
         let create_user = CreateUser {
             username: username.clone(),
             email: email.clone(),
-            password: "password123".to_string(),
+            password: password.clone(),
             role: Some(UserRole::User),
         };
 
@@ -494,7 +496,7 @@ mod tests {
         // Test login still works
         let login_data = json!({
             "username": username,
-            "password": "password123"
+            "password": password
         });
 
         let response = ctx.app.clone()
@@ -510,6 +512,78 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_public_registration_cannot_request_a_role() {
+        let ctx = TestContext::new().await;
+        let suffix = uuid::Uuid::new_v4().simple();
+        let username = format!("selfreg_{}", suffix);
+        let password = readur::test_utils::test_password();
+        let register = |body: serde_json::Value| {
+            ctx.app.clone().oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/register")
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+        };
+
+        // A request carrying a role is refused outright and creates nothing.
+        let response = register(json!({
+            "username": username,
+            "email": format!("selfreg_{}@example.com", suffix),
+            "password": password,
+            "role": "admin"
+        }))
+        .await
+        .unwrap();
+        assert!(response.status().is_client_error(), "got {}", response.status());
+        assert!(ctx.state.db.get_user_by_username(&username).await.unwrap().is_none());
+
+        // Without it, registration creates a standard user.
+        let response = register(json!({
+            "username": username,
+            "email": format!("selfreg_{}@example.com", suffix),
+            "password": password
+        }))
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["username"], username.as_str());
+        assert_eq!(body["role"], "user");
+
+        let stored = ctx.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+        assert_eq!(stored.role, UserRole::User);
+    }
+
+    #[tokio::test]
+    async fn test_admin_can_create_admin_via_users_endpoint() {
+        let ctx = TestContext::new().await;
+        let auth_helper = ctx.auth_helper();
+        let admin = auth_helper.create_admin_user().await;
+        assert_eq!(admin.user_response.role, UserRole::Admin);
+        let token = auth_helper.login_user(&admin.username, &admin.password).await;
+
+        let suffix = uuid::Uuid::new_v4().simple();
+        let username = format!("newadmin_{}", suffix);
+        let new_admin = json!({
+            "username": username,
+            "email": format!("newadmin_{}@example.com", suffix),
+            "password": readur::test_utils::test_password(),
+            "role": "admin"
+        });
+
+        let (status, body) = json_request(&ctx, "POST", "/api/users", &token, Some(new_admin)).await;
+        assert_eq!(status, StatusCode::OK, "{}", body);
+        assert_eq!(body["role"], "admin");
+
+        let stored = ctx.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+        assert_eq!(stored.role, UserRole::Admin);
     }
 
     async fn login_from(ctx: &TestContext, ip: &str, username: &str, password: &str) -> StatusCode {
@@ -611,10 +685,12 @@ mod tests {
         let admin = auth_helper.create_admin_user().await;
         let token = auth_helper.login_user(&admin.username, &admin.password).await;
 
+        let password = readur::test_utils::test_password();
+        let too_short = &password[..5];
         for body in [
-            json!({ "username": "../escape", "email": "ok@example.com", "password": "password123" }),
-            json!({ "username": "valid_name", "email": "not-an-email", "password": "password123" }),
-            json!({ "username": "valid_name", "email": "ok@example.com", "password": "short" }),
+            json!({ "username": "../escape", "email": "ok@example.com", "password": password }),
+            json!({ "username": "valid_name", "email": "not-an-email", "password": password }),
+            json!({ "username": "valid_name", "email": "ok@example.com", "password": too_short }),
         ] {
             let (status, _) = json_request(&ctx, "POST", "/api/users", &token, Some(body.clone())).await;
             assert_eq!(status, StatusCode::BAD_REQUEST, "expected rejection for {}", body);
@@ -702,7 +778,7 @@ mod tests {
             "PUT",
             &format!("/api/users/{}", admin.id()),
             &token,
-            Some(json!({ "password": "short" })),
+            Some(json!({ "password": &readur::test_utils::test_password()[..5] })),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);

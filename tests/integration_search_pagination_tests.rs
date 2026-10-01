@@ -107,6 +107,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -151,6 +152,7 @@ mod tests {
                     include_snippets: Some(false),
                     snippet_length: None,
                     search_mode: None,
+                    ..Default::default()
                 };
                 let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
                 assert_eq!(count, 20, "Total should be consistent (20) at offset {}", offset);
@@ -194,6 +196,7 @@ mod tests {
                     include_snippets: Some(false),
                     snippet_length: None,
                     search_mode: None,
+                    ..Default::default()
                 };
                 let results = db.search_documents(user.id, &request).await?;
 
@@ -244,6 +247,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -259,6 +263,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count_pdf = db.count_search_documents(user.id, UserRole::User, &request_pdf).await?;
@@ -301,6 +306,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -343,6 +349,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -394,6 +401,7 @@ mod tests {
                     include_snippets: Some(false),
                     snippet_length: None,
                     search_mode: None,
+                    ..Default::default()
                 };
 
                 let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -442,6 +450,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             // User A should see only their 10 documents
@@ -496,6 +505,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count_apple = db.count_search_documents(user.id, UserRole::User, &request_apple).await?;
@@ -514,6 +524,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count_orange = db.count_search_documents(user.id, UserRole::User, &request_orange).await?;
@@ -581,6 +592,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
@@ -599,6 +611,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count_none = db.count_search_documents(user.id, UserRole::User, &request_none).await?;
@@ -641,6 +654,7 @@ mod tests {
                 include_snippets: Some(false),
                 snippet_length: None,
                 search_mode: None,
+                ..Default::default()
             };
 
             let count = db.count_search_documents(user.id, UserRole::User, &request).await?;

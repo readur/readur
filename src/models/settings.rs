@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
-#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct Settings {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -67,7 +69,8 @@ pub struct Settings {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SettingsResponse {
     pub ocr_language: String,
     pub preferred_languages: Vec<String>,
@@ -127,7 +130,8 @@ pub struct SettingsResponse {
     pub office_extraction_enable_detailed_logging: bool,
 }
 
-#[derive(Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateSettings {
     pub ocr_language: Option<String>,
     pub preferred_languages: Option<Vec<String>>,

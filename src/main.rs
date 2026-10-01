@@ -147,32 +147,7 @@ async fn main() -> anyhow::Result<()> {
     println!("\n🔗 STARTUP CONFIGURATION:");
     println!("{}", "=".repeat(50));
     println!("🌐 Server will start on: {}", config.server_address);
-    // Parse database URL safely without exposing credentials
-    let db_info = if let Some(at_pos) = config.database_url.find('@') {
-        let host_part = &config.database_url[at_pos + 1..];
-        let protocol = if config.database_url.starts_with("postgresql://") { "postgresql" } else { "postgres" };
-        
-        // Extract just username from credentials part (before @)
-        let creds_part = &config.database_url[..at_pos];
-        let username = if let Some(proto_end) = creds_part.find("://") {
-            let after_proto = &creds_part[proto_end + 3..];
-            if let Some(colon_pos) = after_proto.find(':') {
-                &after_proto[..colon_pos]
-            } else {
-                after_proto
-            }
-        } else {
-            "unknown"
-        };
-        // if we get the username, let's now mask it to get just the first and last character
-        let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
-        
-        format!("{}://{}:***@{}", protocol, masked_username, host_part)
-    } else {
-        "Invalid database URL format".to_string()
-    };
-    
-    println!("🗄️  Database connection: {}", db_info);
+    println!("🗄️  Database: configured");
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
@@ -247,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
     let background_db = match Database::new_with_pool_config(&config.database_url, 30, 3).await {
         Ok(db) => {
             println!("✅ Background database pool created (max: 30 connections, min idle: 3)");
+            println!("🗄️  Database: connected");
             db
         }
         Err(e) => {

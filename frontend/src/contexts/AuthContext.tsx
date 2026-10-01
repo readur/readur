@@ -1,24 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { AUTH_LOGOUT_EVENT, installSessionInterceptor, withSessionRotation } from '../services/authEvents'
+import { clearUserState } from '../auth/clearUserState'
+import type { LoginResponse, UserResponse, UserRole } from '../types/generated'
+
+export { isAdmin } from '../auth/roles'
+export type { LoginResponse, UserRole }
 
 // Reset the session whenever an authenticated API request is rejected with 401.
 installSessionInterceptor(api)
 
-export type UserRole = 'admin' | 'user'
-
-export interface User {
-  id: string
-  username: string
-  email: string
-  role: UserRole
-  is_active: boolean
-}
-
-export interface LoginResponse {
-  token: string
-  user: User
-}
+/** The signed-in user, as `/auth/me` and the sign-in endpoints return it. */
+export type User = UserResponse
 
 /**
  * Non-blocking notices about the session, shown on the sign-in page.
@@ -46,9 +39,6 @@ interface AuthContextType {
   dismissSessionNotice: () => void
 }
 
-export const isAdmin = (user: { role?: string } | null | undefined): boolean =>
-  user?.role === 'admin'
-
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -66,8 +56,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // The API layer signals when the session is no longer valid (e.g. a 401
-    // after the token was revoked); drop the in-memory user as well.
-    const handleForcedLogout = () => setUser(null)
+    // after the token was revoked); drop the in-memory user and forget what
+    // this browser remembers about their activity, as an explicit logout does.
+    // A password change swapping the token never gets here (see withSessionRotation).
+    const handleForcedLogout = () => {
+      clearUserState()
+      setUser(null)
+    }
     window.addEventListener(AUTH_LOGOUT_EVENT, handleForcedLogout)
     return () => window.removeEventListener(AUTH_LOGOUT_EVENT, handleForcedLogout)
   }, [])
@@ -93,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Only a rejected token ends the session. Network errors and server
       // failures keep the stored token so a reload can restore the session.
       if (error?.response?.status === 401) {
+        clearUserState()
         clearSession()
       } else {
         console.error('Could not load the signed-in user:', error)
@@ -120,6 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     const token = localStorage.getItem('token')
+    // Forget what this browser remembers about the user's activity, so the
+    // next person to sign in does not inherit it.
+    clearUserState()
     clearSession()
     if (token) {
       try {

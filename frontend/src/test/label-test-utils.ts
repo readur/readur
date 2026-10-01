@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { type LabelData } from '../components/Labels/Label';
+import { type LabelData } from '../features/labels';
 
 /**
  * Test utilities for label-related tests

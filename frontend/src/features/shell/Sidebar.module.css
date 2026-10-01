@@ -1,0 +1,254 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5) var(--s-4) var(--s-3);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 2px var(--s-1) 2px 2px;
+  color: var(--fg);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.logo {
+  flex: none;
+  object-fit: contain;
+}
+
+.wordmarkText {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-1) var(--s-3) var(--s-5);
+  scrollbar-width: thin;
+}
+
+/* ── Destinations ────────────────────────────────────── */
+
+.primaryNav {
+  margin-bottom: var(--s-5);
+}
+
+.navList,
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: 38px;
+  padding: 0 var(--s-3);
+  color: var(--fg-2);
+  text-decoration: none;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.navLink:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.navLink:focus-visible,
+.item:focus-visible,
+.more:focus-visible,
+.wordmark:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.navLinkActive,
+.navLinkActive:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.navIcon {
+  display: inline-flex;
+  font-size: 18px;
+}
+
+.navLabel {
+  min-width: 0;
+}
+
+/* ── Collections and sources ─────────────────────────── */
+
+.list + .list {
+  margin-top: var(--s-5);
+}
+
+.listHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: 0 var(--s-3) var(--s-2);
+}
+
+.listTitle {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg-meta);
+}
+
+.synced {
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 var(--s-3);
+  color: var(--fg-2);
+  text-decoration: none;
+  font-size: var(--fs-md);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.item:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.itemCurrent,
+.itemCurrent:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.itemName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labelDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--label-color, var(--fg-meta));
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.count {
+  flex: none;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.health {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.health-syncing {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.health-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.health-check {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.health-off {
+  background: var(--surface-sunken);
+  color: var(--fg-2);
+}
+
+.more {
+  display: inline-block;
+  margin: 2px 0 0;
+  padding: var(--s-1) var(--s-3);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.more:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  padding: var(--s-1) var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+/* ── Foot: account and tools ─────────────────────────── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  flex: none;
+  font-size: 18px;
+}
+
+.tools button {
+  font-size: 18px;
+}

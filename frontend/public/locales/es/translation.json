@@ -75,22 +75,60 @@
       "oidcNotConfigured": "OIDC no está configurado en este servidor. Por favor usa inicio de sesión con nombre de usuario/contraseña.",
       "oidcInitFailed": "Falló el inicio de sesión OIDC. Por favor intenta de nuevo.",
       "loginFailed": "Falló el inicio de sesión. Por favor verifica tus credenciales.",
-      "logoutIncomplete": "Has cerrado sesión en este dispositivo, pero no se pudo contactar con el servidor. Tu sesión anterior puede seguir siendo válida hasta que caduque."
+      "logoutIncomplete": "Has cerrado sesión en este dispositivo, pero no se pudo contactar con el servidor. Tu sesión anterior puede seguir siendo válida hasta que caduque.",
+      "accountDisabledOrPending": "Esta cuenta está desactivada o pendiente de aprobación por un administrador",
+      "tooManyAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo más tarde.",
+      "tooManyAttemptsRetry": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo en {{seconds}} segundos."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Iniciar sesión",
+      "loading": "Cargando opciones de inicio de sesión",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "usernameRequired": "Introduce tu usuario",
+      "passwordRequired": "Introduce tu contraseña",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
+      "submit": "Iniciar sesión",
+      "signingIn": "Iniciando sesión…",
+      "sso": "Iniciar sesión con SSO",
+      "redirecting": "Redirigiendo…",
+      "noMethods": "Este servidor no tiene ningún método de inicio de sesión habilitado. Pide a un administrador que habilite el acceso con contraseña o SSO.",
+      "errors": {
+        "invalidCredentials": "Usuario o contraseña incorrectos. Revisa ambos e inténtalo de nuevo.",
+        "accountDisabled": "Esta cuenta está desactivada. Pide a un administrador que la reactive.",
+        "sessionExpired": "Tu sesión ha caducado. Inicia sesión de nuevo.",
+        "unreachable": "No se puede conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+        "server": "El servidor tuvo un problema. Inténtalo de nuevo en un momento.",
+        "generic": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+        "ssoNotConfigured": "SSO no está configurado en este servidor. Inicia sesión con tu usuario y contraseña.",
+        "ssoFailed": "Falló el inicio de sesión con SSO. Inténtalo de nuevo o consulta con tu administrador.",
+        "ssoStart": "No se pudo iniciar el acceso con SSO. Inténtalo de nuevo."
+      },
+      "or": "o"
+    },
+    "callback": {
+      "title": "Iniciando sesión…",
+      "wait": "Un momento mientras terminamos de iniciar tu sesión.",
+      "errorTitle": "Error al iniciar sesión",
+      "back": "Volver a iniciar sesión"
     },
     "oidcCallback": {
       "errors": {
-        "provider_error": "El proveedor de identidad no completó el inicio de sesión. Por favor intenta de nuevo.",
-        "invalid_state": "La solicitud de inicio de sesión no es válida o ha caducado. Por favor inicia sesión de nuevo.",
-        "auth_failed": "La autenticación con el proveedor de identidad falló. Por favor inicia sesión de nuevo.",
-        "no_account": "No hay ninguna cuenta disponible para esta identidad. Contacta a tu administrador.",
         "account_disabled": "Esta cuenta está deshabilitada o pendiente de aprobación por un administrador.",
-        "server_error": "Se produjo un error del servidor durante el inicio de sesión. Por favor intenta más tarde.",
-        "unknown": "No se pudo iniciar sesión. Por favor inicia sesión de nuevo.",
-        "missingCode": "No se recibió ningún código de autenticación del servidor.",
+        "auth_failed": "La autenticación con el proveedor de identidad falló. Por favor inicia sesión de nuevo.",
         "invalidCode": "Este enlace de inicio de sesión no es válido o ha caducado. Por favor inicia sesión de nuevo.",
-        "tooManyAttempts": "Demasiados intentos. Espera un momento e inicia sesión de nuevo."
+        "invalid_state": "La solicitud de inicio de sesión no es válida o ha caducado. Por favor inicia sesión de nuevo.",
+        "missingCode": "No se recibió ningún código de autenticación del servidor.",
+        "no_account": "No hay ninguna cuenta disponible para esta identidad. Contacta a tu administrador.",
+        "provider_error": "El proveedor de identidad no completó el inicio de sesión. Por favor intenta de nuevo.",
+        "server_error": "Se produjo un error del servidor durante el inicio de sesión. Por favor intenta más tarde.",
+        "tooManyAttempts": "Demasiados intentos. Espera un momento e inicia sesión de nuevo.",
+        "unknown": "No se pudo iniciar sesión. Por favor inicia sesión de nuevo."
       }
-    }
+    },
+    "createAccountLink": "¿No tienes una cuenta? Solicita una"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -101,7 +139,14 @@
     "sources": "Fuentes",
     "watchFolder": "Carpeta Vigilada",
     "documentManagement": "Gestión de Documentos",
-    "ignoredFiles": "Archivos Ignorados"
+    "ignoredFiles": "Archivos Ignorados",
+    "settings": "Configuración",
+    "debug": "Depuración",
+    "sections": {
+      "library": "Biblioteca",
+      "ingest": "Ingesta",
+      "system": "Sistema"
+    }
   },
   "dashboard": {
     "greeting": "Esto es lo que está pasando con tus documentos hoy.",
@@ -135,7 +180,13 @@
       "title": "Documentos Recientes",
       "viewAll": "Ver Todos",
       "noDocuments": "Aún no hay documentos",
-      "uploadFirst": "Sube tu primer documento para comenzar"
+      "uploadFirst": "Sube tu primer documento para comenzar",
+      "columns": {
+        "document": "Documento",
+        "size": "Tamaño",
+        "added": "Añadido",
+        "status": "Estado"
+      }
     },
     "quickActions": {
       "title": "Acciones Rápidas",
@@ -505,6 +556,12 @@
         "deleting": "Eliminando...",
         "delete": "Eliminar Documento"
       }
+    },
+    "tabs": {
+      "preview": "Vista previa",
+      "ocrText": "Texto OCR",
+      "details": "Detalles",
+      "activity": "Actividad"
     }
   },
   "documentManagement": {
@@ -645,7 +702,8 @@
       "general": "General",
       "ocrSettings": "Configuración de OCR",
       "userManagement": "Gestión de Usuarios",
-      "serverConfiguration": "Configuración del Servidor"
+      "serverConfiguration": "Configuración del Servidor",
+      "account": "Cuenta"
     },
     "general": {
       "title": "Configuración General",
@@ -754,13 +812,14 @@
     },
     "userManagement": {
       "title": "Gestión de Usuarios",
-      "addUser": "Agregar Usuario",
+      "addUser": "Agregar usuario",
       "tableHeaders": {
         "username": "Nombre de Usuario",
         "email": "Correo Electrónico",
         "createdAt": "Creado En",
         "watchDirectory": "Directorio de Vigilancia",
-        "actions": "Acciones"
+        "actions": "Acciones",
+        "status": "Estado"
       },
       "watchDirectory": {
         "statusActive": "Activo",
@@ -786,7 +845,15 @@
         "title": "Eliminar Directorio de Vigilancia",
         "message": "¿Estás seguro de que quieres eliminar el directorio de vigilancia para el usuario \"{{username}}\"? Esta acción no se puede deshacer y detendrá el monitoreo de su directorio para archivos nuevos.",
         "removeButton": "Eliminar Directorio"
-      }
+      },
+      "activeToggleLabel": "Cuenta activa para {{username}}",
+      "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta",
+      "disableUser": "Desactivar cuenta",
+      "enableUser": "Activar cuenta",
+      "pendingApprovalNotice": "{{count}} cuenta(s) están desactivadas o pendientes de aprobación. Activa una cuenta para que esa persona pueda iniciar sesión.",
+      "roleAdmin": "Admin",
+      "statusActive": "Activa",
+      "statusPending": "Desactivada / pendiente de aprobación"
     },
     "serverConfiguration": {
       "title": "Configuración del Servidor (Solo Administrador)",
@@ -837,7 +904,7 @@
       "userUpdated": "Usuario actualizado exitosamente",
       "userDeleted": "Usuario eliminado exitosamente",
       "cannotDeleteSelf": "No puedes eliminar tu propia cuenta",
-      "confirmDeleteUser": "¿Estás seguro de que quieres eliminar este usuario?",
+      "confirmDeleteUser": "¿Seguro que quieres eliminar a {{username}} ({{email}})?",
       "duplicateUsername": "Este nombre de usuario ya está en uso. Por favor elige un nombre de usuario diferente.",
       "duplicateEmail": "Esta dirección de correo electrónico ya está en uso. Por favor usa un correo electrónico diferente.",
       "invalidPassword": "La contraseña debe tener al menos 8 caracteres con mayúsculas, minúsculas y números.",
@@ -860,7 +927,186 @@
       "ocrResumeFailed": "Se requiere acceso de administrador para reanudar el procesamiento OCR",
       "ocrResumeFailedGeneric": "Falló reanudar el procesamiento OCR",
       "serverConfigLoadFailed": "Se requiere acceso de administrador para ver la configuración del servidor",
-      "serverConfigLoadFailedGeneric": "Falló la carga de configuración del servidor"
+      "serverConfigLoadFailedGeneric": "Falló la carga de configuración del servidor",
+      "settingsLoadFailed": "No se pudieron cargar los ajustes",
+      "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta",
+      "userDisabled": "{{username}} se ha desactivado y se ha cerrado su sesión",
+      "userEnabled": "{{username}} ya puede iniciar sesión"
+    },
+    "adminOnly": {
+      "title": "Solo administradores",
+      "description": "Pide a un administrador que cambie estos ajustes si lo necesitas."
+    },
+    "apiKeys": {
+      "active": "Activa",
+      "alreadyRevoked": "Ya revocada",
+      "copied": "Copiada",
+      "copiedStatus": "Copiada al portapapeles",
+      "copy": "Copiar clave de API",
+      "copyFailed": "No se pudo copiar al portapapeles. Selecciónala y cópiala manualmente.",
+      "create": "Crear clave de API",
+      "createFailed": "No se pudo crear la clave de API.",
+      "createTitle": "Crear clave de API",
+      "created": "Creada",
+      "empty": "Todavía no tienes claves de API.",
+      "expiration": "Caducidad",
+      "expired": "Caducada",
+      "expires": "Caduca",
+      "expiry": {
+        "7": "7 días",
+        "30": "30 días",
+        "90": "90 días",
+        "180": "180 días",
+        "365": "1 año",
+        "never": "Nunca (no recomendado)"
+      },
+      "intro": "Usa una clave de API en la cabecera Authorization: Bearer para autenticar scripts e integraciones. Las claves tienen todos los permisos de tu cuenta: trátalas como contraseñas.",
+      "keyName": "Nombre de la clave:",
+      "lastUsed": "Último uso",
+      "loadFailed": "No se pudieron cargar las claves de API.",
+      "name": "Nombre",
+      "nameHelp": "Una etiqueta que reconocerás más tarde.",
+      "namePlaceholder": "p. ej. backup-script",
+      "nameRequired": "Ponle un nombre a esta clave.",
+      "never": "Nunca",
+      "prefix": "Prefijo",
+      "revealTitle": "Tu nueva clave de API",
+      "revealWarning": "Copia esta clave ahora. Por seguridad no se volverá a mostrar: si la pierdes tendrás que crear otra.",
+      "revoke": "Revocar",
+      "revokeFailed": "No se pudo revocar la clave de API.",
+      "revokeMessage": "¿Revocar {{name}}? Los scripts e integraciones que usen esta clave dejarán de funcionar de inmediato. No se puede deshacer.",
+      "revokeNamed": "Revocar {{name}}",
+      "revokeTitle": "Revocar clave de API",
+      "revoked": "Revocada",
+      "saved": "Ya la he guardado",
+      "status": "Estado",
+      "usage": "Úsala así:"
+    },
+    "appearance": {
+      "dark": "Oscuro",
+      "language": "Idioma de la interfaz",
+      "light": "Claro",
+      "system": "Sistema",
+      "systemHelp": "Seguir el ajuste del dispositivo",
+      "theme": "Tema"
+    },
+    "debugTools": {
+      "checkFailed": "fallida",
+      "checkPassed": "correcta"
+    },
+    "fold": {
+      "close": "Cerrar",
+      "edit": "Editar"
+    },
+    "groups": {
+      "languages": "Idiomas",
+      "ocrControls": "Control del procesamiento",
+      "processing": "Procesamiento",
+      "qualityThresholds": "Umbrales de calidad"
+    },
+    "labels": {
+      "createFailed": "No se pudo crear la etiqueta",
+      "deleteFailed": "No se pudo eliminar la etiqueta",
+      "intro": "Las etiquetas organizan documentos y fuentes. Los recuentos indican cuántas veces se usa cada una.",
+      "invalidData": "Se recibió un formato de datos no válido del servidor",
+      "unexpectedStatus": "El servidor devolvió una respuesta inesperada ({{status}})",
+      "updateFailed": "No se pudo actualizar la etiqueta"
+    },
+    "languageSelector": {
+      "addMore_one": "Añadir más idiomas (queda {{count}})",
+      "addMore_other": "Añadir más idiomas (quedan {{count}})",
+      "available": "Idiomas disponibles",
+      "help": "El idioma principal se procesa primero para mejorar la precisión. Varios idiomas ayudan con documentos multilingües.",
+      "loadFailed": "No se pudieron cargar los idiomas de OCR",
+      "loading": "Cargando idiomas…",
+      "max_one": "Se permite un máximo de {{count}} idioma para un rendimiento óptimo.",
+      "max_other": "Se permite un máximo de {{count}} idiomas para un rendimiento óptimo.",
+      "none": "No hay idiomas seleccionados. Los documentos usarán el idioma de OCR predeterminado.",
+      "primaryNote": "(Principal)",
+      "primaryTag": "Principal",
+      "remove": "Quitar {{language}}",
+      "select": "Seleccionar idiomas de OCR…",
+      "selected": "Idiomas seleccionados",
+      "setPrimary": "Hacer principal",
+      "title": "Idiomas de OCR"
+    },
+    "nav": {
+      "label": "Secciones de ajustes",
+      "matches_one": "{{count}} sección coincide",
+      "matches_other": "{{count}} secciones coinciden",
+      "noMatches": "Ningún ajuste coincide con «{{query}}»",
+      "search": "Buscar ajustes",
+      "searchPlaceholder": "Filtrar por nombre",
+      "section": "Sección"
+    },
+    "sections": {
+      "apiKeys": "Claves de API",
+      "appearance": "Apariencia",
+      "debug": "Depuración",
+      "general": "General",
+      "labels": "Etiquetas",
+      "ocr": "OCR",
+      "server": "Servidor",
+      "users": "Usuarios",
+      "account": "Cuenta"
+    },
+    "summary": {
+      "advanced": "ventana {{w}} · morfología {{m}} · ecualización {{h}} · guardar imágenes {{s}}",
+      "days_one": "{{count}} día",
+      "days_other": "{{count}} días",
+      "defaultLanguage": "predeterminado",
+      "enhancement": "brillo {{b}} · contraste {{c}}× · ruido {{n}} · nitidez {{s}}",
+      "enhancementSkipped": "omitida · solo imágenes originales",
+      "fileProcessing": "{{size}} MB máx. · {{memory}} MB de memoria · rotar {{rotate}}",
+      "forever": "siempre",
+      "imageSize": "{{w}} × {{h}} px · escalado {{u}}×",
+      "languages": "{{languages}} · detección automática {{auto}}",
+      "off": "no",
+      "on": "sí",
+      "paused": "en pausa",
+      "processing": "{{jobs}} trabajos · {{timeout}} s · prioridad {{priority}}",
+      "running": "en marcha",
+      "search": "{{perPage}} por página · {{snippet}} caracteres · difusa {{fuzzy}}",
+      "storage": "conservar {{retention}} · limpieza {{cleanup}} · compresión {{compression}}",
+      "thresholds": "brillo {{b}} · contraste {{c}} · ruido {{n}} · nitidez {{s}}"
+    },
+    "users": {
+      "createDirFor": "Crear carpeta vigilada para {{name}}",
+      "deleteNamed": "Eliminar a {{name}}",
+      "deleteTitle": "Eliminar usuario",
+      "editNamed": "Editar a {{name}}",
+      "emailRequired": "Introduce un correo electrónico.",
+      "empty": "Todavía no hay usuarios",
+      "intro": "Personas que pueden iniciar sesión en este servidor de Readur.",
+      "loadFailed": "No se pudieron cargar los usuarios",
+      "passwordRequired": "Introduce una contraseña.",
+      "removeDirFor": "Quitar la carpeta vigilada de {{name}}",
+      "usernameRequired": "Introduce un nombre de usuario.",
+      "viewDirFor": "Ver la carpeta vigilada de {{name}}"
+    },
+    "validation": {
+      "choose": "Elige una de las opciones.",
+      "integer": "Introduce un número entero.",
+      "min": "Introduce {{min}} o más.",
+      "number": "Introduce un número.",
+      "odd": "Introduce un número impar.",
+      "range": "Introduce un valor entre {{min}} y {{max}}.",
+      "required": "Introduce un valor."
+    },
+    "account": {
+      "changePassword": "Cambiar contraseña",
+      "confirmNewPassword": "Confirmar nueva contraseña",
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "passwordChangeFailed": "No se pudo cambiar la contraseña",
+      "passwordChanged": "Contraseña cambiada. Se cerraron tus otras sesiones.",
+      "passwordMismatch": "Las nuevas contraseñas no coinciden",
+      "passwordPolicy": "Al menos {{min}} caracteres",
+      "passwordTooLong": "La contraseña no puede superar los {{max}} bytes",
+      "title": "Cuenta",
+      "tooManyAttempts": "Demasiados intentos. Inténtalo de nuevo más tarde.",
+      "updatePassword": "Actualizar contraseña",
+      "wrongCurrentPassword": "La contraseña actual no es correcta"
     }
   },
   "labels": {
@@ -902,7 +1148,8 @@
       "cancel": "Cancelar",
       "create": "Crear",
       "update": "Actualizar",
-      "saving": "Guardando..."
+      "saving": "Guardando...",
+      "previewName": "Vista previa de etiqueta"
     },
     "selector": {
       "placeholder": "Buscar o crear etiquetas...",
@@ -911,7 +1158,9 @@
       "createLabel": "Crear etiqueta \"{{name}}\"",
       "noLabelsFound": "No se encontraron etiquetas",
       "noLabelsMatch": "No hay etiquetas que coincidan con \"{{query}}\"",
-      "noLabelsAvailable": "No hay etiquetas disponibles"
+      "noLabelsAvailable": "No hay etiquetas disponibles",
+      "label": "Etiquetas",
+      "selected": "Etiquetas seleccionadas"
     },
     "empty": {
       "title": "No se encontraron etiquetas",
@@ -940,7 +1189,41 @@
       "systemDelete": "Las etiquetas del sistema no se pueden eliminar. Solo se pueden eliminar las etiquetas creadas por el usuario.",
       "invalidName": "El nombre de la etiqueta contiene caracteres inválidos. Por favor usa solo letras, números y puntuación básica.",
       "invalidColor": "Formato de color inválido. Por favor usa un color hexadecimal válido como #0969da.",
-      "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas."
+      "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas.",
+      "commaNotAllowed": "Los nombres de las etiquetas no pueden contener comas."
+    },
+    "colors": {
+      "blue": "Azul",
+      "gray": "Gris",
+      "green": "Verde",
+      "indigo": "Índigo",
+      "orange": "Naranja",
+      "pink": "Rosa",
+      "purple": "Morado",
+      "red": "Rojo",
+      "teal": "Verde azulado",
+      "yellow": "Amarillo"
+    },
+    "icons": {
+      "archive": "Archivo",
+      "assignment": "Tarea",
+      "briefcase": "Maletín",
+      "bug": "Error",
+      "build": "Herramienta",
+      "document": "Documento",
+      "dollar": "Dinero",
+      "folder": "Carpeta",
+      "label": "Etiqueta",
+      "medical": "Médico",
+      "person": "Persona",
+      "receipt": "Recibo",
+      "scale": "Legal",
+      "schedule": "Agenda",
+      "star": "Estrella",
+      "work": "Trabajo"
+    },
+    "tag": {
+      "remove": "Quitar {{name}}"
     }
   },
   "notifications": {
@@ -1285,14 +1568,20 @@
     },
     "actions": {
       "signup": "Registrarse",
-      "creating": "Creando cuenta..."
+      "creating": "Creando cuenta...",
+      "backToSignIn": "Volver a iniciar sesión"
     },
     "links": {
       "signin": "¿Ya tienes una cuenta? Inicia sesión"
     },
     "errors": {
-      "failed": "Falló el registro"
-    }
+      "failed": "Falló el registro",
+      "disabled": "El registro abierto está desactivado en este servidor.",
+      "passwordTooShort": "La contraseña debe tener al menos {{min}} caracteres",
+      "rateLimited": "Demasiados intentos de registro. Inténtalo de nuevo más tarde."
+    },
+    "passwordHint": "Al menos {{min}} caracteres",
+    "pendingApproval": "Cuenta creada. Un administrador debe aprobarla antes de que puedas iniciar sesión."
   },
   "sources": {
     "title": "Fuentes de Documentos",
@@ -1366,7 +1655,10 @@
       "sourceType": "Tipo de Fuente",
       "sourceEnabled": "Fuente Habilitada",
       "sourceEnabledHelper": "Habilitar esta fuente para sincronización",
-      "sourceNamePlaceholder": "Mi Servidor de Documentos"
+      "sourceNamePlaceholder": "Mi Servidor de Documentos",
+      "keepCurrentSecret": "Déjalo en blanco para conservar el valor actual",
+      "passwordStored": "Hay una contraseña guardada para esta fuente",
+      "secretStored": "Hay una clave secreta guardada para esta fuente"
     },
     "webdav": {
       "title": "Configuración WebDAV",
@@ -1514,6 +1806,1534 @@
         "watchDirectory": "Directorio vigilado",
         "exampleFile": "Archivo de ejemplo"
       }
+    }
+  },
+  "ui": {
+    "clear": "Borrar",
+    "close": "Cerrar",
+    "showOptions": "Mostrar opciones",
+    "notifications": "Notificaciones",
+    "pagination": {
+      "label": "Paginación",
+      "range": "{{start}}–{{end}} de {{total}}",
+      "pageSize": "Filas por página",
+      "previous": "Página anterior",
+      "next": "Página siguiente"
+    },
+    "toast": {
+      "info": "Información:",
+      "success": "Correcto:",
+      "danger": "Error:"
+    },
+    "filterChip": {
+      "clear": "Quitar filtro {{label}}"
+    },
+    "bulk": {
+      "label": "Acciones en lote",
+      "clear": "Borrar selección",
+      "count_one": "<n>{{count}}</n> <w>seleccionado</w>",
+      "count_other": "<n>{{count}}</n> <w>seleccionados</w>"
+    },
+    "commandPalette": {
+      "label": "Paleta de comandos",
+      "search": "Buscar",
+      "placeholder": "Buscar documentos, etiquetas, páginas…",
+      "loading": "Buscando…",
+      "noResults": "Sin resultados",
+      "results": "Resultados",
+      "hint": "Escribe para buscar"
+    },
+    "board": {
+      "loading": "Cargando",
+      "empty": "Nada que mostrar"
+    }
+  },
+  "status": {
+    "pending": "Pendiente",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "Indexado",
+    "failed": "Fallido",
+    "healthy": "Correcto",
+    "syncing": "Sincronizando",
+    "warning": "Revisar",
+    "error": "Error",
+    "disabled": "Desactivado"
+  },
+  "shell": {
+    "skipToContent": "Saltar al contenido",
+    "home": "Inicio de Readur",
+    "loading": "Cargando",
+    "nav": {
+      "label": "Principal",
+      "tabBar": "Barra de pestañas",
+      "board": "Tablero",
+      "library": "Biblioteca",
+      "intake": "Entrada",
+      "settings": "Configuración",
+      "home": "Inicio",
+      "search": "Buscar"
+    },
+    "search": {
+      "open": "Buscar documentos",
+      "placeholder": "Buscar documentos…",
+      "short": "Búsqueda rápida…"
+    },
+    "palette": {
+      "navigation": "Ir a",
+      "documents": "Documentos",
+      "recent": "Búsquedas recientes",
+      "showAll": "Ver todos los resultados de «{{query}}»"
+    },
+    "synced": {
+      "justNow": "sincronizado ahora",
+      "minutes": "sincronizado hace {{count}} min",
+      "hours": "sincronizado hace {{count}} h",
+      "days": "sincronizado hace {{count}} d",
+      "at": "sincronizado {{when}}"
+    },
+    "alerts": {
+      "label": "Notificaciones",
+      "labelUnread": "Notificaciones, {{count}} sin leer",
+      "unread": "{{count}} sin leer",
+      "close": "Cerrar notificaciones",
+      "dismiss": "Descartar {{title}}",
+      "new": "Nuevo",
+      "type": {
+        "success": "Éxito",
+        "error": "Error",
+        "warning": "Advertencia",
+        "info": "Información"
+      }
+    },
+    "language": {
+      "label": "Cambiar idioma"
+    },
+    "theme": {
+      "toDark": "Cambiar a modo oscuro",
+      "toLight": "Cambiar a modo claro"
+    },
+    "user": {
+      "menu": "Menú de la cuenta",
+      "settings": "Configuración",
+      "apiDocs": "Documentación de la API",
+      "logout": "Cerrar sesión",
+      "menuFor": "Menú de la cuenta, {{name}}"
+    },
+    "intake": {
+      "title": "Entrada",
+      "sections": "Secciones de entrada",
+      "upload": "Subir",
+      "connections": "Conexiones",
+      "watch": "Carpeta vigilada",
+      "attention": "Requiere atención",
+      "ignored": "Archivos ignorados"
+    },
+    "settings": {
+      "title": "Configuración",
+      "sections": "Secciones de configuración",
+      "general": "General",
+      "labels": "Etiquetas",
+      "debug": "Depuración"
+    },
+    "collections": {
+      "title": "Colecciones",
+      "empty": "Aún no hay colecciones",
+      "all": "Todas las colecciones"
+    },
+    "sources": {
+      "title": "Orígenes",
+      "uploads": "Subidas",
+      "watch": "Carpeta vigilada",
+      "health": {
+        "syncing": "Sincronizando",
+        "error": "Error",
+        "check": "Revisar",
+        "off": "Apagado"
+      }
+    },
+    "menu": {
+      "label": "Menú",
+      "open": "Abrir menú",
+      "close": "Cerrar menú"
+    }
+  },
+  "board": {
+    "title": "Panel",
+    "addDocuments": "Añadir documentos",
+    "retry": "Reintentar",
+    "viewAll": "Ver todo",
+    "figure": {
+      "inQueue": "{{formatted}} en cola",
+      "zero": "0 en cola"
+    },
+    "markAllSeen": "Marcar todo como visto",
+    "loading": "Cargando",
+    "tag": {
+      "new": "Nuevo",
+      "changed": "Cambiado"
+    },
+    "col": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "status": "Estado",
+      "size": "Tamaño",
+      "added": "Añadido",
+      "reason": "Motivo",
+      "age": "Antigüedad",
+      "actions": "Acciones"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "dismiss": "Descartar",
+      "dismissNamed": "Descartar {{name}}",
+      "retryNamed": "Reintentar {{name}}",
+      "retryQueued": "Reintento iniciado",
+      "retryFailed": "No se pudo reintentar",
+      "error": "No se pudieron cargar algunos elementos que requieren atención."
+    },
+    "arrivals": {
+      "title": "Añadidos recientemente",
+      "library": "Abrir biblioteca",
+      "error": "No se pudieron cargar los documentos recientes.",
+      "empty": "Aún no hay documentos",
+      "emptyHint": "Los documentos que añadas aparecerán aquí a medida que lleguen.",
+      "bulkOne": "documento nuevo",
+      "bulkMany": "documentos nuevos",
+      "bulkOpen": "Abrir en la biblioteca, más recientes primero"
+    },
+    "processing": {
+      "title": "Procesamiento",
+      "pending": "Pendientes",
+      "processing": "En proceso",
+      "failed": "Fallidos",
+      "doneToday": "Hechos hoy",
+      "oldestWait": "Espera más larga",
+      "error": "No se pudo cargar la cola de OCR.",
+      "statusError": "No se pudo cargar el estado del OCR.",
+      "ocr": "OCR",
+      "pause": "Pausar OCR",
+      "resume": "Reanudar OCR",
+      "pauseFailed": "No se pudo pausar el OCR",
+      "resumeFailed": "No se pudo reanudar el OCR"
+    },
+    "connections": {
+      "title": "Conexiones",
+      "manage": "Gestionar",
+      "error": "No se pudieron cargar las conexiones.",
+      "empty": "Sin conexiones",
+      "add": "Añadir conexión"
+    },
+    "totals": {
+      "title": "Biblioteca",
+      "documents": "Documentos",
+      "storage": "Almacenamiento",
+      "indexed": "Indexado",
+      "labels": "Etiquetas",
+      "error": "No se pudieron cargar los totales de la biblioteca."
+    }
+  },
+  "document": {
+    "breadcrumb": "Ruta de navegación",
+    "library": "Biblioteca",
+    "actions": {
+      "retry": "Reintentar OCR",
+      "download": "Descargar",
+      "share": "Compartir",
+      "comments": "Comentarios",
+      "more": "Más acciones",
+      "processedImage": "Ver imagen procesada",
+      "delete": "Eliminar documento"
+    },
+    "delete": {
+      "title": "¿Eliminar este documento?",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar",
+      "message": "Se eliminará <0>{{filename}}</0> junto con su texto extraído, etiquetas, comentarios y enlaces compartidos. No se puede deshacer."
+    },
+    "processed": {
+      "title": "Imagen procesada",
+      "close": "Cerrar",
+      "loading": "Cargando imagen",
+      "missing": "No hay imagen procesada guardada para este documento.",
+      "alt": "Imagen tal como se preparó para el OCR",
+      "caption": "Esta es la imagen depurada que leyó el motor OCR."
+    },
+    "loading": "Cargando documento",
+    "panel": {
+      "comments": "Comentarios",
+      "links": "Enlaces compartidos",
+      "label": "Panel lateral"
+    },
+    "notFound": "Documento no encontrado",
+    "loadFailed": "No se pudo cargar este documento",
+    "notFoundHint": "Puede que se haya eliminado o que el enlace sea incorrecto.",
+    "loadFailedHint": "Revisa tu conexión e inténtalo de nuevo.",
+    "retry": "Reintentar",
+    "backToLibrary": "Volver a la biblioteca",
+    "toast": {
+      "downloadFailed": "No se pudo descargar el archivo",
+      "retryQueued": "OCR en cola de nuevo",
+      "retryFailed": "No se pudo volver a poner el OCR en cola",
+      "deleted": "Documento eliminado",
+      "deleteFailed": "No se pudo eliminar el documento",
+      "labelsFailed": "No se pudieron guardar las etiquetas"
+    },
+    "labels": {
+      "editor": "Editar etiquetas",
+      "placeholder": "Buscar o crear etiquetas…",
+      "cancel": "Cancelar",
+      "save": "Guardar etiquetas",
+      "add": "Añadir etiqueta"
+    },
+    "type": {
+      "image": "Imagen",
+      "text": "Texto",
+      "other": "Archivo"
+    },
+    "pass": {
+      "uploaded": "Subida",
+      "sourceLocalFolder": "Carpeta local",
+      "sourceBatch": "Importación por lotes",
+      "label": "Resumen del documento",
+      "status": "Estado",
+      "progress": "Progreso del OCR",
+      "type": "Tipo",
+      "pages": "Páginas",
+      "size": "Tamaño",
+      "source": "Origen",
+      "added": "Añadido",
+      "language": "Idioma",
+      "confidence": "Confianza",
+      "labels": "Etiquetas",
+      "noLabels": "Ninguna",
+      "editLabels": "Editar etiquetas"
+    },
+    "share": {
+      "titleNamed": "Compartir {{name}}",
+      "title": "Compartir documento",
+      "done": "Listo",
+      "active": "Activo",
+      "expired": "Caducado",
+      "revoked": "Revocado",
+      "copied": "Enlace copiado",
+      "copyFailed": "No se pudo copiar el enlace",
+      "revokedToast": "Enlace revocado",
+      "revokeFailed": "No se pudo revocar el enlace",
+      "none": "Todavía no hay enlaces compartidos.",
+      "existing": "Enlaces existentes",
+      "views": "Vistas",
+      "expiresShort": "Caduca",
+      "never": "Nunca",
+      "createdShort": "Creado",
+      "protected": "Contraseña",
+      "confirmRevoke": "¿Revocar este enlace?",
+      "confirmRevokeText": "¿Revocar este enlace? Dejará de funcionar para todas las personas que lo tengan.",
+      "keep": "Conservar",
+      "revoke": "Revocar",
+      "copy": "Copiar enlace",
+      "revokeLink": "Revocar enlace",
+      "loadFailed": "No se pudieron cargar los enlaces compartidos.",
+      "loading": "Cargando enlaces compartidos",
+      "createFailed": "No se pudo crear el enlace. Inténtalo de nuevo.",
+      "ready": "Cualquier persona con este enlace puede abrir el documento.",
+      "url": "Enlace para compartir",
+      "passwordNote": "Se necesitará la contraseña para abrirlo.",
+      "another": "Crear otro enlace",
+      "newLink": "Nuevo enlace compartido",
+      "password": "Contraseña (opcional)",
+      "passwordHint": "Déjalo vacío para acceso libre",
+      "hidePassword": "Ocultar contraseña",
+      "showPassword": "Mostrar contraseña",
+      "expires": "Caducidad (opcional)",
+      "expiresHint": "Déjalo vacío para que no caduque",
+      "maxViews": "Límite de vistas (opcional)",
+      "maxViewsHint": "Déjalo vacío para vistas ilimitadas",
+      "create": "Crear enlace"
+    },
+    "details": {
+      "yes": "Sí",
+      "octal": "octal",
+      "no": "No",
+      "sourceMetadata": "Metadatos de origen",
+      "fieldCount_one": "{{count}} campo",
+      "fieldCount_other": "{{count}} campos",
+      "hashCopied": "Hash copiado",
+      "copyFailed": "No se pudo copiar",
+      "file": "Archivo",
+      "filename": "Nombre de archivo",
+      "mimeType": "Tipo MIME",
+      "size": "Tamaño",
+      "added": "Añadido",
+      "modified": "Última modificación",
+      "addedBy": "Añadido por",
+      "unknown": "Desconocido",
+      "owner": "Propietario",
+      "group": "Grupo",
+      "permissions": "Permisos",
+      "hash": "SHA-256",
+      "copyHash": "Copiar hash",
+      "notAvailable": "No disponible",
+      "source": "Origen",
+      "sourceType": "Tipo",
+      "sourcePath": "Ruta",
+      "sourceId": "ID de origen",
+      "originalCreated": "Creado originalmente",
+      "originalModified": "Modificado originalmente",
+      "processing": "Procesamiento",
+      "status": "Estado",
+      "confidence": "Confianza",
+      "words": "Palabras",
+      "time": "Tiempo de procesamiento",
+      "retries": "Reintentos",
+      "failure": "Motivo del fallo",
+      "activity": "Actividad",
+      "retryHistory_one": "Historial de reintentos ({{count}})",
+      "retryHistory_other": "Historial de reintentos ({{count}})",
+      "title": "Detalles",
+      "hide": "Ocultar detalles",
+      "show": "Mostrar detalles"
+    },
+    "activity": {
+      "uploaded": "Añadido",
+      "by": "por {{name}}",
+      "ocrDone": "Texto extraído",
+      "ocrFailed": "El OCR falló",
+      "ocrRunning": "OCR en curso"
+    },
+    "text": {
+      "words_one": "{{n}} palabra",
+      "words_other": "{{n}} palabras",
+      "copied": "Texto copiado",
+      "copyFailed": "No se pudo copiar el texto",
+      "confidence": "{{value}} % de confianza",
+      "time": "{{ms}} ms",
+      "noMatches": "Sin coincidencias",
+      "matchPosition": "{{current}} de {{total}}",
+      "title": "Texto",
+      "find": "Buscar en el texto",
+      "findPlaceholder": "Buscar en el texto…",
+      "previousMatch": "Coincidencia anterior",
+      "nextMatch": "Coincidencia siguiente",
+      "monospace": "Monoespaciado",
+      "copyAll": "Copiar todo el texto",
+      "body": "Texto extraído",
+      "loading": "Cargando texto",
+      "pending": "El texto aparecerá aquí cuando termine el OCR.",
+      "failed": "El OCR no pudo leer este documento.",
+      "loadFailed": "No se pudo cargar el texto extraído.",
+      "empty": "No se encontró texto en este documento.",
+      "displayOptions": "Opciones de visualización del texto",
+      "copy": "Copiar",
+      "failureDetail": "Mostrar el mensaje completo"
+    },
+    "comments": {
+      "saveFailed": "No se pudo guardar el comentario. Inténtalo de nuevo.",
+      "cancel": "Cancelar",
+      "post": "Publicar",
+      "by": "Comentario de {{name}}",
+      "edited": "editado",
+      "editLabel": "Editar comentario",
+      "save": "Guardar",
+      "reply": "Responder",
+      "edit": "Editar comentario",
+      "delete": "Eliminar comentario",
+      "newLabel": "Nuevo comentario",
+      "placeholder": "Escribe un comentario…",
+      "loadFailed": "No se pudieron cargar los comentarios.",
+      "loading": "Cargando comentarios",
+      "empty": "Todavía no hay comentarios",
+      "emptyHint": "Inicia la conversación sobre este documento.",
+      "list": "Comentarios",
+      "deleteFailed": "No se pudo eliminar el comentario",
+      "loadRepliesFailed": "No se pudieron cargar más respuestas",
+      "replyLabel": "Responder a {{name}}",
+      "hideReplies_one": "Ocultar {{count}} respuesta",
+      "hideReplies_other": "Ocultar {{count}} respuestas",
+      "showReplies_one": "Mostrar {{count}} respuesta",
+      "showReplies_other": "Mostrar {{count}} respuestas",
+      "loadMore": "Cargar más respuestas"
+    },
+    "shared": {
+      "wrongPassword": "La contraseña no es correcta. Inténtalo de nuevo.",
+      "verifyFailed": "No se pudo comprobar la contraseña. Inténtalo de nuevo.",
+      "downloadFailed": "No se pudo descargar el archivo. Inténtalo de nuevo.",
+      "loading": "Cargando documento compartido",
+      "expiredTitle": "Este enlace ha caducado",
+      "unavailableTitle": "Este enlace no está disponible",
+      "expired": "Ha pasado su fecha de caducidad, alcanzó su límite de vistas o fue revocado. Pide un enlace nuevo a quien te lo envió.",
+      "missing": "No existe o se ha eliminado.",
+      "invalid": "El enlace está incompleto.",
+      "error": "No se pudo cargar el documento compartido. Inténtalo más tarde.",
+      "passwordTitle": "Se requiere contraseña",
+      "passwordHint": "Este documento está protegido. Introduce la contraseña que te dieron.",
+      "password": "Contraseña",
+      "submit": "Abrir documento",
+      "file": "Archivo",
+      "expires": "Caduca",
+      "preview": "Mostrar vista previa",
+      "previewHint": "Abrir la vista previa cuenta como una vista de este enlace.",
+      "expiresOn": "El enlace caduca el {{date}}",
+      "noExpiry": "El enlace no caduca"
+    },
+    "viewer": {
+      "loading": "Cargando vista previa",
+      "error": "No se pudo cargar la vista previa.",
+      "unsupported": "No hay vista previa para este tipo de archivo",
+      "unsupportedHint": "Los archivos {{type}} no se pueden mostrar en el navegador. Descarga el archivo para abrirlo."
+    },
+    "tabs": {
+      "preview": "Vista previa",
+      "label": "Vistas del documento",
+      "text": "Texto",
+      "details": "Detalles"
+    },
+    "meta": {
+      "pages_one": "{{count}} página",
+      "pages_other": "{{count}} páginas",
+      "added": "Añadido {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "view": {
+      "label": "Vista",
+      "document": "Documento",
+      "split": "En paralelo",
+      "text": "Texto"
+    }
+  },
+  "library": {
+    "add": "Añadir documentos",
+    "added": {
+      "1y": "Último año",
+      "30d": "Últimos 30 días",
+      "7d": "Últimos 7 días",
+      "from": "Desde",
+      "order": "La fecha final es anterior a la inicial",
+      "to": "Hasta"
+    },
+    "bulk": {
+      "addLabel": "Añadir etiqueta",
+      "addLabelTitle": "Añadir etiquetas a {{count}} documentos",
+      "addLabelTitle_one": "Añadir etiquetas a 1 documento",
+      "apply": "Añadir etiquetas",
+      "delete": "Eliminar",
+      "deleteBody": "Se eliminarán los documentos y su texto. No se puede deshacer.",
+      "deleteFailed": "No se pudieron eliminar los documentos",
+      "deleteTitle": "¿Eliminar {{count}} documentos?",
+      "deleteTitle_one": "¿Eliminar 1 documento?",
+      "deleted": "{{count}} documentos eliminados",
+      "deleted_one": "1 documento eliminado",
+      "download": "Descargar",
+      "downloadFailed": "{{count}} descargas fallidas",
+      "downloadFailed_one": "1 descarga fallida",
+      "downloaded": "{{count}} documentos descargados",
+      "downloaded_one": "1 documento descargado",
+      "downloading": "Descargando…",
+      "labelFailed": "No se pudieron añadir las etiquetas",
+      "labelled": "Etiquetas añadidas a {{count}} documentos",
+      "labelled_one": "Etiquetas añadidas a 1 documento",
+      "retry": "Reintentar OCR",
+      "deleteNone": "No se eliminó ningún documento",
+      "deletedSome": "{{deleted}} de {{requested}} documentos eliminados"
+    },
+    "cancel": "Cancelar",
+    "columns": {
+      "added": "Añadido",
+      "labels": "Etiquetas",
+      "name": "Nombre",
+      "size": "Tamaño",
+      "source": "Origen",
+      "status": "Estado",
+      "type": "Tipo",
+      "updated": "Actualizado"
+    },
+    "compact": "Filas compactas",
+    "count": "{{formatted}} documentos",
+    "count_one": "{{formatted}} documento",
+    "counting": "Contando…",
+    "detail": {
+      "confidence": "Confianza",
+      "delete": "Eliminar",
+      "deleteBody": "Se eliminarán «{{name}}» y su texto. No se puede deshacer.",
+      "deleteFailed": "No se pudo eliminar el documento",
+      "deleteTitle": "¿Eliminar este documento?",
+      "deleted": "Documento eliminado",
+      "download": "Descargar",
+      "downloadFailed": "La descarga falló",
+      "facts": "Datos del documento",
+      "labelsFailed": "No se pudieron guardar las etiquetas",
+      "labelsSaved": "Etiquetas guardadas",
+      "language": "Idioma",
+      "loadingText": "Cargando texto",
+      "noPreview": "Aún no hay vista previa",
+      "noText": "Todavía no se ha leído texto de este documento.",
+      "open": "Abrir",
+      "pagesOcr": "Páginas/OCR",
+      "retry": "Reintentar OCR",
+      "retryFailed": "No se pudo reintentar el reconocimiento de texto",
+      "retryQueued": "Reconocimiento de texto en cola de nuevo",
+      "share": "Compartir",
+      "text": "Texto",
+      "textFailed": "No se pudo cargar el texto.",
+      "title": "Documento",
+      "pages_one": "1 página",
+      "pages_other": "{{count}} páginas",
+      "added": "Añadido {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "empty": {
+      "clearFilters": "Quitar filtros",
+      "error": "No se pudieron cargar los documentos",
+      "noMatches": "Sin resultados",
+      "noMatchesHint": "Nada coincide con la búsqueda y los filtros actuales.",
+      "none": "Aún no hay documentos",
+      "noneHint": "Sube archivos o conecta una carpeta para empezar tu biblioteca.",
+      "tooMany": "Demasiadas coincidencias: afina la búsqueda",
+      "tooManyHint": "Añade una palabra o un filtro para acotar los resultados.",
+      "collection": "Todavía no hay nada en «{{name}}»",
+      "collectionHint": "Busca documentos, marca los que van aquí y elige «Guardar como colección».",
+      "goSearch": "Ir a la búsqueda"
+    },
+    "filters": {
+      "added": "Añadido",
+      "any": "Cualquiera",
+      "clearAll": "Quitar todo",
+      "findLabel": "Buscar una colección",
+      "label": "Etiqueta",
+      "noLabelMatch": "No hay colecciones coincidentes",
+      "noLabels": "Aún no hay colecciones",
+      "region": "Buscar y filtrar",
+      "source": "Origen",
+      "status": "Estado",
+      "type": "Tipo",
+      "collection": "Colección"
+    },
+    "help": {
+      "boolean": "Operadores",
+      "booleanHint": "Usa & (y), | (o), ! (no)",
+      "exampleAnd": "Ambas palabras",
+      "exampleFuzzy": "Tolera errores de escritura",
+      "exampleNot": "Excluir una palabra",
+      "exampleOr": "Cualquiera de las palabras",
+      "examplePhrase": "Una frase exacta",
+      "exampleWord": "Documentos que mencionan una palabra",
+      "examples": "Prueba",
+      "fuzzy": "Escritura parecida",
+      "fuzzyHint": "También encuentra casi coincidencias y erratas",
+      "intro": "La búsqueda revisa los nombres de archivo y el texto leído de cada documento.",
+      "match": "Coincidencia",
+      "open": "Ayuda de búsqueda",
+      "phrase": "Frase exacta",
+      "phraseHint": "Las palabras aparecen juntas y en orden",
+      "simple": "Todas las palabras",
+      "simpleHint": "Cada palabra aparece en algún lugar",
+      "title": "Ayuda de búsqueda"
+    },
+    "labelsMore": "{{count}} más",
+    "retry": "Reintentar",
+    "search": {
+      "keepTyping": "Sigue escribiendo…",
+      "label": "Buscar documentos",
+      "placeholder": "Buscar nombres y texto…",
+      "allDates": "Mostrar todas las fechas",
+      "allSelected_one": "La única coincidencia está seleccionada",
+      "allSelected_other": "Las {{formatted}} coincidencias están seleccionadas",
+      "bestMatch": "Más relevantes",
+      "bigPlaceholder": "Busca en todos los documentos por nombre o por las palabras que contienen",
+      "count_one": "1 documento coincide con «{{q}}»",
+      "count_other": "{{formatted}} documentos coinciden con «{{q}}»",
+      "counting": "Buscando…",
+      "error": "La búsqueda no se pudo completar",
+      "everything": "Buscar en todos los documentos…",
+      "inRange": "en {{range}}",
+      "loading": "Buscando…",
+      "monthCount_one": "1 resultado",
+      "monthCount_other": "{{count}} resultados",
+      "nameMatch": "Coincide en el nombre del archivo",
+      "newest": "Más recientes primero",
+      "noMatchesHint": "Revisa la ortografía, prueba con menos palabras o activa «Ortografía parecida» en la ayuda de búsqueda.",
+      "order": "Orden",
+      "preview": "Vista rápida de {{name}}",
+      "results": "Resultados",
+      "selectAll_one": "Seleccionar la única coincidencia",
+      "selectAll_other": "Seleccionar las {{formatted}} coincidencias",
+      "selectPage": "Seleccionar todo en esta página",
+      "startHint": "Readur busca en los nombres de archivo y en cada palabra leída de tus escaneos y PDF. Prueba con un nombre, un lugar o un tema, como «hombro» o «factura 2024».",
+      "startTitle": "Encuentra cualquier cosa en tus documentos",
+      "title": "Búsqueda"
+    },
+    "sort": {
+      "asc": "{{field}}, ascendente",
+      "desc": "{{field}}, descendente",
+      "label": "Ordenar por",
+      "relevance": "Mejor coincidencia"
+    },
+    "source": {
+      "unknown": "Conexión",
+      "upload": "Subida",
+      "watch": "Carpeta vigilada"
+    },
+    "status": {
+      "completed": "Indexado",
+      "failed": "Fallido",
+      "pending": "Pendiente",
+      "processing": "Procesando"
+    },
+    "table": "Documentos",
+    "tag": {
+      "changed": "Cambiado",
+      "new": "Nuevo"
+    },
+    "title": "Biblioteca",
+    "type": {
+      "image": "Imágenes",
+      "office": "Office",
+      "other": "Otros",
+      "pdf": "PDF",
+      "text": "Texto"
+    },
+    "collection": {
+      "action": "Guardar como colección",
+      "assignFailed": "La colección se creó, pero no se pudieron añadir los documentos. Inténtalo de nuevo.",
+      "assignFailedExisting": "No se pudieron añadir los documentos",
+      "color": "Color",
+      "createFailed": "No se pudo crear la colección",
+      "existing": "Una colección existente",
+      "name": "Nombre",
+      "nameRequired": "Ponle un nombre a la colección",
+      "nameTaken": "Ya existe una colección con este nombre. Elígela en «Una colección existente».",
+      "new": "Una colección nueva",
+      "pick": "Colección",
+      "pickPlaceholder": "Elige una colección",
+      "save": "Guardar",
+      "saved_one": "1 documento guardado en «{{name}}»",
+      "saved_other": "{{count}} documentos guardados en «{{name}}»",
+      "target": "Guardar en",
+      "title_one": "Guardar 1 documento como colección",
+      "title_other": "Guardar {{count}} documentos como colección"
+    },
+    "loading": "Cargando documentos",
+    "monthCount_one": "1 documento",
+    "monthCount_other": "{{count}} documentos",
+    "selectDocument": "Seleccionar {{name}}",
+    "timeline": {
+      "label": "Coincidencias por mes",
+      "month_one": "{{month}}: 1 coincidencia",
+      "month_other": "{{month}}: {{formatted}} coincidencias",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Sin fecha",
+    "view": {
+      "grid": "Cuadrícula",
+      "label": "Vista",
+      "table": "Tabla"
+    }
+  },
+  "intake": {
+    "actions": {
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "refresh": "Actualizar",
+      "retry": "Reintentar"
+    },
+    "attention": {
+      "allReasons": "Todos los motivos",
+      "allStages": "Todas las fases",
+      "cannotRetry": "Este documento no se puede reintentar.",
+      "clearFilters": "Borrar filtros",
+      "col": {
+        "failed": "Fallido",
+        "name": "Nombre",
+        "reason": "Motivo",
+        "retries": "Reintentos",
+        "stage": "Fase",
+        "status": "Estado"
+      },
+      "confidence": "Confianza",
+      "created": "Añadido",
+      "dates": "Fechas",
+      "delete": "Eliminar",
+      "deleteBody": "Esto no se puede deshacer. Los documentos y sus archivos se eliminan de forma permanente.",
+      "deleteConfirm": "Eliminar documentos",
+      "deleteFailed": "No se pudieron eliminar los documentos",
+      "deleteNone": "No se eliminó ningún documento",
+      "deleteTitle_one": "¿Eliminar {{count}} documento?",
+      "deleteTitle_other": "¿Eliminar {{count}} documentos?",
+      "deletedOf": "{{deleted}} de {{requested}} documentos eliminados",
+      "download": "Descargar",
+      "downloadFailed": "No se pudo descargar el archivo",
+      "emptyBody": "Todos los documentos se importaron y leyeron.",
+      "emptyTitle": "No hay documentos fallidos",
+      "errorMessage": "Mensaje de error",
+      "failedLabel": "Documentos fallidos",
+      "failure": "Fallo",
+      "file": "Archivo",
+      "filter": "Mostrar",
+      "importEmpty": "No hay otros fallos de importación.",
+      "importLead": "Archivos que fallaron antes o fuera del OCR. Son solo registros: abre uno para ver el motivo.",
+      "importLoadFailed": "No se pudieron cargar los fallos de importación.",
+      "importTitle": "Otros fallos de importación",
+      "lastRetry": "Último reintento",
+      "loadFailed": "No se pudieron cargar los documentos fallidos.",
+      "markSeen": "Marcar como visto",
+      "noErrorMessage": "No se registró ningún mensaje de error.",
+      "noRetries": "ninguno aún",
+      "notFound": "El documento ya no existe.",
+      "ocrLead": "Documentos cuyo texto no se pudo leer. Abre uno para ver detalles o selecciona varios para reintentar o eliminar.",
+      "ocrResult": "Resultado de OCR",
+      "preview": "Archivo",
+      "reason": {
+        "duplicate_content": "Contenido duplicado",
+        "file_corrupted": "Archivo dañado",
+        "file_too_large": "Archivo demasiado grande",
+        "low_ocr_confidence": "Confianza de OCR baja",
+        "ocr_timeout": "Se agotó el tiempo de OCR",
+        "other": "Otro",
+        "pdf_parsing_error": "No se pudo leer el PDF",
+        "unsupported_format": "Formato no compatible"
+      },
+      "reasonCode": "Código de motivo: {{code}}",
+      "reasonFilter": "Motivo",
+      "recordOnly": "Es un registro de una importación fallida; el archivo no se añadió a la biblioteca.",
+      "retry": "Reintentar",
+      "retryFailed": "No se pudo reintentar el OCR",
+      "retryLanguages": "Reintentar con idiomas",
+      "retryLanguagesHint": "Opcional. Déjalo vacío para usar tu idioma de OCR predeterminado.",
+      "retryOcr": "Reintentar OCR",
+      "retryOptions": "Reintentar…",
+      "retryPartial": "Algunos documentos no se pusieron en cola. Revísalos e inténtalo de nuevo.",
+      "retryQueued": "{{queued}} de {{matched}} documentos en cola",
+      "retryStarted": "Reintento de OCR en cola",
+      "retryWait": "{{name}} · unos {{minutes}} min",
+      "size": "Tamaño",
+      "source": "Origen",
+      "stage": {
+        "ingestion": "Ingesta",
+        "ocr": "OCR",
+        "processing": "Procesando",
+        "storage": "Almacenamiento",
+        "sync": "Sincronización",
+        "validation": "Validación"
+      },
+      "stageFilter": "Fase",
+      "tags": "Etiquetas: {{tags}}",
+      "type": "Tipo",
+      "updated": "Actualizado",
+      "view": {
+        "cleanup": "Limpieza",
+        "duplicates": "Duplicados",
+        "failed": "OCR fallido",
+        "lowConfidence": "Confianza baja"
+      },
+      "words": "Palabras"
+    },
+    "bulkRetry": {
+      "advanced": "Avanzado",
+      "criteria": "Criterios",
+      "errors": {
+        "execute": "No se pudo iniciar el reintento",
+        "network": "Error de red. Comprueba tu conexión e inténtalo de nuevo.",
+        "none": "Ningún documento coincide con estos criterios.",
+        "noneQueued": "No se puso ningún documento en cola, así que no se reintentará nada.",
+        "ocr": "Algunos documentos no se pueden reintentar por problemas de procesamiento.",
+        "permission": "No tienes permiso para reintentar documentos.",
+        "preview": "No se pudo previsualizar el reintento",
+        "server": "Error del servidor. Inténtalo más tarde.",
+        "session": "Tu sesión ha caducado. Actualiza la página e inicia sesión de nuevo."
+      },
+      "execute_one": "Reintentar {{count}} documento",
+      "execute_other": "Reintentar {{count}} documentos",
+      "fileTypes": "Tipos de archivo",
+      "hours": "{{n}} horas",
+      "languages": "Idiomas de OCR",
+      "languagesHint": "Opcional. Vuelve a leer los documentos seleccionados con estos idiomas.",
+      "languagesSelectedOnly": "La elección de idiomas solo se aplica a los documentos seleccionados.",
+      "limit": "Máximo de documentos a reintentar",
+      "limitHint": "Déjalo vacío para no poner límite (1–1000).",
+      "matched": "Documentos coincidentes",
+      "maxSize": "Tamaño máximo de archivo",
+      "maxSizeValue": "Hasta {{size}}",
+      "minutes": "{{n}} minutos",
+      "mode": "Modo de reintento",
+      "modeAll": "Reintentar todos los documentos con OCR fallido",
+      "modeFilter": "Reintentar los documentos que cumplan los criterios",
+      "modeSelected": "Reintentar los documentos seleccionados ({{count}} seleccionados)",
+      "more": "y {{count}} más",
+      "preview": "Vista previa",
+      "previewResults": "Resultados de la vista previa",
+      "priority": "Prioridad (más alta es más urgente)",
+      "priorityNotWithLanguages": "La prioridad personalizada no se aplica al reintentar con idiomas elegidos; esos reintentos usan la prioridad normal.",
+      "priorityOverride": "Anular la prioridad de procesamiento",
+      "reason": {
+        "corruption": "Archivo dañado",
+        "font": "Problemas de codificación de fuentes",
+        "lowConfidence": "Confianza baja",
+        "memory": "Límite de memoria",
+        "noText": "No se encontró texto",
+        "timeout": "Tiempo de procesamiento agotado"
+      },
+      "reasons": "Motivos del fallo",
+      "seconds": "{{n}} segundos",
+      "time": "Tiempo estimado",
+      "title": "Reintento masivo de OCR"
+    },
+    "cleanup": {
+      "confirmDelete_one": "¿Eliminar {{count}} documento con OCR fallido?",
+      "confirmDelete_other": "¿Eliminar {{count}} documentos con OCR fallido?",
+      "confirmRetryAll": "¿Reintentar el OCR de todos los documentos fallidos?",
+      "deleteFailed": "No se pudieron eliminar los documentos fallidos",
+      "deleteFailedButton": "Eliminar documentos fallidos",
+      "deleted": "Documentos fallidos eliminados",
+      "failedBody": "Elimina todos los documentos cuyo OCR falló por completo, incluidos los que no tienen valor de confianza. Revisa primero la vista previa.",
+      "failedTitle": "Eliminar documentos con OCR fallido",
+      "preview": "Vista previa",
+      "previewFailed": "No se pudo previsualizar los documentos fallidos",
+      "requeueButton": "Reintentar trabajos fallidos",
+      "requeueTitle": "Reintentar solo los trabajos fallidos",
+      "retryAllBody": "Vuelve a poner en cola el OCR de todos los documentos cuyo OCR falló. Los documentos leídos correctamente no se tocan. Con muchos fallos puede tardar mucho.",
+      "retryAllButton": "Reintentar todos los documentos fallidos",
+      "retryAllFailed": "No se pudieron reintentar los documentos",
+      "retryAllNone": "No hay documentos fallidos que reintentar",
+      "retryAllQueued_one": "{{count}} documento en cola, unos {{minutes}} min",
+      "retryAllQueued_other": "{{count}} documentos en cola, unos {{minutes}} min",
+      "retryAllTitle": "Reintentar el OCR de todos los documentos fallidos"
+    },
+    "connections": {
+      "add": "Añadir conexión",
+      "addFirst": "Añade tu primera conexión",
+      "autoRefreshing": "Actualizando durante la sincronización",
+      "col": {
+        "files": "Archivos",
+        "lastSync": "Última sincronización",
+        "name": "Nombre",
+        "next": "Próxima",
+        "status": "Estado",
+        "type": "Tipo"
+      },
+      "emptyBody": "Conecta un servidor WebDAV, una carpeta local o un almacenamiento S3 y Readur importará los archivos nuevos por su cuenta.",
+      "emptyTitle": "Aún no hay conexiones",
+      "label": "Conexiones",
+      "loadFailed": "No se pudieron cargar las conexiones."
+    },
+    "detail": {
+      "alreadySyncing": "Esta conexión ya se está sincronizando.",
+      "auth": "Inicio de sesión",
+      "authFailed": "El origen rechazó las credenciales.",
+      "cannotConnect": "No se pudo conectar con el origen. Revisa su configuración.",
+      "connection": "Conexión",
+      "counts": "Recuentos",
+      "deepScan": "Análisis profundo",
+      "deepScanFailed": "No se pudo iniciar el análisis profundo",
+      "deepScanHint": "El análisis profundo solo está disponible para conexiones WebDAV; usa «Sincronizar ahora».",
+      "deepScanStarted": "Análisis profundo iniciado",
+      "deepScanWebdavOnly": "El análisis profundo solo está disponible para conexiones WebDAV.",
+      "delete": "Eliminar",
+      "deleteBody": "Esto no se puede deshacer. La configuración de la conexión y todo su historial de sincronización se eliminan de forma permanente.",
+      "deleteConfirm": "Eliminar conexión",
+      "deleteFailed": "No se pudo eliminar la conexión",
+      "deleteTitle": "¿Eliminar «{{name}}»?",
+      "deleteWhileSyncing": "Detén la sincronización antes de eliminar esta conexión.",
+      "deleted": "Esta conexión ya no existe.",
+      "deletedToast": "Conexión eliminada",
+      "disable": "Desactivar",
+      "disabled": "Conexión desactivada",
+      "documents": "Documentos",
+      "edit": "Editar",
+      "enable": "Activar",
+      "enabled": "Conexión activada",
+      "errorsFailed": "No se pudieron cargar los errores recientes.",
+      "errorsLoading": "Cargando errores recientes…",
+      "every": "cada {{minutes}} min",
+      "extensions": "Tipos de archivo",
+      "failureCount_one": "{{count}} fallo · último {{when}}",
+      "failureCount_other": "{{count}} fallos · último {{when}}",
+      "folders": "Carpetas",
+      "health": "Comprobar estado",
+      "healthFailed": "No se pudo iniciar la comprobación de estado",
+      "healthLabel": "Estado",
+      "healthStarted": "Comprobación de estado iniciada",
+      "ignored": "Archivos ignorados",
+      "interval": "Intervalo",
+      "lastError": "La última sincronización falló",
+      "lastSync": "Última sincronización",
+      "location": "Ubicación",
+      "manual": "manual",
+      "never": "nunca",
+      "next": "Próxima",
+      "noErrors": "No hay errores recientes.",
+      "notSyncing": "Esta conexión no se está sincronizando.",
+      "ocrDone": "OCR hecho",
+      "passwordSet": "contraseña establecida",
+      "pending": "Pendientes",
+      "recentErrors": "Errores recientes",
+      "schedule": "Programación",
+      "scope": "Alcance",
+      "severity": "Gravedad: {{severity}}",
+      "size": "Tamaño",
+      "stop": "Detener sincronización",
+      "stopFailed": "No se pudo detener la sincronización",
+      "sync": "Sincronizar ahora",
+      "syncFailed": "No se pudo iniciar la sincronización",
+      "syncStarted": "Sincronización iniciada",
+      "syncStopped": "Sincronización detenida",
+      "toggleFailed": "No se pudo cambiar la conexión",
+      "healthFindings": "Comprobación de estado"
+    },
+    "duplicates": {
+      "col": {
+        "actions": "Acciones",
+        "added": "Añadido",
+        "group": "Grupo",
+        "name": "Nombre",
+        "size": "Tamaño",
+        "type": "Tipo"
+      },
+      "count_one": "{{count}} grupo de archivos idénticos",
+      "count_other": "{{count}} grupos de archivos idénticos",
+      "downloadFile": "Descargar {{name}}",
+      "emptyBody": "Todos los archivos de la biblioteca tienen contenido único.",
+      "emptyTitle": "No hay duplicados",
+      "label": "Documentos duplicados",
+      "lead": "Estos archivos tienen el mismo contenido con nombres distintos. Ábrelos para decidir cuál conservar; la primera subida de cada grupo aparece primero.",
+      "loadFailed": "No se pudieron cargar los duplicados.",
+      "original": "Nombre original: {{name}}",
+      "view": "Ver",
+      "viewFile": "Ver {{name}}"
+    },
+    "form": {
+      "add": "Añadir",
+      "addTo": "Añadir a «{{label}}»",
+      "create": "Añadir conexión",
+      "createTitle": "Añadir conexión",
+      "created": "Conexión añadida",
+      "editTitle": "Editar conexión",
+      "enabled": "Conexión activada",
+      "enabledHint": "Incluir esta conexión al sincronizar",
+      "errors": {
+        "duplicate": "«{{value}}» ya está en la lista",
+        "duplicateName": "Ya existe una conexión con este nombre.",
+        "folderRequired": "Añade al menos una carpeta",
+        "interval": "Introduce minutos enteros entre {{min}} y {{max}}",
+        "required": "Obligatorio",
+        "summary": "Corrige los campos resaltados antes de guardar.",
+        "url": "Introduce una dirección de servidor, como cloud.example.com o https://cloud.example.com"
+      },
+      "estimate": {
+        "byFolder": "Estimación por carpeta",
+        "done": "Estimación lista",
+        "estimatedTime": "Tiempo estimado",
+        "failed": "No se pudo estimar el rastreo",
+        "files": "Archivos",
+        "folder": "Carpeta",
+        "hint": "Estima cuántos archivos procesaría una sincronización completa y cuánto tardaría.",
+        "results": "Resultados de la estimación",
+        "run": "Estimar rastreo",
+        "running": "Estimando…",
+        "sizeMb": "Tamaño (MB)",
+        "supported": "Compatibles",
+        "supportedFiles": "Archivos compatibles",
+        "time": "Tiempo",
+        "title": "Estimación del rastreo",
+        "totalFiles": "Archivos totales",
+        "totalSize": "Tamaño total"
+      },
+      "extensions": {
+        "hint": "Tipos de archivo que se sincronizan y procesan con OCR.",
+        "hintLocal": "Tipos de archivo que se vigilan y procesan con OCR.",
+        "label": "Extensiones de archivo"
+      },
+      "folders": {
+        "local": "Directorios que vigilar",
+        "localHint": "Directorios locales que analizar. Usa rutas absolutas.",
+        "s3": "Prefijos de objeto que vigilar",
+        "s3Hint": "Prefijos de objeto (como carpetas) en los que buscar archivos.",
+        "title": "Qué vigilar",
+        "webdav": "Carpetas que vigilar",
+        "webdavHint": "Carpetas en las que buscar archivos. Usa rutas absolutas que empiecen por «/»."
+      },
+      "local": {
+        "hint": "Readur vigila carpetas del servidor en el que se ejecuta. Asegúrate de que puede leer las rutas que añadas.",
+        "recursive": "Analizar subcarpetas",
+        "recursiveHint": "Analizar subdirectorios de forma recursiva",
+        "symlinks": "Seguir enlaces simbólicos",
+        "symlinksHint": "Seguir enlaces simbólicos al analizar directorios",
+        "title": "Carpeta local"
+      },
+      "name": "Nombre",
+      "namePlaceholder": "Mi servidor de documentos",
+      "preview": {
+        "bucketPrefix": "Bucket / prefijo",
+        "file": "Archivo de ejemplo",
+        "folder": "Carpeta vigilada",
+        "server": "URL del servidor",
+        "title": "URL de sincronización de ejemplo",
+        "webdavPath": "Ruta WebDAV"
+      },
+      "relativeWarning": "«{{value}}» es una ruta relativa. Se recomiendan rutas absolutas que empiecen por «/».",
+      "remove": "Quitar {{item}}",
+      "s3": {
+        "accessKey": "ID de clave de acceso",
+        "addressing": "Estilo de direccionamiento",
+        "addressingHint": "MinIO, RustFS y la mayoría de los servicios S3 autoalojados necesitan el estilo de ruta. La detección automática prueba ambos.",
+        "auto": "Detección automática",
+        "bucket": "Nombre del bucket",
+        "endpoint": "URL del endpoint (opcional)",
+        "endpointHint": "Déjalo vacío para AWS S3 o indica un endpoint propio para MinIO y otros almacenamientos compatibles con S3.",
+        "hint": "Conéctate a AWS S3, MinIO o cualquier servicio compatible con S3. Para MinIO, indica la URL del endpoint de tu servidor.",
+        "path": "Estilo de ruta (endpoint/bucket/clave)",
+        "prefix": "Prefijo de clave de objeto (opcional)",
+        "prefixHint": "Analizar solo las claves de objeto que empiecen por este prefijo.",
+        "region": "Región",
+        "secretKey": "Clave de acceso secreta",
+        "title": "Almacenamiento compatible con S3",
+        "vhost": "Alojamiento virtual (bucket.endpoint/clave)"
+      },
+      "saveChanges": "Guardar cambios",
+      "saveFailed": "No se pudo guardar la conexión",
+      "saveFailedHint": "Revisa la configuración e inténtalo de nuevo.",
+      "saved": "Conexión actualizada",
+      "schedule": {
+        "auto": "Sincronización automática",
+        "autoHint": "Sincronizar archivos según una programación",
+        "autoHintLocal": "Buscar archivos nuevos según una programación",
+        "autoHintS3": "Buscar objetos nuevos según una programación",
+        "interval": "Intervalo de sincronización (minutos)",
+        "intervalHint": "Con qué frecuencia buscar archivos nuevos (de {{min}} min a 24 horas)",
+        "title": "Programación"
+      },
+      "test": {
+        "auth": "Error al iniciar sesión. Revisa el usuario y la contraseña.",
+        "button": "Probar conexión",
+        "config": "Algunos ajustes no son válidos. Revisa los valores e inténtalo de nuevo.",
+        "error": "No se pudo probar la conexión",
+        "failed": "La conexión falló",
+        "ok": "Conexión correcta",
+        "path": "Una ruta de carpeta no es válida o no es accesible.",
+        "timeout": "Se agotó el tiempo de conexión. El servidor puede ser lento o no estar disponible.",
+        "unreachable": "No se pudo contactar con el servidor. Revisa la URL y tu red."
+      },
+      "type": "Tipo de conexión",
+      "typeLocal": "Carpetas del servidor de Readur",
+      "typeS3": "AWS S3, MinIO y otros almacenamientos compatibles con S3",
+      "typeS3Label": "Compatible con S3",
+      "typeWebdav": "Nextcloud, ownCloud y otros servidores WebDAV",
+      "webdav": {
+        "generic": "WebDAV genérico",
+        "genericHint": "Protocolo WebDAV estándar",
+        "nextcloud": "Optimizado para servidores Nextcloud",
+        "owncloud": "Optimizado para servidores ownCloud",
+        "password": "Contraseña",
+        "serverType": "Tipo de servidor",
+        "serverUrl": "URL del servidor",
+        "title": "Servidor WebDAV",
+        "username": "Usuario"
+      },
+      "localAdminOnly": "Solo un administrador puede añadir carpetas locales.",
+      "localAdminOnlyHint": "Aun así puede intentarlo: el servidor puede permitir carpetas concretas para todos."
+    },
+    "ignored": {
+      "allReasons": "Todos los motivos",
+      "allSources": "Todos los orígenes",
+      "breadcrumbs": "Ruta de navegación",
+      "clearSource": "Mostrar todos los orígenes",
+      "col": {
+        "actions": "Acciones",
+        "ignored": "Ignorado",
+        "name": "Nombre",
+        "reason": "Motivo",
+        "size": "Tamaño",
+        "source": "Origen"
+      },
+      "confirm": "Dejar de ignorar",
+      "confirmBody": "Estos archivos se quitan de la lista de ignorados y se volverán a importar en la próxima sincronización de su conexión.",
+      "confirmMany": "¿Dejar de ignorar {{count}} archivos?",
+      "confirmOne": "¿Dejar de ignorar «{{name}}»?",
+      "emptyBody": "Todos los archivos que encontraron tus conexiones se están importando.",
+      "emptyTitle": "No se ignora nada",
+      "latest": "Más reciente",
+      "loadFailed": "No se pudieron cargar los archivos ignorados.",
+      "noReason": "Sin motivo",
+      "reason": "Motivo",
+      "removeFailed": "No se pudo actualizar la lista de ignorados",
+      "removed": "Quitado de la lista de ignorados",
+      "search": "Buscar nombres de archivo",
+      "sourceType": "Tipo de origen",
+      "summary": "Resumen de archivos ignorados",
+      "title": "Archivos ignorados",
+      "total": "Archivos ignorados",
+      "totalSize": "Tamaño total",
+      "unignore": "Dejar de ignorar",
+      "unignoreFile": "Dejar de ignorar {{name}}",
+      "unignoreSelected": "Dejar de ignorar"
+    },
+    "lowConfidence": {
+      "col": {
+        "added": "Añadido",
+        "confidence": "Confianza",
+        "name": "Nombre",
+        "size": "Tamaño",
+        "status": "Estado"
+      },
+      "confirm": "Eliminar documentos",
+      "confirmTitle_one": "¿Eliminar {{count}} documento por debajo del {{threshold}} %?",
+      "confirmTitle_other": "¿Eliminar {{count}} documentos por debajo del {{threshold}} %?",
+      "delete": "Eliminar coincidencias",
+      "deleteFailed": "No se pudieron eliminar los documentos",
+      "deleted": "Documentos eliminados",
+      "lead": "Busca documentos cuya confianza de reconocimiento de texto esté por debajo de un umbral. Revisa las coincidencias antes de eliminar nada.",
+      "more": "y {{count}} más",
+      "none": "n/d",
+      "preview": "Previsualizar coincidencias",
+      "previewFailed": "No se pudo previsualizar los documentos con confianza baja",
+      "results": "Resultados de la vista previa",
+      "stale": "El umbral ha cambiado. Vuelve a previsualizar antes de eliminar.",
+      "threshold": "Umbral de confianza"
+    },
+    "meta": {
+      "attention_one": "{{count}} requiere atención",
+      "attention_other": "{{count}} requieren atención",
+      "connections_one": "{{count}} conexión",
+      "connections_other": "{{count}} conexiones",
+      "processing": "{{count}} en proceso"
+    },
+    "notice": {
+      "danger": "Error:",
+      "info": "Nota:",
+      "ok": "Hecho:"
+    },
+    "ocr": {
+      "pause": "Pausar OCR",
+      "pauseFailed": "No se pudo pausar el OCR",
+      "paused": "OCR en pausa",
+      "resume": "Reanudar OCR",
+      "resumeFailed": "No se pudo reanudar el OCR",
+      "resumed": "OCR reanudado"
+    },
+    "preview": {
+      "download": "Descarga el archivo para abrirlo en tu ordenador.",
+      "failed": "No se pudo cargar el archivo para la vista previa.",
+      "loading": "Cargando vista previa",
+      "missing": "No se encontró el archivo o se ha eliminado.",
+      "moved": "Es posible que el archivo original se haya eliminado o movido del almacenamiento.",
+      "unknownType": "desconocido",
+      "unsupported": "No hay vista previa para este tipo de archivo ({{type}})"
+    },
+    "recommend": {
+      "count_one": "{{count}} documento · {{pattern}}",
+      "count_other": "{{count}} documentos · {{pattern}}",
+      "criteria": "Criterios",
+      "empty": "Ahora mismo no hay recomendaciones de reintento. Normalmente significa:",
+      "emptyPattern": "Ningún patrón de fallo sugiere que un reintento funcionaría",
+      "emptyRetried": "Los documentos fallidos ya se han reintentado varias veces",
+      "emptyTypes": "No hay fallos del tipo que suele resolverse al reintentar",
+      "loadFailed": "No se pudieron cargar las recomendaciones de reintento",
+      "loading": "Buscando patrones de fallo…",
+      "rateHigh": "{{pct}} % probable (alta)",
+      "rateLow": "{{pct}} % probable (baja)",
+      "rateMedium": "{{pct}} % probable (media)",
+      "retry_one": "Reintentar {{count}} documento",
+      "retry_other": "Reintentar {{count}} documentos",
+      "retryFailed": "No se pudo iniciar el reintento",
+      "title": "Recomendaciones de reintento",
+      "nothingQueued": "No se puso nada en cola",
+      "confirmBody": "Esto reintenta todos los documentos fallidos que coinciden con «{{title}}», no solo {{name}}.",
+      "confirmTitle_other": "¿Reintentar {{count}} documentos de toda tu biblioteca?",
+      "confirmTitle_one": "¿Reintentar 1 documento de toda tu biblioteca?"
+    },
+    "retry": {
+      "col": {
+        "previous": "Antes",
+        "priority": "Prioridad",
+        "queue": "Cola",
+        "reason": "Motivo",
+        "when": "Cuándo"
+      },
+      "empty": "No se encontraron reintentos para este documento.",
+      "legend": "Prioridad: muy alta 15–20, alta 12–14, media 8–11, baja 5–7, muy baja 1–4.",
+      "loadFailed": "No se pudo cargar el historial de reintentos.",
+      "loading": "Cargando historial de reintentos…",
+      "notQueued": "No está en cola",
+      "priority": {
+        "high": "Alta",
+        "low": "Baja",
+        "medium": "Media",
+        "veryHigh": "Muy alta",
+        "veryLow": "Muy baja"
+      },
+      "queued": "En cola · {{id}}",
+      "reason": {
+        "auto": "Reintento automático",
+        "bulkAll": "Reintento masivo (todos)",
+        "bulkFiltered": "Reintento masivo (filtrado)",
+        "bulkSelected": "Reintento masivo (seleccionados)",
+        "manual": "Reintento manual",
+        "scheduled": "Reintento programado"
+      },
+      "summary_one": "{{count}} reintento",
+      "summary_other": "{{count}} reintentos",
+      "title": "Historial de reintentos de OCR"
+    },
+    "sections": {
+      "attention": "Requiere atención",
+      "connections": "Conexiones",
+      "ignored": "Ignorado",
+      "label": "Secciones de entrada",
+      "upload": "Añadir documentos",
+      "watch": "Carpeta vigilada"
+    },
+    "sourceErrors": {
+      "severity": {
+        "Critical": "Crítica",
+        "High": "Alta",
+        "Low": "Baja",
+        "Medium": "Media"
+      },
+      "type": {
+        "Conflict": "Conflicto",
+        "DepthLimit": "Límite de profundidad de carpetas",
+        "InvalidCharacters": "Caracteres no válidos",
+        "JsonParseError": "Respuesta JSON ilegible",
+        "NetworkError": "Error de red",
+        "NotFound": "No encontrado",
+        "PathTooLong": "Ruta demasiado larga",
+        "PermissionDenied": "Permiso denegado",
+        "QuotaExceeded": "Cuota superada",
+        "RateLimited": "Límite de solicitudes alcanzado",
+        "ServerError": "Error del servidor",
+        "SizeLimit": "Límite de tamaño",
+        "Timeout": "Tiempo agotado",
+        "TooManyItems": "Demasiados elementos",
+        "Unknown": "Error desconocido",
+        "UnsupportedOperation": "Operación no compatible",
+        "XmlParseError": "Respuesta XML ilegible"
+      }
+    },
+    "sourceType": {
+      "local_folder": "Carpeta local",
+      "s3": "S3",
+      "unknown": "Desconocido",
+      "webdav": "WebDAV"
+    },
+    "sync": {
+      "bytes": "Datos procesados",
+      "collapse": "Contraer",
+      "connection": {
+        "connected": "Conectado",
+        "connecting": "Conectando…",
+        "disconnected": "Desconectado",
+        "failed": "La conexión falló",
+        "live": "En directo",
+        "reconnect": "Reconectar",
+        "reconnecting": "Reconectando…",
+        "unknown": "Desconocido"
+      },
+      "currentDirectory": "Directorio actual",
+      "currentFile": "Archivo actual",
+      "directories": "Directorios",
+      "elapsed": "Transcurrido",
+      "errorMany": "{{count}} errores",
+      "errorOne": "1 error",
+      "eta": "Tiempo restante",
+      "expand": "Expandir",
+      "files": "Archivos",
+      "filesProgress": "Progreso de archivos",
+      "filesValue": "{{processed}} / {{found}} archivos ({{percent}} %)",
+      "phase": "Fase",
+      "rate": "Velocidad",
+      "rateValue": "{{rate}} archivos/s",
+      "statsLabel": "Cifras de sincronización",
+      "title": "Progreso de sincronización de {{name}}",
+      "waiting": "Esperando información del progreso de sincronización…",
+      "warningMany": "{{count}} advertencias",
+      "warningOne": "1 advertencia"
+    },
+    "tag": {
+      "changed": "Cambiado",
+      "new": "Nuevo"
+    },
+    "title": "Entrada",
+    "upload": {
+      "boardLabel": "Archivos para subir",
+      "chooseFiles": "Elegir archivos",
+      "clearDone": "Quitar terminados",
+      "col": {
+        "actions": "Acciones",
+        "name": "Nombre",
+        "progress": "Progreso",
+        "size": "Tamaño",
+        "status": "Estado"
+      },
+      "dropLabel": "Suelta archivos para añadirlos",
+      "dropNow": "Suelta para añadir",
+      "dropTitle": "Suelta archivos para añadirlos",
+      "emptyBody": "Suelta archivos arriba o elígelos de tu ordenador.",
+      "emptyTitle": "Aún no hay archivos",
+      "errors": {
+        "format": "Este tipo de archivo no es compatible.",
+        "generic": "Error al subir",
+        "network": "Error de red. Comprueba tu conexión.",
+        "permission": "No tienes permiso para subir archivos.",
+        "processing": "No se pudo procesar el archivo.",
+        "server": "El servidor tuvo un problema. Inténtalo de nuevo.",
+        "session": "Tu sesión ha caducado. Inicia sesión de nuevo.",
+        "tooLarge": "El archivo es demasiado grande.",
+        "labels": "Se subió, pero no se pudieron añadir las etiquetas."
+      },
+      "labelDuplicate": "Ya existe una etiqueta con este nombre.",
+      "labelFailed": "No se pudo crear la etiqueta.",
+      "labelInvalidColor": "Ese color no es válido.",
+      "labelInvalidName": "Ese nombre de etiqueta no está permitido.",
+      "labelMax": "Has alcanzado el límite de etiquetas.",
+      "labels": "Etiquetas",
+      "labelsFailed": "No se pudieron cargar las etiquetas. Puedes subir archivos sin ellas.",
+      "labelsNetwork": "No se pudieron cargar las etiquetas por un error de red.",
+      "labelsPermission": "No tienes permiso para ver las etiquetas.",
+      "labelsPlaceholder": "Añadir etiquetas a todos los archivos subidos",
+      "languages": "Idiomas de OCR",
+      "maxSize": "máx. {{size}} MB por archivo",
+      "options": "Aplicar a estas subidas",
+      "progressOf": "Progreso de subida de {{name}}",
+      "rejected": "Algunos archivos no se añadieron",
+      "remove": "Quitar",
+      "removeFile": "Quitar {{name}}",
+      "retryFile": "Reintentar {{name}}",
+      "uploadAll": "Subir todos ({{count}})",
+      "uploading": "Subiendo {{done}} de {{total}}"
+    },
+    "watch": {
+      "avgWait": "Espera media",
+      "col": {
+        "detail": "Detalles",
+        "path": "Carpeta",
+        "scope": "Alcance",
+        "status": "Estado"
+      },
+      "create": "Crear mi carpeta vigilada",
+      "createFailed": "No se pudo crear la carpeta vigilada",
+      "createHint": "Tu carpeta vigilada personal aún no existe. Créala para dejar archivos en ella.",
+      "created": "Carpeta vigilada creada",
+      "exists": "La carpeta existe",
+      "failed": "Fallido",
+      "howTitle": "Cómo funciona la carpeta vigilada",
+      "loading": "Cargando…",
+      "locations": "Carpetas vigiladas",
+      "missing": "La carpeta aún no existe",
+      "nothingToRequeue": "No hay trabajos fallidos que reintentar",
+      "oldest": "Más antiguo en espera",
+      "pending": "En espera",
+      "personal": "Tuya",
+      "personalFailed": "No se pudo cargar tu carpeta vigilada.",
+      "processing": "Procesando",
+      "queue": "Cola de procesamiento",
+      "queueFailed": "No se pudo cargar la cola de procesamiento.",
+      "requeue_one": "Reintentar {{count}} trabajo fallido",
+      "requeue_other": "Reintentar {{count}} trabajos fallidos",
+      "requeueBody": "Cada trabajo de OCR fallido vuelve a la cola.",
+      "requeueConfirm": "Reintentar trabajos",
+      "requeueFailed": "No se pudieron reintentar los trabajos fallidos",
+      "requeueTitle": "¿Reintentar los trabajos fallidos?",
+      "requeued_one": "{{count}} trabajo de nuevo en cola",
+      "requeued_other": "{{count}} trabajos de nuevo en cola",
+      "step": {
+        "dedupe": "Se omiten los archivos que ya están en la biblioteca.",
+        "detect": "Se detectan los archivos nuevos en la carpeta.",
+        "queue": "Pasa a la cola de OCR.",
+        "store": "El archivo se almacena.",
+        "validate": "Se comprueban el tipo y el tamaño."
+      },
+      "strategy": "Estrategia: {{strategy}} (eventos de archivo y análisis periódicos)",
+      "system": "Servidor",
+      "systemDetail": "cada {{seconds}} s · archivos de hasta {{hours}} h",
+      "systemInfo": "La carpeta del servidor la configura tu administrador y se aplica a todos.",
+      "today": "Hechos hoy",
+      "types": "Tipos de archivo"
+    },
+    "reason": {
+      "details": "Detalles técnicos"
+    },
+    "connectionFailure": {
+      "auth": "El servidor rechazó el inicio de sesión. Revise el usuario, la contraseña o las claves.",
+      "notFound": "No se encontró la carpeta o el bucket. Revise la dirección y la ruta.",
+      "tls": "El certificado de seguridad del servidor no es de confianza.",
+      "unreachable": "No se puede acceder al servidor. Revise la dirección y que esté en línea.",
+      "server": "El servidor informó de un error. Inténtelo de nuevo en unos minutos.",
+      "emptySyncs": "Las últimas sincronizaciones no encontraron archivos nuevos. Revise la ruta de la carpeta."
+    },
+    "connectionAdvice": {
+      "connectivity": "Revise la dirección del servidor, el inicio de sesión y la red.",
+      "noContent": "Si espera archivos nuevos, revise la ruta de la carpeta y que el servidor esté accesible."
+    }
+  },
+  "failure": {
+    "damaged": "El archivo parece dañado",
+    "docTools": "No se pueden leer archivos .doc: instala antiword o catdoc",
+    "encrypted": "El PDF está protegido con contraseña",
+    "lowConfidence": "El texto era demasiado confuso para leerlo con fiabilidad",
+    "memory": "Se agotó la memoria al leer el archivo",
+    "missing": "Falta el archivo en el almacenamiento",
+    "ocr": "Falló el OCR",
+    "permission": "Readur no tiene permiso para abrir el archivo",
+    "timeout": "El OCR tardó demasiado y se detuvo",
+    "tooLarge": "El archivo es demasiado grande",
+    "unsupported": "Este tipo de archivo no es compatible",
+    "unknown": "Algo salió mal"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Buenos días, {{name}}",
+      "morningPlain": "Buenos días",
+      "afternoon": "Buenas tardes, {{name}}",
+      "afternoonPlain": "Buenas tardes",
+      "evening": "Buenas noches, {{name}}",
+      "eveningPlain": "Buenas noches"
+    },
+    "week": {
+      "count": "{{formatted}} recibidos esta semana",
+      "none": "No ha llegado nada esta semana"
+    },
+    "kind": {
+      "upload": "Subidas web y por API",
+      "watch": "Carpeta vigilada",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Carpeta local"
+    },
+    "lanes": {
+      "title": "Entradas",
+      "manage": "Gestionar fuentes",
+      "error": "No se pudieron cargar las entradas.",
+      "empty": "Aún no hay fuentes",
+      "today": "hoy",
+      "lastArrival": "Última llegada {{age}}",
+      "never": "Nada todavía",
+      "quiet": "Sin actividad",
+      "idle": "Inactiva",
+      "uploads": "Subidas",
+      "source": "Fuente",
+      "barsLabel": "{{total}} en los últimos {{days}} días, la mayoría el {{day}} ({{most}})",
+      "barsEmpty": "Nada en los últimos {{days}} días",
+      "more": "{{formatted}} fuentes más",
+      "allSilent": "No ha llegado nada de ninguna fuente en los últimos {{days}} días."
+    },
+    "pipeline": {
+      "title": "Procesamiento",
+      "paused": "El OCR está en pausa",
+      "failed": "{{formatted}} con errores",
+      "failedError": "No se pudieron cargar los documentos con errores.",
+      "review": "Revisar",
+      "showRecent": "Mostrar los últimos errores",
+      "rawError": "Texto del error",
+      "doneToday": "{{done}} completados hoy",
+      "oldest": "el más antiguo espera desde hace {{wait}}"
+    },
+    "recent": {
+      "title": "Recién llegados"
+    },
+    "status": {
+      "label": "Resumen",
+      "idle": "nada en espera",
+      "busy": "{{processing}} procesando · {{pending}} en espera",
+      "pending": "{{pending}} en espera"
     }
   }
 }

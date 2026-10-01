@@ -1,0 +1,326 @@
+/* Building blocks shared by every Intake section. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.toolbarEnd {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.heading {
+  font-family: var(--font-ui);
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.lead {
+  margin: 0;
+  max-width: 72ch;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+}
+
+.meta {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.mono {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+
+.codeBlock {
+  margin: 0;
+  padding: var(--s-3);
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+
+/* Names in board rows: text plus an optional changed tag. */
+.name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-inline-start: var(--s-2);
+  padding: 0 var(--s-1);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  text-align: center;
+  background: var(--new);
+  color: var(--new-fg);
+  border-radius: 999px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 28px;
+  padding: 0 var(--s-1) 0 var(--s-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.chipText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline notices: an icon and a word carry the tone, never colour alone. */
+.notice {
+  display: flex;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.notice[data-tone='danger'] {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.notice[data-tone='ok'] {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+}
+
+.notice[data-tone='warning'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+.noticeIcon {
+  flex: none;
+  display: inline-flex;
+  font-size: var(--fs-lg);
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.notice[data-tone='danger'] .noticeIcon {
+  color: var(--danger);
+}
+
+.notice[data-tone='ok'] .noticeIcon {
+  color: var(--ok);
+}
+
+.noticeBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.noticeTitle {
+  font-weight: 600;
+}
+
+.bar {
+  flex: 1;
+  min-width: 40px;
+  height: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform var(--dur-2) var(--ease);
+}
+
+[dir='rtl'] .barFill {
+  transform-origin: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill {
+    transition: none;
+  }
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.progressValue {
+  flex: none;
+  min-width: 4ch;
+  text-align: end;
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-1);
+}
+
+.dangerText {
+  color: var(--danger);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A failure in plain words with the raw text folded away. */
+.reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.reasonSummary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reasonDetails {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.reasonDetails summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.reasonDetails summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reasonDetails[open] summary {
+  margin-bottom: var(--s-1);
+}
+
+.nameBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nameSub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.nameSub[data-tone='warning'] {
+  color: var(--warn);
+}
+
+.dotName {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}

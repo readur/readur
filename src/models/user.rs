@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum UserRole {
     #[serde(rename = "admin")]
     Admin,
@@ -12,7 +14,8 @@ pub enum UserRole {
     User,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, ToSchema, TS)]
+#[ts(export)]
 pub enum AuthProvider {
     #[serde(rename = "local")]
     Local,
@@ -62,6 +65,8 @@ impl TryFrom<String> for AuthProvider {
     }
 }
 
+// Internal DB model (carries password_hash); not exported to TypeScript.
+// Routes return `UserResponse` instead.
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
@@ -86,22 +91,25 @@ pub struct User {
 /// Body of the public self-registration endpoint. Deliberately separate from
 /// [`CreateUser`] so privileged fields (such as `role`) can never be supplied
 /// by an unauthenticated caller.
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(export)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct ChangePasswordRequest {
     pub current_password: String,
     pub new_password: String,
 }
 
 /// Admin-only account creation payload (also used internally).
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateUser {
     pub username: String,
     pub email: String,
@@ -114,19 +122,22 @@ fn default_user_role() -> Option<UserRole> {
     Some(UserRole::User)
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct LoginResponse {
     pub token: String,
     pub user: UserResponse,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
@@ -140,7 +151,8 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateUser {
     pub username: Option<String>,
     pub email: Option<String>,

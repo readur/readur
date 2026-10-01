@@ -4,7 +4,7 @@ import { createComprehensiveAxiosMock } from '../../../test/comprehensive-mocks'
 // Mock axios to prevent real HTTP requests
 vi.mock('axios', () => createComprehensiveAxiosMock());
 
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ocrService } from '../../../services/api';
 import LanguageSelector from '../LanguageSelector';
@@ -69,9 +69,11 @@ describe('LanguageSelector Component', () => {
       });
     });
 
-    test('should show loading state initially', () => {
+    test('should show loading state initially', async () => {
       renderLanguageSelector();
       expect(screen.getByText('Loading languages...')).toBeInTheDocument();
+      // Let the language request settle inside the test.
+      expect(await screen.findByText('OCR Languages')).toBeInTheDocument();
     });
 
     test('should show default state text when no languages selected', async () => {
@@ -354,7 +356,7 @@ describe('LanguageSelector Component', () => {
       const button = screen.getByText('Select OCR languages...').closest('button');
 
       // Tab to button and press Enter to open
-      button?.focus();
+      act(() => button?.focus());
       expect(button).toHaveFocus();
 
       await user.keyboard('{Enter}');
@@ -391,6 +393,56 @@ describe('LanguageSelector Component', () => {
       // Should have proper button for adding more
       const addButton = screen.getByText('Add more languages (2 remaining)');
       expect(addButton.closest('button')).toHaveAttribute('type', 'button');
+    });
+  });
+
+  describe('Rebuilt interactions', () => {
+    test('toggle exposes aria-expanded and aria-controls', async () => {
+      renderLanguageSelector();
+      const toggle = await screen.findByRole('button', { name: 'Select OCR languages...' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+      expect(panel).toHaveAccessibleName('Available Languages');
+    });
+
+    test('selects a language with the keyboard', async () => {
+      const mockOnChange = vi.fn();
+      renderLanguageSelector({ onLanguagesChange: mockOnChange });
+      await user.click(await screen.findByRole('button', { name: 'Select OCR languages...' }));
+      act(() => screen.getByRole('checkbox', { name: 'Spanish' }).focus());
+      await user.keyboard(' ');
+      expect(mockOnChange).toHaveBeenCalledWith(['spa'], 'spa');
+    });
+
+    test('removes a tag and promotes the next language to primary', async () => {
+      const mockOnChange = vi.fn();
+      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', onLanguagesChange: mockOnChange });
+      await user.click(await screen.findByRole('button', { name: 'Remove English' }));
+      expect(mockOnChange).toHaveBeenCalledWith(['spa'], 'spa');
+    });
+
+    test('changes the primary language', async () => {
+      const mockOnChange = vi.fn();
+      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', onLanguagesChange: mockOnChange });
+      await user.click(await screen.findByRole('button', { name: 'Add more languages (2 remaining)' }));
+      await user.click(screen.getByRole('button', { name: 'Set Primary Spanish' }));
+      expect(mockOnChange).toHaveBeenCalledWith(['eng', 'spa'], 'spa');
+    });
+
+    test('disables unselected languages at the limit and says why', async () => {
+      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', maxLanguages: 2 });
+      await user.click(await screen.findByRole('button', { name: 'Add more languages (0 remaining)' }));
+      expect(screen.getByRole('checkbox', { name: 'French' })).toBeDisabled();
+      expect(screen.getByRole('checkbox', { name: 'English' })).toBeEnabled();
+      expect(screen.getByText('Maximum 2 languages allowed for optimal performance.')).toBeInTheDocument();
+    });
+
+    test('shows the server message when languages fail to load', async () => {
+      vi.mocked(ocrService.getAvailableLanguages).mockRejectedValue({ response: { data: { message: 'OCR offline' } } });
+      renderLanguageSelector();
+      expect(await screen.findByRole('alert')).toHaveTextContent('OCR offline');
     });
   });
 });

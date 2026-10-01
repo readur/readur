@@ -75,22 +75,60 @@
       "oidcNotConfigured": "OIDC ist auf diesem Server nicht konfiguriert. Bitte verwenden Sie die Benutzername/Passwort-Anmeldung.",
       "oidcInitFailed": "OIDC-Anmeldung konnte nicht initialisiert werden. Bitte versuchen Sie es erneut.",
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten.",
-      "logoutIncomplete": "Sie sind auf diesem Gerät abgemeldet, aber der Server war nicht erreichbar. Ihre bisherige Sitzung kann bis zu ihrem Ablauf gültig bleiben."
+      "logoutIncomplete": "Sie sind auf diesem Gerät abgemeldet, aber der Server war nicht erreichbar. Ihre bisherige Sitzung kann bis zu ihrem Ablauf gültig bleiben.",
+      "accountDisabledOrPending": "Dieses Konto ist deaktiviert oder wartet auf die Freigabe durch einen Administrator",
+      "tooManyAttempts": "Zu viele Anmeldeversuche. Bitte versuchen Sie es später erneut.",
+      "tooManyAttemptsRetry": "Zu viele Anmeldeversuche. Bitte versuchen Sie es in {{seconds}} Sekunden erneut."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Anmelden",
+      "loading": "Anmeldeoptionen werden geladen",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "usernameRequired": "Benutzernamen eingeben",
+      "passwordRequired": "Passwort eingeben",
+      "showPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
+      "submit": "Anmelden",
+      "signingIn": "Anmeldung läuft…",
+      "sso": "Mit SSO anmelden",
+      "redirecting": "Weiterleitung…",
+      "noMethods": "Auf diesem Server ist keine Anmeldemethode aktiviert. Bitten Sie eine Administratorin oder einen Administrator, Passwort- oder SSO-Anmeldung zu aktivieren.",
+      "errors": {
+        "invalidCredentials": "Benutzername oder Passwort falsch. Prüfen Sie beides und versuchen Sie es erneut.",
+        "accountDisabled": "Dieses Konto ist deaktiviert. Bitten Sie eine Administratorin oder einen Administrator, es wieder zu aktivieren.",
+        "sessionExpired": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+        "unreachable": "Der Server ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+        "server": "Auf dem Server ist ein Problem aufgetreten. Versuchen Sie es gleich noch einmal.",
+        "generic": "Anmeldung fehlgeschlagen. Versuchen Sie es erneut.",
+        "ssoNotConfigured": "SSO ist auf diesem Server nicht eingerichtet. Melden Sie sich mit Benutzername und Passwort an.",
+        "ssoFailed": "SSO-Anmeldung fehlgeschlagen. Versuchen Sie es erneut oder wenden Sie sich an Ihre Administration.",
+        "ssoStart": "SSO-Anmeldung konnte nicht gestartet werden. Versuchen Sie es erneut."
+      },
+      "or": "oder"
+    },
+    "callback": {
+      "title": "Anmeldung läuft…",
+      "wait": "Einen Moment, die Anmeldung wird abgeschlossen.",
+      "errorTitle": "Anmeldung fehlgeschlagen",
+      "back": "Zurück zur Anmeldung"
     },
     "oidcCallback": {
       "errors": {
-        "provider_error": "Der Identitätsanbieter hat die Anmeldung nicht abgeschlossen. Bitte versuchen Sie es erneut.",
-        "invalid_state": "Die Anmeldeanfrage ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
-        "auth_failed": "Die Authentifizierung beim Identitätsanbieter ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
-        "no_account": "Für diese Identität ist kein Konto verfügbar. Wenden Sie sich an Ihren Administrator.",
         "account_disabled": "Dieses Konto ist deaktiviert oder wartet auf die Freigabe durch einen Administrator.",
-        "server_error": "Bei der Anmeldung ist ein Serverfehler aufgetreten. Bitte versuchen Sie es später erneut.",
-        "unknown": "Die Anmeldung ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
-        "missingCode": "Vom Server wurde kein Authentifizierungscode empfangen.",
+        "auth_failed": "Die Authentifizierung beim Identitätsanbieter ist fehlgeschlagen. Bitte melden Sie sich erneut an.",
         "invalidCode": "Dieser Anmeldelink ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
-        "tooManyAttempts": "Zu viele Versuche. Bitte warten Sie einen Moment und melden Sie sich erneut an."
+        "invalid_state": "Die Anmeldeanfrage ist ungültig oder abgelaufen. Bitte melden Sie sich erneut an.",
+        "missingCode": "Vom Server wurde kein Authentifizierungscode empfangen.",
+        "no_account": "Für diese Identität ist kein Konto verfügbar. Wenden Sie sich an Ihren Administrator.",
+        "provider_error": "Der Identitätsanbieter hat die Anmeldung nicht abgeschlossen. Bitte versuchen Sie es erneut.",
+        "server_error": "Bei der Anmeldung ist ein Serverfehler aufgetreten. Bitte versuchen Sie es später erneut.",
+        "tooManyAttempts": "Zu viele Versuche. Bitte warten Sie einen Moment und melden Sie sich erneut an.",
+        "unknown": "Die Anmeldung ist fehlgeschlagen. Bitte melden Sie sich erneut an."
       }
-    }
+    },
+    "createAccountLink": "Noch kein Konto? Konto anfordern"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -101,7 +139,14 @@
     "sources": "Quellen",
     "watchFolder": "Überwachter Ordner",
     "documentManagement": "Dokumentenverwaltung",
-    "ignoredFiles": "Ignorierte Dateien"
+    "ignoredFiles": "Ignorierte Dateien",
+    "settings": "Einstellungen",
+    "debug": "Debug",
+    "sections": {
+      "library": "Bibliothek",
+      "ingest": "Import",
+      "system": "System"
+    }
   },
   "dashboard": {
     "greeting": "Hier ist eine Übersicht über Ihre Dokumente für heute.",
@@ -135,7 +180,13 @@
       "title": "Aktuelle Dokumente",
       "viewAll": "Alle anzeigen",
       "noDocuments": "Noch keine Dokumente",
-      "uploadFirst": "Laden Sie Ihr erstes Dokument hoch, um zu beginnen"
+      "uploadFirst": "Laden Sie Ihr erstes Dokument hoch, um zu beginnen",
+      "columns": {
+        "document": "Dokument",
+        "size": "Größe",
+        "added": "Hinzugefügt",
+        "status": "Status"
+      }
     },
     "quickActions": {
       "title": "Schnellaktionen",
@@ -505,6 +556,12 @@
         "deleting": "Wird gelöscht...",
         "delete": "Dokument löschen"
       }
+    },
+    "tabs": {
+      "preview": "Vorschau",
+      "ocrText": "OCR-Text",
+      "details": "Details",
+      "activity": "Aktivität"
     }
   },
   "ignoredFiles": {
@@ -744,7 +801,8 @@
       "general": "Allgemein",
       "ocrSettings": "OCR-Einstellungen",
       "userManagement": "Benutzerverwaltung",
-      "serverConfiguration": "Serverkonfiguration"
+      "serverConfiguration": "Serverkonfiguration",
+      "account": "Konto"
     },
     "general": {
       "title": "Allgemeine Einstellungen",
@@ -859,7 +917,8 @@
         "email": "E-Mail",
         "createdAt": "Erstellt am",
         "watchDirectory": "Überwachungsverzeichnis",
-        "actions": "Aktionen"
+        "actions": "Aktionen",
+        "status": "Status"
       },
       "watchDirectory": {
         "statusActive": "Aktiv",
@@ -885,7 +944,15 @@
         "title": "Überwachungsverzeichnis entfernen",
         "message": "Sind Sie sicher, dass Sie das Überwachungsverzeichnis für Benutzer \"{{username}}\" entfernen möchten? Diese Aktion kann nicht rückgängig gemacht werden und stoppt die Überwachung ihres Verzeichnisses auf neue Dateien.",
         "removeButton": "Verzeichnis entfernen"
-      }
+      },
+      "activeToggleLabel": "Konto aktiv für {{username}}",
+      "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
+      "disableUser": "Konto deaktivieren",
+      "enableUser": "Konto aktivieren",
+      "pendingApprovalNotice": "{{count}} Konto/Konten sind deaktiviert oder warten auf Freigabe. Aktivieren Sie ein Konto, damit sich die Person anmelden kann.",
+      "roleAdmin": "Admin",
+      "statusActive": "Aktiv",
+      "statusPending": "Deaktiviert / Freigabe ausstehend"
     },
     "serverConfiguration": {
       "title": "Serverkonfiguration (Nur für Administratoren)",
@@ -936,7 +1003,7 @@
       "userUpdated": "Benutzer erfolgreich aktualisiert",
       "userDeleted": "Benutzer erfolgreich gelöscht",
       "cannotDeleteSelf": "Sie können Ihr eigenes Konto nicht löschen",
-      "confirmDeleteUser": "Sind Sie sicher, dass Sie diesen Benutzer löschen möchten?",
+      "confirmDeleteUser": "Möchten Sie {{username}} ({{email}}) wirklich löschen?",
       "duplicateUsername": "Dieser Benutzername ist bereits vergeben. Bitte wählen Sie einen anderen Benutzernamen.",
       "duplicateEmail": "Diese E-Mail-Adresse wird bereits verwendet. Bitte verwenden Sie eine andere E-Mail.",
       "invalidPassword": "Passwort muss mindestens 8 Zeichen mit Groß-, Kleinbuchstaben und Zahlen enthalten.",
@@ -959,7 +1026,186 @@
       "ocrResumeFailed": "Administratorzugriff erforderlich, um OCR-Verarbeitung fortzusetzen",
       "ocrResumeFailedGeneric": "Fehler beim Fortsetzen der OCR-Verarbeitung",
       "serverConfigLoadFailed": "Administratorzugriff erforderlich, um Serverkonfiguration anzuzeigen",
-      "serverConfigLoadFailedGeneric": "Fehler beim Laden der Serverkonfiguration"
+      "serverConfigLoadFailedGeneric": "Fehler beim Laden der Serverkonfiguration",
+      "settingsLoadFailed": "Einstellungen konnten nicht geladen werden",
+      "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
+      "userDisabled": "{{username}} wurde deaktiviert und abgemeldet",
+      "userEnabled": "{{username}} kann sich jetzt anmelden"
+    },
+    "adminOnly": {
+      "title": "Nur für Administratoren",
+      "description": "Wenden Sie sich an einen Administrator, wenn Sie diese Einstellungen ändern müssen."
+    },
+    "apiKeys": {
+      "active": "Aktiv",
+      "alreadyRevoked": "Bereits widerrufen",
+      "copied": "Kopiert",
+      "copiedStatus": "In die Zwischenablage kopiert",
+      "copy": "API-Schlüssel kopieren",
+      "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen. Bitte markieren und manuell kopieren.",
+      "create": "API-Schlüssel erstellen",
+      "createFailed": "API-Schlüssel konnte nicht erstellt werden.",
+      "createTitle": "API-Schlüssel erstellen",
+      "created": "Erstellt",
+      "empty": "Sie haben noch keine API-Schlüssel.",
+      "expiration": "Ablauf",
+      "expired": "Abgelaufen",
+      "expires": "Läuft ab",
+      "expiry": {
+        "7": "7 Tage",
+        "30": "30 Tage",
+        "90": "90 Tage",
+        "180": "180 Tage",
+        "365": "1 Jahr",
+        "never": "Nie (nicht empfohlen)"
+      },
+      "intro": "Verwenden Sie einen API-Schlüssel im Header „Authorization: Bearer“, um Skripte und Integrationen zu authentifizieren. Schlüssel haben alle Rechte Ihres Kontos – behandeln Sie sie wie Passwörter.",
+      "keyName": "Name des Schlüssels:",
+      "lastUsed": "Zuletzt verwendet",
+      "loadFailed": "API-Schlüssel konnten nicht geladen werden.",
+      "name": "Name",
+      "nameHelp": "Eine Bezeichnung, die Sie später wiedererkennen.",
+      "namePlaceholder": "z. B. backup-script",
+      "nameRequired": "Bitte geben Sie diesem Schlüssel einen Namen.",
+      "never": "Nie",
+      "prefix": "Präfix",
+      "revealTitle": "Ihr neuer API-Schlüssel",
+      "revealWarning": "Kopieren Sie diesen Schlüssel jetzt. Aus Sicherheitsgründen wird er nicht erneut angezeigt – wenn Sie ihn verlieren, müssen Sie einen neuen erstellen.",
+      "revoke": "Widerrufen",
+      "revokeFailed": "API-Schlüssel konnte nicht widerrufen werden.",
+      "revokeMessage": "{{name}} widerrufen? Alle Skripte und Integrationen, die diesen Schlüssel verwenden, funktionieren sofort nicht mehr. Dies kann nicht rückgängig gemacht werden.",
+      "revokeNamed": "{{name}} widerrufen",
+      "revokeTitle": "API-Schlüssel widerrufen",
+      "revoked": "Widerrufen",
+      "saved": "Ich habe ihn gespeichert",
+      "status": "Status",
+      "usage": "Verwendung:"
+    },
+    "appearance": {
+      "dark": "Dunkel",
+      "language": "Sprache der Oberfläche",
+      "light": "Hell",
+      "system": "System",
+      "systemHelp": "Einstellung des Geräts übernehmen",
+      "theme": "Design"
+    },
+    "debugTools": {
+      "checkFailed": "fehlgeschlagen",
+      "checkPassed": "OK"
+    },
+    "fold": {
+      "close": "Schließen",
+      "edit": "Bearbeiten"
+    },
+    "groups": {
+      "languages": "Sprachen",
+      "ocrControls": "Verarbeitungssteuerung",
+      "processing": "Verarbeitung",
+      "qualityThresholds": "Qualitätsschwellen"
+    },
+    "labels": {
+      "createFailed": "Label konnte nicht erstellt werden",
+      "deleteFailed": "Label konnte nicht gelöscht werden",
+      "intro": "Labels ordnen Dokumente und Quellen. Die Zahlen zeigen, wie oft ein Label verwendet wird.",
+      "invalidData": "Ungültiges Datenformat vom Server erhalten",
+      "unexpectedStatus": "Unerwartete Serverantwort ({{status}})",
+      "updateFailed": "Label konnte nicht aktualisiert werden"
+    },
+    "languageSelector": {
+      "addMore_one": "Weitere Sprachen hinzufügen (noch {{count}})",
+      "addMore_other": "Weitere Sprachen hinzufügen (noch {{count}})",
+      "available": "Verfügbare Sprachen",
+      "help": "Die Hauptsprache wird zuerst verarbeitet, um die Genauigkeit zu verbessern. Mehrere Sprachen helfen bei gemischtsprachigen Dokumenten.",
+      "loadFailed": "OCR-Sprachen konnten nicht geladen werden",
+      "loading": "Sprachen werden geladen…",
+      "max_one": "Für optimale Leistung ist höchstens {{count}} Sprache erlaubt.",
+      "max_other": "Für optimale Leistung sind höchstens {{count}} Sprachen erlaubt.",
+      "none": "Keine Sprachen ausgewählt. Dokumente verwenden die Standard-OCR-Sprache.",
+      "primaryNote": "(Hauptsprache)",
+      "primaryTag": "Hauptsprache",
+      "remove": "{{language}} entfernen",
+      "select": "OCR-Sprachen auswählen…",
+      "selected": "Ausgewählte Sprachen",
+      "setPrimary": "Als Hauptsprache",
+      "title": "OCR-Sprachen"
+    },
+    "nav": {
+      "label": "Einstellungsbereiche",
+      "matches_one": "{{count}} Bereich passt",
+      "matches_other": "{{count}} Bereiche passen",
+      "noMatches": "Keine Einstellung passt zu „{{query}}“",
+      "search": "Einstellungen durchsuchen",
+      "searchPlaceholder": "Nach Namen filtern",
+      "section": "Bereich"
+    },
+    "sections": {
+      "apiKeys": "API-Schlüssel",
+      "appearance": "Darstellung",
+      "debug": "Diagnose",
+      "general": "Allgemein",
+      "labels": "Labels",
+      "ocr": "OCR",
+      "server": "Server",
+      "users": "Benutzer",
+      "account": "Konto"
+    },
+    "summary": {
+      "advanced": "Fenster {{w}} · Morphologie {{m}} · Ausgleich {{h}} · Bilder speichern {{s}}",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage",
+      "defaultLanguage": "Standard",
+      "enhancement": "Helligkeit {{b}} · Kontrast {{c}}× · Rauschen {{n}} · Schärfe {{s}}",
+      "enhancementSkipped": "übersprungen · nur Originalbilder",
+      "fileProcessing": "max. {{size}} MB · {{memory}} MB Speicher · Drehen {{rotate}}",
+      "forever": "unbegrenzt",
+      "imageSize": "{{w}} × {{h}} px · Skalierung {{u}}×",
+      "languages": "{{languages}} · Auto-Erkennung {{auto}}",
+      "off": "aus",
+      "on": "an",
+      "paused": "pausiert",
+      "processing": "{{jobs}} Aufträge · {{timeout}} s · Priorität {{priority}}",
+      "running": "läuft",
+      "search": "{{perPage}} pro Seite · {{snippet}} Zeichen · unscharf {{fuzzy}}",
+      "storage": "aufbewahren {{retention}} · Bereinigung {{cleanup}} · Komprimierung {{compression}}",
+      "thresholds": "Helligkeit {{b}} · Kontrast {{c}} · Rauschen {{n}} · Schärfe {{s}}"
+    },
+    "users": {
+      "createDirFor": "Überwachungsordner für {{name}} erstellen",
+      "deleteNamed": "{{name}} löschen",
+      "deleteTitle": "Benutzer löschen",
+      "editNamed": "{{name}} bearbeiten",
+      "emailRequired": "Geben Sie eine E-Mail-Adresse ein.",
+      "empty": "Noch keine Benutzer",
+      "intro": "Personen, die sich an diesem Readur-Server anmelden können.",
+      "loadFailed": "Benutzer konnten nicht geladen werden",
+      "passwordRequired": "Geben Sie ein Passwort ein.",
+      "removeDirFor": "Überwachungsordner von {{name}} entfernen",
+      "usernameRequired": "Geben Sie einen Benutzernamen ein.",
+      "viewDirFor": "Überwachungsordner von {{name}} anzeigen"
+    },
+    "validation": {
+      "choose": "Wählen Sie eine der Optionen.",
+      "integer": "Geben Sie eine ganze Zahl ein.",
+      "min": "Geben Sie {{min}} oder mehr ein.",
+      "number": "Geben Sie eine Zahl ein.",
+      "odd": "Geben Sie eine ungerade Zahl ein.",
+      "range": "Geben Sie einen Wert von {{min}} bis {{max}} ein.",
+      "required": "Geben Sie einen Wert ein."
+    },
+    "account": {
+      "changePassword": "Passwort ändern",
+      "confirmNewPassword": "Neues Passwort bestätigen",
+      "currentPassword": "Aktuelles Passwort",
+      "newPassword": "Neues Passwort",
+      "passwordChangeFailed": "Das Passwort konnte nicht geändert werden",
+      "passwordChanged": "Passwort geändert. Ihre anderen Sitzungen wurden abgemeldet.",
+      "passwordMismatch": "Die neuen Passwörter stimmen nicht überein",
+      "passwordPolicy": "Mindestens {{min}} Zeichen",
+      "passwordTooLong": "Das Passwort darf höchstens {{max}} Bytes lang sein",
+      "title": "Konto",
+      "tooManyAttempts": "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
+      "updatePassword": "Passwort aktualisieren",
+      "wrongCurrentPassword": "Das aktuelle Passwort ist falsch"
     }
   },
   "labels": {
@@ -1001,7 +1247,8 @@
       "cancel": "Abbrechen",
       "create": "Erstellen",
       "update": "Aktualisieren",
-      "saving": "Wird gespeichert..."
+      "saving": "Wird gespeichert...",
+      "previewName": "Label-Vorschau"
     },
     "selector": {
       "placeholder": "Labels suchen oder erstellen...",
@@ -1010,7 +1257,9 @@
       "createLabel": "Label \"{{name}}\" erstellen",
       "noLabelsFound": "Keine Labels gefunden",
       "noLabelsMatch": "Keine Labels entsprechen \"{{query}}\"",
-      "noLabelsAvailable": "Keine Labels verfügbar"
+      "noLabelsAvailable": "Keine Labels verfügbar",
+      "label": "Labels",
+      "selected": "Ausgewählte Labels"
     },
     "empty": {
       "title": "Keine Labels gefunden",
@@ -1039,7 +1288,41 @@
       "systemDelete": "System-Labels können nicht gelöscht werden. Nur benutzererstellte Labels können entfernt werden.",
       "invalidName": "Label-Name enthält ungültige Zeichen. Bitte verwenden Sie nur Buchstaben, Zahlen und einfache Satzzeichen.",
       "invalidColor": "Ungültiges Farbformat. Bitte verwenden Sie eine gültige Hex-Farbe wie #0969da.",
-      "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen."
+      "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen.",
+      "commaNotAllowed": "Label-Namen dürfen keine Kommas enthalten."
+    },
+    "colors": {
+      "blue": "Blau",
+      "gray": "Grau",
+      "green": "Grün",
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "pink": "Pink",
+      "purple": "Lila",
+      "red": "Rot",
+      "teal": "Türkis",
+      "yellow": "Gelb"
+    },
+    "icons": {
+      "archive": "Archiv",
+      "assignment": "Aufgabe",
+      "briefcase": "Aktentasche",
+      "bug": "Fehler",
+      "build": "Werkzeug",
+      "document": "Dokument",
+      "dollar": "Geld",
+      "folder": "Ordner",
+      "label": "Label",
+      "medical": "Medizin",
+      "person": "Person",
+      "receipt": "Beleg",
+      "scale": "Recht",
+      "schedule": "Termin",
+      "star": "Stern",
+      "work": "Arbeit"
+    },
+    "tag": {
+      "remove": "{{name}} entfernen"
     }
   },
   "notifications": {
@@ -1074,14 +1357,20 @@
     },
     "actions": {
       "signup": "Registrieren",
-      "creating": "Konto wird erstellt..."
+      "creating": "Konto wird erstellt...",
+      "backToSignIn": "Zurück zur Anmeldung"
     },
     "links": {
       "signin": "Haben Sie bereits ein Konto? Anmelden"
     },
     "errors": {
-      "failed": "Registrierung fehlgeschlagen"
-    }
+      "failed": "Registrierung fehlgeschlagen",
+      "disabled": "Die Selbstregistrierung ist auf diesem Server deaktiviert.",
+      "passwordTooShort": "Das Passwort muss mindestens {{min}} Zeichen lang sein",
+      "rateLimited": "Zu viele Registrierungsversuche. Bitte versuchen Sie es später erneut."
+    },
+    "passwordHint": "Mindestens {{min}} Zeichen",
+    "pendingApproval": "Konto erstellt. Ein Administrator muss es freigeben, bevor Sie sich anmelden können."
   },
   "debug": {
     "title": "Dokumentverarbeitung Debug",
@@ -1366,7 +1655,10 @@
       "sourceType": "Quellentyp",
       "sourceEnabled": "Quelle aktiviert",
       "sourceEnabledHelper": "Diese Quelle für Synchronisierung aktivieren",
-      "sourceNamePlaceholder": "Mein Dokumentserver"
+      "sourceNamePlaceholder": "Mein Dokumentserver",
+      "keepCurrentSecret": "Leer lassen, um den aktuellen Wert zu behalten",
+      "passwordStored": "Für diese Quelle ist ein Passwort gespeichert",
+      "secretStored": "Für diese Quelle ist ein geheimer Schlüssel gespeichert"
     },
     "webdav": {
       "title": "WebDAV-Konfiguration",
@@ -1514,6 +1806,1534 @@
         "watchDirectory": "Überwachungsverzeichnis",
         "exampleFile": "Beispieldatei"
       }
+    }
+  },
+  "ui": {
+    "clear": "Löschen",
+    "close": "Schließen",
+    "showOptions": "Optionen anzeigen",
+    "notifications": "Benachrichtigungen",
+    "pagination": {
+      "label": "Seitennavigation",
+      "range": "{{start}}–{{end}} von {{total}}",
+      "pageSize": "Zeilen pro Seite",
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite"
+    },
+    "toast": {
+      "info": "Info:",
+      "success": "Erfolg:",
+      "danger": "Fehler:"
+    },
+    "filterChip": {
+      "clear": "Filter {{label}} entfernen"
+    },
+    "bulk": {
+      "label": "Sammelaktionen",
+      "clear": "Auswahl aufheben",
+      "count_one": "<n>{{count}}</n> <w>ausgewählt</w>",
+      "count_other": "<n>{{count}}</n> <w>ausgewählt</w>"
+    },
+    "commandPalette": {
+      "label": "Befehlspalette",
+      "search": "Suchen",
+      "placeholder": "Dokumente, Labels, Seiten durchsuchen…",
+      "loading": "Suche läuft…",
+      "noResults": "Keine Ergebnisse",
+      "results": "Ergebnisse",
+      "hint": "Tippen, um zu suchen"
+    },
+    "board": {
+      "loading": "Wird geladen",
+      "empty": "Nichts anzuzeigen"
+    }
+  },
+  "status": {
+    "pending": "Ausstehend",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "Indexiert",
+    "failed": "Fehlgeschlagen",
+    "healthy": "Intakt",
+    "syncing": "Synchronisiert",
+    "warning": "Prüfen",
+    "error": "Fehler",
+    "disabled": "Aus"
+  },
+  "shell": {
+    "skipToContent": "Zum Inhalt springen",
+    "home": "Readur Startseite",
+    "loading": "Wird geladen",
+    "nav": {
+      "label": "Hauptnavigation",
+      "tabBar": "Tab-Leiste",
+      "board": "Übersicht",
+      "library": "Bibliothek",
+      "intake": "Eingang",
+      "settings": "Einstellungen",
+      "home": "Start",
+      "search": "Suche"
+    },
+    "search": {
+      "open": "Dokumente durchsuchen",
+      "placeholder": "Dokumente durchsuchen…",
+      "short": "Schnellsuche…"
+    },
+    "palette": {
+      "navigation": "Gehe zu",
+      "documents": "Dokumente",
+      "recent": "Letzte Suchen",
+      "showAll": "Alle Ergebnisse für „{{query}}“ anzeigen"
+    },
+    "synced": {
+      "justNow": "gerade synchronisiert",
+      "minutes": "vor {{count}} Min. synchronisiert",
+      "hours": "vor {{count}} Std. synchronisiert",
+      "days": "vor {{count}} T. synchronisiert",
+      "at": "synchronisiert {{when}}"
+    },
+    "alerts": {
+      "label": "Benachrichtigungen",
+      "labelUnread": "Benachrichtigungen, {{count}} ungelesen",
+      "unread": "{{count}} ungelesen",
+      "close": "Benachrichtigungen schließen",
+      "dismiss": "{{title}} verwerfen",
+      "new": "Neu",
+      "type": {
+        "success": "Erfolg",
+        "error": "Fehler",
+        "warning": "Warnung",
+        "info": "Info"
+      }
+    },
+    "language": {
+      "label": "Sprache ändern"
+    },
+    "theme": {
+      "toDark": "Zum dunklen Modus wechseln",
+      "toLight": "Zum hellen Modus wechseln"
+    },
+    "user": {
+      "menu": "Kontomenü",
+      "settings": "Einstellungen",
+      "apiDocs": "API-Dokumentation",
+      "logout": "Abmelden",
+      "menuFor": "Kontomenü, {{name}}"
+    },
+    "intake": {
+      "title": "Eingang",
+      "sections": "Eingangsbereiche",
+      "upload": "Hochladen",
+      "connections": "Verbindungen",
+      "watch": "Überwachter Ordner",
+      "attention": "Handlungsbedarf",
+      "ignored": "Ignorierte Dateien"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "sections": "Einstellungsbereiche",
+      "general": "Allgemein",
+      "labels": "Labels",
+      "debug": "Debug"
+    },
+    "collections": {
+      "title": "Sammlungen",
+      "empty": "Noch keine Sammlungen",
+      "all": "Alle Sammlungen"
+    },
+    "sources": {
+      "title": "Quellen",
+      "uploads": "Uploads",
+      "watch": "Überwachter Ordner",
+      "health": {
+        "syncing": "Synchronisiert",
+        "error": "Fehler",
+        "check": "Prüfen",
+        "off": "Aus"
+      }
+    },
+    "menu": {
+      "label": "Menü",
+      "open": "Menü öffnen",
+      "close": "Menü schließen"
+    }
+  },
+  "board": {
+    "title": "Übersicht",
+    "addDocuments": "Dokumente hinzufügen",
+    "retry": "Erneut versuchen",
+    "viewAll": "Alle anzeigen",
+    "figure": {
+      "inQueue": "{{formatted}} in der Warteschlange",
+      "zero": "0 in der Warteschlange"
+    },
+    "markAllSeen": "Alle als gesehen markieren",
+    "loading": "Wird geladen",
+    "tag": {
+      "new": "Neu",
+      "changed": "Geändert"
+    },
+    "col": {
+      "name": "Name",
+      "type": "Typ",
+      "status": "Status",
+      "size": "Größe",
+      "added": "Hinzugefügt",
+      "reason": "Grund",
+      "age": "Alter",
+      "actions": "Aktionen"
+    },
+    "attention": {
+      "title": "Erfordert Aufmerksamkeit",
+      "dismiss": "Ausblenden",
+      "dismissNamed": "{{name}} ausblenden",
+      "retryNamed": "{{name}} erneut versuchen",
+      "retryQueued": "Neuer Versuch gestartet",
+      "retryFailed": "Erneuter Versuch fehlgeschlagen",
+      "error": "Einige Einträge, die Aufmerksamkeit erfordern, konnten nicht geladen werden."
+    },
+    "arrivals": {
+      "title": "Zuletzt hinzugefügt",
+      "library": "Bibliothek öffnen",
+      "error": "Die neuesten Dokumente konnten nicht geladen werden.",
+      "empty": "Noch keine Dokumente",
+      "emptyHint": "Hinzugefügte Dokumente erscheinen hier, sobald sie eintreffen.",
+      "bulkOne": "neues Dokument",
+      "bulkMany": "neue Dokumente",
+      "bulkOpen": "In der Bibliothek öffnen, neueste zuerst"
+    },
+    "processing": {
+      "title": "Verarbeitung",
+      "pending": "Ausstehend",
+      "processing": "In Arbeit",
+      "failed": "Fehlgeschlagen",
+      "doneToday": "Heute erledigt",
+      "oldestWait": "Längste Wartezeit",
+      "error": "Die OCR-Warteschlange konnte nicht geladen werden.",
+      "statusError": "Der OCR-Status konnte nicht geladen werden.",
+      "ocr": "OCR",
+      "pause": "OCR pausieren",
+      "resume": "OCR fortsetzen",
+      "pauseFailed": "OCR konnte nicht pausiert werden",
+      "resumeFailed": "OCR konnte nicht fortgesetzt werden"
+    },
+    "connections": {
+      "title": "Verbindungen",
+      "manage": "Verwalten",
+      "error": "Verbindungen konnten nicht geladen werden.",
+      "empty": "Keine Verbindungen",
+      "add": "Verbindung hinzufügen"
+    },
+    "totals": {
+      "title": "Bibliothek",
+      "documents": "Dokumente",
+      "storage": "Speicher",
+      "indexed": "Indexiert",
+      "labels": "Labels",
+      "error": "Die Bibliothekssummen konnten nicht geladen werden."
+    }
+  },
+  "document": {
+    "breadcrumb": "Navigationspfad",
+    "library": "Bibliothek",
+    "actions": {
+      "retry": "OCR wiederholen",
+      "download": "Herunterladen",
+      "share": "Teilen",
+      "comments": "Kommentare",
+      "more": "Weitere Aktionen",
+      "processedImage": "Verarbeitetes Bild anzeigen",
+      "delete": "Dokument löschen"
+    },
+    "delete": {
+      "title": "Dieses Dokument löschen?",
+      "cancel": "Abbrechen",
+      "confirm": "Löschen",
+      "message": "<0>{{filename}}</0> wird mit extrahiertem Text, Labels, Kommentaren und Freigabelinks entfernt. Das lässt sich nicht rückgängig machen."
+    },
+    "processed": {
+      "title": "Verarbeitetes Bild",
+      "close": "Schließen",
+      "loading": "Bild wird geladen",
+      "missing": "Für dieses Dokument ist kein verarbeitetes Bild gespeichert.",
+      "alt": "Bild, wie es für die OCR vorbereitet wurde",
+      "caption": "Dieses bereinigte Bild hat die OCR-Engine gelesen."
+    },
+    "loading": "Dokument wird geladen",
+    "panel": {
+      "comments": "Kommentare",
+      "links": "Freigabelinks",
+      "label": "Seitenleiste"
+    },
+    "notFound": "Dokument nicht gefunden",
+    "loadFailed": "Dokument konnte nicht geladen werden",
+    "notFoundHint": "Es wurde möglicherweise gelöscht oder der Link ist falsch.",
+    "loadFailedHint": "Prüfe deine Verbindung und versuche es erneut.",
+    "retry": "Erneut versuchen",
+    "backToLibrary": "Zurück zur Bibliothek",
+    "toast": {
+      "downloadFailed": "Datei konnte nicht heruntergeladen werden",
+      "retryQueued": "OCR erneut eingereiht",
+      "retryFailed": "OCR konnte nicht erneut eingereiht werden",
+      "deleted": "Dokument gelöscht",
+      "deleteFailed": "Dokument konnte nicht gelöscht werden",
+      "labelsFailed": "Labels konnten nicht gespeichert werden"
+    },
+    "labels": {
+      "editor": "Labels bearbeiten",
+      "placeholder": "Labels suchen oder erstellen…",
+      "cancel": "Abbrechen",
+      "save": "Labels speichern",
+      "add": "Label hinzufügen"
+    },
+    "type": {
+      "image": "Bild",
+      "text": "Text",
+      "other": "Datei"
+    },
+    "pass": {
+      "uploaded": "Upload",
+      "sourceLocalFolder": "Lokaler Ordner",
+      "sourceBatch": "Stapelimport",
+      "label": "Dokumentübersicht",
+      "status": "Status",
+      "progress": "OCR-Fortschritt",
+      "type": "Typ",
+      "pages": "Seiten",
+      "size": "Größe",
+      "source": "Quelle",
+      "added": "Hinzugefügt",
+      "language": "Sprache",
+      "confidence": "Konfidenz",
+      "labels": "Labels",
+      "noLabels": "Keine",
+      "editLabels": "Labels bearbeiten"
+    },
+    "share": {
+      "titleNamed": "{{name}} teilen",
+      "title": "Dokument teilen",
+      "done": "Fertig",
+      "active": "Aktiv",
+      "expired": "Abgelaufen",
+      "revoked": "Widerrufen",
+      "copied": "Link kopiert",
+      "copyFailed": "Link konnte nicht kopiert werden",
+      "revokedToast": "Link widerrufen",
+      "revokeFailed": "Link konnte nicht widerrufen werden",
+      "none": "Noch keine Freigabelinks.",
+      "existing": "Bestehende Links",
+      "views": "Aufrufe",
+      "expiresShort": "Läuft ab",
+      "never": "Nie",
+      "createdShort": "Erstellt",
+      "protected": "Passwort",
+      "confirmRevoke": "Diesen Link widerrufen?",
+      "confirmRevokeText": "Diesen Link widerrufen? Er funktioniert dann für niemanden mehr.",
+      "keep": "Behalten",
+      "revoke": "Widerrufen",
+      "copy": "Link kopieren",
+      "revokeLink": "Link widerrufen",
+      "loadFailed": "Freigabelinks konnten nicht geladen werden.",
+      "loading": "Freigabelinks werden geladen",
+      "createFailed": "Link konnte nicht erstellt werden. Versuche es erneut.",
+      "ready": "Alle mit diesem Link können das Dokument öffnen.",
+      "url": "Freigabelink",
+      "passwordNote": "Zum Öffnen wird das Passwort benötigt.",
+      "another": "Weiteren Link erstellen",
+      "newLink": "Neuer Freigabelink",
+      "password": "Passwort (optional)",
+      "passwordHint": "Leer lassen für freien Zugriff",
+      "hidePassword": "Passwort verbergen",
+      "showPassword": "Passwort anzeigen",
+      "expires": "Ablauf (optional)",
+      "expiresHint": "Leer lassen für kein Ablaufdatum",
+      "maxViews": "Aufruflimit (optional)",
+      "maxViewsHint": "Leer lassen für unbegrenzte Aufrufe",
+      "create": "Link erstellen"
+    },
+    "details": {
+      "yes": "Ja",
+      "octal": "oktal",
+      "no": "Nein",
+      "sourceMetadata": "Quellmetadaten",
+      "fieldCount_one": "{{count}} Feld",
+      "fieldCount_other": "{{count}} Felder",
+      "hashCopied": "Hash kopiert",
+      "copyFailed": "Kopieren fehlgeschlagen",
+      "file": "Datei",
+      "filename": "Dateiname",
+      "mimeType": "MIME-Typ",
+      "size": "Größe",
+      "added": "Hinzugefügt",
+      "modified": "Zuletzt geändert",
+      "addedBy": "Hinzugefügt von",
+      "unknown": "Unbekannt",
+      "owner": "Eigentümer",
+      "group": "Gruppe",
+      "permissions": "Berechtigungen",
+      "hash": "SHA-256",
+      "copyHash": "Hash kopieren",
+      "notAvailable": "Nicht verfügbar",
+      "source": "Quelle",
+      "sourceType": "Typ",
+      "sourcePath": "Pfad",
+      "sourceId": "Quell-ID",
+      "originalCreated": "Ursprünglich erstellt",
+      "originalModified": "Ursprünglich geändert",
+      "processing": "Verarbeitung",
+      "status": "Status",
+      "confidence": "Konfidenz",
+      "words": "Wörter",
+      "time": "Verarbeitungszeit",
+      "retries": "Wiederholungen",
+      "failure": "Fehlerursache",
+      "activity": "Aktivität",
+      "retryHistory_one": "Wiederholungsverlauf ({{count}})",
+      "retryHistory_other": "Wiederholungsverlauf ({{count}})",
+      "title": "Details",
+      "hide": "Details ausblenden",
+      "show": "Details anzeigen"
+    },
+    "activity": {
+      "uploaded": "Hinzugefügt",
+      "by": "von {{name}}",
+      "ocrDone": "Text extrahiert",
+      "ocrFailed": "OCR fehlgeschlagen",
+      "ocrRunning": "OCR läuft"
+    },
+    "text": {
+      "words_one": "{{n}} Wort",
+      "words_other": "{{n}} Wörter",
+      "copied": "Text kopiert",
+      "copyFailed": "Text konnte nicht kopiert werden",
+      "confidence": "{{value}} % Konfidenz",
+      "time": "{{ms}} ms",
+      "noMatches": "Keine Treffer",
+      "matchPosition": "{{current}} von {{total}}",
+      "title": "Text",
+      "find": "Im Text suchen",
+      "findPlaceholder": "Im Text suchen…",
+      "previousMatch": "Vorheriger Treffer",
+      "nextMatch": "Nächster Treffer",
+      "monospace": "Festbreitenschrift",
+      "copyAll": "Gesamten Text kopieren",
+      "body": "Extrahierter Text",
+      "loading": "Text wird geladen",
+      "pending": "Der Text erscheint hier, sobald die OCR fertig ist.",
+      "failed": "Die OCR konnte dieses Dokument nicht lesen.",
+      "loadFailed": "Der extrahierte Text konnte nicht geladen werden.",
+      "empty": "In diesem Dokument wurde kein Text gefunden.",
+      "displayOptions": "Textanzeige",
+      "copy": "Kopieren",
+      "failureDetail": "Vollständige Meldung anzeigen"
+    },
+    "comments": {
+      "saveFailed": "Kommentar konnte nicht gespeichert werden. Versuche es erneut.",
+      "cancel": "Abbrechen",
+      "post": "Senden",
+      "by": "Kommentar von {{name}}",
+      "edited": "bearbeitet",
+      "editLabel": "Kommentar bearbeiten",
+      "save": "Speichern",
+      "reply": "Antworten",
+      "edit": "Kommentar bearbeiten",
+      "delete": "Kommentar löschen",
+      "newLabel": "Neuer Kommentar",
+      "placeholder": "Kommentar schreiben…",
+      "loadFailed": "Kommentare konnten nicht geladen werden.",
+      "loading": "Kommentare werden geladen",
+      "empty": "Noch keine Kommentare",
+      "emptyHint": "Beginne die Unterhaltung zu diesem Dokument.",
+      "list": "Kommentare",
+      "deleteFailed": "Kommentar konnte nicht gelöscht werden",
+      "loadRepliesFailed": "Weitere Antworten konnten nicht geladen werden",
+      "replyLabel": "{{name}} antworten",
+      "hideReplies_one": "{{count}} Antwort ausblenden",
+      "hideReplies_other": "{{count}} Antworten ausblenden",
+      "showReplies_one": "{{count}} Antwort anzeigen",
+      "showReplies_other": "{{count}} Antworten anzeigen",
+      "loadMore": "Weitere Antworten laden"
+    },
+    "shared": {
+      "wrongPassword": "Das Passwort ist nicht richtig. Versuche es erneut.",
+      "verifyFailed": "Passwort konnte nicht geprüft werden. Versuche es erneut.",
+      "downloadFailed": "Datei konnte nicht heruntergeladen werden. Versuche es erneut.",
+      "loading": "Geteiltes Dokument wird geladen",
+      "expiredTitle": "Dieser Link ist abgelaufen",
+      "unavailableTitle": "Dieser Link ist nicht verfügbar",
+      "expired": "Er hat sein Ablaufdatum oder Aufruflimit erreicht oder wurde widerrufen. Bitte die absendende Person um einen neuen Link.",
+      "missing": "Er existiert nicht oder wurde entfernt.",
+      "invalid": "Der Link ist unvollständig.",
+      "error": "Das geteilte Dokument konnte nicht geladen werden. Versuche es später erneut.",
+      "passwordTitle": "Passwort erforderlich",
+      "passwordHint": "Dieses Dokument ist geschützt. Gib das Passwort ein, das du erhalten hast.",
+      "password": "Passwort",
+      "submit": "Dokument öffnen",
+      "file": "Datei",
+      "expires": "Läuft ab",
+      "preview": "Vorschau anzeigen",
+      "previewHint": "Das Öffnen der Vorschau zählt als Aufruf dieses Links.",
+      "expiresOn": "Link läuft ab am {{date}}",
+      "noExpiry": "Link läuft nie ab"
+    },
+    "viewer": {
+      "loading": "Vorschau wird geladen",
+      "error": "Vorschau konnte nicht geladen werden.",
+      "unsupported": "Keine Vorschau für diesen Dateityp",
+      "unsupportedHint": "{{type}}-Dateien können nicht im Browser angezeigt werden. Lade die Datei herunter, um sie zu öffnen."
+    },
+    "tabs": {
+      "preview": "Vorschau",
+      "label": "Dokumentansichten",
+      "text": "Text",
+      "details": "Details"
+    },
+    "meta": {
+      "pages_one": "{{count}} Seite",
+      "pages_other": "{{count}} Seiten",
+      "added": "Hinzugefügt {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "view": {
+      "label": "Ansicht",
+      "document": "Dokument",
+      "split": "Nebeneinander",
+      "text": "Text"
+    }
+  },
+  "library": {
+    "add": "Dokumente hinzufügen",
+    "added": {
+      "1y": "Letztes Jahr",
+      "30d": "Letzte 30 Tage",
+      "7d": "Letzte 7 Tage",
+      "from": "Von",
+      "order": "Das Enddatum liegt vor dem Startdatum",
+      "to": "Bis"
+    },
+    "bulk": {
+      "addLabel": "Label hinzufügen",
+      "addLabelTitle": "Labels zu {{count}} Dokumenten hinzufügen",
+      "addLabelTitle_one": "Labels zu 1 Dokument hinzufügen",
+      "apply": "Labels hinzufügen",
+      "delete": "Löschen",
+      "deleteBody": "Die Dokumente und ihr Text werden entfernt. Das lässt sich nicht rückgängig machen.",
+      "deleteFailed": "Die Dokumente konnten nicht gelöscht werden",
+      "deleteTitle": "{{count}} Dokumente löschen?",
+      "deleteTitle_one": "1 Dokument löschen?",
+      "deleted": "{{count}} Dokumente gelöscht",
+      "deleted_one": "1 Dokument gelöscht",
+      "download": "Herunterladen",
+      "downloadFailed": "{{count}} Downloads fehlgeschlagen",
+      "downloadFailed_one": "1 Download fehlgeschlagen",
+      "downloaded": "{{count}} Dokumente heruntergeladen",
+      "downloaded_one": "1 Dokument heruntergeladen",
+      "downloading": "Wird heruntergeladen…",
+      "labelFailed": "Die Labels konnten nicht hinzugefügt werden",
+      "labelled": "Labels zu {{count}} Dokumenten hinzugefügt",
+      "labelled_one": "Labels zu 1 Dokument hinzugefügt",
+      "retry": "OCR wiederholen",
+      "deleteNone": "Es wurden keine Dokumente gelöscht",
+      "deletedSome": "{{deleted}} von {{requested}} Dokumenten gelöscht"
+    },
+    "cancel": "Abbrechen",
+    "columns": {
+      "added": "Hinzugefügt",
+      "labels": "Labels",
+      "name": "Name",
+      "size": "Größe",
+      "source": "Quelle",
+      "status": "Status",
+      "type": "Typ",
+      "updated": "Geändert"
+    },
+    "compact": "Kompakte Zeilen",
+    "count": "{{formatted}} Dokumente",
+    "count_one": "{{formatted}} Dokument",
+    "counting": "Wird gezählt…",
+    "detail": {
+      "confidence": "Konfidenz",
+      "delete": "Löschen",
+      "deleteBody": "„{{name}}“ und sein Text werden entfernt. Das lässt sich nicht rückgängig machen.",
+      "deleteFailed": "Das Dokument konnte nicht gelöscht werden",
+      "deleteTitle": "Dieses Dokument löschen?",
+      "deleted": "Dokument gelöscht",
+      "download": "Herunterladen",
+      "downloadFailed": "Download fehlgeschlagen",
+      "facts": "Dokumentangaben",
+      "labelsFailed": "Labels konnten nicht gespeichert werden",
+      "labelsSaved": "Labels gespeichert",
+      "language": "Sprache",
+      "loadingText": "Text wird geladen",
+      "noPreview": "Noch keine Vorschau",
+      "noText": "Aus diesem Dokument wurde noch kein Text gelesen.",
+      "open": "Öffnen",
+      "pagesOcr": "Seiten/OCR",
+      "retry": "OCR wiederholen",
+      "retryFailed": "Die Texterkennung konnte nicht wiederholt werden",
+      "retryQueued": "Texterkennung erneut eingereiht",
+      "share": "Teilen",
+      "text": "Text",
+      "textFailed": "Der Text konnte nicht geladen werden.",
+      "title": "Dokument",
+      "pages_one": "1 Seite",
+      "pages_other": "{{count}} Seiten",
+      "added": "Hinzugefügt {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "empty": {
+      "clearFilters": "Filter zurücksetzen",
+      "error": "Dokumente konnten nicht geladen werden",
+      "noMatches": "Keine Treffer",
+      "noMatchesHint": "Nichts passt zur aktuellen Suche und zu den Filtern.",
+      "none": "Noch keine Dokumente",
+      "noneHint": "Laden Sie Dateien hoch oder verbinden Sie einen Ordner, um Ihre Bibliothek zu beginnen.",
+      "tooMany": "Zu viele Treffer – verfeinern Sie die Suche",
+      "tooManyHint": "Fügen Sie ein Wort oder einen Filter hinzu, um die Ergebnisse einzugrenzen.",
+      "collection": "Noch nichts in „{{name}}“",
+      "collectionHint": "Suchen Sie nach Dokumenten, haken Sie die passenden an und wählen Sie „Als Sammlung speichern“.",
+      "goSearch": "Zur Suche"
+    },
+    "filters": {
+      "added": "Hinzugefügt",
+      "any": "Alle",
+      "clearAll": "Alle zurücksetzen",
+      "findLabel": "Sammlung suchen",
+      "label": "Label",
+      "noLabelMatch": "Keine passenden Sammlungen",
+      "noLabels": "Noch keine Sammlungen",
+      "region": "Suchen und filtern",
+      "source": "Quelle",
+      "status": "Status",
+      "type": "Typ",
+      "collection": "Sammlung"
+    },
+    "help": {
+      "boolean": "Operatoren",
+      "booleanHint": "Mit & (und), | (oder), ! (nicht)",
+      "exampleAnd": "Beide Wörter",
+      "exampleFuzzy": "Verzeiht Tippfehler",
+      "exampleNot": "Ein Wort ausschließen",
+      "exampleOr": "Eines der Wörter",
+      "examplePhrase": "Eine genaue Wortfolge",
+      "exampleWord": "Dokumente, die ein Wort enthalten",
+      "examples": "Ausprobieren",
+      "fuzzy": "Ähnliche Schreibweise",
+      "fuzzyHint": "Findet auch Beinahe-Treffer und Tippfehler",
+      "intro": "Die Suche durchsucht Dateinamen und den aus jedem Dokument gelesenen Text.",
+      "match": "Abgleich",
+      "open": "Suchhilfe",
+      "phrase": "Genaue Wortfolge",
+      "phraseHint": "Die Wörter stehen zusammen und in dieser Reihenfolge",
+      "simple": "Alle Wörter",
+      "simpleHint": "Jedes Wort kommt irgendwo vor",
+      "title": "Suchhilfe"
+    },
+    "labelsMore": "{{count}} weitere",
+    "retry": "Erneut versuchen",
+    "search": {
+      "keepTyping": "Weiter tippen…",
+      "label": "Dokumente durchsuchen",
+      "placeholder": "Namen und Text durchsuchen…",
+      "allDates": "Alle Zeiträume zeigen",
+      "allSelected_one": "Der 1 Treffer ist ausgewählt",
+      "allSelected_other": "Alle {{formatted}} Treffer sind ausgewählt",
+      "bestMatch": "Beste Treffer",
+      "bigPlaceholder": "Alle Dokumente nach Namen oder enthaltenen Wörtern durchsuchen",
+      "count_one": "1 Dokument passt zu „{{q}}“",
+      "count_other": "{{formatted}} Dokumente passen zu „{{q}}“",
+      "counting": "Suche läuft…",
+      "error": "Die Suche ist fehlgeschlagen",
+      "everything": "Alle Dokumente durchsuchen…",
+      "inRange": "im Zeitraum {{range}}",
+      "loading": "Suche läuft…",
+      "monthCount_one": "1 Treffer",
+      "monthCount_other": "{{count}} Treffer",
+      "nameMatch": "Treffer im Dateinamen",
+      "newest": "Neueste zuerst",
+      "noMatchesHint": "Prüfen Sie die Schreibweise, versuchen Sie weniger Wörter oder schalten Sie in der Suchhilfe „Ähnliche Schreibweise“ ein.",
+      "order": "Reihenfolge",
+      "preview": "Kurzansicht von {{name}}",
+      "results": "Ergebnisse",
+      "selectAll_one": "Den 1 Treffer auswählen",
+      "selectAll_other": "Alle {{formatted}} Treffer auswählen",
+      "selectPage": "Alle auf dieser Seite auswählen",
+      "startHint": "Readur durchsucht Dateinamen und jedes Wort, das aus Ihren Scans und PDFs gelesen wurde. Versuchen Sie einen Namen, einen Ort oder ein Thema, etwa „Schulter“ oder „Rechnung 2024“.",
+      "startTitle": "Finden Sie alles in Ihren Dokumenten",
+      "title": "Suche"
+    },
+    "sort": {
+      "asc": "{{field}}, aufsteigend",
+      "desc": "{{field}}, absteigend",
+      "label": "Sortieren nach",
+      "relevance": "Beste Übereinstimmung"
+    },
+    "source": {
+      "unknown": "Verbindung",
+      "upload": "Upload",
+      "watch": "Überwachter Ordner"
+    },
+    "status": {
+      "completed": "Indiziert",
+      "failed": "Fehlgeschlagen",
+      "pending": "Ausstehend",
+      "processing": "In Bearbeitung"
+    },
+    "table": "Dokumente",
+    "tag": {
+      "changed": "Geändert",
+      "new": "Neu"
+    },
+    "title": "Bibliothek",
+    "type": {
+      "image": "Bilder",
+      "office": "Office",
+      "other": "Sonstige",
+      "pdf": "PDF",
+      "text": "Text"
+    },
+    "collection": {
+      "action": "Als Sammlung speichern",
+      "assignFailed": "Die Sammlung wurde angelegt, aber die Dokumente konnten nicht hinzugefügt werden. Bitte erneut versuchen.",
+      "assignFailedExisting": "Die Dokumente konnten nicht hinzugefügt werden",
+      "color": "Farbe",
+      "createFailed": "Die Sammlung konnte nicht angelegt werden",
+      "existing": "Eine vorhandene Sammlung",
+      "name": "Name",
+      "nameRequired": "Geben Sie der Sammlung einen Namen",
+      "nameTaken": "Eine Sammlung mit diesem Namen gibt es schon. Wählen Sie sie unter „Eine vorhandene Sammlung“.",
+      "new": "Eine neue Sammlung",
+      "pick": "Sammlung",
+      "pickPlaceholder": "Sammlung wählen",
+      "save": "Speichern",
+      "saved_one": "1 Dokument in „{{name}}“ gespeichert",
+      "saved_other": "{{count}} Dokumente in „{{name}}“ gespeichert",
+      "target": "Speichern in",
+      "title_one": "1 Dokument als Sammlung speichern",
+      "title_other": "{{count}} Dokumente als Sammlung speichern"
+    },
+    "loading": "Dokumente werden geladen",
+    "monthCount_one": "1 Dokument",
+    "monthCount_other": "{{count}} Dokumente",
+    "selectDocument": "{{name}} auswählen",
+    "timeline": {
+      "label": "Treffer nach Monat",
+      "month_one": "{{month}}: 1 Treffer",
+      "month_other": "{{month}}: {{formatted}} Treffer",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Ohne Datum",
+    "view": {
+      "grid": "Raster",
+      "label": "Ansicht",
+      "table": "Tabelle"
+    }
+  },
+  "intake": {
+    "actions": {
+      "cancel": "Abbrechen",
+      "close": "Schließen",
+      "refresh": "Aktualisieren",
+      "retry": "Erneut versuchen"
+    },
+    "attention": {
+      "allReasons": "Alle Gründe",
+      "allStages": "Alle Phasen",
+      "cannotRetry": "Dieses Dokument kann nicht erneut verarbeitet werden.",
+      "clearFilters": "Filter zurücksetzen",
+      "col": {
+        "failed": "Fehlgeschlagen",
+        "name": "Name",
+        "reason": "Grund",
+        "retries": "Versuche",
+        "stage": "Phase",
+        "status": "Status"
+      },
+      "confidence": "Konfidenz",
+      "created": "Hinzugefügt",
+      "dates": "Daten",
+      "delete": "Löschen",
+      "deleteBody": "Dies kann nicht rückgängig gemacht werden. Die Dokumente und ihre Dateien werden endgültig gelöscht.",
+      "deleteConfirm": "Dokumente löschen",
+      "deleteFailed": "Die Dokumente konnten nicht gelöscht werden",
+      "deleteNone": "Es wurden keine Dokumente gelöscht",
+      "deleteTitle_one": "{{count}} Dokument löschen?",
+      "deleteTitle_other": "{{count}} Dokumente löschen?",
+      "deletedOf": "{{deleted}} von {{requested}} Dokumenten gelöscht",
+      "download": "Herunterladen",
+      "downloadFailed": "Die Datei konnte nicht heruntergeladen werden",
+      "emptyBody": "Alle Dokumente wurden importiert und gelesen.",
+      "emptyTitle": "Keine fehlgeschlagenen Dokumente",
+      "errorMessage": "Fehlermeldung",
+      "failedLabel": "Fehlgeschlagene Dokumente",
+      "failure": "Fehler",
+      "file": "Datei",
+      "filter": "Anzeigen",
+      "importEmpty": "Keine weiteren Importfehler.",
+      "importLead": "Dateien, die vor oder außerhalb der OCR fehlgeschlagen sind. Es sind nur Einträge: Öffnen Sie einen, um den Grund zu sehen.",
+      "importLoadFailed": "Importfehler konnten nicht geladen werden.",
+      "importTitle": "Weitere Importfehler",
+      "lastRetry": "Letzter Versuch",
+      "loadFailed": "Fehlgeschlagene Dokumente konnten nicht geladen werden.",
+      "markSeen": "Als gesehen markieren",
+      "noErrorMessage": "Es wurde keine Fehlermeldung aufgezeichnet.",
+      "noRetries": "noch keiner",
+      "notFound": "Das Dokument existiert nicht mehr.",
+      "ocrLead": "Dokumente, deren Text nicht gelesen werden konnte. Öffnen Sie eines für Details oder wählen Sie mehrere zum Wiederholen oder Löschen aus.",
+      "ocrResult": "OCR-Ergebnis",
+      "preview": "Datei",
+      "reason": {
+        "duplicate_content": "Doppelter Inhalt",
+        "file_corrupted": "Datei beschädigt",
+        "file_too_large": "Datei zu groß",
+        "low_ocr_confidence": "Niedrige OCR-Konfidenz",
+        "ocr_timeout": "OCR-Zeitüberschreitung",
+        "other": "Sonstiges",
+        "pdf_parsing_error": "PDF konnte nicht gelesen werden",
+        "unsupported_format": "Nicht unterstütztes Format"
+      },
+      "reasonCode": "Grundcode: {{code}}",
+      "reasonFilter": "Grund",
+      "recordOnly": "Dies ist ein Eintrag eines fehlgeschlagenen Imports; die Datei wurde nicht zur Bibliothek hinzugefügt.",
+      "retry": "Erneut versuchen",
+      "retryFailed": "OCR konnte nicht erneut gestartet werden",
+      "retryLanguages": "Mit Sprachen erneut versuchen",
+      "retryLanguagesHint": "Optional. Leer lassen, um Ihre Standard-OCR-Sprache zu verwenden.",
+      "retryOcr": "OCR erneut ausführen",
+      "retryOptions": "Erneut versuchen…",
+      "retryPartial": "Einige Dokumente wurden nicht eingereiht. Prüfen Sie sie und versuchen Sie es erneut.",
+      "retryQueued": "{{queued}} von {{matched}} Dokumenten eingereiht",
+      "retryStarted": "OCR-Wiederholung eingereiht",
+      "retryWait": "{{name}} · etwa {{minutes}} Min.",
+      "size": "Größe",
+      "source": "Quelle",
+      "stage": {
+        "ingestion": "Import",
+        "ocr": "OCR",
+        "processing": "Verarbeitung",
+        "storage": "Speicherung",
+        "sync": "Synchronisierung",
+        "validation": "Prüfung"
+      },
+      "stageFilter": "Phase",
+      "tags": "Tags: {{tags}}",
+      "type": "Typ",
+      "updated": "Aktualisiert",
+      "view": {
+        "cleanup": "Bereinigen",
+        "duplicates": "Duplikate",
+        "failed": "OCR fehlgeschlagen",
+        "lowConfidence": "Niedrige Konfidenz"
+      },
+      "words": "Wörter"
+    },
+    "bulkRetry": {
+      "advanced": "Erweitert",
+      "criteria": "Kriterien",
+      "errors": {
+        "execute": "Die Wiederholung konnte nicht gestartet werden",
+        "network": "Netzwerkfehler. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+        "none": "Keine Dokumente entsprechen diesen Kriterien.",
+        "noneQueued": "Es wurden keine Dokumente eingereiht, daher wird nichts erneut verarbeitet.",
+        "ocr": "Einige Dokumente können wegen Verarbeitungsproblemen nicht erneut verarbeitet werden.",
+        "permission": "Sie haben keine Berechtigung, Dokumente erneut zu verarbeiten.",
+        "preview": "Vorschau der Wiederholung nicht möglich",
+        "server": "Serverfehler. Versuchen Sie es später erneut.",
+        "session": "Ihre Sitzung ist abgelaufen. Laden Sie die Seite neu und melden Sie sich erneut an."
+      },
+      "execute_one": "{{count}} Dokument erneut verarbeiten",
+      "execute_other": "{{count}} Dokumente erneut verarbeiten",
+      "fileTypes": "Dateitypen",
+      "hours": "{{n}} Stunden",
+      "languages": "OCR-Sprachen",
+      "languagesHint": "Optional. Die ausgewählten Dokumente mit diesen Sprachen erneut lesen.",
+      "languagesSelectedOnly": "Die Sprachauswahl gilt nur für ausgewählte Dokumente.",
+      "limit": "Maximale Anzahl zu wiederholender Dokumente",
+      "limitHint": "Leer lassen für keine Begrenzung (1–1000).",
+      "matched": "Gefundene Dokumente",
+      "maxSize": "Maximale Dateigröße",
+      "maxSizeValue": "Bis {{size}}",
+      "minutes": "{{n}} Minuten",
+      "mode": "Wiederholungsmodus",
+      "modeAll": "Alle Dokumente mit fehlgeschlagener OCR erneut verarbeiten",
+      "modeFilter": "Dokumente nach Kriterien erneut verarbeiten",
+      "modeSelected": "Ausgewählte Dokumente erneut verarbeiten ({{count}} ausgewählt)",
+      "more": "und {{count}} weitere",
+      "preview": "Vorschau",
+      "previewResults": "Vorschauergebnis",
+      "priority": "Priorität (höher ist dringender)",
+      "priorityNotWithLanguages": "Die Prioritätsüberschreibung gilt nicht beim Wiederholen mit ausgewählten Sprachen; diese Wiederholungen nutzen die normale Priorität.",
+      "priorityOverride": "Verarbeitungspriorität überschreiben",
+      "reason": {
+        "corruption": "Beschädigte Datei",
+        "font": "Probleme mit der Schriftkodierung",
+        "lowConfidence": "Niedrige Konfidenz",
+        "memory": "Speicherlimit",
+        "noText": "Kein Text gefunden",
+        "timeout": "Zeitüberschreitung bei der Verarbeitung"
+      },
+      "reasons": "Fehlergründe",
+      "seconds": "{{n}} Sekunden",
+      "time": "Geschätzte Dauer",
+      "title": "OCR-Massenwiederholung"
+    },
+    "cleanup": {
+      "confirmDelete_one": "{{count}} Dokument mit fehlgeschlagener OCR löschen?",
+      "confirmDelete_other": "{{count}} Dokumente mit fehlgeschlagener OCR löschen?",
+      "confirmRetryAll": "OCR für alle fehlgeschlagenen Dokumente wiederholen?",
+      "deleteFailed": "Die fehlgeschlagenen Dokumente konnten nicht gelöscht werden",
+      "deleteFailedButton": "Fehlgeschlagene Dokumente löschen",
+      "deleted": "Fehlgeschlagene Dokumente gelöscht",
+      "failedBody": "Entfernt alle Dokumente, bei denen die OCR vollständig fehlgeschlagen ist, auch solche ohne Konfidenzwert. Zuerst die Vorschau prüfen.",
+      "failedTitle": "Dokumente mit fehlgeschlagener OCR löschen",
+      "preview": "Vorschau",
+      "previewFailed": "Vorschau der fehlgeschlagenen Dokumente nicht möglich",
+      "requeueButton": "Fehlgeschlagene Aufträge wiederholen",
+      "requeueTitle": "Nur fehlgeschlagene Aufträge wiederholen",
+      "retryAllBody": "Reiht die OCR für alle Dokumente mit fehlgeschlagener OCR erneut ein. Erfolgreich gelesene Dokumente bleiben unberührt. Bei vielen Fehlern kann das lange dauern.",
+      "retryAllButton": "Alle fehlgeschlagenen Dokumente wiederholen",
+      "retryAllFailed": "Die Dokumente konnten nicht erneut verarbeitet werden",
+      "retryAllNone": "Keine fehlgeschlagenen Dokumente zu wiederholen",
+      "retryAllQueued_one": "{{count}} Dokument eingereiht, etwa {{minutes}} Min.",
+      "retryAllQueued_other": "{{count}} Dokumente eingereiht, etwa {{minutes}} Min.",
+      "retryAllTitle": "OCR für alle fehlgeschlagenen Dokumente wiederholen"
+    },
+    "connections": {
+      "add": "Verbindung hinzufügen",
+      "addFirst": "Erste Verbindung hinzufügen",
+      "autoRefreshing": "Aktualisiert während der Synchronisierung",
+      "col": {
+        "files": "Dateien",
+        "lastSync": "Letzte Synchronisierung",
+        "name": "Name",
+        "next": "Nächste",
+        "status": "Status",
+        "type": "Typ"
+      },
+      "emptyBody": "Verbinden Sie einen WebDAV-Server, einen lokalen Ordner oder S3-Speicher, und Readur importiert neue Dateien selbstständig.",
+      "emptyTitle": "Noch keine Verbindungen",
+      "label": "Verbindungen",
+      "loadFailed": "Verbindungen konnten nicht geladen werden."
+    },
+    "detail": {
+      "alreadySyncing": "Diese Verbindung synchronisiert bereits.",
+      "auth": "Anmeldung",
+      "authFailed": "Die Quelle hat die Zugangsdaten abgelehnt.",
+      "cannotConnect": "Keine Verbindung zur Quelle. Prüfen Sie die Einstellungen.",
+      "connection": "Verbindung",
+      "counts": "Zahlen",
+      "deepScan": "Tiefenscan",
+      "deepScanFailed": "Der Tiefenscan konnte nicht gestartet werden",
+      "deepScanHint": "Der Tiefenscan ist nur für WebDAV-Verbindungen verfügbar; verwenden Sie stattdessen „Jetzt synchronisieren“.",
+      "deepScanStarted": "Tiefenscan gestartet",
+      "deepScanWebdavOnly": "Der Tiefenscan ist nur für WebDAV-Verbindungen verfügbar.",
+      "delete": "Löschen",
+      "deleteBody": "Dies kann nicht rückgängig gemacht werden. Die Verbindungseinstellungen und der gesamte Synchronisierungsverlauf werden endgültig entfernt.",
+      "deleteConfirm": "Verbindung löschen",
+      "deleteFailed": "Die Verbindung konnte nicht gelöscht werden",
+      "deleteTitle": "„{{name}}“ löschen?",
+      "deleteWhileSyncing": "Beenden Sie die Synchronisierung, bevor Sie diese Verbindung löschen.",
+      "deleted": "Diese Verbindung existiert nicht mehr.",
+      "deletedToast": "Verbindung gelöscht",
+      "disable": "Deaktivieren",
+      "disabled": "Verbindung deaktiviert",
+      "documents": "Dokumente",
+      "edit": "Bearbeiten",
+      "enable": "Aktivieren",
+      "enabled": "Verbindung aktiviert",
+      "errorsFailed": "Letzte Fehler konnten nicht geladen werden.",
+      "errorsLoading": "Letzte Fehler werden geladen…",
+      "every": "alle {{minutes}} Min.",
+      "extensions": "Dateitypen",
+      "failureCount_one": "{{count}} Fehler · zuletzt {{when}}",
+      "failureCount_other": "{{count}} Fehler · zuletzt {{when}}",
+      "folders": "Ordner",
+      "health": "Zustand prüfen",
+      "healthFailed": "Die Zustandsprüfung konnte nicht gestartet werden",
+      "healthLabel": "Zustand",
+      "healthStarted": "Zustandsprüfung gestartet",
+      "ignored": "Ignorierte Dateien",
+      "interval": "Intervall",
+      "lastError": "Letzte Synchronisierung fehlgeschlagen",
+      "lastSync": "Letzte Synchronisierung",
+      "location": "Ort",
+      "manual": "manuell",
+      "never": "nie",
+      "next": "Nächste",
+      "noErrors": "Keine aktuellen Fehler.",
+      "notSyncing": "Diese Verbindung synchronisiert gerade nicht.",
+      "ocrDone": "OCR fertig",
+      "passwordSet": "Passwort gesetzt",
+      "pending": "Ausstehend",
+      "recentErrors": "Letzte Fehler",
+      "schedule": "Zeitplan",
+      "scope": "Umfang",
+      "severity": "Schweregrad: {{severity}}",
+      "size": "Größe",
+      "stop": "Synchronisierung beenden",
+      "stopFailed": "Die Synchronisierung konnte nicht beendet werden",
+      "sync": "Jetzt synchronisieren",
+      "syncFailed": "Die Synchronisierung konnte nicht gestartet werden",
+      "syncStarted": "Synchronisierung gestartet",
+      "syncStopped": "Synchronisierung beendet",
+      "toggleFailed": "Die Verbindung konnte nicht geändert werden",
+      "healthFindings": "Gesundheitsprüfung"
+    },
+    "duplicates": {
+      "col": {
+        "actions": "Aktionen",
+        "added": "Hinzugefügt",
+        "group": "Gruppe",
+        "name": "Name",
+        "size": "Größe",
+        "type": "Typ"
+      },
+      "count_one": "{{count}} Gruppe identischer Dateien",
+      "count_other": "{{count}} Gruppen identischer Dateien",
+      "downloadFile": "{{name}} herunterladen",
+      "emptyBody": "Jede Datei in der Bibliothek hat einen eindeutigen Inhalt.",
+      "emptyTitle": "Keine Duplikate",
+      "label": "Doppelte Dokumente",
+      "lead": "Diese Dateien haben identischen Inhalt unter verschiedenen Namen. Öffnen Sie jede, um zu entscheiden, welche Sie behalten; der erste Upload einer Gruppe steht zuerst.",
+      "loadFailed": "Duplikate konnten nicht geladen werden.",
+      "original": "Ursprünglicher Name: {{name}}",
+      "view": "Ansehen",
+      "viewFile": "{{name}} ansehen"
+    },
+    "form": {
+      "add": "Hinzufügen",
+      "addTo": "Zu „{{label}}“ hinzufügen",
+      "create": "Verbindung hinzufügen",
+      "createTitle": "Verbindung hinzufügen",
+      "created": "Verbindung hinzugefügt",
+      "editTitle": "Verbindung bearbeiten",
+      "enabled": "Verbindung aktiviert",
+      "enabledHint": "Diese Verbindung beim Synchronisieren einbeziehen",
+      "errors": {
+        "duplicate": "„{{value}}“ ist bereits in der Liste",
+        "duplicateName": "Eine Verbindung mit diesem Namen existiert bereits.",
+        "folderRequired": "Fügen Sie mindestens einen Ordner hinzu",
+        "interval": "Geben Sie ganze Minuten zwischen {{min}} und {{max}} ein",
+        "required": "Erforderlich",
+        "summary": "Korrigieren Sie die markierten Felder vor dem Speichern.",
+        "url": "Geben Sie eine Serveradresse ein, z. B. cloud.example.com oder https://cloud.example.com"
+      },
+      "estimate": {
+        "byFolder": "Schätzung nach Ordner",
+        "done": "Schätzung fertig",
+        "estimatedTime": "Geschätzte Dauer",
+        "failed": "Der Durchlauf konnte nicht geschätzt werden",
+        "files": "Dateien",
+        "folder": "Ordner",
+        "hint": "Schätzen Sie, wie viele Dateien eine vollständige Synchronisierung verarbeiten würde und wie lange sie dauert.",
+        "results": "Schätzergebnis",
+        "run": "Durchlauf schätzen",
+        "running": "Wird geschätzt…",
+        "sizeMb": "Größe (MB)",
+        "supported": "Unterstützt",
+        "supportedFiles": "Unterstützte Dateien",
+        "time": "Zeit",
+        "title": "Durchlaufschätzung",
+        "totalFiles": "Dateien gesamt",
+        "totalSize": "Gesamtgröße"
+      },
+      "extensions": {
+        "hint": "Dateitypen, die synchronisiert und per OCR verarbeitet werden.",
+        "hintLocal": "Dateitypen, die überwacht und per OCR verarbeitet werden.",
+        "label": "Dateiendungen"
+      },
+      "folders": {
+        "local": "Zu überwachende Verzeichnisse",
+        "localHint": "Lokale Verzeichnisse zum Durchsuchen. Verwenden Sie absolute Pfade.",
+        "s3": "Zu überwachende Objektpräfixe",
+        "s3Hint": "Objektpräfixe (wie Ordner), die nach Dateien durchsucht werden.",
+        "title": "Was überwacht wird",
+        "webdav": "Zu überwachende Ordner",
+        "webdavHint": "Ordner, die nach Dateien durchsucht werden. Verwenden Sie absolute Pfade, die mit „/“ beginnen."
+      },
+      "local": {
+        "hint": "Readur überwacht Ordner auf dem Server, auf dem es läuft. Stellen Sie sicher, dass es die angegebenen Pfade lesen kann.",
+        "recursive": "Unterordner durchsuchen",
+        "recursiveHint": "Unterverzeichnisse rekursiv durchsuchen",
+        "symlinks": "Symbolischen Links folgen",
+        "symlinksHint": "Beim Durchsuchen von Verzeichnissen Symlinks folgen",
+        "title": "Lokaler Ordner"
+      },
+      "name": "Name",
+      "namePlaceholder": "Mein Dokumentenserver",
+      "preview": {
+        "bucketPrefix": "Bucket / Präfix",
+        "file": "Beispieldatei",
+        "folder": "Überwachter Ordner",
+        "server": "Server-URL",
+        "title": "Beispiel-URL der Synchronisierung",
+        "webdavPath": "WebDAV-Pfad"
+      },
+      "relativeWarning": "„{{value}}“ ist ein relativer Pfad. Absolute Pfade, die mit „/“ beginnen, werden empfohlen.",
+      "remove": "{{item}} entfernen",
+      "s3": {
+        "accessKey": "Zugriffsschlüssel-ID",
+        "addressing": "Adressierungsstil",
+        "addressingHint": "MinIO, RustFS und die meisten selbst gehosteten S3-Dienste benötigen Pfad-Stil. Die automatische Erkennung probiert beides.",
+        "auto": "Automatisch erkennen",
+        "bucket": "Bucket-Name",
+        "endpoint": "Endpunkt-URL (optional)",
+        "endpointHint": "Für AWS S3 leer lassen oder einen eigenen Endpunkt für MinIO und anderen S3-kompatiblen Speicher angeben.",
+        "hint": "Verbindung zu AWS S3, MinIO oder einem anderen S3-kompatiblen Dienst. Geben Sie für MinIO die Endpunkt-URL Ihres Servers an.",
+        "path": "Pfad-Stil (Endpunkt/Bucket/Schlüssel)",
+        "prefix": "Präfix für Objektschlüssel (optional)",
+        "prefixHint": "Nur Objektschlüssel durchsuchen, die mit diesem Präfix beginnen.",
+        "region": "Region",
+        "secretKey": "Geheimer Zugriffsschlüssel",
+        "title": "S3-kompatibler Speicher",
+        "vhost": "Virtuell gehostet (bucket.endpunkt/schlüssel)"
+      },
+      "saveChanges": "Änderungen speichern",
+      "saveFailed": "Die Verbindung konnte nicht gespeichert werden",
+      "saveFailedHint": "Prüfen Sie die Einstellungen und versuchen Sie es erneut.",
+      "saved": "Verbindung aktualisiert",
+      "schedule": {
+        "auto": "Automatische Synchronisierung",
+        "autoHint": "Dateien nach Zeitplan synchronisieren",
+        "autoHintLocal": "Nach Zeitplan nach neuen Dateien suchen",
+        "autoHintS3": "Nach Zeitplan nach neuen Objekten suchen",
+        "interval": "Synchronisierungsintervall (Minuten)",
+        "intervalHint": "Wie oft nach neuen Dateien gesucht wird ({{min}} Min. bis 24 Stunden)",
+        "title": "Zeitplan"
+      },
+      "test": {
+        "auth": "Anmeldung fehlgeschlagen. Prüfen Sie Benutzername und Passwort.",
+        "button": "Verbindung testen",
+        "config": "Einige Einstellungen sind ungültig. Prüfen Sie die Werte und versuchen Sie es erneut.",
+        "error": "Die Verbindung konnte nicht getestet werden",
+        "failed": "Verbindung fehlgeschlagen",
+        "ok": "Verbindung erfolgreich",
+        "path": "Ein Ordnerpfad ist ungültig oder nicht erreichbar.",
+        "timeout": "Zeitüberschreitung der Verbindung. Der Server ist möglicherweise langsam oder nicht erreichbar.",
+        "unreachable": "Der Server ist nicht erreichbar. Prüfen Sie die URL und Ihr Netzwerk."
+      },
+      "type": "Verbindungstyp",
+      "typeLocal": "Ordner auf dem Readur-Server",
+      "typeS3": "AWS S3, MinIO und anderer S3-kompatibler Speicher",
+      "typeS3Label": "S3-kompatibel",
+      "typeWebdav": "Nextcloud, ownCloud und andere WebDAV-Server",
+      "webdav": {
+        "generic": "Allgemeines WebDAV",
+        "genericHint": "Standard-WebDAV-Protokoll",
+        "nextcloud": "Für Nextcloud-Server optimiert",
+        "owncloud": "Für ownCloud-Server optimiert",
+        "password": "Passwort",
+        "serverType": "Servertyp",
+        "serverUrl": "Server-URL",
+        "title": "WebDAV-Server",
+        "username": "Benutzername"
+      },
+      "localAdminOnly": "Nur ein Administrator kann lokale Ordner hinzufügen.",
+      "localAdminOnlyHint": "Sie können es trotzdem versuchen: Der Server erlaubt möglicherweise bestimmte Ordner für alle."
+    },
+    "ignored": {
+      "allReasons": "Alle Gründe",
+      "allSources": "Alle Quellen",
+      "breadcrumbs": "Brotkrümelnavigation",
+      "clearSource": "Alle Quellen anzeigen",
+      "col": {
+        "actions": "Aktionen",
+        "ignored": "Ignoriert",
+        "name": "Name",
+        "reason": "Grund",
+        "size": "Größe",
+        "source": "Quelle"
+      },
+      "confirm": "Nicht mehr ignorieren",
+      "confirmBody": "Diese Dateien werden aus der Ignorierliste entfernt und bei der nächsten Synchronisierung ihrer Verbindung erneut importiert.",
+      "confirmMany": "{{count}} Dateien nicht mehr ignorieren?",
+      "confirmOne": "„{{name}}“ nicht mehr ignorieren?",
+      "emptyBody": "Jede von Ihren Verbindungen gefundene Datei wird importiert.",
+      "emptyTitle": "Nichts wird ignoriert",
+      "latest": "Zuletzt",
+      "loadFailed": "Ignorierte Dateien konnten nicht geladen werden.",
+      "noReason": "Kein Grund angegeben",
+      "reason": "Grund",
+      "removeFailed": "Die Ignorierliste konnte nicht aktualisiert werden",
+      "removed": "Aus der Ignorierliste entfernt",
+      "search": "Dateinamen durchsuchen",
+      "sourceType": "Quelltyp",
+      "summary": "Übersicht ignorierter Dateien",
+      "title": "Ignorierte Dateien",
+      "total": "Ignorierte Dateien",
+      "totalSize": "Gesamtgröße",
+      "unignore": "Nicht mehr ignorieren",
+      "unignoreFile": "{{name}} nicht mehr ignorieren",
+      "unignoreSelected": "Nicht mehr ignorieren"
+    },
+    "lowConfidence": {
+      "col": {
+        "added": "Hinzugefügt",
+        "confidence": "Konfidenz",
+        "name": "Name",
+        "size": "Größe",
+        "status": "Status"
+      },
+      "confirm": "Dokumente löschen",
+      "confirmTitle_one": "{{count}} Dokument unter {{threshold}} % löschen?",
+      "confirmTitle_other": "{{count}} Dokumente unter {{threshold}} % löschen?",
+      "delete": "Treffer löschen",
+      "deleteFailed": "Die Dokumente konnten nicht gelöscht werden",
+      "deleted": "Dokumente gelöscht",
+      "lead": "Finden Sie Dokumente, deren Texterkennungs-Konfidenz unter einem Schwellenwert liegt. Prüfen Sie die Treffer in der Vorschau, bevor Sie etwas löschen.",
+      "more": "und {{count}} weitere",
+      "none": "k. A.",
+      "preview": "Treffer anzeigen",
+      "previewFailed": "Vorschau der Dokumente mit niedriger Konfidenz nicht möglich",
+      "results": "Vorschauergebnis",
+      "stale": "Der Schwellenwert hat sich geändert. Zeigen Sie die Vorschau vor dem Löschen erneut an.",
+      "threshold": "Konfidenzschwelle"
+    },
+    "meta": {
+      "attention_one": "{{count}} erfordert Aufmerksamkeit",
+      "attention_other": "{{count}} erfordern Aufmerksamkeit",
+      "connections_one": "{{count}} Verbindung",
+      "connections_other": "{{count}} Verbindungen",
+      "processing": "{{count}} in Verarbeitung"
+    },
+    "notice": {
+      "danger": "Fehler:",
+      "info": "Hinweis:",
+      "ok": "Erledigt:"
+    },
+    "ocr": {
+      "pause": "OCR pausieren",
+      "pauseFailed": "OCR konnte nicht pausiert werden",
+      "paused": "OCR pausiert",
+      "resume": "OCR fortsetzen",
+      "resumeFailed": "OCR konnte nicht fortgesetzt werden",
+      "resumed": "OCR fortgesetzt"
+    },
+    "preview": {
+      "download": "Laden Sie die Datei herunter, um sie auf Ihrem Computer zu öffnen.",
+      "failed": "Die Datei konnte nicht für die Vorschau geladen werden.",
+      "loading": "Vorschau wird geladen",
+      "missing": "Die Datei wurde nicht gefunden oder gelöscht.",
+      "moved": "Die Originaldatei wurde möglicherweise gelöscht oder im Speicher verschoben.",
+      "unknownType": "unbekannt",
+      "unsupported": "Keine Vorschau für diesen Dateityp ({{type}})"
+    },
+    "recommend": {
+      "count_one": "{{count}} Dokument · {{pattern}}",
+      "count_other": "{{count}} Dokumente · {{pattern}}",
+      "criteria": "Kriterien",
+      "empty": "Derzeit keine Wiederholungsempfehlungen. Das bedeutet meist:",
+      "emptyPattern": "Kein Fehlermuster deutet darauf hin, dass eine Wiederholung gelingen würde",
+      "emptyRetried": "Fehlgeschlagene Dokumente wurden bereits mehrmals wiederholt",
+      "emptyTypes": "Keine Fehler einer Art, die bei Wiederholung meist gelingt",
+      "loadFailed": "Wiederholungsempfehlungen konnten nicht geladen werden",
+      "loading": "Suche nach Fehlermustern…",
+      "rateHigh": "{{pct}} % wahrscheinlich (hoch)",
+      "rateLow": "{{pct}} % wahrscheinlich (niedrig)",
+      "rateMedium": "{{pct}} % wahrscheinlich (mittel)",
+      "retry_one": "{{count}} Dokument erneut verarbeiten",
+      "retry_other": "{{count}} Dokumente erneut verarbeiten",
+      "retryFailed": "Die Wiederholung konnte nicht gestartet werden",
+      "title": "Wiederholungsempfehlungen",
+      "nothingQueued": "Es wurde nichts eingereiht",
+      "confirmBody": "Dies verarbeitet jedes fehlgeschlagene Dokument erneut, das zu „{{title}}“ passt, nicht nur {{name}}.",
+      "confirmTitle_other": "{{count}} Dokumente in der gesamten Bibliothek erneut verarbeiten?",
+      "confirmTitle_one": "1 Dokument in der gesamten Bibliothek erneut verarbeiten?"
+    },
+    "retry": {
+      "col": {
+        "previous": "Vorher",
+        "priority": "Priorität",
+        "queue": "Warteschlange",
+        "reason": "Grund",
+        "when": "Wann"
+      },
+      "empty": "Für dieses Dokument wurden keine Wiederholungsversuche gefunden.",
+      "legend": "Priorität: sehr hoch 15–20, hoch 12–14, mittel 8–11, niedrig 5–7, sehr niedrig 1–4.",
+      "loadFailed": "Der Wiederholungsverlauf konnte nicht geladen werden.",
+      "loading": "Wiederholungsverlauf wird geladen…",
+      "notQueued": "Nicht eingereiht",
+      "priority": {
+        "high": "Hoch",
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "veryHigh": "Sehr hoch",
+        "veryLow": "Sehr niedrig"
+      },
+      "queued": "Eingereiht · {{id}}",
+      "reason": {
+        "auto": "Automatische Wiederholung",
+        "bulkAll": "Massenwiederholung (alle)",
+        "bulkFiltered": "Massenwiederholung (gefiltert)",
+        "bulkSelected": "Massenwiederholung (ausgewählt)",
+        "manual": "Manuelle Wiederholung",
+        "scheduled": "Geplante Wiederholung"
+      },
+      "summary_one": "{{count}} Wiederholungsversuch",
+      "summary_other": "{{count}} Wiederholungsversuche",
+      "title": "OCR-Wiederholungsverlauf"
+    },
+    "sections": {
+      "attention": "Erfordert Aufmerksamkeit",
+      "connections": "Verbindungen",
+      "ignored": "Ignoriert",
+      "label": "Bereiche des Eingangs",
+      "upload": "Dokumente hinzufügen",
+      "watch": "Überwachter Ordner"
+    },
+    "sourceErrors": {
+      "severity": {
+        "Critical": "Kritisch",
+        "High": "Hoch",
+        "Low": "Niedrig",
+        "Medium": "Mittel"
+      },
+      "type": {
+        "Conflict": "Konflikt",
+        "DepthLimit": "Ordnertiefenlimit",
+        "InvalidCharacters": "Ungültige Zeichen",
+        "JsonParseError": "Unlesbare JSON-Antwort",
+        "NetworkError": "Netzwerkfehler",
+        "NotFound": "Nicht gefunden",
+        "PathTooLong": "Pfad zu lang",
+        "PermissionDenied": "Zugriff verweigert",
+        "QuotaExceeded": "Kontingent überschritten",
+        "RateLimited": "Anfragelimit erreicht",
+        "ServerError": "Serverfehler",
+        "SizeLimit": "Größenlimit",
+        "Timeout": "Zeitüberschreitung",
+        "TooManyItems": "Zu viele Elemente",
+        "Unknown": "Unbekannter Fehler",
+        "UnsupportedOperation": "Nicht unterstützter Vorgang",
+        "XmlParseError": "Unlesbare XML-Antwort"
+      }
+    },
+    "sourceType": {
+      "local_folder": "Lokaler Ordner",
+      "s3": "S3",
+      "unknown": "Unbekannt",
+      "webdav": "WebDAV"
+    },
+    "sync": {
+      "bytes": "Verarbeitete Daten",
+      "collapse": "Einklappen",
+      "connection": {
+        "connected": "Verbunden",
+        "connecting": "Verbinde…",
+        "disconnected": "Getrennt",
+        "failed": "Verbindung fehlgeschlagen",
+        "live": "Live",
+        "reconnect": "Neu verbinden",
+        "reconnecting": "Verbinde erneut…",
+        "unknown": "Unbekannt"
+      },
+      "currentDirectory": "Aktuelles Verzeichnis",
+      "currentFile": "Aktuelle Datei",
+      "directories": "Verzeichnisse",
+      "elapsed": "Vergangen",
+      "errorMany": "{{count}} Fehler",
+      "errorOne": "1 Fehler",
+      "eta": "Verbleibende Zeit",
+      "expand": "Ausklappen",
+      "files": "Dateien",
+      "filesProgress": "Dateifortschritt",
+      "filesValue": "{{processed}} / {{found}} Dateien ({{percent}} %)",
+      "phase": "Phase",
+      "rate": "Rate",
+      "rateValue": "{{rate}} Dateien/s",
+      "statsLabel": "Synchronisierungswerte",
+      "title": "Synchronisierungsfortschritt von {{name}}",
+      "waiting": "Warte auf Informationen zum Synchronisierungsfortschritt…",
+      "warningMany": "{{count}} Warnungen",
+      "warningOne": "1 Warnung"
+    },
+    "tag": {
+      "changed": "Geändert",
+      "new": "Neu"
+    },
+    "title": "Eingang",
+    "upload": {
+      "boardLabel": "Hochzuladende Dateien",
+      "chooseFiles": "Dateien auswählen",
+      "clearDone": "Fertige entfernen",
+      "col": {
+        "actions": "Aktionen",
+        "name": "Name",
+        "progress": "Fortschritt",
+        "size": "Größe",
+        "status": "Status"
+      },
+      "dropLabel": "Dateien zum Hinzufügen ablegen",
+      "dropNow": "Loslassen zum Hinzufügen",
+      "dropTitle": "Dateien zum Hinzufügen ablegen",
+      "emptyBody": "Legen Sie Dateien oben ab oder wählen Sie sie auf Ihrem Computer aus.",
+      "emptyTitle": "Noch keine Dateien",
+      "errors": {
+        "format": "Dieser Dateityp wird nicht unterstützt.",
+        "generic": "Hochladen fehlgeschlagen",
+        "network": "Netzwerkfehler. Prüfen Sie Ihre Verbindung.",
+        "permission": "Sie dürfen nichts hochladen.",
+        "processing": "Die Datei konnte nicht verarbeitet werden.",
+        "server": "Beim Server ist ein Problem aufgetreten. Versuchen Sie es erneut.",
+        "session": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an.",
+        "tooLarge": "Die Datei ist zu groß.",
+        "labels": "Hochgeladen, aber die Labels konnten nicht hinzugefügt werden."
+      },
+      "labelDuplicate": "Ein Label mit diesem Namen existiert bereits.",
+      "labelFailed": "Das Label konnte nicht erstellt werden.",
+      "labelInvalidColor": "Diese Farbe ist ungültig.",
+      "labelInvalidName": "Dieser Labelname ist nicht erlaubt.",
+      "labelMax": "Sie haben die maximale Anzahl an Labels erreicht.",
+      "labels": "Labels",
+      "labelsFailed": "Labels konnten nicht geladen werden. Sie können trotzdem ohne Labels hochladen.",
+      "labelsNetwork": "Labels konnten wegen eines Netzwerkfehlers nicht geladen werden.",
+      "labelsPermission": "Sie dürfen keine Labels sehen.",
+      "labelsPlaceholder": "Allen hochgeladenen Dateien Labels hinzufügen",
+      "languages": "OCR-Sprachen",
+      "maxSize": "max. {{size}} MB pro Datei",
+      "options": "Auf diese Uploads anwenden",
+      "progressOf": "Upload-Fortschritt für {{name}}",
+      "rejected": "Einige Dateien wurden nicht hinzugefügt",
+      "remove": "Entfernen",
+      "removeFile": "{{name}} entfernen",
+      "retryFile": "{{name}} erneut versuchen",
+      "uploadAll": "Alle hochladen ({{count}})",
+      "uploading": "Lade {{done}} von {{total}} hoch"
+    },
+    "watch": {
+      "avgWait": "Durchschnittliche Wartezeit",
+      "col": {
+        "detail": "Details",
+        "path": "Ordner",
+        "scope": "Umfang",
+        "status": "Status"
+      },
+      "create": "Meinen überwachten Ordner anlegen",
+      "createFailed": "Der überwachte Ordner konnte nicht angelegt werden",
+      "createHint": "Ihr persönlicher überwachter Ordner existiert noch nicht. Legen Sie ihn an, um dort Dateien abzulegen.",
+      "created": "Überwachter Ordner angelegt",
+      "exists": "Ordner vorhanden",
+      "failed": "Fehlgeschlagen",
+      "howTitle": "So funktioniert der überwachte Ordner",
+      "loading": "Wird geladen…",
+      "locations": "Überwachte Ordner",
+      "missing": "Ordner existiert noch nicht",
+      "nothingToRequeue": "Keine fehlgeschlagenen Aufträge zu wiederholen",
+      "oldest": "Am längsten wartend",
+      "pending": "Wartend",
+      "personal": "Ihrer",
+      "personalFailed": "Ihr überwachter Ordner konnte nicht geladen werden.",
+      "processing": "Verarbeitung",
+      "queue": "Verarbeitungswarteschlange",
+      "queueFailed": "Die Verarbeitungswarteschlange konnte nicht geladen werden.",
+      "requeue_one": "{{count}} fehlgeschlagenen Auftrag wiederholen",
+      "requeue_other": "{{count}} fehlgeschlagene Aufträge wiederholen",
+      "requeueBody": "Jeder fehlgeschlagene OCR-Auftrag kommt zurück in die Warteschlange.",
+      "requeueConfirm": "Aufträge wiederholen",
+      "requeueFailed": "Die fehlgeschlagenen Aufträge konnten nicht wiederholt werden",
+      "requeueTitle": "Fehlgeschlagene Aufträge wiederholen?",
+      "requeued_one": "{{count}} Auftrag erneut eingereiht",
+      "requeued_other": "{{count}} Aufträge erneut eingereiht",
+      "step": {
+        "dedupe": "Dateien, die bereits in der Bibliothek sind, werden übersprungen.",
+        "detect": "Neue Dateien im Ordner werden erkannt.",
+        "queue": "Sie kommt in die OCR-Warteschlange.",
+        "store": "Die Datei wird gespeichert.",
+        "validate": "Typ und Größe werden geprüft."
+      },
+      "strategy": "Strategie: {{strategy}} (Dateiereignisse plus regelmäßige Scans)",
+      "system": "Server",
+      "systemDetail": "alle {{seconds}} s · Dateien bis {{hours}} h alt",
+      "systemInfo": "Der Serverordner wird von Ihrer Administration festgelegt und gilt für alle.",
+      "today": "Heute erledigt",
+      "types": "Dateitypen"
+    },
+    "reason": {
+      "details": "Technische Details"
+    },
+    "connectionFailure": {
+      "auth": "Der Server hat die Anmeldung abgelehnt. Prüfen Sie Benutzername, Passwort oder Schlüssel.",
+      "notFound": "Ordner oder Bucket nicht gefunden. Prüfen Sie Adresse und Pfad.",
+      "tls": "Dem Sicherheitszertifikat des Servers wird nicht vertraut.",
+      "unreachable": "Der Server ist nicht erreichbar. Prüfen Sie die Adresse und ob er online ist.",
+      "server": "Der Server meldet einen Fehler. Versuchen Sie es in einigen Minuten erneut.",
+      "emptySyncs": "Die letzten Synchronisierungen fanden keine neuen Dateien. Prüfen Sie den Ordnerpfad."
+    },
+    "connectionAdvice": {
+      "connectivity": "Prüfen Sie Serveradresse, Anmeldung und Netzwerk.",
+      "noContent": "Falls neue Dateien erwartet werden, prüfen Sie den Ordnerpfad und ob der Server erreichbar ist."
+    }
+  },
+  "failure": {
+    "damaged": "Die Datei scheint beschädigt zu sein",
+    "docTools": ".doc-Dateien können nicht gelesen werden: antiword oder catdoc installieren",
+    "encrypted": "Das PDF ist passwortgeschützt",
+    "lowConfidence": "Der Text war zu undeutlich, um ihn zuverlässig zu lesen",
+    "memory": "Beim Lesen der Datei ging der Speicher aus",
+    "missing": "Die Datei fehlt im Speicher",
+    "ocr": "OCR fehlgeschlagen",
+    "permission": "Readur darf die Datei nicht öffnen",
+    "timeout": "Die OCR hat zu lange gedauert und wurde abgebrochen",
+    "tooLarge": "Die Datei ist zu groß",
+    "unsupported": "Dieser Dateityp wird nicht unterstützt",
+    "unknown": "Etwas ist schiefgelaufen"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Guten Morgen, {{name}}",
+      "morningPlain": "Guten Morgen",
+      "afternoon": "Guten Tag, {{name}}",
+      "afternoonPlain": "Guten Tag",
+      "evening": "Guten Abend, {{name}}",
+      "eveningPlain": "Guten Abend"
+    },
+    "week": {
+      "count": "{{formatted}} diese Woche eingegangen",
+      "none": "Diese Woche ist nichts eingegangen"
+    },
+    "kind": {
+      "upload": "Web- und API-Uploads",
+      "watch": "Überwachter Ordner",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Lokaler Ordner"
+    },
+    "lanes": {
+      "title": "Eingang",
+      "manage": "Quellen verwalten",
+      "error": "Eingänge konnten nicht geladen werden.",
+      "empty": "Noch keine Quellen",
+      "today": "heute",
+      "lastArrival": "Zuletzt eingegangen {{age}}",
+      "never": "Noch nichts",
+      "quiet": "Ruhig",
+      "idle": "Inaktiv",
+      "uploads": "Uploads",
+      "source": "Quelle",
+      "barsLabel": "{{total}} in den letzten {{days}} Tagen, die meisten am {{day}} ({{most}})",
+      "barsEmpty": "Nichts in den letzten {{days}} Tagen",
+      "more": "{{formatted}} weitere Quellen",
+      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen."
+    },
+    "pipeline": {
+      "title": "Verarbeitung",
+      "paused": "OCR ist pausiert",
+      "failed": "{{formatted}} fehlgeschlagen",
+      "failedError": "Fehlgeschlagene Dokumente konnten nicht geladen werden.",
+      "review": "Prüfen",
+      "showRecent": "Letzte Fehler anzeigen",
+      "rawError": "Fehlertext",
+      "doneToday": "{{done}} heute erledigt",
+      "oldest": "älteste wartet seit {{wait}}"
+    },
+    "recent": {
+      "title": "Gerade eingegangen"
+    },
+    "status": {
+      "label": "Überblick",
+      "idle": "nichts in der Warteschlange",
+      "busy": "{{processing}} in Verarbeitung · {{pending}} wartend",
+      "pending": "{{pending}} wartend"
     }
   }
 }

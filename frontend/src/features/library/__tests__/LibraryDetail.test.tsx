@@ -1,0 +1,401 @@
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { isLit, markLit } from '../../board/litStore';
+import { currentUrl, renderLibrary, settle } from './libraryTestUtils';
+import {
+  DOCS,
+  documentService,
+  hit,
+  labelService,
+  listResponse,
+  searchResponse,
+  searchService,
+  setupLibraryMocks,
+  sharedLinksService,
+} from './serviceMocks';
+
+vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
+vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
+vi.mock('../../../components/BulkRetryModal', async () => (await import('./serviceMocks')).retryModalModule());
+
+type User = ReturnType<typeof userEvent.setup>;
+
+// `hidden`: while the panel is open, the page behind it is hidden from assistive tech.
+const rowFor = (name: RegExp) =>
+  screen.getByRole('rowheader', { name, hidden: true }).closest('[role="row"]') as HTMLElement;
+const panel = () => screen.getByRole('dialog');
+
+async function openWithEnter(user: User, name: RegExp) {
+  await screen.findByRole('rowheader', { name });
+  const row = rowFor(name);
+  act(() => row.focus());
+  await user.keyboard('{Enter}');
+  return screen.findByRole('dialog');
+}
+
+describe('Library detail panel', () => {
+  beforeEach(() => {
+    setupLibraryMocks();
+  });
+
+  describe('opening and moving', () => {
+    test('Enter on a row opens the panel for that document', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      const dialog = await openWithEnter(user, /invoice-march/);
+      expect(within(dialog).getByRole('heading', { name: /invoice-march\.pdf/ })).toBeInTheDocument();
+      await settle();
+    });
+
+    test('clicking a row opens the panel without selecting it', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await user.click(await screen.findByRole('rowheader', { name: /lease\.pdf/ }));
+      expect(await screen.findByRole('heading', { name: /lease\.pdf/ })).toBeInTheDocument();
+      expect(screen.queryByRole('toolbar', { name: 'Bulk actions' })).not.toBeInTheDocument();
+      await settle();
+    });
+
+    test('↓ and ↑ move to the next and previous document', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      await user.keyboard('{ArrowDown}');
+      expect(within(panel()).getByRole('heading', { name: /lease\.pdf/ })).toBeInTheDocument();
+      await user.keyboard('{ArrowDown}');
+      expect(within(panel()).getByRole('heading', { name: /photo\.png/ })).toBeInTheDocument();
+      await user.keyboard('{ArrowUp}');
+      expect(within(panel()).getByRole('heading', { name: /lease\.pdf/ })).toBeInTheDocument();
+      await settle();
+    });
+
+    test('the arrows stop at the ends of the page', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      await user.keyboard('{ArrowUp}');
+      expect(within(panel()).getByRole('heading', { name: /invoice-march/ })).toBeInTheDocument();
+      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+      expect(within(panel()).getByRole('heading', { name: /photo\.png/ })).toBeInTheDocument();
+      await settle();
+    });
+
+    test('Escape closes the panel and returns focus to the row', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(rowFor(/lease\.pdf/)).toHaveFocus());
+    });
+  });
+
+  describe('content', () => {
+    test('shows the document facts as one line, leaving out what is unknown', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      const facts = await within(panel()).findByRole('group', { name: 'Document facts' });
+      await waitFor(() => expect(within(facts).getByText('2 pages')).toBeInTheDocument());
+      const parts = Array.from(facts.children).map((c) => c.textContent);
+      expect(parts[0]).toBe('PDF');
+      expect(parts).toContain('2.0 KB');
+      expect(parts).toContain('Upload');
+      expect(parts).toContain('ENG');
+      expect(parts).toContain('OCR 91%');
+      expect(parts.some((p) => /^Added .*2026/.test(p ?? ''))).toBe(true);
+      expect(parts).not.toContain('—');
+    });
+
+    test('the title is the filename in its real case, with the full name as a tooltip', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      const heading = within(panel()).getByRole('heading', { name: 'invoice-march.pdf' });
+      expect(heading.querySelector('[title]')).toHaveAttribute('title', 'invoice-march.pdf');
+    });
+
+    test('Open is the primary action and Delete sits apart as a danger action', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      const buttons = within(panel()).getAllByRole('button').map((b) => b.textContent?.trim());
+      const order = ['Open', 'Download', 'Share', 'Delete'].map((n) => buttons.indexOf(n));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    });
+
+    test('shows the OCR status as a pill beside the facts, not a confidence yet', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /photo\.png/);
+      const facts = await within(panel()).findByRole('group', { name: 'Document facts' });
+      expect((facts.parentElement as HTMLElement).textContent).toMatch(/OCR 3\/12/);
+      expect(within(facts).queryByText(/^OCR \d+%$/)).not.toBeInTheDocument();
+      await settle();
+    });
+
+    test('shows the start of the OCR text', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      expect(await within(panel()).findByText(/Total due: 120 EUR/)).toBeInTheDocument();
+      expect(documentService.getOcrText).toHaveBeenCalledWith('d1');
+    });
+
+    test('marks search matches in the OCR text (quick look from Search)', async () => {
+      const user = userEvent.setup();
+      searchService.enhancedSearch.mockResolvedValue(searchResponse([hit(DOCS[0], 'Invoice for March', [[0, 7]])]));
+      renderLibrary('/search?q=total');
+      await user.click(await screen.findByRole('button', { name: /quick look at invoice-march/i }));
+      await within(panel()).findByText(/120 EUR/);
+      const marks = Array.from(panel().querySelectorAll('mark')).map((m) => m.textContent);
+      expect(marks).toEqual(['Total']);
+    });
+
+    test('says so when there is no text yet', async () => {
+      const user = userEvent.setup();
+      documentService.getOcrText.mockResolvedValue({ data: { id: 'd3', ocr_text: null, has_ocr_text: false } });
+      renderLibrary();
+      await openWithEnter(user, /photo\.png/);
+      expect(await within(panel()).findByText('No text has been read from this document yet.')).toBeInTheDocument();
+    });
+
+    test('only fetches the text once per document', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      await within(panel()).findByText(/120 EUR/);
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{ArrowUp}');
+      await within(panel()).findByText(/120 EUR/);
+      expect(documentService.getOcrText.mock.calls.filter(([id]) => id === 'd1')).toHaveLength(1);
+    });
+  });
+
+  describe('labels', () => {
+    test('editing labels saves at once and confirms', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('combobox', { name: 'Labels' }));
+      await user.click(await screen.findByRole('option', { name: /tax/i }));
+      await waitFor(() => expect(labelService.setDocumentLabels).toHaveBeenCalledWith('d2', ['l-tax']));
+      expect(await screen.findByText('Labels saved')).toBeInTheDocument();
+      expect(within(rowFor(/lease\.pdf/)).getByText('Tax')).toBeInTheDocument();
+    });
+
+    test('removing a label saves the rest', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      await user.click(within(panel()).getByRole('button', { name: 'Remove Home' }));
+      await waitFor(() => expect(labelService.setDocumentLabels).toHaveBeenCalledWith('d1', ['l-tax', 'l-work']));
+      await settle();
+    });
+
+    test('a late failure of an older save does not undo a newer one', async () => {
+      const user = userEvent.setup();
+      let rejectFirst!: (e: Error) => void;
+      labelService.setDocumentLabels
+        .mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)))
+        .mockResolvedValueOnce({ data: {} });
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      const combo = within(panel()).getByRole('combobox', { name: 'Labels' });
+      await user.click(combo);
+      await user.click(await screen.findByRole('option', { name: /tax/i }));
+      await user.click(combo);
+      await user.click(await screen.findByRole('option', { name: /work/i }));
+      await waitFor(() => expect(labelService.setDocumentLabels).toHaveBeenLastCalledWith('d2', ['l-tax', 'l-work']));
+      expect(await screen.findByText('Labels saved')).toBeInTheDocument();
+      await act(async () => rejectFirst(new Error('late')));
+      expect(await screen.findByText('Could not save labels')).toBeInTheDocument();
+      const row = rowFor(/lease\.pdf/);
+      expect(within(row).getByText('Tax')).toBeInTheDocument();
+      expect(within(row).getByText('Work')).toBeInTheDocument();
+    });
+
+    test('a failed save puts the labels back and says so', async () => {
+      const user = userEvent.setup();
+      labelService.setDocumentLabels.mockRejectedValue(new Error('nope'));
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('combobox', { name: 'Labels' }));
+      await user.click(await screen.findByRole('option', { name: /tax/i }));
+      expect(await screen.findByText('Could not save labels')).toBeInTheDocument();
+      expect(within(rowFor(/lease\.pdf/)).queryByText('Tax')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('actions', () => {
+    test('Open goes to the document page', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Open' }));
+      expect(currentUrl()).toBe('/documents/d2');
+    });
+
+    test('Download downloads the file under its name', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Download' }));
+      expect(documentService.downloadFile).toHaveBeenCalledWith('d2', 'lease.pdf');
+      await settle();
+    });
+
+    test('Retry OCR is offered only for failed documents', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      expect(within(panel()).queryByRole('button', { name: 'Retry OCR' })).not.toBeInTheDocument();
+      await user.keyboard('{ArrowDown}');
+      await user.click(within(panel()).getByRole('button', { name: 'Retry OCR' }));
+      expect(documentService.retryOcr).toHaveBeenCalledWith('d2');
+      expect(await screen.findByText('Text recognition queued again')).toBeInTheDocument();
+    });
+
+    test('Retry OCR reloads the text instead of showing the cached copy', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await within(panel()).findByText(/120 EUR/);
+      const before = documentService.getOcrText.mock.calls.filter(([id]) => id === 'd2').length;
+      await user.click(within(panel()).getByRole('button', { name: 'Retry OCR' }));
+      await waitFor(() =>
+        expect(documentService.getOcrText.mock.calls.filter(([id]) => id === 'd2').length).toBe(before + 1),
+      );
+      await settle();
+    });
+
+    test('Share opens the sharing dialog for the document', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Share' }));
+      expect(await screen.findByRole('dialog', { name: 'Share lease.pdf' })).toBeInTheDocument();
+      await waitFor(() => expect(sharedLinksService.listByDocument).toHaveBeenCalledWith('d2'));
+      await settle();
+    });
+
+    test('Delete asks first and cancelling keeps the document', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      const confirm = await screen.findByRole('alertdialog', { name: 'Delete this document?' });
+      expect(within(confirm).getByText(/“lease\.pdf”/)).toBeInTheDocument();
+      await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+      expect(documentService.delete).not.toHaveBeenCalled();
+      await settle();
+    });
+
+    test('confirming Delete removes the document and closes the panel', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      const confirm = await screen.findByRole('alertdialog');
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+      expect(documentService.delete).toHaveBeenCalledWith('d2');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(documentService.listFiltered.mock.calls.length).toBeGreaterThan(1);
+      await settle();
+    });
+    test('the delete confirmation cannot be dismissed while the delete is in flight', async () => {
+      let finish!: (v: unknown) => void;
+      documentService.delete.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      const confirm = await screen.findByRole('alertdialog', { name: 'Delete this document?' });
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+      expect(documentService.delete).toHaveBeenCalledWith('d2');
+      expect(within(confirm).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      await user.keyboard('{Escape}');
+      expect(screen.getByRole('alertdialog', { name: 'Delete this document?' })).toBeInTheDocument();
+      await act(async () => finish({ data: {} }));
+      expect(await screen.findByText('Document deleted')).toBeInTheDocument();
+      await settle();
+    });
+  });
+
+  describe('deleted documents', () => {
+    test('bulk-deleting the open document closes the panel', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await screen.findByRole('rowheader', { name: /lease\.pdf/ });
+      await user.click(within(rowFor(/lease\.pdf/)).getByRole('checkbox'));
+      await openWithEnter(user, /lease\.pdf/);
+      // The bar sits behind the modal panel; press it without a pointer (as assistive tech can).
+      const bar = screen.getByRole('toolbar', { name: 'Bulk actions', hidden: true });
+      fireEvent.click(within(bar).getByRole('button', { name: 'Delete', hidden: true }));
+      const confirm = await screen.findByRole('alertdialog');
+      documentService.listFiltered.mockResolvedValue(listResponse([DOCS[0], DOCS[2]], 2));
+      await user.click(within(confirm).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(documentService.bulkDelete).toHaveBeenCalledWith(['d2']));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await settle();
+    });
+
+    test('the panel closes when its document drops out of the results', async () => {
+      const user = userEvent.setup();
+      renderLibrary();
+      await openWithEnter(user, /lease\.pdf/);
+      documentService.listFiltered.mockResolvedValue(listResponse([DOCS[0]], 1));
+      await user.click(within(panel()).getByRole('button', { name: 'Delete' }));
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole('rowheader', { name: /lease\.pdf/ })).not.toBeInTheDocument());
+      await settle();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('changed rows', () => {
+    test('a changed row shows its tag and loses it once opened', async () => {
+      const user = userEvent.setup();
+      markLit('document', 'd2', 'new');
+      markLit('document', 'd3', 'changed');
+      renderLibrary();
+      await screen.findByRole('rowheader', { name: /lease\.pdf/ });
+      expect(rowFor(/lease\.pdf/)).toHaveAttribute('data-changed', 'true');
+      expect(within(rowFor(/lease\.pdf/)).getByText('New')).toBeInTheDocument();
+      expect(within(rowFor(/photo\.png/)).getByText('Changed')).toBeInTheDocument();
+      expect(rowFor(/invoice-march/)).not.toHaveAttribute('data-changed');
+
+      await openWithEnter(user, /lease\.pdf/);
+      expect(isLit('document', 'd2')).toBe(false);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(within(rowFor(/lease\.pdf/)).queryByText('New')).not.toBeInTheDocument());
+      expect(rowFor(/lease\.pdf/)).not.toHaveAttribute('data-changed');
+      expect(within(rowFor(/photo\.png/)).getByText('Changed')).toBeInTheDocument();
+    });
+
+    test('"Mark all seen" appears with lit rows and clears them', async () => {
+      const user = userEvent.setup();
+      markLit('document', 'd2', 'new');
+      markLit('document', 'd3', 'changed');
+      renderLibrary();
+      await screen.findByRole('rowheader', { name: /lease\.pdf/ });
+      await user.click(screen.getByRole('button', { name: 'Mark all seen' }));
+      expect(isLit('document', 'd2')).toBe(false);
+      expect(isLit('document', 'd3')).toBe(false);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark all seen' })).not.toBeInTheDocument());
+    });
+
+    test('moving to a row with the arrows also clears its tag', async () => {
+      const user = userEvent.setup();
+      markLit('document', 'd2', 'changed');
+      renderLibrary();
+      await openWithEnter(user, /invoice-march/);
+      await user.keyboard('{ArrowDown}');
+      expect(isLit('document', 'd2')).toBe(false);
+      await settle();
+    });
+  });
+});

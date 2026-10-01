@@ -5,7 +5,7 @@ use crate::models::S3SourceConfig;
 
 mod parsing;
 use parsing::{env_flag, env_list, read_jwt_setting, normalize_cors_origin};
-pub use parsing::{validate_jwt_secret, MIN_JWT_SECRET_BYTES};
+pub use parsing::{validate_jwt_secret, DEFAULT_FILE_STABILITY_CHECK_MS, DEFAULT_WATCH_INTERVAL_SECONDS, MIN_JWT_SECRET_BYTES};
 
 /// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
 fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -> bool {

@@ -1,0 +1,84 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.field[data-required] .label::after {
+  content: " *" / "";
+}
+
+.control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--s-3);
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+
+textarea.control {
+  padding-block: var(--s-2);
+  min-height: 80px;
+  resize: vertical;
+}
+
+.control::placeholder {
+  color: var(--fg-meta);
+}
+
+.control:hover {
+  border-color: var(--fg-meta);
+}
+
+.control:focus-visible,
+.control[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.control[data-focused] {
+  border-color: var(--accent);
+}
+
+.control[data-invalid] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.control[data-disabled],
+.control:disabled {
+  color: var(--fg-meta);
+  background: var(--surface-2);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.field[data-disabled] .label {
+  color: var(--fg-meta);
+}

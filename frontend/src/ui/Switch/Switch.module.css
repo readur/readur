@@ -1,0 +1,74 @@
+.switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-height: 32px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.track {
+  flex: none;
+  box-sizing: border-box;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin-top: 2px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--line-strong);
+  border-radius: 50%;
+  transition: transform var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+
+.switch[data-selected] .track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch[data-selected] .thumb {
+  transform: translateX(16px);
+  background: var(--accent-fg);
+}
+
+.switch[data-focus-visible] .track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch[data-disabled] {
+  color: var(--fg-meta);
+  cursor: not-allowed;
+}
+
+.switch[data-disabled] .track {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+
+.switch[data-disabled] .thumb {
+  background: var(--line);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}

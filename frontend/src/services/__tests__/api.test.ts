@@ -24,8 +24,8 @@ describe('documentService', () => {
   });
 
   describe('getOcrText', () => {
-    const mockOcrResponse: OcrResponse = {
-      document_id: 'doc-123',
+    const mockOcrResponse = {
+      id: 'doc-123',
       filename: 'test_document.pdf',
       has_ocr_text: true,
       ocr_text: 'This is extracted OCR text content.',
@@ -35,7 +35,7 @@ describe('documentService', () => {
       ocr_status: 'completed',
       ocr_error: null,
       ocr_completed_at: '2024-01-01T00:05:00Z',
-    };
+    } as OcrResponse;
 
     it('should fetch OCR text for a document', async () => {
       const mockResponse = {
@@ -51,7 +51,7 @@ describe('documentService', () => {
       const result = await documentService.getOcrText('doc-123');
 
       expect(result.data).toEqual(mockOcrResponse);
-      expect(result.data.document_id).toBe('doc-123');
+      expect(result.data.id).toBe('doc-123');
       expect(result.data.has_ocr_text).toBe(true);
       expect(result.data.ocr_text).toBe('This is extracted OCR text content.');
       expect(result.data.ocr_confidence).toBe(95.5);
@@ -59,8 +59,8 @@ describe('documentService', () => {
     });
 
     it('should handle OCR response without text', async () => {
-      const mockEmptyOcrResponse: OcrResponse = {
-        document_id: 'doc-456',
+      const mockEmptyOcrResponse = {
+        id: 'doc-456',
         filename: 'text_file.txt',
         has_ocr_text: false,
         ocr_text: null,
@@ -70,7 +70,7 @@ describe('documentService', () => {
         ocr_status: 'pending',
         ocr_error: null,
         ocr_completed_at: null,
-      };
+      } as OcrResponse;
 
       const mockResponse = {
         data: mockEmptyOcrResponse,
@@ -91,8 +91,8 @@ describe('documentService', () => {
     });
 
     it('should handle OCR error response', async () => {
-      const mockErrorOcrResponse: OcrResponse = {
-        document_id: 'doc-789',
+      const mockErrorOcrResponse = {
+        id: 'doc-789',
         filename: 'corrupted_file.pdf',
         has_ocr_text: false,
         ocr_text: null,
@@ -102,7 +102,7 @@ describe('documentService', () => {
         ocr_status: 'failed',
         ocr_error: 'Failed to process document: corrupted file format',
         ocr_completed_at: '2024-01-01T00:05:00Z',
-      };
+      } as OcrResponse;
 
       const mockResponse = {
         data: mockErrorOcrResponse,
@@ -168,7 +168,7 @@ describe('documentService', () => {
   });
 
   describe('list', () => {
-    const mockDocuments: Document[] = [
+    const mockDocuments = [
       {
         id: 'doc-1',
         filename: 'document1.pdf',
@@ -197,7 +197,7 @@ describe('documentService', () => {
         ocr_processing_time_ms: undefined,
         ocr_status: 'pending',
       },
-    ];
+    ] as unknown as Document[];
 
     it('should fetch document list with OCR metadata', async () => {
       const mockResponse = {
@@ -223,7 +223,7 @@ describe('documentService', () => {
   describe('upload', () => {
     it('should upload file with multipart form data', async () => {
       const mockFile = new File(['content'], 'test.pdf', { type: 'application/pdf' });
-      const mockUploadResponse: Document = {
+      const mockUploadResponse = {
         id: 'doc-new',
         filename: 'test.pdf',
         original_filename: 'test.pdf',
@@ -233,7 +233,7 @@ describe('documentService', () => {
         created_at: '2024-01-01T00:00:00Z',
         has_ocr_text: false,
         ocr_status: 'pending',
-      };
+      } as Document;
 
       mockDocumentService.upload.mockResolvedValue({ data: mockUploadResponse });
 
@@ -259,8 +259,8 @@ describe('documentService', () => {
 
 describe('OcrResponse interface', () => {
   it('should have correct type structure', () => {
-    const ocrResponse: OcrResponse = {
-      document_id: 'doc-123',
+    const ocrResponse = {
+      id: 'doc-123',
       filename: 'test.pdf',
       has_ocr_text: true,
       ocr_text: 'Sample text',
@@ -270,10 +270,10 @@ describe('OcrResponse interface', () => {
       ocr_status: 'completed',
       ocr_error: null,
       ocr_completed_at: '2024-01-01T00:00:00Z',
-    };
+    } as OcrResponse;
 
     // Type assertions to ensure correct types
-    expect(typeof ocrResponse.document_id).toBe('string');
+    expect(typeof ocrResponse.id).toBe('string');
     expect(typeof ocrResponse.filename).toBe('string');
     expect(typeof ocrResponse.has_ocr_text).toBe('boolean');
     expect(typeof ocrResponse.ocr_text).toBe('string');
@@ -286,8 +286,8 @@ describe('OcrResponse interface', () => {
   });
 
   it('should allow optional/null fields', () => {
-    const ocrResponseMinimal: OcrResponse = {
-      document_id: 'doc-456',
+    const ocrResponseMinimal = {
+      id: 'doc-456',
       filename: 'text.txt',
       has_ocr_text: false,
       ocr_text: null,
@@ -297,7 +297,7 @@ describe('OcrResponse interface', () => {
       ocr_status: 'pending',
       ocr_error: undefined,
       ocr_completed_at: undefined,
-    };
+    } as OcrResponse;
 
     expect(ocrResponseMinimal.has_ocr_text).toBe(false);
     expect(ocrResponseMinimal.ocr_text).toBeNull();
@@ -535,7 +535,7 @@ describe('documentService.getFailedOcrDocuments', () => {
     expect(mockDocumentService.getFailedOcrDocuments).toHaveBeenCalledWith(50, 0);
     expect(result.data).toEqual(mockFailedOcrResponse);
     expect(result.data.documents).toHaveLength(2);
-    expect(result.data.documents[0].failure_stage).toBe('ocr');
+    expect((result.data.documents[0] as { failure_stage?: string }).failure_stage).toBe('ocr');
     expect(result.data.pagination.total).toBe(2);
   });
 
@@ -647,7 +647,7 @@ describe('documentService.getFailedDocuments', () => {
 
     expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr');
     expect(result.data.documents).toHaveLength(1);
-    expect(result.data.documents[0].failure_stage).toBe('ocr');
+    expect((result.data.documents[0] as { failure_stage?: string }).failure_stage).toBe('ocr');
   });
 
   it('should filter by reason parameter', async () => {
@@ -681,7 +681,7 @@ describe('documentService.getFailedDocuments', () => {
 
     expect(mockDocumentService.getFailedDocuments).toHaveBeenCalledWith(25, 0, 'ocr', 'low_ocr_confidence');
     expect(result.data.documents).toHaveLength(1);
-    expect(result.data.documents[0].failure_stage).toBe('ocr');
+    expect((result.data.documents[0] as { failure_stage?: string }).failure_stage).toBe('ocr');
     expect(result.data.documents[0].failure_reason).toBe('low_ocr_confidence');
   });
 

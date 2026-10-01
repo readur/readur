@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use ts_rs::TS;
 
 /// A personal API key for programmatic authentication.
 ///
@@ -11,12 +12,14 @@ use uuid::Uuid;
 /// string and is what the auth extractor compares against on each request.
 /// `key_prefix` is the first 12 characters of the plaintext (`readur_pat_X`),
 /// stored separately so the UI can identify keys without exposing them.
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct ApiKey {
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
     #[serde(skip_serializing)]
+    #[ts(skip)]
     pub key_hash: String,
     pub key_prefix: String,
     pub expires_at: Option<DateTime<Utc>>,
@@ -37,14 +40,16 @@ impl ApiKey {
 
 /// Payload for creating a new API key. `expires_in_days` is validated server-side
 /// to fall within `1..=365`. `None` means "no expiration".
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateApiKeyRequest {
     pub name: String,
     pub expires_in_days: Option<u32>,
 }
 
 /// Metadata-only view of an API key. Never contains the plaintext or hash.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct ApiKeyResponse {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -77,7 +82,8 @@ impl From<ApiKey> for ApiKeyResponse {
 /// Response body returned only from the create endpoint. `plaintext` is the
 /// full `readur_pat_<...>` value and is the single chance the caller has to
 /// capture it — the server does not retain it.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct CreateApiKeyResponse {
     pub api_key: ApiKeyResponse,
     pub plaintext: String,

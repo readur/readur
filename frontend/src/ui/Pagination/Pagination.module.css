@@ -1,0 +1,43 @@
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-5);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.readout {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.size {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.sizeLabel {
+  font-size: var(--fs-md);
+  color: var(--fg-meta);
+}
+
+.sizeSelect {
+  min-width: 80px;
+}
+
+.sizeSelect .trigger {
+  min-height: 32px;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+}

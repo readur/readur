@@ -1,0 +1,15 @@
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--new-fg);
+  background: var(--new);
+  border-radius: var(--radius-pill);
+}

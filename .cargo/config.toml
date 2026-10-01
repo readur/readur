@@ -6,3 +6,8 @@
 # Environment variables for test execution
 RUST_TEST_THREADS = "1"
 READUR_TEST_MODE = "true"
+# ts-rs: `cargo test export_bindings` writes the frontend API types here.
+# Regenerate with scripts/generate-ts-bindings.sh.
+TS_RS_EXPORT_DIR = { value = "frontend/src/types/generated", relative = true }
+# i64/u64 serialize as JSON numbers, so emit `number` instead of `bigint`.
+TS_RS_LARGE_INT = "number"

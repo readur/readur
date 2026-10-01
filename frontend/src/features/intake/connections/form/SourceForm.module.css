@@ -1,0 +1,200 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin: 0;
+  padding: var(--s-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.legend {
+  font-family: var(--font-ui);
+  padding: 0 0 var(--s-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+}
+
+@media (max-width: 719px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.listField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.addRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Align the Add button with the input, below the field label. */
+.addButton {
+  margin-top: calc(var(--fs-sm) * 1.45 + var(--s-1));
+}
+
+.numberInput {
+  max-width: 12ch;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Radio cards */
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.choiceOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-2);
+}
+
+.choiceOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  outline: none;
+}
+
+.choiceOption[data-hovered] {
+  border-color: var(--accent);
+}
+
+.choiceOption[data-selected] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choiceOption[data-focus-visible] {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.choiceMark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.choiceOption[data-selected] .choiceMark {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choiceLabel {
+  font-weight: 600;
+}
+
+.choiceDescription {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+/* Sync URL preview: parts are told apart by weight and decoration as well as the legend. */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.previewTitle {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--fg-meta);
+}
+
+.previewUrl {
+  display: block;
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.previewPart[data-part='server'] {
+  font-weight: 600;
+}
+
+.previewPart[data-part='path'] {
+  font-style: italic;
+}
+
+.previewPart[data-part='folder'] {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.previewPart[data-part='file'] {
+  color: var(--fg-meta);
+}
+
+.previewLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}

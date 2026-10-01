@@ -178,3 +178,27 @@ mod security_setting_tests {
         }
     }
 }
+
+mod watch_settings_tests {
+    use crate::config::*;
+
+    #[test]
+    fn effective_watch_settings_fall_back_to_the_watcher_defaults() {
+        let mut config = crate::test_utils::TestConfigBuilder::default().build(String::new());
+        config.watch_interval_seconds = None;
+        config.file_stability_check_ms = None;
+        assert_eq!(
+            config.effective_watch_interval_seconds(),
+            DEFAULT_WATCH_INTERVAL_SECONDS
+        );
+        assert_eq!(
+            config.effective_file_stability_check_ms(),
+            DEFAULT_FILE_STABILITY_CHECK_MS
+        );
+
+        config.watch_interval_seconds = Some(5);
+        config.file_stability_check_ms = Some(250);
+        assert_eq!(config.effective_watch_interval_seconds(), 5);
+        assert_eq!(config.effective_file_stability_check_ms(), 250);
+    }
+}

@@ -7,6 +7,7 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -14,7 +15,8 @@ use crate::{
     AppState,
 };
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, TS)]
+#[ts(export, rename = "NotificationPaginationQuery", optional_fields)]
 struct PaginationQuery {
     limit: Option<i64>,
     offset: Option<i64>,

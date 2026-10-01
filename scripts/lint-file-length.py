@@ -125,24 +125,17 @@ MIN_SCANNED = 300
 # raise a number to land a change -- that is the exact regression this blocks.
 # Regenerate with `mise run lines-baseline` (it warns about any raised entry).
 BASELINE: dict[str, int] = {
-    "frontend/src/pages/SourcesPage.tsx": 2692,
     "tests/integration_documents_database_tests.rs": 2702,
     "src/services/webdav/service.rs": 2609,
-    "frontend/src/pages/DocumentManagementPage.tsx": 2458,
-    "src/ocr/enhanced.rs": 1952,
-    "frontend/src/pages/SettingsPage.tsx": 1894,
+    "src/ocr/enhanced.rs": 1941,
     "tests/webdav_stress_tests.rs": 1879,
-    "src/test_utils.rs": 1774,
+    "src/test_utils.rs": 1773,
     "tests/integration_file_processing_pipeline_tests.rs": 1687,
     "tests/integration_source_sync_cancellation_workflow_tests.rs": 1531,
-    "frontend/src/pages/SearchPage.tsx": 1528,
     "src/ocr/xml_extractor.rs": 1429,
     "src/ocr/queue.rs": 1305,
-    "frontend/src/services/api.ts": 1226,
     "src/scheduling/source_scheduler.rs": 1153,
     "src/config.rs": 1044,
-    "frontend/src/pages/DocumentsPage.tsx": 1112,
-    "frontend/src/pages/DebugPage.tsx": 1078,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
 }
 

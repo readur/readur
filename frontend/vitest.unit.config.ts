@@ -16,8 +16,28 @@ export default defineConfig({
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',
       '**/e2e/**',
+      '**/*.e2e.test.{js,jsx,ts,tsx}',
       '**/*.integration.test.{js,jsx,ts,tsx}',
     ],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        'src/test/**',
+        '**/*.d.ts',
+        'src/**/__tests__/**',
+        'src/main.tsx',
+      ],
+      reporter: ['text-summary', 'json-summary', 'html'],
+      // Floor(measured) - 1 per metric. Thresholds only go up: raise them when coverage improves.
+      thresholds: {
+        statements: 89,
+        branches: 85,
+        functions: 82,
+        lines: 89,
+      },
+    },
   },
   server: {
     port: parseInt(CLIENT_PORT),
@@ -37,7 +57,7 @@ export default defineConfig({
           return
         }
         warn(warning)
-      }
-    }
+      },
+    },
   },
 })

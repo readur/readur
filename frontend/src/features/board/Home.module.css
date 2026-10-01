@@ -1,0 +1,777 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* Source colour slots: every coloured mark reads --lane / --lane-soft. */
+[data-hue="1"] { --lane: var(--src-1); --lane-soft: var(--src-1-soft); }
+[data-hue="2"] { --lane: var(--src-2); --lane-soft: var(--src-2-soft); }
+[data-hue="3"] { --lane: var(--src-3); --lane-soft: var(--src-3-soft); }
+[data-hue="4"] { --lane: var(--src-4); --lane-soft: var(--src-4-soft); }
+[data-hue="5"] { --lane: var(--src-5); --lane-soft: var(--src-5-soft); }
+[data-hue="6"] { --lane: var(--src-6); --lane-soft: var(--src-6-soft); }
+[data-hue="7"] { --lane: var(--src-7); --lane-soft: var(--src-7-soft); }
+[data-hue="8"] { --lane: var(--src-8); --lane-soft: var(--src-8-soft); }
+
+/* Header: on phones the add action stays beside the greeting as a labelled icon button. */
+
+.addLink {
+  gap: var(--s-2);
+}
+
+@media (max-width: 599px) {
+  .header {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  .header > :first-child {
+    flex: 1 1 auto;
+  }
+
+  .header > :last-child {
+    flex: none;
+  }
+
+  .addLink {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .addLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Status line under the greeting */
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.statusPart {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.statusPart + .statusPart::before {
+  content: "·";
+  margin: 0 var(--s-2);
+  color: var(--fg-meta);
+}
+
+.statusFailed {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.statusLink {
+  font-weight: 600;
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.statusLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Panels */
+
+.panel {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5) var(--s-2);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: var(--lh-title);
+  color: var(--fg);
+}
+
+.panelAction {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.panelBody {
+  padding: var(--s-3) var(--s-5) var(--s-5);
+}
+
+/* Links */
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-1) var(--ease);
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+.primaryLink,
+.secondaryLink {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 var(--s-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.primaryLink {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-fg);
+}
+
+.primaryLink:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.secondaryLink {
+  height: 32px;
+  padding: 0 var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+}
+
+.secondaryLink:hover {
+  border-color: var(--line-strong);
+}
+
+.link:focus-visible,
+.primaryLink:focus-visible,
+.secondaryLink:focus-visible,
+.laneLink:focus-visible,
+.cardLink:focus-visible,
+.failureName:focus-visible,
+.details summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Error notice */
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0 var(--s-5) var(--s-4);
+  padding: var(--s-2) var(--s-3);
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+}
+
+.errorMark {
+  flex: none;
+}
+
+.errorText {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Lanes */
+
+.lanes {
+  margin: 0;
+  padding: 0 0 var(--s-2);
+  list-style: none;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(168px, 1.6fr) 84px minmax(128px, 0.8fr) 108px;
+  align-items: center;
+  column-gap: var(--s-5);
+  min-height: 52px;
+  padding: var(--s-2) var(--s-5);
+  border-top: 1px solid var(--line);
+}
+
+.lane:first-child {
+  border-top: 0;
+}
+
+.lane[data-health="quiet"] {
+  background: var(--warn-soft);
+}
+
+.laneName {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.laneText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.laneLink {
+  overflow: hidden;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.laneLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.laneKind,
+.laneMeta,
+.laneLast {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.laneKind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.laneToday,
+.laneLast {
+  margin: 0;
+}
+
+.laneToday {
+  white-space: nowrap;
+}
+
+.laneCount {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.laneHealth {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--warn-fill);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.idle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .quiet {
+  color: var(--bg);
+}
+
+/* The footer row that leads to every other source */
+
+.moreRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;
+  padding: 0 var(--s-5);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.moreRow:hover {
+  background: var(--surface-2);
+}
+
+.moreRow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* 14-day bar strip: the one authored moment, bars rise into place on load. */
+
+.bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 3px;
+  height: 32px;
+  min-width: 0;
+}
+
+.bar {
+  display: block;
+  height: max(3px, calc(var(--h) * 100%));
+  border-radius: 2px 2px 0 0;
+  background: var(--lane);
+  opacity: 0.55;
+  transform-origin: bottom;
+  animation: rise var(--dur-3) var(--ease-out-expo) both;
+  animation-delay: calc(var(--i) * 18ms);
+}
+
+.bar[data-today] {
+  opacity: 1;
+}
+
+.bar[data-zero] {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--lane-soft);
+  opacity: 1;
+}
+
+@keyframes rise {
+  from {
+    transform: scaleY(0.08);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation: none;
+  }
+}
+
+/* Processing and failures */
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-5) var(--s-4);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-height: 40px;
+}
+
+.line .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.lineMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  line-height: 1;
+}
+
+.line[data-tone="ok"] .lineMark {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.line[data-tone="accent"] .lineMark {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.line[data-tone="warn"] .lineMark {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.line[data-tone="danger"] .lineMark {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.lineText {
+  display: flex;
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+
+.lineNote {
+  color: var(--fg-2);
+}
+
+.failCount {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.failureBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.details {
+  margin-left: calc(24px + var(--s-3));
+  font-size: var(--fs-md);
+}
+
+.details > summary {
+  width: fit-content;
+  min-height: 32px;
+  line-height: 32px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.failures {
+  margin: var(--s-1) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.failure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: var(--s-1) var(--s-4);
+  align-items: baseline;
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.failureName {
+  overflow: hidden;
+  color: var(--fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failureWhy {
+  color: var(--fg-2);
+}
+
+.failureAge {
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+  white-space: nowrap;
+}
+
+.raw {
+  grid-column: 1 / -1;
+  font-size: var(--fs-sm);
+}
+
+.raw > summary {
+  width: fit-content;
+  color: var(--fg-meta);
+  cursor: pointer;
+}
+
+.raw pre {
+  max-height: 200px;
+  margin: var(--s-2) 0 0;
+  padding: var(--s-3);
+  overflow: auto;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Just arrived */
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  margin: 0 var(--s-5) var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  background: var(--new-soft);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+}
+
+.bulkCount {
+  font-weight: 600;
+}
+
+/* One row: 6 tiles from 1200px, 4 below, a scrolling row on phones. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s-4);
+  margin: 0;
+  padding: var(--s-2) var(--s-5) var(--s-5);
+  list-style: none;
+}
+
+.card:nth-child(n + 7) {
+  display: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.cardLink {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  border-radius: var(--radius);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.cardThumb {
+  position: relative;
+  display: block;
+  border-radius: var(--radius);
+  transition: box-shadow var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+
+/* 4:3 and filled from the top: the top of a page (letterhead, title) is what identifies it. */
+.cardThumb > span:first-child {
+  display: flex;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  background: var(--surface-sunken);
+}
+
+.cardThumb img {
+  object-fit: cover;
+  object-position: top center;
+}
+
+.cardLink:hover .cardThumb {
+  box-shadow: var(--shadow-overlay);
+  transform: translateY(-2px);
+}
+
+.cardTag {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  box-shadow: var(--shadow-1);
+}
+
+.card[data-changed] .cardThumb > span:first-child {
+  border-color: var(--new-fill);
+  box-shadow: 0 0 0 1px var(--new-fill);
+}
+
+.cardName {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cardLink:hover .cardName {
+  color: var(--accent);
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.cardSource {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardDate {
+  flex: none;
+  margin-left: auto;
+}
+
+@media (max-width: 1199px) {
+  .cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .card:nth-child(n + 5) {
+    display: none;
+  }
+}
+
+/* Narrow screens: a lane stacks into name + health, then the strip, then its figures. */
+
+@media (max-width: 899px) {
+  /* Two lines per lane: name and health, then the strip and today's count. */
+  .lane {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name health"
+      "bars today";
+    row-gap: var(--s-1);
+    min-height: 0;
+    padding: var(--s-2) var(--s-4);
+  }
+
+  .laneName { grid-area: name; }
+  .bars { grid-area: bars; height: 22px; }
+  .laneToday { grid-area: today; text-align: right; }
+  .laneHealth { grid-area: health; }
+  .laneKind,
+  .laneLast { display: none; }
+
+  .moreRow {
+    padding: 0 var(--s-4);
+  }
+
+  .panelHead,
+  .lines {
+    padding-left: var(--s-4);
+    padding-right: var(--s-4);
+  }
+
+
+  .details {
+    margin-left: 0;
+  }
+
+  .failure {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .failureWhy {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 599px) {
+  /* The dots only read well on one line: on phones the parts wrap apart with a gap instead. */
+  .status {
+    gap: var(--s-1) var(--s-4);
+  }
+
+  .statusPart + .statusPart::before {
+    content: none;
+  }
+
+  /* A row that scrolls sideways, about two and a half tiles in view, snapping to each tile. */
+  .cards {
+    display: flex;
+    gap: var(--s-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--s-4);
+    padding: var(--s-2) var(--s-4) var(--s-4);
+    scrollbar-width: thin;
+  }
+
+  .cardSource {
+    display: none;
+  }
+
+  .cards > .card {
+    display: flex;
+    flex: 0 0 calc((100% - 2 * var(--s-3)) / 2.6);
+    scroll-snap-align: start;
+  }
+}
+

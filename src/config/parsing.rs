@@ -3,6 +3,8 @@
 use anyhow::Result;
 use std::env;
 
+use super::Config;
+
 /// Values shipped in example configs, compose files and docs. A JWT secret
 /// equal to any of these is treated as unset.
 pub(super) const KNOWN_WEAK_JWT_SECRETS: &[&str] = &[
@@ -137,4 +139,25 @@ pub(super) fn env_list(name: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+// Watch-folder settings as the watcher actually applies them.
+
+/// Polling interval the watch-folder scanner uses when WATCH_INTERVAL_SECONDS is unset.
+pub const DEFAULT_WATCH_INTERVAL_SECONDS: u64 = 30;
+/// File-stability wait the watch-folder scanner uses when FILE_STABILITY_CHECK_MS is unset.
+pub const DEFAULT_FILE_STABILITY_CHECK_MS: u64 = 1000;
+
+impl Config {
+    /// Seconds between watch-folder scans, as the watcher actually runs them.
+    pub fn effective_watch_interval_seconds(&self) -> u64 {
+        self.watch_interval_seconds
+            .unwrap_or(DEFAULT_WATCH_INTERVAL_SECONDS)
+    }
+
+    /// Milliseconds a watched file must stay unchanged before it is ingested.
+    pub fn effective_file_stability_check_ms(&self) -> u64 {
+        self.file_stability_check_ms
+            .unwrap_or(DEFAULT_FILE_STABILITY_CHECK_MS)
+    }
 }

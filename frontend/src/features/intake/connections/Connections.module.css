@@ -1,0 +1,79 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.detailStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.issueList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+}
+
+.issueFix {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.errorItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+
+.errorItem + .errorItem {
+  border-top: 1px solid var(--line);
+}
+
+.errorHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.errorType {
+  font-weight: 600;
+}
+
+.errorPath {
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+}
+
+.errorMessage {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}

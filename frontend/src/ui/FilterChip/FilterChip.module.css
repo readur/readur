@@ -1,0 +1,104 @@
+.chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: 0 var(--s-3);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  outline: none;
+}
+
+.trigger[data-hovered] {
+  background: var(--surface-sunken);
+}
+
+.active .trigger[data-hovered] {
+  background: transparent;
+}
+
+.trigger[data-focus-visible],
+.clear[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.label {
+  flex: none;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--fg-2);
+}
+
+.active .label {
+  color: var(--accent);
+}
+
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.chevron,
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.chevron {
+  color: var(--fg-meta);
+}
+
+/* Icons size to 1em, so the type scale sets their size. */
+.chevron,
+.clear {
+  font-size: var(--fs-md);
+}
+
+.clear {
+  width: 30px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.clear[data-hovered] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.dialog {
+  outline: none;
+}

@@ -8,6 +8,7 @@ use axum::{
 use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
@@ -65,7 +66,8 @@ fn issue_session(state: &AppState, user: User) -> Response {
     }
 }
 
-#[derive(Serialize, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 struct AuthConfig {
     allow_local_auth: bool,
     allow_registration: bool,
@@ -331,7 +333,8 @@ struct OidcCallbackQuery {
     error: Option<String>,
 }
 
-#[derive(Deserialize, utoipa::ToSchema)]
+#[derive(Deserialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 struct OidcExchangeRequest {
     code: String,
 }

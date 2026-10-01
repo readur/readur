@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
+use ts_rs::TS;
 
 use crate::{
     auth::{AdminUser, AuthUser},
@@ -187,7 +188,8 @@ fn stored_webdav_password_reusable(stored: Option<&Settings>, update: &UpdateSet
         && new_username.trim() == stored.webdav_username.as_deref().unwrap_or_default().trim()
 }
 
-#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 struct ServerConfiguration {
     max_file_size_mb: u64,
@@ -261,8 +263,8 @@ async fn get_server_configuration(
         watch_folder: Some(config.watch_folder.clone()),
         ocr_language: user_settings.ocr_language,
         allowed_file_types: user_settings.allowed_file_types,
-        watch_interval_seconds: config.watch_interval_seconds,
-        file_stability_check_ms: config.file_stability_check_ms,
+        watch_interval_seconds: Some(config.effective_watch_interval_seconds()),
+        file_stability_check_ms: Some(config.effective_file_stability_check_ms()),
         max_file_age_hours: config.max_file_age_hours,
         enable_background_ocr: user_settings.enable_background_ocr,
         version: env!("CARGO_PKG_VERSION").to_string(),

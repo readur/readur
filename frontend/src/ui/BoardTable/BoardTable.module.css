@@ -1,0 +1,454 @@
+.container {
+  --row-height: 40px;
+  /* Contains absolutely positioned cell content (visually hidden text) inside the scroll box. */
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+
+/*
+ * On a phone a table that is still wider than the screen scrolls inside its own box, never the
+ * page. (Only there: a scroll container would also stop the sticky head following the page.)
+ */
+@media (max-width: 719px) {
+  .container {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+}
+
+.container[data-density='compact'] {
+  --row-height: 32px;
+}
+
+/* A compact row that holds controls grows just enough to keep them inset from its hairlines. */
+.container[data-density='compact']:not([data-layout='stacked']) .row:has(.cell button:not([slot])) > .cell {
+  height: 36px;
+}
+
+.container[aria-busy='true'] .body {
+  opacity: 0.6;
+}
+
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  outline: none;
+}
+
+.table[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Head */
+
+.column {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 36px;
+  padding: 0 var(--s-3);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-family: var(--font-label);
+  font-stretch: var(--font-label-stretch);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  outline: none;
+}
+
+.column:first-child {
+  border-top-left-radius: var(--radius);
+}
+
+.column:last-child {
+  border-top-right-radius: var(--radius);
+}
+
+.column[data-allows-sorting] {
+  cursor: pointer;
+}
+
+.column[data-allows-sorting][data-hovered] {
+  color: var(--fg);
+}
+
+.column[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.columnInner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  max-width: 100%;
+}
+
+.columnLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sortMark {
+  flex: none;
+  font-size: var(--fs-xs);
+  visibility: hidden;
+}
+
+.column[data-hovered] .sortMark,
+.sorted {
+  visibility: visible;
+}
+
+.sorted {
+  color: var(--accent);
+}
+
+.selectColumn,
+.selectCell {
+  width: 40px;
+  padding: 0 var(--s-2) 0 var(--s-3);
+}
+
+/*
+ * Controls inside a row are compact and inset from the hairlines: 28px tall in a 40px (or 32px
+ * compact) row, never the full row height.
+ */
+.cell button:not([slot]) {
+  height: 28px;
+  min-height: 0;
+  padding-block: 0;
+}
+
+/* Rows */
+
+.row {
+  outline: none;
+  cursor: default;
+}
+
+.actionable .row {
+  cursor: pointer;
+}
+
+.row[data-hovered] > .cell {
+  background: var(--surface-2);
+}
+
+.row[data-selected] > .cell,
+.row[data-selected][data-hovered] > .cell {
+  background: var(--accent-soft);
+}
+
+.row[data-focus-visible] > .cell {
+  box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
+}
+
+.row[data-focus-visible] > .cell:first-child {
+  box-shadow: inset 2px 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
+}
+
+.row[data-focus-visible] > .cell:last-child {
+  box-shadow: inset -2px 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
+}
+
+.cell {
+  height: var(--row-height);
+  padding: 0 var(--s-3);
+  vertical-align: middle;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  outline: none;
+}
+
+.cell:first-child {
+  position: relative;
+}
+
+.row:last-child > .cell {
+  border-bottom: 0;
+}
+
+.cell[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* A changed row carries a coral dot in its first cell's gutter (its tag carries the word). */
+.changed > .cell:first-child::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--new-fill);
+  pointer-events: none;
+}
+
+.cellValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hasDetail > .cell {
+  padding-top: var(--s-2);
+  padding-bottom: var(--s-2);
+  vertical-align: top;
+}
+
+.detail {
+  margin-top: var(--s-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+  white-space: normal;
+}
+
+.detailText {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/*
+ * Columns folded into a phone row: the tag and marks, then one mono meta line, then any long
+ * text. Values only; the labelled version is the row's (visually hidden) description.
+ */
+.foldLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.foldMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.metaSep {
+  color: var(--fg-meta);
+}
+
+.foldText {
+  margin-top: var(--s-1);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.foldLine + .detailText {
+  margin-top: var(--s-1);
+}
+
+.data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+
+.align-start { text-align: left; }
+.align-center { text-align: center; }
+.align-end { text-align: right; }
+
+/* Empty and loading */
+
+.empty {
+  padding: var(--s-6) var(--s-4);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+}
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  height: var(--row-height);
+  padding: 0 var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.loadingRow:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * Phones: each row stacks instead of squeezing columns. Line 1 is the checkbox and the name at
+ * the full remaining width (two lines at most); line 2 is the tag, status and mono meta; long
+ * text and any kept columns (actions) follow on their own lines. The table never scrolls sideways.
+ */
+.container[data-layout='stacked'] {
+  overflow-x: visible;
+}
+
+.container[data-layout='stacked'] .table,
+.container[data-layout='stacked'] .body,
+.container[data-layout='stacked'] .head {
+  display: block;
+  width: 100%;
+}
+
+.container[data-layout='stacked'] .head > * {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.container[data-layout='stacked'] .column {
+  position: static;
+  display: flex;
+  align-items: center;
+  border-bottom: 0;
+}
+
+.container[data-layout='stacked'] .headerColumn {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+}
+
+/* Heads of kept columns other than the name stay in the grid for assistive tech only. */
+.container[data-layout='stacked'] .column:not(.headerColumn, .selectColumn) {
+  position: absolute;
+  width: 1px !important;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.container[data-layout='stacked'] .row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: var(--s-2) 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.container[data-layout='stacked'][data-selectable='true'] .row {
+  padding-left: 40px;
+}
+
+.container[data-layout='stacked'] .row:last-child {
+  border-bottom: 0;
+}
+
+.container[data-layout='stacked'] .row > .cell {
+  box-sizing: border-box;
+  display: block;
+  flex: 0 1 auto;
+  max-width: 100%;
+  height: auto;
+  min-width: 0;
+  padding: var(--s-1) var(--s-3) 0;
+  text-align: left;
+  background: transparent;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.container[data-layout='stacked'] .row > .headerCell {
+  flex: 1 0 100%;
+  padding-top: 0;
+}
+
+/* The last kept column (usually the actions) sits at the end of its own line. */
+.container[data-layout='stacked'] .row > .cell:not(.headerCell, .selectCell):last-child {
+  margin-left: auto;
+}
+
+.container[data-layout='stacked'] .row > .selectCell {
+  position: absolute;
+  top: var(--s-2);
+  left: 0;
+  width: 40px;
+  padding: 0 0 0 var(--s-3);
+}
+
+.container[data-layout='stacked'] .headerCell > .cellValue {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 20px;
+}
+
+.container[data-layout='stacked'] .headerCell > .detail {
+  margin-top: 2px;
+}
+
+.container[data-layout='stacked'] .row[data-hovered] {
+  background: var(--surface-2);
+}
+
+.container[data-layout='stacked'] .row[data-selected] {
+  background: var(--accent-soft);
+}
+
+.container[data-layout='stacked'] .row[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.container[data-layout='stacked'] .changed > .cell:first-child::before {
+  content: none;
+}
+
+.container[data-layout='stacked'] .changed::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--new-fill);
+  pointer-events: none;
+}

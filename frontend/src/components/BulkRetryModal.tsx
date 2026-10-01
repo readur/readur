@@ -1,38 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
+  Label,
   Radio,
-  TextField,
-  Chip,
-  Box,
-  Typography,
-  Alert,
-  LinearProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Checkbox,
+  RadioGroup,
   Slider,
-  Stack,
-  Card,
-  CardContent,
-  Divider,
-} from '@mui/material';
+  SliderOutput,
+  SliderThumb,
+  SliderTrack,
+  ToggleButton,
+} from 'react-aria-components';
+import { Button, Checkbox, Dialog, Pass, PassCell, TextField } from '../ui';
 import {
-  ExpandMore as ExpandMoreIcon,
-  Schedule as ScheduleIcon,
-  Assessment as AssessmentIcon,
-  Refresh as RefreshIcon,
-} from '@mui/icons-material';
-import { documentService, BulkOcrRetryRequest, OcrRetryFilter, BulkOcrRetryResponse, ErrorHelper, ErrorCodes } from '../services/api';
+  documentService,
+  ocrService,
+  ErrorHelper,
+  ErrorCodes,
+  type BulkOcrRetryRequest,
+  type BulkOcrRetryResponse,
+  type OcrRetryFilter,
+} from '../services/api';
+import LanguageSelector from './LanguageSelector';
+import styles from './RetryModals.module.css';
 
 interface BulkRetryModalProps {
   open: boolean;
@@ -40,6 +29,8 @@ interface BulkRetryModalProps {
   onSuccess: (result: BulkOcrRetryResponse) => void;
   selectedDocumentIds?: string[];
 }
+
+type Mode = 'all' | 'specific' | 'filter';
 
 const COMMON_MIME_TYPES = [
   { value: 'application/pdf', label: 'PDF' },
@@ -49,419 +40,351 @@ const COMMON_MIME_TYPES = [
   { value: 'text/plain', label: 'Text' },
 ];
 
-const COMMON_FAILURE_REASONS = [
-  { value: 'pdf_font_encoding', label: 'Font Encoding Issues' },
-  { value: 'ocr_timeout', label: 'Processing Timeout' },
-  { value: 'pdf_corruption', label: 'File Corruption' },
-  { value: 'low_ocr_confidence', label: 'Low Confidence' },
-  { value: 'no_extractable_text', label: 'No Text Found' },
-  { value: 'ocr_memory_limit', label: 'Memory Limit' },
+const COMMON_FAILURE_REASONS: Array<{ value: string; key: string; label: string }> = [
+  { value: 'pdf_font_encoding', key: 'intake.bulkRetry.reason.font', label: 'Font encoding issues' },
+  { value: 'ocr_timeout', key: 'intake.bulkRetry.reason.timeout', label: 'Processing timeout' },
+  { value: 'pdf_corruption', key: 'intake.bulkRetry.reason.corruption', label: 'File corruption' },
+  { value: 'low_ocr_confidence', key: 'intake.bulkRetry.reason.lowConfidence', label: 'Low confidence' },
+  { value: 'no_extractable_text', key: 'intake.bulkRetry.reason.noText', label: 'No text found' },
+  { value: 'ocr_memory_limit', key: 'intake.bulkRetry.reason.memory', label: 'Memory limit' },
 ];
 
 const FILE_SIZE_PRESETS = [
-  { label: '< 1MB', value: 1024 * 1024 },
-  { label: '< 5MB', value: 5 * 1024 * 1024 },
-  { label: '< 10MB', value: 10 * 1024 * 1024 },
-  { label: '< 50MB', value: 50 * 1024 * 1024 },
+  { label: '< 1 MB', value: 1024 * 1024 },
+  { label: '< 5 MB', value: 5 * 1024 * 1024 },
+  { label: '< 10 MB', value: 10 * 1024 * 1024 },
+  { label: '< 50 MB', value: 50 * 1024 * 1024 },
 ];
 
-export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
-  open,
-  onClose,
-  onSuccess,
-  selectedDocumentIds = [],
-}) => {
-  const [mode, setMode] = useState<'all' | 'specific' | 'filter'>('all');
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
+
+/** Retry OCR for all failed documents, the selected ones, or those matching criteria; preview first. */
+export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, onSuccess, selectedDocumentIds = [] }) => {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<Mode>('all');
   const [filter, setFilter] = useState<OcrRetryFilter>({});
-  const [priorityOverride, setPriorityOverride] = useState<number>(10);
-  const [usePriorityOverride, setUsePriorityOverride] = useState(false);
-  const [previewOnly, setPreviewOnly] = useState(true);
+  const [usePriority, setUsePriority] = useState(false);
+  const [priority, setPriority] = useState(10);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [primaryLanguage, setPrimaryLanguage] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [previewResult, setPreviewResult] = useState<BulkOcrRetryResponse | null>(null);
+  const [preview, setPreview] = useState<BulkOcrRetryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize mode based on selected documents
+  // Start from a clean form each time the modal opens.
   useEffect(() => {
-    if (selectedDocumentIds.length > 0) {
-      setMode('specific');
-    }
-  }, [selectedDocumentIds]);
-
-  const handleModeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setMode(event.target.value as 'all' | 'specific' | 'filter');
-    setPreviewResult(null);
+    if (!open) return;
+    setMode(selectedDocumentIds.length > 0 ? 'specific' : 'all');
+    setFilter({});
+    setUsePriority(false);
+    setPriority(10);
+    setLanguages([]);
+    setPrimaryLanguage(undefined);
+    setPreview(null);
     setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const changeFilter = <K extends keyof OcrRetryFilter>(key: K, value: OcrRetryFilter[K]) => {
+    setFilter((prev) => ({ ...prev, [key]: value }));
+    setPreview(null);
+  };
+  const toggleIn = (key: 'mime_types' | 'failure_reasons', value: string) => {
+    const current = filter[key] ?? [];
+    changeFilter(key, current.includes(value) ? current.filter((v) => v !== value) : [...current, value]);
   };
 
-  const handleFilterChange = (key: keyof OcrRetryFilter, value: any) => {
-    setFilter(prev => ({
-      ...prev,
-      [key]: value,
-    }));
-    setPreviewResult(null);
-  };
+  const withLanguages = mode === 'specific' && languages.length > 0;
 
-  const handleMimeTypeToggle = (mimeType: string) => {
-    const current = filter.mime_types || [];
-    if (current.includes(mimeType)) {
-      handleFilterChange('mime_types', current.filter(t => t !== mimeType));
-    } else {
-      handleFilterChange('mime_types', [...current, mimeType]);
-    }
-  };
-
-  const handleFailureReasonToggle = (reason: string) => {
-    const current = filter.failure_reasons || [];
-    if (current.includes(reason)) {
-      handleFilterChange('failure_reasons', current.filter(r => r !== reason));
-    } else {
-      handleFilterChange('failure_reasons', [...current, reason]);
-    }
-  };
-
-  const buildRequest = (preview: boolean): BulkOcrRetryRequest => {
-    const request: BulkOcrRetryRequest = {
-      mode,
-      preview_only: preview,
-    };
-
-    if (mode === 'specific') {
-      request.document_ids = selectedDocumentIds;
-    } else if (mode === 'filter') {
-      request.filter = filter;
-    }
-
-    if (usePriorityOverride) {
-      request.priority_override = priorityOverride;
-    }
-
+  const buildRequest = (previewOnly: boolean): BulkOcrRetryRequest => {
+    const request: BulkOcrRetryRequest = { mode, preview_only: previewOnly };
+    if (mode === 'specific') request.document_ids = selectedDocumentIds;
+    else if (mode === 'filter') request.filter = filter;
+    if (usePriority) request.priority_override = priority;
     return request;
+  };
+
+  const describeError = (err: unknown, action: 'preview' | 'execute') => {
+    const info = ErrorHelper.formatErrorForDisplay(err, true);
+    if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
+      return t('intake.bulkRetry.errors.session', 'Your session has expired. Refresh the page and sign in again.');
+    }
+    if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
+      return t('intake.bulkRetry.errors.permission', 'You do not have permission to retry documents.');
+    }
+    if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
+      return t('intake.bulkRetry.errors.none', 'No documents match these criteria.');
+    }
+    if (action === 'execute' && ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_OCR_FAILED)) {
+      return t('intake.bulkRetry.errors.ocr', 'Some documents cannot be retried because of processing issues.');
+    }
+    if (info.category === 'server') return t('intake.bulkRetry.errors.server', 'Server error. Try again later.');
+    if (info.category === 'network') return t('intake.bulkRetry.errors.network', 'Network error. Check your connection and try again.');
+    return (
+      info.message ||
+      (action === 'preview'
+        ? t('intake.bulkRetry.errors.preview', 'Could not preview the retry')
+        : t('intake.bulkRetry.errors.execute', 'Could not start the retry'))
+    );
   };
 
   const handlePreview = async () => {
     setLoading(true);
     setError(null);
     try {
-      const request = buildRequest(true);
-      const response = await documentService.bulkRetryOcr(request);
-      setPreviewResult(response.data);
-    } catch (err: any) {
-      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-      let errorMessage = 'Failed to preview retry operation';
-      
-      // Handle specific bulk retry preview errors
-      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
-          ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to preview retry operations.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
-        errorMessage = 'No documents found matching the specified criteria.';
-      } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later.';
-      } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else {
-        errorMessage = errorInfo.message || 'Failed to preview retry operation';
-      }
-      
-      setError(errorMessage);
-      setPreviewResult(null);
+      const response = await documentService.bulkRetryOcr(buildRequest(true));
+      setPreview(response.data);
+    } catch (err) {
+      setError(describeError(err, 'preview'));
+      setPreview(null);
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Selected documents with chosen languages are retried one by one with those languages. The
+   * per-document endpoint takes no priority and returns no time estimate, so neither is reported.
+   */
+  const retryWithLanguages = async (): Promise<BulkOcrRetryResponse> => {
+    const results = await Promise.allSettled(
+      selectedDocumentIds.map((id) => ocrService.retryWithLanguage(id, undefined, languages)),
+    );
+    const queued = results.filter(
+      (r) => r.status === 'fulfilled' && (r.value?.data as { success?: boolean } | undefined)?.success !== false,
+    ).length;
+    return {
+      success: queued > 0,
+      message: '',
+      queued_count: queued,
+      matched_count: selectedDocumentIds.length,
+      documents: [],
+      estimated_total_time_minutes: 0,
+    };
   };
 
   const handleExecute = async () => {
     setLoading(true);
     setError(null);
     try {
-      const request = buildRequest(false);
-      const response = await documentService.bulkRetryOcr(request);
-      onSuccess(response.data);
-      onClose();
-    } catch (err: any) {
-      const errorInfo = ErrorHelper.formatErrorForDisplay(err, true);
-      let errorMessage = 'Failed to execute retry operation';
-      
-      // Handle specific bulk retry execution errors
-      if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || 
-          ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
-        errorMessage = 'Your session has expired. Please refresh the page and log in again.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
-        errorMessage = 'You do not have permission to execute retry operations.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
-        errorMessage = 'No documents found matching the specified criteria.';
-      } else if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_OCR_FAILED)) {
-        errorMessage = 'Some documents cannot be retried due to processing issues.';
-      } else if (errorInfo.category === 'server') {
-        errorMessage = 'Server error. Please try again later or contact support.';
-      } else if (errorInfo.category === 'network') {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else {
-        errorMessage = errorInfo.message || 'Failed to execute retry operation';
+      const result = withLanguages
+        ? await retryWithLanguages()
+        : (await documentService.bulkRetryOcr(buildRequest(false))).data;
+      if (!result || !result.queued_count) {
+        // A 200 that queued nothing is not a success: keep the dialog open and say so.
+        setError(t('intake.bulkRetry.errors.noneQueued', 'No documents were queued, so nothing will be retried.'));
+        return;
       }
-      
-      setError(errorMessage);
+      onSuccess(result);
+      onClose();
+    } catch (err) {
+      setError(describeError(err, 'execute'));
     } finally {
       setLoading(false);
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  };
-
   const formatDuration = (minutes: number) => {
-    if (minutes < 1) return `${Math.round(minutes * 60)} seconds`;
-    if (minutes < 60) return `${Math.round(minutes)} minutes`;
-    return `${Math.round(minutes / 60)} hours`;
+    if (minutes < 1) return t('intake.bulkRetry.seconds', '{{n}} seconds', { n: Math.round(minutes * 60) });
+    if (minutes < 60) return t('intake.bulkRetry.minutes', '{{n}} minutes', { n: Math.round(minutes) });
+    return t('intake.bulkRetry.hours', '{{n}} hours', { n: Math.round(minutes / 60) });
   };
 
+  const matched = preview?.matched_count ?? 0;
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <RefreshIcon />
-          Bulk OCR Retry
-        </Box>
-      </DialogTitle>
+    <Dialog
+      isOpen={open}
+      onOpenChange={(isOpen) => !isOpen && onClose()}
+      size="lg"
+      isDismissable={!loading}
+      title={t('intake.bulkRetry.title', 'Bulk OCR retry')}
+      actions={
+        <>
+          <Button variant="ghost" onPress={onClose} isDisabled={loading}>
+            {t('intake.actions.cancel', 'Cancel')}
+          </Button>
+          <Button onPress={() => void handlePreview()} isDisabled={loading}>
+            {t('intake.bulkRetry.preview', 'Preview')}
+          </Button>
+          <Button variant="primary" onPress={() => void handleExecute()} isPending={loading} isDisabled={!preview || matched === 0}>
+            {t('intake.bulkRetry.execute', 'Retry {{count}} documents', { count: matched })}
+          </Button>
+        </>
+      }
+    >
+      <div className={styles.stack}>
+        {error ? (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        ) : null}
 
-      <DialogContent>
-        <Stack spacing={3}>
-          {error && (
-            <Alert severity="error">{error}</Alert>
-          )}
+        <RadioGroup
+          className={styles.radioGroup}
+          value={mode}
+          onChange={(value) => {
+            setMode(value as Mode);
+            setPreview(null);
+            setError(null);
+          }}
+        >
+          <Label className={styles.heading}>{t('intake.bulkRetry.mode', 'Retry mode')}</Label>
+          <Radio value="all" className={styles.radio}>
+            {t('intake.bulkRetry.modeAll', 'Retry all failed OCR documents')}
+          </Radio>
+          <Radio value="specific" className={styles.radio} isDisabled={selectedDocumentIds.length === 0}>
+            {t('intake.bulkRetry.modeSelected', 'Retry selected documents ({{count}} selected)', { count: selectedDocumentIds.length })}
+          </Radio>
+          <Radio value="filter" className={styles.radio}>
+            {t('intake.bulkRetry.modeFilter', 'Retry documents matching criteria')}
+          </Radio>
+        </RadioGroup>
 
-          {/* Selection Mode */}
-          <FormControl component="fieldset">
-            <FormLabel component="legend">Retry Mode</FormLabel>
-            <RadioGroup value={mode} onChange={handleModeChange}>
-              <FormControlLabel
-                value="all"
-                control={<Radio />}
-                label="Retry all failed OCR documents"
-              />
-              <FormControlLabel
-                value="specific"
-                control={<Radio />}
-                label={`Retry selected documents (${selectedDocumentIds.length} selected)`}
-                disabled={selectedDocumentIds.length === 0}
-              />
-              <FormControlLabel
-                value="filter"
-                control={<Radio />}
-                label="Retry documents matching criteria"
-              />
-            </RadioGroup>
-          </FormControl>
+        {mode === 'filter' ? (
+          <fieldset className={styles.fieldset}>
+            <legend className={styles.heading}>{t('intake.bulkRetry.criteria', 'Criteria')}</legend>
+            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.fileTypes', 'File types')}>
+              <span className={styles.label}>{t('intake.bulkRetry.fileTypes', 'File types')}</span>
+              {COMMON_MIME_TYPES.map(({ value, label }) => (
+                <ToggleButton
+                  key={value}
+                  className={styles.toggle}
+                  isSelected={filter.mime_types?.includes(value) ?? false}
+                  onChange={() => toggleIn('mime_types', value)}
+                >
+                  {label}
+                </ToggleButton>
+              ))}
+            </div>
+            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.reasons', 'Failure reasons')}>
+              <span className={styles.label}>{t('intake.bulkRetry.reasons', 'Failure reasons')}</span>
+              {COMMON_FAILURE_REASONS.map(({ value, key, label }) => (
+                <ToggleButton
+                  key={value}
+                  className={styles.toggle}
+                  isSelected={filter.failure_reasons?.includes(value) ?? false}
+                  onChange={() => toggleIn('failure_reasons', value)}
+                >
+                  {t(key, label)}
+                </ToggleButton>
+              ))}
+            </div>
+            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.maxSize', 'Maximum file size')}>
+              <span className={styles.label}>{t('intake.bulkRetry.maxSize', 'Maximum file size')}</span>
+              {FILE_SIZE_PRESETS.map(({ label, value }) => (
+                <ToggleButton
+                  key={value}
+                  className={styles.toggle}
+                  isSelected={filter.max_file_size === value}
+                  onChange={() => changeFilter('max_file_size', filter.max_file_size === value ? undefined : value)}
+                >
+                  {label}
+                </ToggleButton>
+              ))}
+            </div>
+            {filter.max_file_size ? (
+              <p className={styles.muted}>
+                {t('intake.bulkRetry.maxSizeValue', 'Up to {{size}}', { size: formatFileSize(filter.max_file_size) })}
+              </p>
+            ) : null}
+            <TextField
+              label={t('intake.bulkRetry.limit', 'Maximum documents to retry')}
+              description={t('intake.bulkRetry.limitHint', 'Leave empty for no limit (1–1000).')}
+              inputMode="numeric"
+              value={filter.limit ? String(filter.limit) : ''}
+              onChange={(v) => {
+                const n = parseInt(v, 10);
+                changeFilter('limit', Number.isNaN(n) ? undefined : Math.max(1, Math.min(1000, n)));
+              }}
+            />
+          </fieldset>
+        ) : null}
 
-          {/* Filter Options */}
-          {mode === 'filter' && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">Filter Criteria</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Stack spacing={3}>
-                  {/* MIME Types */}
-                  <Box>
-                    <Typography variant="subtitle1" gutterBottom>
-                      File Types
-                    </Typography>
-                    <Box display="flex" flexWrap="wrap" gap={1}>
-                      {COMMON_MIME_TYPES.map(({ value, label }) => (
-                        <Chip
-                          key={value}
-                          label={label}
-                          variant={filter.mime_types?.includes(value) ? 'filled' : 'outlined'}
-                          onClick={() => handleMimeTypeToggle(value)}
-                          clickable
-                        />
-                      ))}
-                    </Box>
-                  </Box>
+        <fieldset className={styles.fieldset}>
+          <legend className={styles.heading}>{t('intake.bulkRetry.languages', 'OCR languages')}</legend>
+          <p className={styles.muted}>
+            {mode === 'specific'
+              ? t('intake.bulkRetry.languagesHint', 'Optional. Read the selected documents again with these languages.')
+              : t('intake.bulkRetry.languagesSelectedOnly', 'Choosing languages applies to selected documents only.')}
+          </p>
+          <LanguageSelector
+            selectedLanguages={languages}
+            primaryLanguage={primaryLanguage}
+            onLanguagesChange={(next, primary) => {
+              setLanguages(next);
+              setPrimaryLanguage(primary ?? next[0]);
+            }}
+            disabled={mode !== 'specific' || loading}
+          />
+        </fieldset>
 
-                  {/* Failure Reasons */}
-                  <Box>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Failure Reasons
-                    </Typography>
-                    <Box display="flex" flexWrap="wrap" gap={1}>
-                      {COMMON_FAILURE_REASONS.map(({ value, label }) => (
-                        <Chip
-                          key={value}
-                          label={label}
-                          variant={filter.failure_reasons?.includes(value) ? 'filled' : 'outlined'}
-                          onClick={() => handleFailureReasonToggle(value)}
-                          clickable
-                          color="secondary"
-                        />
-                      ))}
-                    </Box>
-                  </Box>
-
-                  {/* File Size */}
-                  <Box>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Maximum File Size
-                    </Typography>
-                    <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
-                      {FILE_SIZE_PRESETS.map(({ label, value }) => (
-                        <Chip
-                          key={value}
-                          label={label}
-                          variant={filter.max_file_size === value ? 'filled' : 'outlined'}
-                          onClick={() => handleFilterChange('max_file_size', 
-                            filter.max_file_size === value ? undefined : value)}
-                          clickable
-                          color="primary"
-                        />
-                      ))}
-                    </Box>
-                    {filter.max_file_size && (
-                      <Typography variant="body2" color="text.secondary">
-                        Max file size: {formatFileSize(filter.max_file_size)}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  {/* Limit */}
-                  <TextField
-                    label="Maximum Documents to Retry"
-                    type="number"
-                    value={filter.limit || ''}
-                    onChange={(e) => handleFilterChange('limit', 
-                      e.target.value ? parseInt(e.target.value) : undefined)}
-                    InputProps={{
-                      inputProps: { min: 1, max: 1000 }
-                    }}
-                    helperText="Leave empty for no limit"
-                  />
-                </Stack>
-              </AccordionDetails>
-            </Accordion>
-          )}
-
-          {/* Priority Override */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">Advanced Options</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Stack spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={usePriorityOverride}
-                      onChange={(e) => setUsePriorityOverride(e.target.checked)}
-                    />
-                  }
-                  label="Override processing priority"
-                />
-                {usePriorityOverride && (
-                  <Box>
-                    <Typography gutterBottom>
-                      Priority: {priorityOverride} (Higher = More Urgent)
-                    </Typography>
-                    <Slider
-                      value={priorityOverride}
-                      onChange={(_, value) => setPriorityOverride(value as number)}
-                      min={1}
-                      max={20}
-                      marks={[
-                        { value: 1, label: 'Low' },
-                        { value: 10, label: 'Normal' },
-                        { value: 20, label: 'High' },
-                      ]}
-                      valueLabelDisplay="auto"
-                    />
-                  </Box>
+        <fieldset className={styles.fieldset}>
+          <legend className={styles.heading}>{t('intake.bulkRetry.advanced', 'Advanced')}</legend>
+          <Checkbox
+            label={t('intake.bulkRetry.priorityOverride', 'Override processing priority')}
+            isSelected={usePriority}
+            onChange={setUsePriority}
+          />
+          {usePriority && withLanguages ? (
+            <p className={styles.muted} role="note">
+              {t(
+                'intake.bulkRetry.priorityNotWithLanguages',
+                'The priority override does not apply when retrying with chosen languages; those retries use the normal priority.',
+              )}
+            </p>
+          ) : null}
+          {usePriority ? (
+            <Slider className={styles.slider} minValue={1} maxValue={20} value={priority} onChange={(v) => setPriority(v as number)}>
+              <div className={styles.headRow}>
+                <Label className={styles.label}>{t('intake.bulkRetry.priority', 'Priority (higher is more urgent)')}</Label>
+                <SliderOutput className={styles.mono} />
+              </div>
+              <SliderTrack className={styles.track}>
+                {({ state }) => (
+                  <>
+                    <div className={styles.trackFill} style={{ width: `${state.getThumbPercent(0) * 100}%` }} />
+                    <SliderThumb className={styles.thumb} />
+                  </>
                 )}
-              </Stack>
-            </AccordionDetails>
-          </Accordion>
+              </SliderTrack>
+            </Slider>
+          ) : null}
+        </fieldset>
 
-          {/* Preview Results */}
-          {previewResult && (
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                  Preview Results
-                </Typography>
-                <Stack spacing={2}>
-                  <Box display="flex" justifyContent="space-between">
-                    <Typography>Documents matched:</Typography>
-                    <Typography fontWeight="bold">{previewResult.matched_count}</Typography>
-                  </Box>
-                  <Box display="flex" justifyContent="space-between">
-                    <Typography>Estimated processing time:</Typography>
-                    <Typography fontWeight="bold">
-                      <ScheduleIcon sx={{ mr: 0.5, verticalAlign: 'middle', fontSize: 'small' }} />
-                      {formatDuration(previewResult.estimated_total_time_minutes)}
-                    </Typography>
-                  </Box>
-                  {previewResult.documents && previewResult.documents.length > 0 && (
-                    <Box>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Sample Documents:
-                      </Typography>
-                      <Box maxHeight={200} overflow="auto">
-                        {(previewResult.documents || []).slice(0, 10).map((doc) => (
-                          <Box key={doc.id} py={0.5}>
-                            <Typography variant="body2">
-                              {doc.filename} ({formatFileSize(doc.file_size)})
-                              {doc.ocr_failure_reason && (
-                                <Chip 
-                                  size="small" 
-                                  label={doc.ocr_failure_reason} 
-                                  sx={{ ml: 1, fontSize: '0.7rem' }}
-                                />
-                              )}
-                            </Typography>
-                          </Box>
-                        ))}
-                        {previewResult.documents && previewResult.documents.length > 10 && (
-                          <Typography variant="body2" color="text.secondary" mt={1}>
-                            ... and {previewResult.documents.length - 10} more documents
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-          )}
-
-          {loading && <LinearProgress />}
-        </Stack>
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button 
-          onClick={handlePreview} 
-          disabled={loading}
-          variant="outlined"
-        >
-          Preview
-        </Button>
-        <Button
-          onClick={handleExecute}
-          disabled={loading || !previewResult || previewResult.matched_count === 0}
-          variant="contained"
-          color="primary"
-        >
-          {loading ? 'Processing...' : `Retry ${previewResult?.matched_count || 0} Documents`}
-        </Button>
-      </DialogActions>
+        {preview ? (
+          <section className={styles.stack} aria-label={t('intake.bulkRetry.previewResults', 'Preview results')}>
+            <Pass>
+              <PassCell label={t('intake.bulkRetry.matched', 'Documents matched')} mono>
+                {String(preview.matched_count)}
+              </PassCell>
+              <PassCell label={t('intake.bulkRetry.time', 'Estimated time')} mono>
+                {formatDuration(preview.estimated_total_time_minutes)}
+              </PassCell>
+            </Pass>
+            {preview.documents?.length ? (
+              <ul className={styles.sample}>
+                {preview.documents.slice(0, 10).map((doc) => (
+                  <li key={doc.id}>
+                    <span>{doc.filename}</span>
+                    <span className={styles.mono}> · {formatFileSize(doc.file_size)}</span>
+                    {doc.ocr_failure_reason ? <span className={styles.muted}> · {doc.ocr_failure_reason}</span> : null}
+                  </li>
+                ))}
+                {preview.documents.length > 10 ? (
+                  <li className={styles.muted}>
+                    {t('intake.bulkRetry.more', 'and {{count}} more', { count: preview.documents.length - 10 })}
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
     </Dialog>
   );
 };

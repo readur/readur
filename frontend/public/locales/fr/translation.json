@@ -75,22 +75,60 @@
       "oidcNotConfigured": "OIDC n'est pas configuré sur ce serveur. Veuillez utiliser la connexion par nom d'utilisateur/mot de passe.",
       "oidcInitFailed": "Échec de l'initialisation de la connexion OIDC. Veuillez réessayer.",
       "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants.",
-      "logoutIncomplete": "Vous êtes déconnecté sur cet appareil, mais le serveur n'a pas pu être joint. Votre session précédente peut rester valide jusqu'à son expiration."
+      "logoutIncomplete": "Vous êtes déconnecté sur cet appareil, mais le serveur n'a pas pu être joint. Votre session précédente peut rester valide jusqu'à son expiration.",
+      "accountDisabledOrPending": "Ce compte est désactivé ou en attente de validation par un administrateur",
+      "tooManyAttempts": "Trop de tentatives de connexion. Réessayez plus tard.",
+      "tooManyAttemptsRetry": "Trop de tentatives de connexion. Réessayez dans {{seconds}} secondes."
+    },
+    "login": {
+      "wordmark": "Readur",
+      "title": "Connexion",
+      "loading": "Chargement des options de connexion",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "usernameRequired": "Saisissez votre nom d'utilisateur",
+      "passwordRequired": "Saisissez votre mot de passe",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
+      "submit": "Se connecter",
+      "signingIn": "Connexion…",
+      "sso": "Se connecter avec SSO",
+      "redirecting": "Redirection…",
+      "noMethods": "Aucune méthode de connexion n'est activée sur ce serveur. Demandez à un administrateur d'activer la connexion par mot de passe ou SSO.",
+      "errors": {
+        "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect. Vérifiez les deux et réessayez.",
+        "accountDisabled": "Ce compte est désactivé. Demandez à un administrateur de le réactiver.",
+        "sessionExpired": "Votre session a expiré. Reconnectez-vous.",
+        "unreachable": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+        "server": "Le serveur a rencontré un problème. Réessayez dans un instant.",
+        "generic": "Échec de la connexion. Réessayez.",
+        "ssoNotConfigured": "SSO n'est pas configuré sur ce serveur. Connectez-vous avec votre nom d'utilisateur et votre mot de passe.",
+        "ssoFailed": "Échec de la connexion SSO. Réessayez ou contactez votre administrateur.",
+        "ssoStart": "Impossible de démarrer la connexion SSO. Réessayez."
+      },
+      "or": "ou"
+    },
+    "callback": {
+      "title": "Connexion en cours…",
+      "wait": "Un instant, nous terminons votre connexion.",
+      "errorTitle": "Échec de la connexion",
+      "back": "Retour à la connexion"
     },
     "oidcCallback": {
       "errors": {
-        "provider_error": "Le fournisseur d'identité n'a pas terminé la connexion. Veuillez réessayer.",
-        "invalid_state": "La demande de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
-        "auth_failed": "L'authentification auprès du fournisseur d'identité a échoué. Veuillez vous reconnecter.",
-        "no_account": "Aucun compte n'est disponible pour cette identité. Contactez votre administrateur.",
         "account_disabled": "Ce compte est désactivé ou en attente d'approbation par un administrateur.",
-        "server_error": "Une erreur serveur est survenue pendant la connexion. Veuillez réessayer plus tard.",
-        "unknown": "La connexion a échoué. Veuillez vous reconnecter.",
-        "missingCode": "Aucun code d'authentification n'a été reçu du serveur.",
+        "auth_failed": "L'authentification auprès du fournisseur d'identité a échoué. Veuillez vous reconnecter.",
         "invalidCode": "Ce lien de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
-        "tooManyAttempts": "Trop de tentatives. Veuillez patienter un moment puis vous reconnecter."
+        "invalid_state": "La demande de connexion est invalide ou a expiré. Veuillez vous reconnecter.",
+        "missingCode": "Aucun code d'authentification n'a été reçu du serveur.",
+        "no_account": "Aucun compte n'est disponible pour cette identité. Contactez votre administrateur.",
+        "provider_error": "Le fournisseur d'identité n'a pas terminé la connexion. Veuillez réessayer.",
+        "server_error": "Une erreur serveur est survenue pendant la connexion. Veuillez réessayer plus tard.",
+        "tooManyAttempts": "Trop de tentatives. Veuillez patienter un moment puis vous reconnecter.",
+        "unknown": "La connexion a échoué. Veuillez vous reconnecter."
       }
-    }
+    },
+    "createAccountLink": "Pas encore de compte ? Demandez-en un"
   },
   "navigation": {
     "dashboard": "Tableau de bord",
@@ -101,7 +139,14 @@
     "sources": "Sources",
     "watchFolder": "Dossier surveillé",
     "documentManagement": "Gestion des documents",
-    "ignoredFiles": "Fichiers ignorés"
+    "ignoredFiles": "Fichiers ignorés",
+    "settings": "Paramètres",
+    "debug": "Débogage",
+    "sections": {
+      "library": "Bibliothèque",
+      "ingest": "Import",
+      "system": "Système"
+    }
   },
   "dashboard": {
     "greeting": "Voici ce qui se passe avec vos documents aujourd'hui.",
@@ -135,7 +180,13 @@
       "title": "Documents récents",
       "viewAll": "Tout afficher",
       "noDocuments": "Aucun document pour le moment",
-      "uploadFirst": "Chargez votre premier document pour commencer"
+      "uploadFirst": "Chargez votre premier document pour commencer",
+      "columns": {
+        "document": "Document",
+        "size": "Taille",
+        "added": "Ajouté",
+        "status": "Statut"
+      }
     },
     "quickActions": {
       "title": "Actions rapides",
@@ -505,6 +556,12 @@
         "deleting": "Suppression...",
         "delete": "Supprimer le document"
       }
+    },
+    "tabs": {
+      "preview": "Aperçu",
+      "ocrText": "Texte OCR",
+      "details": "Détails",
+      "activity": "Activité"
     }
   },
   "ignoredFiles": {
@@ -744,7 +801,8 @@
       "general": "Général",
       "ocrSettings": "Paramètres OCR",
       "userManagement": "Gestion des utilisateurs",
-      "serverConfiguration": "Configuration du serveur"
+      "serverConfiguration": "Configuration du serveur",
+      "account": "Compte"
     },
     "general": {
       "title": "Paramètres généraux",
@@ -859,7 +917,8 @@
         "email": "E-mail",
         "createdAt": "Créé le",
         "watchDirectory": "Répertoire surveillé",
-        "actions": "Actions"
+        "actions": "Actions",
+        "status": "Statut"
       },
       "watchDirectory": {
         "statusActive": "Actif",
@@ -885,7 +944,15 @@
         "title": "Supprimer le répertoire surveillé",
         "message": "Êtes-vous sûr de vouloir supprimer le répertoire surveillé de l'utilisateur \"{{username}}\" ? Cette action ne peut pas être annulée et arrêtera la surveillance de leur répertoire pour les nouveaux fichiers.",
         "removeButton": "Supprimer le répertoire"
-      }
+      },
+      "activeToggleLabel": "Compte actif pour {{username}}",
+      "cannotDeactivateSelf": "Vous ne pouvez pas désactiver votre propre compte",
+      "disableUser": "Désactiver le compte",
+      "enableUser": "Activer le compte",
+      "pendingApprovalNotice": "{{count}} compte(s) sont désactivés ou en attente de validation. Activez un compte pour permettre à cette personne de se connecter.",
+      "roleAdmin": "Admin",
+      "statusActive": "Actif",
+      "statusPending": "Désactivé / en attente de validation"
     },
     "serverConfiguration": {
       "title": "Configuration du serveur (Administrateur uniquement)",
@@ -936,7 +1003,7 @@
       "userUpdated": "Utilisateur mis à jour avec succès",
       "userDeleted": "Utilisateur supprimé avec succès",
       "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte",
-      "confirmDeleteUser": "Êtes-vous sûr de vouloir supprimer cet utilisateur ?",
+      "confirmDeleteUser": "Voulez-vous vraiment supprimer {{username}} ({{email}}) ?",
       "duplicateUsername": "Ce nom d'utilisateur est déjà pris. Veuillez choisir un nom d'utilisateur différent.",
       "duplicateEmail": "Cette adresse e-mail est déjà utilisée. Veuillez utiliser une autre adresse e-mail.",
       "invalidPassword": "Le mot de passe doit contenir au moins 8 caractères avec des majuscules, des minuscules et des chiffres.",
@@ -959,7 +1026,186 @@
       "ocrResumeFailed": "Accès administrateur requis pour reprendre le traitement OCR",
       "ocrResumeFailedGeneric": "Échec de la reprise du traitement OCR",
       "serverConfigLoadFailed": "Accès administrateur requis pour afficher la configuration du serveur",
-      "serverConfigLoadFailedGeneric": "Échec du chargement de la configuration du serveur"
+      "serverConfigLoadFailedGeneric": "Échec du chargement de la configuration du serveur",
+      "settingsLoadFailed": "Impossible de charger les paramètres",
+      "cannotDeactivateSelf": "Vous ne pouvez pas désactiver votre propre compte",
+      "userDisabled": "{{username}} a été désactivé et déconnecté",
+      "userEnabled": "{{username}} peut maintenant se connecter"
+    },
+    "adminOnly": {
+      "title": "Réservé aux administrateurs",
+      "description": "Demandez à un administrateur si vous devez modifier ces paramètres."
+    },
+    "apiKeys": {
+      "active": "Active",
+      "alreadyRevoked": "Déjà révoquée",
+      "copied": "Copiée",
+      "copiedStatus": "Copiée dans le presse-papiers",
+      "copy": "Copier la clé API",
+      "copyFailed": "Échec de la copie. Sélectionnez et copiez la clé manuellement.",
+      "create": "Créer une clé API",
+      "createFailed": "Impossible de créer la clé API.",
+      "createTitle": "Créer une clé API",
+      "created": "Créée",
+      "empty": "Vous n'avez pas encore de clé API.",
+      "expiration": "Expiration",
+      "expired": "Expirée",
+      "expires": "Expire",
+      "expiry": {
+        "7": "7 jours",
+        "30": "30 jours",
+        "90": "90 jours",
+        "180": "180 jours",
+        "365": "1 an",
+        "never": "Jamais (déconseillé)"
+      },
+      "intro": "Utilisez une clé API dans l'en-tête Authorization: Bearer pour authentifier scripts et intégrations. Les clés disposent de toutes les autorisations de votre compte : traitez-les comme des mots de passe.",
+      "keyName": "Nom de la clé :",
+      "lastUsed": "Dernière utilisation",
+      "loadFailed": "Impossible de charger les clés API.",
+      "name": "Nom",
+      "nameHelp": "Un nom que vous reconnaîtrez plus tard.",
+      "namePlaceholder": "ex. backup-script",
+      "nameRequired": "Veuillez donner un nom à cette clé.",
+      "never": "Jamais",
+      "prefix": "Préfixe",
+      "revealTitle": "Votre nouvelle clé API",
+      "revealWarning": "Copiez cette clé maintenant. Pour votre sécurité, elle ne sera plus affichée : si vous la perdez, il faudra en créer une nouvelle.",
+      "revoke": "Révoquer",
+      "revokeFailed": "Impossible de révoquer la clé API.",
+      "revokeMessage": "Révoquer {{name}} ? Les scripts et intégrations qui utilisent cette clé cesseront immédiatement de fonctionner. Cette action est irréversible.",
+      "revokeNamed": "Révoquer {{name}}",
+      "revokeTitle": "Révoquer la clé API",
+      "revoked": "Révoquée",
+      "saved": "Je l'ai enregistrée",
+      "status": "Statut",
+      "usage": "Utilisation :"
+    },
+    "appearance": {
+      "dark": "Sombre",
+      "language": "Langue de l'interface",
+      "light": "Clair",
+      "system": "Système",
+      "systemHelp": "Suivre le réglage de l'appareil",
+      "theme": "Thème"
+    },
+    "debugTools": {
+      "checkFailed": "échouée",
+      "checkPassed": "réussie"
+    },
+    "fold": {
+      "close": "Fermer",
+      "edit": "Modifier"
+    },
+    "groups": {
+      "languages": "Langues",
+      "ocrControls": "Contrôle du traitement",
+      "processing": "Traitement",
+      "qualityThresholds": "Seuils de qualité"
+    },
+    "labels": {
+      "createFailed": "Impossible de créer l'étiquette",
+      "deleteFailed": "Impossible de supprimer l'étiquette",
+      "intro": "Les étiquettes organisent documents et sources. Les compteurs indiquent l'utilisation de chacune.",
+      "invalidData": "Format de données invalide reçu du serveur",
+      "unexpectedStatus": "Réponse inattendue du serveur ({{status}})",
+      "updateFailed": "Impossible de mettre à jour l'étiquette"
+    },
+    "languageSelector": {
+      "addMore_one": "Ajouter des langues ({{count}} restante)",
+      "addMore_other": "Ajouter des langues ({{count}} restantes)",
+      "available": "Langues disponibles",
+      "help": "La langue principale est traitée en premier pour plus de précision. Plusieurs langues aident pour les documents multilingues.",
+      "loadFailed": "Impossible de charger les langues OCR",
+      "loading": "Chargement des langues…",
+      "max_one": "Maximum {{count}} langue pour des performances optimales.",
+      "max_other": "Maximum {{count}} langues pour des performances optimales.",
+      "none": "Aucune langue sélectionnée. Les documents utiliseront la langue OCR par défaut.",
+      "primaryNote": "(Principale)",
+      "primaryTag": "Principale",
+      "remove": "Retirer {{language}}",
+      "select": "Choisir les langues OCR…",
+      "selected": "Langues sélectionnées",
+      "setPrimary": "Définir comme principale",
+      "title": "Langues OCR"
+    },
+    "nav": {
+      "label": "Sections des paramètres",
+      "matches_one": "{{count}} section correspond",
+      "matches_other": "{{count}} sections correspondent",
+      "noMatches": "Aucun paramètre ne correspond à « {{query}} »",
+      "search": "Rechercher un paramètre",
+      "searchPlaceholder": "Filtrer par nom",
+      "section": "Section"
+    },
+    "sections": {
+      "apiKeys": "Clés API",
+      "appearance": "Apparence",
+      "debug": "Débogage",
+      "general": "Général",
+      "labels": "Étiquettes",
+      "ocr": "OCR",
+      "server": "Serveur",
+      "users": "Utilisateurs",
+      "account": "Compte"
+    },
+    "summary": {
+      "advanced": "fenêtre {{w}} · morphologie {{m}} · égalisation {{h}} · images {{s}}",
+      "days_one": "{{count}} jour",
+      "days_other": "{{count}} jours",
+      "defaultLanguage": "par défaut",
+      "enhancement": "luminosité {{b}} · contraste {{c}}× · bruit {{n}} · netteté {{s}}",
+      "enhancementSkipped": "ignorée · images originales uniquement",
+      "fileProcessing": "{{size}} Mo max · {{memory}} Mo de mémoire · rotation {{rotate}}",
+      "forever": "indéfiniment",
+      "imageSize": "{{w}} × {{h}} px · agrandissement {{u}}×",
+      "languages": "{{languages}} · détection auto {{auto}}",
+      "off": "non",
+      "on": "oui",
+      "paused": "en pause",
+      "processing": "{{jobs}} tâches · {{timeout}} s · priorité {{priority}}",
+      "running": "en cours",
+      "search": "{{perPage}} par page · {{snippet}} caractères · approx. {{fuzzy}}",
+      "storage": "conserver {{retention}} · nettoyage {{cleanup}} · compression {{compression}}",
+      "thresholds": "luminosité {{b}} · contraste {{c}} · bruit {{n}} · netteté {{s}}"
+    },
+    "users": {
+      "createDirFor": "Créer le dossier surveillé de {{name}}",
+      "deleteNamed": "Supprimer {{name}}",
+      "deleteTitle": "Supprimer l'utilisateur",
+      "editNamed": "Modifier {{name}}",
+      "emailRequired": "Saisissez une adresse e-mail.",
+      "empty": "Aucun utilisateur pour l'instant",
+      "intro": "Personnes pouvant se connecter à ce serveur Readur.",
+      "loadFailed": "Impossible de charger les utilisateurs",
+      "passwordRequired": "Saisissez un mot de passe.",
+      "removeDirFor": "Supprimer le dossier surveillé de {{name}}",
+      "usernameRequired": "Saisissez un nom d'utilisateur.",
+      "viewDirFor": "Voir le dossier surveillé de {{name}}"
+    },
+    "validation": {
+      "choose": "Choisissez une des options.",
+      "integer": "Saisissez un nombre entier.",
+      "min": "Saisissez {{min}} ou plus.",
+      "number": "Saisissez un nombre.",
+      "odd": "Saisissez un nombre impair.",
+      "range": "Saisissez une valeur entre {{min}} et {{max}}.",
+      "required": "Saisissez une valeur."
+    },
+    "account": {
+      "changePassword": "Changer le mot de passe",
+      "confirmNewPassword": "Confirmer le nouveau mot de passe",
+      "currentPassword": "Mot de passe actuel",
+      "newPassword": "Nouveau mot de passe",
+      "passwordChangeFailed": "Impossible de changer le mot de passe",
+      "passwordChanged": "Mot de passe modifié. Vos autres sessions ont été déconnectées.",
+      "passwordMismatch": "Les nouveaux mots de passe ne correspondent pas",
+      "passwordPolicy": "Au moins {{min}} caractères",
+      "passwordTooLong": "Le mot de passe ne doit pas dépasser {{max}} octets",
+      "title": "Compte",
+      "tooManyAttempts": "Trop de tentatives. Réessayez plus tard.",
+      "updatePassword": "Mettre à jour le mot de passe",
+      "wrongCurrentPassword": "Le mot de passe actuel est incorrect"
     }
   },
   "labels": {
@@ -1001,7 +1247,8 @@
       "cancel": "Annuler",
       "create": "Créer",
       "update": "Mettre à jour",
-      "saving": "Enregistrement..."
+      "saving": "Enregistrement...",
+      "previewName": "Aperçu de l’étiquette"
     },
     "selector": {
       "placeholder": "Rechercher ou créer des étiquettes...",
@@ -1010,7 +1257,9 @@
       "createLabel": "Créer l'étiquette \"{{name}}\"",
       "noLabelsFound": "Aucune étiquette trouvée",
       "noLabelsMatch": "Aucune étiquette ne correspond à \"{{query}}\"",
-      "noLabelsAvailable": "Aucune étiquette disponible"
+      "noLabelsAvailable": "Aucune étiquette disponible",
+      "label": "Étiquettes",
+      "selected": "Étiquettes sélectionnées"
     },
     "empty": {
       "title": "Aucune étiquette trouvée",
@@ -1039,7 +1288,41 @@
       "systemDelete": "Les étiquettes système ne peuvent pas être supprimées. Seules les étiquettes créées par l'utilisateur peuvent être supprimées.",
       "invalidName": "Le nom de l'étiquette contient des caractères invalides. Veuillez utiliser uniquement des lettres, des chiffres et une ponctuation de base.",
       "invalidColor": "Format de couleur invalide. Veuillez utiliser une couleur hexadécimale valide comme #0969da.",
-      "maxLabelsReached": "Nombre maximal d'étiquettes atteint. Veuillez supprimer certaines étiquettes avant d'en créer de nouvelles."
+      "maxLabelsReached": "Nombre maximal d'étiquettes atteint. Veuillez supprimer certaines étiquettes avant d'en créer de nouvelles.",
+      "commaNotAllowed": "Les noms d'étiquettes ne peuvent pas contenir de virgules."
+    },
+    "colors": {
+      "blue": "Bleu",
+      "gray": "Gris",
+      "green": "Vert",
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "pink": "Rose",
+      "purple": "Violet",
+      "red": "Rouge",
+      "teal": "Bleu canard",
+      "yellow": "Jaune"
+    },
+    "icons": {
+      "archive": "Archive",
+      "assignment": "Tâche",
+      "briefcase": "Porte-documents",
+      "bug": "Bogue",
+      "build": "Outil",
+      "document": "Document",
+      "dollar": "Argent",
+      "folder": "Dossier",
+      "label": "Étiquette",
+      "medical": "Médical",
+      "person": "Personne",
+      "receipt": "Reçu",
+      "scale": "Juridique",
+      "schedule": "Agenda",
+      "star": "Étoile",
+      "work": "Travail"
+    },
+    "tag": {
+      "remove": "Retirer {{name}}"
     }
   },
   "notifications": {
@@ -1074,14 +1357,20 @@
     },
     "actions": {
       "signup": "S'inscrire",
-      "creating": "Création du compte..."
+      "creating": "Création du compte...",
+      "backToSignIn": "Retour à la connexion"
     },
     "links": {
       "signin": "Vous avez déjà un compte ? Se connecter"
     },
     "errors": {
-      "failed": "Échec de l'inscription"
-    }
+      "failed": "Échec de l'inscription",
+      "disabled": "L'inscription libre est désactivée sur ce serveur.",
+      "passwordTooShort": "Le mot de passe doit contenir au moins {{min}} caractères",
+      "rateLimited": "Trop de tentatives d'inscription. Réessayez plus tard."
+    },
+    "passwordHint": "Au moins {{min}} caractères",
+    "pendingApproval": "Compte créé. Un administrateur doit le valider avant que vous puissiez vous connecter."
   },
   "debug": {
     "title": "Débogage du traitement de documents",
@@ -1366,7 +1655,10 @@
       "sourceType": "Type de source",
       "sourceEnabled": "Source activée",
       "sourceEnabledHelper": "Activer cette source pour la synchronisation",
-      "sourceNamePlaceholder": "Mon serveur de documents"
+      "sourceNamePlaceholder": "Mon serveur de documents",
+      "keepCurrentSecret": "Laissez vide pour conserver la valeur actuelle",
+      "passwordStored": "Un mot de passe est enregistré pour cette source",
+      "secretStored": "Une clé secrète est enregistrée pour cette source"
     },
     "webdav": {
       "title": "Configuration WebDAV",
@@ -1514,6 +1806,1534 @@
         "watchDirectory": "Répertoire surveillé",
         "exampleFile": "Fichier exemple"
       }
+    }
+  },
+  "ui": {
+    "clear": "Effacer",
+    "close": "Fermer",
+    "showOptions": "Afficher les options",
+    "notifications": "Notifications",
+    "pagination": {
+      "label": "Pagination",
+      "range": "{{start}}–{{end}} sur {{total}}",
+      "pageSize": "Lignes par page",
+      "previous": "Page précédente",
+      "next": "Page suivante"
+    },
+    "toast": {
+      "info": "Info :",
+      "success": "Succès :",
+      "danger": "Erreur :"
+    },
+    "filterChip": {
+      "clear": "Retirer le filtre {{label}}"
+    },
+    "bulk": {
+      "label": "Actions groupées",
+      "clear": "Effacer la sélection",
+      "count_one": "<n>{{count}}</n> <w>sélectionné</w>",
+      "count_other": "<n>{{count}}</n> <w>sélectionnés</w>"
+    },
+    "commandPalette": {
+      "label": "Palette de commandes",
+      "search": "Rechercher",
+      "placeholder": "Rechercher des documents, libellés, pages…",
+      "loading": "Recherche…",
+      "noResults": "Aucun résultat",
+      "results": "Résultats",
+      "hint": "Saisissez pour rechercher"
+    },
+    "board": {
+      "loading": "Chargement",
+      "empty": "Rien à afficher"
+    }
+  },
+  "status": {
+    "pending": "En attente",
+    "processing": "OCR",
+    "processingProgress": "OCR {{current}}/{{total}}",
+    "completed": "Indexé",
+    "failed": "Échec",
+    "healthy": "Opérationnel",
+    "syncing": "Synchronisation",
+    "warning": "À vérifier",
+    "error": "Erreur",
+    "disabled": "Désactivé"
+  },
+  "shell": {
+    "skipToContent": "Aller au contenu",
+    "home": "Accueil Readur",
+    "loading": "Chargement",
+    "nav": {
+      "label": "Principale",
+      "tabBar": "Barre d’onglets",
+      "board": "Tableau",
+      "library": "Bibliothèque",
+      "intake": "Entrée",
+      "settings": "Paramètres",
+      "home": "Accueil",
+      "search": "Recherche"
+    },
+    "search": {
+      "open": "Rechercher des documents",
+      "placeholder": "Rechercher des documents…",
+      "short": "Recherche rapide…"
+    },
+    "palette": {
+      "navigation": "Aller à",
+      "documents": "Documents",
+      "recent": "Recherches récentes",
+      "showAll": "Afficher tous les résultats pour « {{query}} »"
+    },
+    "synced": {
+      "justNow": "synchronisé à l’instant",
+      "minutes": "synchronisé il y a {{count}} min",
+      "hours": "synchronisé il y a {{count}} h",
+      "days": "synchronisé il y a {{count}} j",
+      "at": "synchronisé {{when}}"
+    },
+    "alerts": {
+      "label": "Notifications",
+      "labelUnread": "Notifications, {{count}} non lues",
+      "unread": "{{count}} non lues",
+      "close": "Fermer les notifications",
+      "dismiss": "Ignorer {{title}}",
+      "new": "Nouveau",
+      "type": {
+        "success": "Succès",
+        "error": "Erreur",
+        "warning": "Avertissement",
+        "info": "Info"
+      }
+    },
+    "language": {
+      "label": "Changer de langue"
+    },
+    "theme": {
+      "toDark": "Passer en mode sombre",
+      "toLight": "Passer en mode clair"
+    },
+    "user": {
+      "menu": "Menu du compte",
+      "settings": "Paramètres",
+      "apiDocs": "Documentation de l’API",
+      "logout": "Se déconnecter",
+      "menuFor": "Menu du compte, {{name}}"
+    },
+    "intake": {
+      "title": "Entrée",
+      "sections": "Sections d’entrée",
+      "upload": "Importer",
+      "connections": "Connexions",
+      "watch": "Dossier surveillé",
+      "attention": "À traiter",
+      "ignored": "Fichiers ignorés"
+    },
+    "settings": {
+      "title": "Paramètres",
+      "sections": "Sections des paramètres",
+      "general": "Général",
+      "labels": "Étiquettes",
+      "debug": "Débogage"
+    },
+    "collections": {
+      "title": "Collections",
+      "empty": "Aucune collection pour l'instant",
+      "all": "Toutes les collections"
+    },
+    "sources": {
+      "title": "Sources",
+      "uploads": "Téléversements",
+      "watch": "Dossier surveillé",
+      "health": {
+        "syncing": "Synchro",
+        "error": "Erreur",
+        "check": "À vérifier",
+        "off": "Désactivé"
+      }
+    },
+    "menu": {
+      "label": "Menu",
+      "open": "Ouvrir le menu",
+      "close": "Fermer le menu"
+    }
+  },
+  "board": {
+    "title": "Tableau de bord",
+    "addDocuments": "Ajouter des documents",
+    "retry": "Réessayer",
+    "viewAll": "Tout afficher",
+    "figure": {
+      "inQueue": "{{formatted}} en file",
+      "zero": "0 en file"
+    },
+    "markAllSeen": "Tout marquer comme vu",
+    "loading": "Chargement",
+    "tag": {
+      "new": "Nouveau",
+      "changed": "Modifié"
+    },
+    "col": {
+      "name": "Nom",
+      "type": "Type",
+      "status": "Statut",
+      "size": "Taille",
+      "added": "Ajouté",
+      "reason": "Motif",
+      "age": "Âge",
+      "actions": "Actions"
+    },
+    "attention": {
+      "title": "À traiter",
+      "dismiss": "Ignorer",
+      "dismissNamed": "Ignorer {{name}}",
+      "retryNamed": "Réessayer {{name}}",
+      "retryQueued": "Nouvel essai lancé",
+      "retryFailed": "Impossible de réessayer",
+      "error": "Certains éléments à traiter n’ont pas pu être chargés."
+    },
+    "arrivals": {
+      "title": "Ajouts récents",
+      "library": "Ouvrir la bibliothèque",
+      "error": "Les documents récents n’ont pas pu être chargés.",
+      "empty": "Aucun document pour l’instant",
+      "emptyHint": "Les documents ajoutés apparaissent ici dès leur arrivée.",
+      "bulkOne": "nouveau document",
+      "bulkMany": "nouveaux documents",
+      "bulkOpen": "Ouvrir dans la bibliothèque, les plus récents en premier"
+    },
+    "processing": {
+      "title": "Traitement",
+      "pending": "En attente",
+      "processing": "En cours",
+      "failed": "Échecs",
+      "doneToday": "Terminés aujourd’hui",
+      "oldestWait": "Attente la plus longue",
+      "error": "La file OCR n’a pas pu être chargée.",
+      "statusError": "L’état de l’OCR n’a pas pu être chargé.",
+      "ocr": "OCR",
+      "pause": "Suspendre l’OCR",
+      "resume": "Reprendre l’OCR",
+      "pauseFailed": "Impossible de suspendre l’OCR",
+      "resumeFailed": "Impossible de reprendre l’OCR"
+    },
+    "connections": {
+      "title": "Connexions",
+      "manage": "Gérer",
+      "error": "Les connexions n’ont pas pu être chargées.",
+      "empty": "Aucune connexion",
+      "add": "Ajouter une connexion"
+    },
+    "totals": {
+      "title": "Bibliothèque",
+      "documents": "Documents",
+      "storage": "Stockage",
+      "indexed": "Indexé",
+      "labels": "Étiquettes",
+      "error": "Les totaux de la bibliothèque n’ont pas pu être chargés."
+    }
+  },
+  "document": {
+    "breadcrumb": "Fil d’Ariane",
+    "library": "Bibliothèque",
+    "actions": {
+      "retry": "Relancer l’OCR",
+      "download": "Télécharger",
+      "share": "Partager",
+      "comments": "Commentaires",
+      "more": "Plus d’actions",
+      "processedImage": "Voir l’image traitée",
+      "delete": "Supprimer le document"
+    },
+    "delete": {
+      "title": "Supprimer ce document ?",
+      "cancel": "Annuler",
+      "confirm": "Supprimer",
+      "message": "<0>{{filename}}</0> sera supprimé avec son texte extrait, ses étiquettes, ses commentaires et ses liens de partage. Cette action est irréversible."
+    },
+    "processed": {
+      "title": "Image traitée",
+      "close": "Fermer",
+      "loading": "Chargement de l’image",
+      "missing": "Aucune image traitée n’est enregistrée pour ce document.",
+      "alt": "Image telle que préparée pour l’OCR",
+      "caption": "Voici l’image nettoyée que le moteur OCR a lue."
+    },
+    "loading": "Chargement du document",
+    "panel": {
+      "comments": "Commentaires",
+      "links": "Liens de partage",
+      "label": "Panneau latéral"
+    },
+    "notFound": "Document introuvable",
+    "loadFailed": "Impossible de charger ce document",
+    "notFoundHint": "Il a peut-être été supprimé, ou le lien est erroné.",
+    "loadFailedHint": "Vérifiez votre connexion et réessayez.",
+    "retry": "Réessayer",
+    "backToLibrary": "Retour à la bibliothèque",
+    "toast": {
+      "downloadFailed": "Impossible de télécharger le fichier",
+      "retryQueued": "OCR remis en file d’attente",
+      "retryFailed": "Impossible de remettre l’OCR en file d’attente",
+      "deleted": "Document supprimé",
+      "deleteFailed": "Impossible de supprimer le document",
+      "labelsFailed": "Impossible d’enregistrer les étiquettes"
+    },
+    "labels": {
+      "editor": "Modifier les étiquettes",
+      "placeholder": "Rechercher ou créer des étiquettes…",
+      "cancel": "Annuler",
+      "save": "Enregistrer les étiquettes",
+      "add": "Ajouter une étiquette"
+    },
+    "type": {
+      "image": "Image",
+      "text": "Texte",
+      "other": "Fichier"
+    },
+    "pass": {
+      "uploaded": "Import",
+      "sourceLocalFolder": "Dossier local",
+      "sourceBatch": "Import par lot",
+      "label": "Résumé du document",
+      "status": "Statut",
+      "progress": "Progression de l’OCR",
+      "type": "Type",
+      "pages": "Pages",
+      "size": "Taille",
+      "source": "Source",
+      "added": "Ajouté",
+      "language": "Langue",
+      "confidence": "Confiance",
+      "labels": "Étiquettes",
+      "noLabels": "Aucune",
+      "editLabels": "Modifier les étiquettes"
+    },
+    "share": {
+      "titleNamed": "Partager {{name}}",
+      "title": "Partager le document",
+      "done": "Terminé",
+      "active": "Actif",
+      "expired": "Expiré",
+      "revoked": "Révoqué",
+      "copied": "Lien copié",
+      "copyFailed": "Impossible de copier le lien",
+      "revokedToast": "Lien révoqué",
+      "revokeFailed": "Impossible de révoquer le lien",
+      "none": "Aucun lien de partage pour l’instant.",
+      "existing": "Liens existants",
+      "views": "Vues",
+      "expiresShort": "Expire",
+      "never": "Jamais",
+      "createdShort": "Créé",
+      "protected": "Mot de passe",
+      "confirmRevoke": "Révoquer ce lien ?",
+      "confirmRevokeText": "Révoquer ce lien ? Il cessera de fonctionner pour toutes les personnes qui l’ont.",
+      "keep": "Conserver",
+      "revoke": "Révoquer",
+      "copy": "Copier le lien",
+      "revokeLink": "Révoquer le lien",
+      "loadFailed": "Impossible de charger les liens de partage.",
+      "loading": "Chargement des liens de partage",
+      "createFailed": "Impossible de créer le lien. Réessayez.",
+      "ready": "Toute personne disposant de ce lien peut ouvrir le document.",
+      "url": "Lien de partage",
+      "passwordNote": "Le mot de passe sera nécessaire pour l’ouvrir.",
+      "another": "Créer un autre lien",
+      "newLink": "Nouveau lien de partage",
+      "password": "Mot de passe (facultatif)",
+      "passwordHint": "Laisser vide pour un accès libre",
+      "hidePassword": "Masquer le mot de passe",
+      "showPassword": "Afficher le mot de passe",
+      "expires": "Expiration (facultatif)",
+      "expiresHint": "Laisser vide pour aucune expiration",
+      "maxViews": "Limite de vues (facultatif)",
+      "maxViewsHint": "Laisser vide pour des vues illimitées",
+      "create": "Créer le lien"
+    },
+    "details": {
+      "yes": "Oui",
+      "octal": "octal",
+      "no": "Non",
+      "sourceMetadata": "Métadonnées de la source",
+      "fieldCount_one": "{{count}} champ",
+      "fieldCount_other": "{{count}} champs",
+      "hashCopied": "Hash copié",
+      "copyFailed": "Copie impossible",
+      "file": "Fichier",
+      "filename": "Nom du fichier",
+      "mimeType": "Type MIME",
+      "size": "Taille",
+      "added": "Ajouté",
+      "modified": "Dernière modification",
+      "addedBy": "Ajouté par",
+      "unknown": "Inconnu",
+      "owner": "Propriétaire",
+      "group": "Groupe",
+      "permissions": "Permissions",
+      "hash": "SHA-256",
+      "copyHash": "Copier le hash",
+      "notAvailable": "Non disponible",
+      "source": "Source",
+      "sourceType": "Type",
+      "sourcePath": "Chemin",
+      "sourceId": "ID de la source",
+      "originalCreated": "Créé à l’origine",
+      "originalModified": "Modifié à l’origine",
+      "processing": "Traitement",
+      "status": "Statut",
+      "confidence": "Confiance",
+      "words": "Mots",
+      "time": "Durée du traitement",
+      "retries": "Relances",
+      "failure": "Cause de l’échec",
+      "activity": "Activité",
+      "retryHistory_one": "Historique des relances ({{count}})",
+      "retryHistory_other": "Historique des relances ({{count}})",
+      "title": "Détails",
+      "hide": "Masquer les détails",
+      "show": "Afficher les détails"
+    },
+    "activity": {
+      "uploaded": "Ajouté",
+      "by": "par {{name}}",
+      "ocrDone": "Texte extrait",
+      "ocrFailed": "Échec de l’OCR",
+      "ocrRunning": "OCR en cours"
+    },
+    "text": {
+      "words_one": "{{n}} mot",
+      "words_other": "{{n}} mots",
+      "copied": "Texte copié",
+      "copyFailed": "Impossible de copier le texte",
+      "confidence": "{{value}} % de confiance",
+      "time": "{{ms}} ms",
+      "noMatches": "Aucun résultat",
+      "matchPosition": "{{current}} sur {{total}}",
+      "title": "Texte",
+      "find": "Rechercher dans le texte",
+      "findPlaceholder": "Rechercher dans le texte…",
+      "previousMatch": "Résultat précédent",
+      "nextMatch": "Résultat suivant",
+      "monospace": "Chasse fixe",
+      "copyAll": "Copier tout le texte",
+      "body": "Texte extrait",
+      "loading": "Chargement du texte",
+      "pending": "Le texte apparaîtra ici une fois l’OCR terminé.",
+      "failed": "L’OCR n’a pas pu lire ce document.",
+      "loadFailed": "Impossible de charger le texte extrait.",
+      "empty": "Aucun texte trouvé dans ce document.",
+      "displayOptions": "Options d’affichage du texte",
+      "copy": "Copier",
+      "failureDetail": "Afficher le message complet"
+    },
+    "comments": {
+      "saveFailed": "Impossible d’enregistrer le commentaire. Réessayez.",
+      "cancel": "Annuler",
+      "post": "Publier",
+      "by": "Commentaire de {{name}}",
+      "edited": "modifié",
+      "editLabel": "Modifier le commentaire",
+      "save": "Enregistrer",
+      "reply": "Répondre",
+      "edit": "Modifier le commentaire",
+      "delete": "Supprimer le commentaire",
+      "newLabel": "Nouveau commentaire",
+      "placeholder": "Écrire un commentaire…",
+      "loadFailed": "Impossible de charger les commentaires.",
+      "loading": "Chargement des commentaires",
+      "empty": "Aucun commentaire pour l’instant",
+      "emptyHint": "Lancez la discussion sur ce document.",
+      "list": "Commentaires",
+      "deleteFailed": "Impossible de supprimer le commentaire",
+      "loadRepliesFailed": "Impossible de charger plus de réponses",
+      "replyLabel": "Répondre à {{name}}",
+      "hideReplies_one": "Masquer {{count}} réponse",
+      "hideReplies_other": "Masquer {{count}} réponses",
+      "showReplies_one": "Afficher {{count}} réponse",
+      "showReplies_other": "Afficher {{count}} réponses",
+      "loadMore": "Charger plus de réponses"
+    },
+    "shared": {
+      "wrongPassword": "Ce mot de passe est incorrect. Réessayez.",
+      "verifyFailed": "Impossible de vérifier le mot de passe. Réessayez.",
+      "downloadFailed": "Impossible de télécharger le fichier. Réessayez.",
+      "loading": "Chargement du document partagé",
+      "expiredTitle": "Ce lien a expiré",
+      "unavailableTitle": "Ce lien n’est pas disponible",
+      "expired": "Il a dépassé sa date d’expiration, atteint sa limite de vues ou a été révoqué. Demandez un nouveau lien à l’expéditeur.",
+      "missing": "Il n’existe pas ou a été supprimé.",
+      "invalid": "Le lien est incomplet.",
+      "error": "Impossible de charger le document partagé. Réessayez plus tard.",
+      "passwordTitle": "Mot de passe requis",
+      "passwordHint": "Ce document est protégé. Saisissez le mot de passe qui vous a été donné.",
+      "password": "Mot de passe",
+      "submit": "Ouvrir le document",
+      "file": "Fichier",
+      "expires": "Expire",
+      "preview": "Afficher l’aperçu",
+      "previewHint": "Ouvrir l’aperçu compte comme une vue de ce lien.",
+      "expiresOn": "Le lien expire le {{date}}",
+      "noExpiry": "Le lien n’expire jamais"
+    },
+    "viewer": {
+      "loading": "Chargement de l’aperçu",
+      "error": "Impossible de charger l’aperçu.",
+      "unsupported": "Pas d’aperçu pour ce type de fichier",
+      "unsupportedHint": "Les fichiers {{type}} ne peuvent pas s’afficher dans le navigateur. Téléchargez le fichier pour l’ouvrir."
+    },
+    "tabs": {
+      "preview": "Aperçu",
+      "label": "Vues du document",
+      "text": "Texte",
+      "details": "Détails"
+    },
+    "meta": {
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "added": "Ajouté le {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "view": {
+      "label": "Affichage",
+      "document": "Document",
+      "split": "Côte à côte",
+      "text": "Texte"
+    }
+  },
+  "library": {
+    "add": "Ajouter des documents",
+    "added": {
+      "1y": "Dernière année",
+      "30d": "30 derniers jours",
+      "7d": "7 derniers jours",
+      "from": "Du",
+      "order": "La date de fin précède la date de début",
+      "to": "Au"
+    },
+    "bulk": {
+      "addLabel": "Ajouter une étiquette",
+      "addLabelTitle": "Ajouter des étiquettes à {{count}} documents",
+      "addLabelTitle_one": "Ajouter des étiquettes à 1 document",
+      "apply": "Ajouter les étiquettes",
+      "delete": "Supprimer",
+      "deleteBody": "Les documents et leur texte seront supprimés. Action irréversible.",
+      "deleteFailed": "Impossible de supprimer les documents",
+      "deleteTitle": "Supprimer {{count}} documents ?",
+      "deleteTitle_one": "Supprimer 1 document ?",
+      "deleted": "{{count}} documents supprimés",
+      "deleted_one": "1 document supprimé",
+      "download": "Télécharger",
+      "downloadFailed": "{{count}} téléchargements ont échoué",
+      "downloadFailed_one": "1 téléchargement a échoué",
+      "downloaded": "{{count}} documents téléchargés",
+      "downloaded_one": "1 document téléchargé",
+      "downloading": "Téléchargement…",
+      "labelFailed": "Impossible d’ajouter les étiquettes",
+      "labelled": "Étiquettes ajoutées à {{count}} documents",
+      "labelled_one": "Étiquettes ajoutées à 1 document",
+      "retry": "Relancer l’OCR",
+      "deleteNone": "Aucun document n'a été supprimé",
+      "deletedSome": "{{deleted}} documents sur {{requested}} supprimés"
+    },
+    "cancel": "Annuler",
+    "columns": {
+      "added": "Ajouté",
+      "labels": "Étiquettes",
+      "name": "Nom",
+      "size": "Taille",
+      "source": "Source",
+      "status": "Statut",
+      "type": "Type",
+      "updated": "Modifié"
+    },
+    "compact": "Lignes compactes",
+    "count": "{{formatted}} documents",
+    "count_one": "{{formatted}} document",
+    "counting": "Comptage…",
+    "detail": {
+      "confidence": "Confiance",
+      "delete": "Supprimer",
+      "deleteBody": "« {{name}} » et son texte seront supprimés. Action irréversible.",
+      "deleteFailed": "Impossible de supprimer le document",
+      "deleteTitle": "Supprimer ce document ?",
+      "deleted": "Document supprimé",
+      "download": "Télécharger",
+      "downloadFailed": "Le téléchargement a échoué",
+      "facts": "Informations du document",
+      "labelsFailed": "Impossible d’enregistrer les étiquettes",
+      "labelsSaved": "Étiquettes enregistrées",
+      "language": "Langue",
+      "loadingText": "Chargement du texte",
+      "noPreview": "Pas encore d’aperçu",
+      "noText": "Aucun texte n’a encore été lu dans ce document.",
+      "open": "Ouvrir",
+      "pagesOcr": "Pages/OCR",
+      "retry": "Relancer l’OCR",
+      "retryFailed": "Impossible de relancer la reconnaissance de texte",
+      "retryQueued": "Reconnaissance de texte remise en file",
+      "share": "Partager",
+      "text": "Texte",
+      "textFailed": "Le texte n’a pas pu être chargé.",
+      "title": "Document",
+      "pages_one": "1 page",
+      "pages_other": "{{count}} pages",
+      "added": "Ajouté le {{date}}",
+      "ocr": "OCR {{value}} %"
+    },
+    "empty": {
+      "clearFilters": "Effacer les filtres",
+      "error": "Impossible de charger les documents",
+      "noMatches": "Aucun résultat",
+      "noMatchesHint": "Rien ne correspond à la recherche et aux filtres actuels.",
+      "none": "Pas encore de documents",
+      "noneHint": "Importez des fichiers ou connectez un dossier pour démarrer votre bibliothèque.",
+      "tooMany": "Trop de résultats — affinez votre recherche",
+      "tooManyHint": "Ajoutez un mot ou un filtre pour réduire les résultats.",
+      "collection": "Rien dans « {{name}} » pour l’instant",
+      "collectionHint": "Cherchez des documents, cochez ceux qui vont ici et choisissez « Enregistrer comme collection ».",
+      "goSearch": "Aller à la recherche"
+    },
+    "filters": {
+      "added": "Ajouté",
+      "any": "Tous",
+      "clearAll": "Tout effacer",
+      "findLabel": "Rechercher une collection",
+      "label": "Étiquette",
+      "noLabelMatch": "Aucune collection correspondante",
+      "noLabels": "Aucune collection pour l'instant",
+      "region": "Rechercher et filtrer",
+      "source": "Source",
+      "status": "Statut",
+      "type": "Type",
+      "collection": "Collection"
+    },
+    "help": {
+      "boolean": "Opérateurs",
+      "booleanHint": "Utilisez & (et), | (ou), ! (sauf)",
+      "exampleAnd": "Les deux mots",
+      "exampleFuzzy": "Tolère les fautes de frappe",
+      "exampleNot": "Exclure un mot",
+      "exampleOr": "L’un ou l’autre mot",
+      "examplePhrase": "Une expression exacte",
+      "exampleWord": "Documents qui mentionnent un mot",
+      "examples": "Essayer",
+      "fuzzy": "Orthographe proche",
+      "fuzzyHint": "Trouve aussi les correspondances proches et les coquilles",
+      "intro": "La recherche porte sur les noms de fichiers et le texte lu dans chaque document.",
+      "match": "Correspondance",
+      "open": "Aide à la recherche",
+      "phrase": "Expression exacte",
+      "phraseHint": "Les mots se suivent, dans cet ordre",
+      "simple": "Tous les mots",
+      "simpleHint": "Chaque mot apparaît quelque part",
+      "title": "Aide à la recherche"
+    },
+    "labelsMore": "{{count}} de plus",
+    "retry": "Réessayer",
+    "search": {
+      "keepTyping": "Continuez à saisir…",
+      "label": "Rechercher des documents",
+      "placeholder": "Rechercher noms et texte…",
+      "allDates": "Afficher toutes les dates",
+      "allSelected_one": "Le seul résultat est sélectionné",
+      "allSelected_other": "Les {{formatted}} résultats sont sélectionnés",
+      "bestMatch": "Meilleurs résultats",
+      "bigPlaceholder": "Cherchez dans tous les documents par nom ou par les mots qu’ils contiennent",
+      "count_one": "1 document correspond à « {{q}} »",
+      "count_other": "{{formatted}} documents correspondent à « {{q}} »",
+      "counting": "Recherche…",
+      "error": "La recherche n’a pas abouti",
+      "everything": "Chercher dans tous les documents…",
+      "inRange": "en {{range}}",
+      "loading": "Recherche…",
+      "monthCount_one": "1 résultat",
+      "monthCount_other": "{{count}} résultats",
+      "nameMatch": "Correspond au nom du fichier",
+      "newest": "Plus récents d’abord",
+      "noMatchesHint": "Vérifiez l’orthographe, essayez moins de mots ou activez « Orthographe proche » dans l’aide à la recherche.",
+      "order": "Ordre",
+      "preview": "Aperçu de {{name}}",
+      "results": "Résultats",
+      "selectAll_one": "Sélectionner le seul résultat",
+      "selectAll_other": "Sélectionner les {{formatted}} résultats",
+      "selectPage": "Tout sélectionner sur cette page",
+      "startHint": "Readur cherche dans les noms de fichiers et dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
+      "startTitle": "Retrouvez tout dans vos documents",
+      "title": "Recherche"
+    },
+    "sort": {
+      "asc": "{{field}}, croissant",
+      "desc": "{{field}}, décroissant",
+      "label": "Trier par",
+      "relevance": "Meilleure correspondance"
+    },
+    "source": {
+      "unknown": "Connexion",
+      "upload": "Import",
+      "watch": "Dossier surveillé"
+    },
+    "status": {
+      "completed": "Indexé",
+      "failed": "Échec",
+      "pending": "En attente",
+      "processing": "En cours"
+    },
+    "table": "Documents",
+    "tag": {
+      "changed": "Modifié",
+      "new": "Nouveau"
+    },
+    "title": "Bibliothèque",
+    "type": {
+      "image": "Images",
+      "office": "Bureautique",
+      "other": "Autres",
+      "pdf": "PDF",
+      "text": "Texte"
+    },
+    "collection": {
+      "action": "Enregistrer comme collection",
+      "assignFailed": "La collection a été créée, mais les documents n’ont pas pu être ajoutés. Réessayez.",
+      "assignFailedExisting": "Les documents n’ont pas pu être ajoutés",
+      "color": "Couleur",
+      "createFailed": "La collection n’a pas pu être créée",
+      "existing": "Une collection existante",
+      "name": "Nom",
+      "nameRequired": "Donnez un nom à la collection",
+      "nameTaken": "Une collection porte déjà ce nom. Choisissez-la sous « Une collection existante ».",
+      "new": "Une nouvelle collection",
+      "pick": "Collection",
+      "pickPlaceholder": "Choisissez une collection",
+      "save": "Enregistrer",
+      "saved_one": "1 document enregistré dans « {{name}} »",
+      "saved_other": "{{count}} documents enregistrés dans « {{name}} »",
+      "target": "Enregistrer dans",
+      "title_one": "Enregistrer 1 document comme collection",
+      "title_other": "Enregistrer {{count}} documents comme collection"
+    },
+    "loading": "Chargement des documents",
+    "monthCount_one": "1 document",
+    "monthCount_other": "{{count}} documents",
+    "selectDocument": "Sélectionner {{name}}",
+    "timeline": {
+      "label": "Résultats par mois",
+      "month_one": "{{month}} : 1 résultat",
+      "month_other": "{{month}} : {{formatted}} résultats",
+      "span": "{{first}} – {{last}}"
+    },
+    "undated": "Sans date",
+    "view": {
+      "grid": "Grille",
+      "label": "Affichage",
+      "table": "Tableau"
+    }
+  },
+  "intake": {
+    "actions": {
+      "cancel": "Annuler",
+      "close": "Fermer",
+      "refresh": "Actualiser",
+      "retry": "Réessayer"
+    },
+    "attention": {
+      "allReasons": "Tous les motifs",
+      "allStages": "Toutes les étapes",
+      "cannotRetry": "Ce document ne peut pas être relancé.",
+      "clearFilters": "Effacer les filtres",
+      "col": {
+        "failed": "Échec",
+        "name": "Nom",
+        "reason": "Motif",
+        "retries": "Tentatives",
+        "stage": "Étape",
+        "status": "Statut"
+      },
+      "confidence": "Confiance",
+      "created": "Ajouté",
+      "dates": "Dates",
+      "delete": "Supprimer",
+      "deleteBody": "Cette action est irréversible. Les documents et leurs fichiers sont supprimés définitivement.",
+      "deleteConfirm": "Supprimer les documents",
+      "deleteFailed": "Impossible de supprimer les documents",
+      "deleteNone": "Aucun document n’a été supprimé",
+      "deleteTitle_one": "Supprimer {{count}} document ?",
+      "deleteTitle_other": "Supprimer {{count}} documents ?",
+      "deletedOf": "{{deleted}} documents sur {{requested}} supprimés",
+      "download": "Télécharger",
+      "downloadFailed": "Impossible de télécharger le fichier",
+      "emptyBody": "Tous les documents ont été importés et lus.",
+      "emptyTitle": "Aucun document en échec",
+      "errorMessage": "Message d’erreur",
+      "failedLabel": "Documents en échec",
+      "failure": "Échec",
+      "file": "Fichier",
+      "filter": "Afficher",
+      "importEmpty": "Aucun autre échec d’import.",
+      "importLead": "Fichiers en échec avant ou en dehors de l’OCR. Ce ne sont que des enregistrements : ouvrez-en un pour voir pourquoi.",
+      "importLoadFailed": "Impossible de charger les échecs d’import.",
+      "importTitle": "Autres échecs d’import",
+      "lastRetry": "Dernière tentative",
+      "loadFailed": "Impossible de charger les documents en échec.",
+      "markSeen": "Marquer comme vu",
+      "noErrorMessage": "Aucun message d’erreur n’a été enregistré.",
+      "noRetries": "aucune pour l’instant",
+      "notFound": "Le document n’existe plus.",
+      "ocrLead": "Documents dont le texte n’a pas pu être lu. Ouvrez-en un pour les détails, ou sélectionnez-en plusieurs pour les relancer ou les supprimer.",
+      "ocrResult": "Résultat OCR",
+      "preview": "Fichier",
+      "reason": {
+        "duplicate_content": "Contenu en double",
+        "file_corrupted": "Fichier corrompu",
+        "file_too_large": "Fichier trop volumineux",
+        "low_ocr_confidence": "Confiance OCR faible",
+        "ocr_timeout": "Délai OCR dépassé",
+        "other": "Autre",
+        "pdf_parsing_error": "Le PDF n’a pas pu être lu",
+        "unsupported_format": "Format non pris en charge"
+      },
+      "reasonCode": "Code du motif : {{code}}",
+      "reasonFilter": "Motif",
+      "recordOnly": "Ceci est l’enregistrement d’un import en échec ; le fichier n’a pas été ajouté à la bibliothèque.",
+      "retry": "Réessayer",
+      "retryFailed": "Impossible de relancer l’OCR",
+      "retryLanguages": "Relancer avec des langues",
+      "retryLanguagesHint": "Facultatif. Laissez vide pour utiliser votre langue OCR par défaut.",
+      "retryOcr": "Relancer l’OCR",
+      "retryOptions": "Réessayer…",
+      "retryPartial": "Certains documents n’ont pas été mis en file d’attente. Vérifiez-les et réessayez.",
+      "retryQueued": "{{queued}} documents sur {{matched}} en file d’attente",
+      "retryStarted": "Nouvelle tentative OCR en file d’attente",
+      "retryWait": "{{name}} · environ {{minutes}} min",
+      "size": "Taille",
+      "source": "Source",
+      "stage": {
+        "ingestion": "Import",
+        "ocr": "OCR",
+        "processing": "Traitement",
+        "storage": "Stockage",
+        "sync": "Synchronisation",
+        "validation": "Validation"
+      },
+      "stageFilter": "Étape",
+      "tags": "Étiquettes : {{tags}}",
+      "type": "Type",
+      "updated": "Mis à jour",
+      "view": {
+        "cleanup": "Nettoyage",
+        "duplicates": "Doublons",
+        "failed": "OCR en échec",
+        "lowConfidence": "Confiance faible"
+      },
+      "words": "Mots"
+    },
+    "bulkRetry": {
+      "advanced": "Avancé",
+      "criteria": "Critères",
+      "errors": {
+        "execute": "Impossible de lancer la nouvelle tentative",
+        "network": "Erreur réseau. Vérifiez votre connexion et réessayez.",
+        "none": "Aucun document ne correspond à ces critères.",
+        "noneQueued": "Aucun document n’a été mis en file d’attente : rien ne sera relancé.",
+        "ocr": "Certains documents ne peuvent pas être relancés à cause de problèmes de traitement.",
+        "permission": "Vous n’avez pas l’autorisation de relancer des documents.",
+        "preview": "Impossible de prévisualiser la nouvelle tentative",
+        "server": "Erreur du serveur. Réessayez plus tard.",
+        "session": "Votre session a expiré. Actualisez la page et reconnectez-vous."
+      },
+      "execute_one": "Relancer {{count}} document",
+      "execute_other": "Relancer {{count}} documents",
+      "fileTypes": "Types de fichiers",
+      "hours": "{{n}} heures",
+      "languages": "Langues OCR",
+      "languagesHint": "Facultatif. Relire les documents sélectionnés avec ces langues.",
+      "languagesSelectedOnly": "Le choix des langues ne s’applique qu’aux documents sélectionnés.",
+      "limit": "Nombre maximal de documents à relancer",
+      "limitHint": "Laissez vide pour aucune limite (1–1000).",
+      "matched": "Documents trouvés",
+      "maxSize": "Taille maximale du fichier",
+      "maxSizeValue": "Jusqu’à {{size}}",
+      "minutes": "{{n}} minutes",
+      "mode": "Mode de relance",
+      "modeAll": "Relancer tous les documents dont l’OCR a échoué",
+      "modeFilter": "Relancer les documents correspondant aux critères",
+      "modeSelected": "Relancer les documents sélectionnés ({{count}} sélectionnés)",
+      "more": "et {{count}} de plus",
+      "preview": "Aperçu",
+      "previewResults": "Résultats de l’aperçu",
+      "priority": "Priorité (plus élevée = plus urgent)",
+      "priorityNotWithLanguages": "La priorité forcée ne s’applique pas aux relances avec des langues choisies ; elles utilisent la priorité normale.",
+      "priorityOverride": "Forcer la priorité de traitement",
+      "reason": {
+        "corruption": "Fichier corrompu",
+        "font": "Problèmes d’encodage des polices",
+        "lowConfidence": "Confiance faible",
+        "memory": "Limite de mémoire",
+        "noText": "Aucun texte trouvé",
+        "timeout": "Délai de traitement dépassé"
+      },
+      "reasons": "Motifs d’échec",
+      "seconds": "{{n}} secondes",
+      "time": "Durée estimée",
+      "title": "Relance OCR groupée"
+    },
+    "cleanup": {
+      "confirmDelete_one": "Supprimer {{count}} document dont l’OCR a échoué ?",
+      "confirmDelete_other": "Supprimer {{count}} documents dont l’OCR a échoué ?",
+      "confirmRetryAll": "Relancer l’OCR de tous les documents en échec ?",
+      "deleteFailed": "Impossible de supprimer les documents en échec",
+      "deleteFailedButton": "Supprimer les documents en échec",
+      "deleted": "Documents en échec supprimés",
+      "failedBody": "Supprime tous les documents dont l’OCR a entièrement échoué, y compris ceux sans valeur de confiance. Commencez par l’aperçu.",
+      "failedTitle": "Supprimer les documents dont l’OCR a échoué",
+      "preview": "Aperçu",
+      "previewFailed": "Impossible de prévisualiser les documents en échec",
+      "requeueButton": "Relancer les tâches en échec",
+      "requeueTitle": "Relancer uniquement les tâches en échec",
+      "retryAllBody": "Remet en file l’OCR de tous les documents dont l’OCR a échoué. Les documents lus avec succès ne sont pas touchés. Avec beaucoup d’échecs, cela peut prendre longtemps.",
+      "retryAllButton": "Relancer tous les documents en échec",
+      "retryAllFailed": "Impossible de relancer les documents",
+      "retryAllNone": "Aucun document en échec à relancer",
+      "retryAllQueued_one": "{{count}} document en file d’attente, environ {{minutes}} min",
+      "retryAllQueued_other": "{{count}} documents en file d’attente, environ {{minutes}} min",
+      "retryAllTitle": "Relancer l’OCR de tous les documents en échec"
+    },
+    "connections": {
+      "add": "Ajouter une connexion",
+      "addFirst": "Ajoutez votre première connexion",
+      "autoRefreshing": "Actualisation pendant la synchronisation",
+      "col": {
+        "files": "Fichiers",
+        "lastSync": "Dernière synchro",
+        "name": "Nom",
+        "next": "Prochaine",
+        "status": "Statut",
+        "type": "Type"
+      },
+      "emptyBody": "Connectez un serveur WebDAV, un dossier local ou un stockage S3 et Readur importe les nouveaux fichiers tout seul.",
+      "emptyTitle": "Aucune connexion pour l’instant",
+      "label": "Connexions",
+      "loadFailed": "Impossible de charger les connexions."
+    },
+    "detail": {
+      "alreadySyncing": "Cette connexion est déjà en cours de synchronisation.",
+      "auth": "Connexion",
+      "authFailed": "La source a refusé les identifiants.",
+      "cannotConnect": "Impossible de se connecter à la source. Vérifiez ses paramètres.",
+      "connection": "Connexion",
+      "counts": "Comptes",
+      "deepScan": "Analyse approfondie",
+      "deepScanFailed": "Impossible de lancer l’analyse approfondie",
+      "deepScanHint": "L’analyse approfondie n’est disponible que pour les connexions WebDAV ; utilisez plutôt « Synchroniser ».",
+      "deepScanStarted": "Analyse approfondie lancée",
+      "deepScanWebdavOnly": "L’analyse approfondie n’est disponible que pour les connexions WebDAV.",
+      "delete": "Supprimer",
+      "deleteBody": "Cette action est irréversible. Les paramètres de la connexion et tout son historique de synchronisation sont supprimés définitivement.",
+      "deleteConfirm": "Supprimer la connexion",
+      "deleteFailed": "Impossible de supprimer la connexion",
+      "deleteTitle": "Supprimer « {{name}} » ?",
+      "deleteWhileSyncing": "Arrêtez la synchronisation avant de supprimer cette connexion.",
+      "deleted": "Cette connexion n’existe plus.",
+      "deletedToast": "Connexion supprimée",
+      "disable": "Désactiver",
+      "disabled": "Connexion désactivée",
+      "documents": "Documents",
+      "edit": "Modifier",
+      "enable": "Activer",
+      "enabled": "Connexion activée",
+      "errorsFailed": "Impossible de charger les erreurs récentes.",
+      "errorsLoading": "Chargement des erreurs récentes…",
+      "every": "toutes les {{minutes}} min",
+      "extensions": "Types de fichiers",
+      "failureCount_one": "{{count}} échec · dernier {{when}}",
+      "failureCount_other": "{{count}} échecs · dernier {{when}}",
+      "folders": "Dossiers",
+      "health": "Vérifier l’état",
+      "healthFailed": "Impossible de lancer la vérification de l’état",
+      "healthLabel": "État",
+      "healthStarted": "Vérification de l’état lancée",
+      "ignored": "Fichiers ignorés",
+      "interval": "Intervalle",
+      "lastError": "La dernière synchronisation a échoué",
+      "lastSync": "Dernière synchro",
+      "location": "Emplacement",
+      "manual": "manuel",
+      "never": "jamais",
+      "next": "Prochaine",
+      "noErrors": "Aucune erreur récente.",
+      "notSyncing": "Cette connexion n’est pas en cours de synchronisation.",
+      "ocrDone": "OCR terminé",
+      "passwordSet": "mot de passe défini",
+      "pending": "En attente",
+      "recentErrors": "Erreurs récentes",
+      "schedule": "Planification",
+      "scope": "Portée",
+      "severity": "Gravité : {{severity}}",
+      "size": "Taille",
+      "stop": "Arrêter la synchronisation",
+      "stopFailed": "Impossible d’arrêter la synchronisation",
+      "sync": "Synchroniser",
+      "syncFailed": "Impossible de lancer la synchronisation",
+      "syncStarted": "Synchronisation lancée",
+      "syncStopped": "Synchronisation arrêtée",
+      "toggleFailed": "Impossible de modifier la connexion",
+      "healthFindings": "Contrôle de santé"
+    },
+    "duplicates": {
+      "col": {
+        "actions": "Actions",
+        "added": "Ajouté",
+        "group": "Groupe",
+        "name": "Nom",
+        "size": "Taille",
+        "type": "Type"
+      },
+      "count_one": "{{count}} groupe de fichiers identiques",
+      "count_other": "{{count}} groupes de fichiers identiques",
+      "downloadFile": "Télécharger {{name}}",
+      "emptyBody": "Chaque fichier de la bibliothèque a un contenu unique.",
+      "emptyTitle": "Aucun doublon",
+      "label": "Documents en double",
+      "lead": "Ces fichiers ont un contenu identique sous des noms différents. Ouvrez-les pour décider lequel garder ; le premier envoi d’un groupe est listé en premier.",
+      "loadFailed": "Impossible de charger les doublons.",
+      "original": "Nom d’origine : {{name}}",
+      "view": "Voir",
+      "viewFile": "Voir {{name}}"
+    },
+    "form": {
+      "add": "Ajouter",
+      "addTo": "Ajouter à « {{label}} »",
+      "create": "Ajouter une connexion",
+      "createTitle": "Ajouter une connexion",
+      "created": "Connexion ajoutée",
+      "editTitle": "Modifier la connexion",
+      "enabled": "Connexion activée",
+      "enabledHint": "Inclure cette connexion lors des synchronisations",
+      "errors": {
+        "duplicate": "« {{value}} » est déjà dans la liste",
+        "duplicateName": "Une connexion portant ce nom existe déjà.",
+        "folderRequired": "Ajoutez au moins un dossier",
+        "interval": "Saisissez un nombre entier de minutes entre {{min}} et {{max}}",
+        "required": "Obligatoire",
+        "summary": "Corrigez les champs signalés avant d’enregistrer.",
+        "url": "Saisissez une adresse de serveur, par exemple cloud.example.com ou https://cloud.example.com"
+      },
+      "estimate": {
+        "byFolder": "Estimation par dossier",
+        "done": "Estimation prête",
+        "estimatedTime": "Durée estimée",
+        "failed": "Impossible d’estimer l’exploration",
+        "files": "Fichiers",
+        "folder": "Dossier",
+        "hint": "Estimez combien de fichiers une synchronisation complète traiterait et combien de temps elle prendrait.",
+        "results": "Résultats de l’estimation",
+        "run": "Estimer l’exploration",
+        "running": "Estimation…",
+        "sizeMb": "Taille (Mo)",
+        "supported": "Pris en charge",
+        "supportedFiles": "Fichiers pris en charge",
+        "time": "Durée",
+        "title": "Estimation de l’exploration",
+        "totalFiles": "Fichiers au total",
+        "totalSize": "Taille totale"
+      },
+      "extensions": {
+        "hint": "Types de fichiers à synchroniser et à traiter par OCR.",
+        "hintLocal": "Types de fichiers à surveiller et à traiter par OCR.",
+        "label": "Extensions de fichier"
+      },
+      "folders": {
+        "local": "Répertoires à surveiller",
+        "localHint": "Répertoires locaux à analyser. Utilisez des chemins absolus.",
+        "s3": "Préfixes d’objets à surveiller",
+        "s3Hint": "Préfixes d’objets (comme des dossiers) dans lesquels chercher des fichiers.",
+        "title": "Quoi surveiller",
+        "webdav": "Dossiers à surveiller",
+        "webdavHint": "Dossiers dans lesquels chercher des fichiers. Utilisez des chemins absolus commençant par « / »."
+      },
+      "local": {
+        "hint": "Readur surveille des dossiers sur le serveur où il tourne. Assurez-vous qu’il peut lire les chemins ajoutés.",
+        "recursive": "Analyser les sous-dossiers",
+        "recursiveHint": "Analyser les sous-répertoires de façon récursive",
+        "symlinks": "Suivre les liens symboliques",
+        "symlinksHint": "Suivre les liens symboliques lors de l’analyse des répertoires",
+        "title": "Dossier local"
+      },
+      "name": "Nom",
+      "namePlaceholder": "Mon serveur de documents",
+      "preview": {
+        "bucketPrefix": "Bucket / préfixe",
+        "file": "Fichier d’exemple",
+        "folder": "Dossier surveillé",
+        "server": "URL du serveur",
+        "title": "Exemple d’URL de synchronisation",
+        "webdavPath": "Chemin WebDAV"
+      },
+      "relativeWarning": "« {{value}} » est un chemin relatif. Les chemins absolus commençant par « / » sont recommandés.",
+      "remove": "Retirer {{item}}",
+      "s3": {
+        "accessKey": "ID de clé d’accès",
+        "addressing": "Style d’adressage",
+        "addressingHint": "MinIO, RustFS et la plupart des services S3 auto-hébergés exigent le style chemin. La détection automatique essaie les deux.",
+        "auto": "Détection automatique",
+        "bucket": "Nom du bucket",
+        "endpoint": "URL du point de terminaison (facultatif)",
+        "endpointHint": "Laissez vide pour AWS S3, ou indiquez un point de terminaison pour MinIO et les autres stockages compatibles S3.",
+        "hint": "Connectez AWS S3, MinIO ou tout service compatible S3. Pour MinIO, indiquez l’URL du point de terminaison de votre serveur.",
+        "path": "Style chemin (point de terminaison/bucket/clé)",
+        "prefix": "Préfixe de clé d’objet (facultatif)",
+        "prefixHint": "N’analyser que les clés d’objet commençant par ce préfixe.",
+        "region": "Région",
+        "secretKey": "Clé d’accès secrète",
+        "title": "Stockage compatible S3",
+        "vhost": "Hébergement virtuel (bucket.point-de-terminaison/clé)"
+      },
+      "saveChanges": "Enregistrer les modifications",
+      "saveFailed": "Impossible d’enregistrer la connexion",
+      "saveFailedHint": "Vérifiez les paramètres et réessayez.",
+      "saved": "Connexion mise à jour",
+      "schedule": {
+        "auto": "Synchronisation automatique",
+        "autoHint": "Synchroniser les fichiers selon une planification",
+        "autoHintLocal": "Rechercher de nouveaux fichiers selon une planification",
+        "autoHintS3": "Rechercher de nouveaux objets selon une planification",
+        "interval": "Intervalle de synchronisation (minutes)",
+        "intervalHint": "Fréquence de recherche de nouveaux fichiers ({{min}} min à 24 heures)",
+        "title": "Planification"
+      },
+      "test": {
+        "auth": "Échec de la connexion. Vérifiez le nom d’utilisateur et le mot de passe.",
+        "button": "Tester la connexion",
+        "config": "Certains paramètres sont invalides. Vérifiez les valeurs et réessayez.",
+        "error": "Impossible de tester la connexion",
+        "failed": "Échec de la connexion",
+        "ok": "Connexion réussie",
+        "path": "Un chemin de dossier est invalide ou inaccessible.",
+        "timeout": "La connexion a expiré. Le serveur est peut-être lent ou injoignable.",
+        "unreachable": "Impossible de joindre le serveur. Vérifiez l’URL et votre réseau."
+      },
+      "type": "Type de connexion",
+      "typeLocal": "Dossiers sur le serveur Readur",
+      "typeS3": "AWS S3, MinIO et autres stockages compatibles S3",
+      "typeS3Label": "Compatible S3",
+      "typeWebdav": "Nextcloud, ownCloud et autres serveurs WebDAV",
+      "webdav": {
+        "generic": "WebDAV générique",
+        "genericHint": "Protocole WebDAV standard",
+        "nextcloud": "Optimisé pour les serveurs Nextcloud",
+        "owncloud": "Optimisé pour les serveurs ownCloud",
+        "password": "Mot de passe",
+        "serverType": "Type de serveur",
+        "serverUrl": "URL du serveur",
+        "title": "Serveur WebDAV",
+        "username": "Nom d’utilisateur"
+      },
+      "localAdminOnly": "Seul un administrateur peut ajouter des dossiers locaux.",
+      "localAdminOnlyHint": "Vous pouvez quand même essayer : le serveur peut autoriser certains dossiers pour tous."
+    },
+    "ignored": {
+      "allReasons": "Tous les motifs",
+      "allSources": "Toutes les sources",
+      "breadcrumbs": "Fil d’Ariane",
+      "clearSource": "Afficher toutes les sources",
+      "col": {
+        "actions": "Actions",
+        "ignored": "Ignoré",
+        "name": "Nom",
+        "reason": "Motif",
+        "size": "Taille",
+        "source": "Source"
+      },
+      "confirm": "Ne plus ignorer",
+      "confirmBody": "Ces fichiers sont retirés de la liste des fichiers ignorés et seront de nouveau importés à la prochaine synchronisation de leur connexion.",
+      "confirmMany": "Ne plus ignorer {{count}} fichiers ?",
+      "confirmOne": "Ne plus ignorer « {{name}} » ?",
+      "emptyBody": "Tous les fichiers trouvés par vos connexions sont importés.",
+      "emptyTitle": "Rien n’est ignoré",
+      "latest": "Le plus récent",
+      "loadFailed": "Impossible de charger les fichiers ignorés.",
+      "noReason": "Aucun motif indiqué",
+      "reason": "Motif",
+      "removeFailed": "Impossible de mettre à jour la liste des fichiers ignorés",
+      "removed": "Retiré de la liste des fichiers ignorés",
+      "search": "Rechercher des noms de fichier",
+      "sourceType": "Type de source",
+      "summary": "Résumé des fichiers ignorés",
+      "title": "Fichiers ignorés",
+      "total": "Fichiers ignorés",
+      "totalSize": "Taille totale",
+      "unignore": "Ne plus ignorer",
+      "unignoreFile": "Ne plus ignorer {{name}}",
+      "unignoreSelected": "Ne plus ignorer"
+    },
+    "lowConfidence": {
+      "col": {
+        "added": "Ajouté",
+        "confidence": "Confiance",
+        "name": "Nom",
+        "size": "Taille",
+        "status": "Statut"
+      },
+      "confirm": "Supprimer les documents",
+      "confirmTitle_one": "Supprimer {{count}} document sous {{threshold}} % ?",
+      "confirmTitle_other": "Supprimer {{count}} documents sous {{threshold}} % ?",
+      "delete": "Supprimer les résultats",
+      "deleteFailed": "Impossible de supprimer les documents",
+      "deleted": "Documents supprimés",
+      "lead": "Trouvez les documents dont la confiance de reconnaissance du texte est sous un seuil. Prévisualisez les résultats avant de supprimer quoi que ce soit.",
+      "more": "et {{count}} de plus",
+      "none": "n.d.",
+      "preview": "Prévisualiser les résultats",
+      "previewFailed": "Impossible de prévisualiser les documents à faible confiance",
+      "results": "Résultats de l’aperçu",
+      "stale": "Le seuil a changé. Refaites l’aperçu avant de supprimer.",
+      "threshold": "Seuil de confiance"
+    },
+    "meta": {
+      "attention_one": "{{count}} à traiter",
+      "attention_other": "{{count}} à traiter",
+      "connections_one": "{{count}} connexion",
+      "connections_other": "{{count}} connexions",
+      "processing": "{{count}} en traitement"
+    },
+    "notice": {
+      "danger": "Erreur :",
+      "info": "Remarque :",
+      "ok": "Terminé :"
+    },
+    "ocr": {
+      "pause": "Suspendre l’OCR",
+      "pauseFailed": "Impossible de suspendre l’OCR",
+      "paused": "OCR suspendu",
+      "resume": "Reprendre l’OCR",
+      "resumeFailed": "Impossible de reprendre l’OCR",
+      "resumed": "OCR repris"
+    },
+    "preview": {
+      "download": "Téléchargez le fichier pour l’ouvrir sur votre ordinateur.",
+      "failed": "Le fichier n’a pas pu être chargé pour l’aperçu.",
+      "loading": "Chargement de l’aperçu",
+      "missing": "Le fichier est introuvable ou a été supprimé.",
+      "moved": "Le fichier d’origine a peut-être été supprimé ou déplacé du stockage.",
+      "unknownType": "inconnu",
+      "unsupported": "Pas d’aperçu pour ce type de fichier ({{type}})"
+    },
+    "recommend": {
+      "count_one": "{{count}} document · {{pattern}}",
+      "count_other": "{{count}} documents · {{pattern}}",
+      "criteria": "Critères",
+      "empty": "Aucune recommandation de relance pour le moment. Cela signifie généralement :",
+      "emptyPattern": "Aucun schéma d’échec n’indique qu’une relance réussirait",
+      "emptyRetried": "Les documents en échec ont déjà été relancés plusieurs fois",
+      "emptyTypes": "Aucun échec d’un type qui réussit généralement à la relance",
+      "loadFailed": "Impossible de charger les recommandations de relance",
+      "loading": "Recherche de schémas d’échec…",
+      "rateHigh": "{{pct}} % probable (élevée)",
+      "rateLow": "{{pct}} % probable (faible)",
+      "rateMedium": "{{pct}} % probable (moyenne)",
+      "retry_one": "Relancer {{count}} document",
+      "retry_other": "Relancer {{count}} documents",
+      "retryFailed": "Impossible de lancer la nouvelle tentative",
+      "title": "Recommandations de relance",
+      "nothingQueued": "Rien n'a été mis en file d'attente",
+      "confirmBody": "Cela relance chaque document en échec correspondant à « {{title}} », pas seulement {{name}}.",
+      "confirmTitle_other": "Relancer {{count}} documents dans toute votre bibliothèque ?",
+      "confirmTitle_one": "Relancer 1 document dans toute votre bibliothèque ?"
+    },
+    "retry": {
+      "col": {
+        "previous": "Avant",
+        "priority": "Priorité",
+        "queue": "File d’attente",
+        "reason": "Motif",
+        "when": "Quand"
+      },
+      "empty": "Aucune tentative de relance trouvée pour ce document.",
+      "legend": "Priorité : très élevée 15–20, élevée 12–14, moyenne 8–11, faible 5–7, très faible 1–4.",
+      "loadFailed": "Impossible de charger l’historique des relances.",
+      "loading": "Chargement de l’historique des relances…",
+      "notQueued": "Pas en file d’attente",
+      "priority": {
+        "high": "Élevée",
+        "low": "Faible",
+        "medium": "Moyenne",
+        "veryHigh": "Très élevée",
+        "veryLow": "Très faible"
+      },
+      "queued": "En file d’attente · {{id}}",
+      "reason": {
+        "auto": "Relance automatique",
+        "bulkAll": "Relance groupée (tous)",
+        "bulkFiltered": "Relance groupée (filtrée)",
+        "bulkSelected": "Relance groupée (sélection)",
+        "manual": "Relance manuelle",
+        "scheduled": "Relance planifiée"
+      },
+      "summary_one": "{{count}} tentative de relance",
+      "summary_other": "{{count}} tentatives de relance",
+      "title": "Historique des relances OCR"
+    },
+    "sections": {
+      "attention": "À traiter",
+      "connections": "Connexions",
+      "ignored": "Ignoré",
+      "label": "Sections de l’arrivée",
+      "upload": "Ajouter des documents",
+      "watch": "Dossier surveillé"
+    },
+    "sourceErrors": {
+      "severity": {
+        "Critical": "Critique",
+        "High": "Élevée",
+        "Low": "Faible",
+        "Medium": "Moyenne"
+      },
+      "type": {
+        "Conflict": "Conflit",
+        "DepthLimit": "Limite de profondeur des dossiers",
+        "InvalidCharacters": "Caractères invalides",
+        "JsonParseError": "Réponse JSON illisible",
+        "NetworkError": "Erreur réseau",
+        "NotFound": "Introuvable",
+        "PathTooLong": "Chemin trop long",
+        "PermissionDenied": "Autorisation refusée",
+        "QuotaExceeded": "Quota dépassé",
+        "RateLimited": "Limite de requêtes atteinte",
+        "ServerError": "Erreur du serveur",
+        "SizeLimit": "Limite de taille",
+        "Timeout": "Délai dépassé",
+        "TooManyItems": "Trop d’éléments",
+        "Unknown": "Erreur inconnue",
+        "UnsupportedOperation": "Opération non prise en charge",
+        "XmlParseError": "Réponse XML illisible"
+      }
+    },
+    "sourceType": {
+      "local_folder": "Dossier local",
+      "s3": "S3",
+      "unknown": "Inconnu",
+      "webdav": "WebDAV"
+    },
+    "sync": {
+      "bytes": "Données traitées",
+      "collapse": "Réduire",
+      "connection": {
+        "connected": "Connecté",
+        "connecting": "Connexion…",
+        "disconnected": "Déconnecté",
+        "failed": "Échec de la connexion",
+        "live": "En direct",
+        "reconnect": "Reconnecter",
+        "reconnecting": "Reconnexion…",
+        "unknown": "Inconnu"
+      },
+      "currentDirectory": "Répertoire actuel",
+      "currentFile": "Fichier actuel",
+      "directories": "Répertoires",
+      "elapsed": "Écoulé",
+      "errorMany": "{{count}} erreurs",
+      "errorOne": "1 erreur",
+      "eta": "Temps restant",
+      "expand": "Développer",
+      "files": "Fichiers",
+      "filesProgress": "Progression des fichiers",
+      "filesValue": "{{processed}} / {{found}} fichiers ({{percent}} %)",
+      "phase": "Phase",
+      "rate": "Débit",
+      "rateValue": "{{rate}} fichiers/s",
+      "statsLabel": "Chiffres de synchronisation",
+      "title": "Progression de la synchronisation de {{name}}",
+      "waiting": "En attente des informations de progression…",
+      "warningMany": "{{count}} avertissements",
+      "warningOne": "1 avertissement"
+    },
+    "tag": {
+      "changed": "Modifié",
+      "new": "Nouveau"
+    },
+    "title": "Arrivée",
+    "upload": {
+      "boardLabel": "Fichiers à envoyer",
+      "chooseFiles": "Choisir des fichiers",
+      "clearDone": "Effacer les terminés",
+      "col": {
+        "actions": "Actions",
+        "name": "Nom",
+        "progress": "Progression",
+        "size": "Taille",
+        "status": "Statut"
+      },
+      "dropLabel": "Déposez des fichiers pour les ajouter",
+      "dropNow": "Relâchez pour ajouter",
+      "dropTitle": "Déposez des fichiers pour les ajouter",
+      "emptyBody": "Déposez des fichiers ci-dessus ou choisissez-les sur votre ordinateur.",
+      "emptyTitle": "Aucun fichier pour l’instant",
+      "errors": {
+        "format": "Ce type de fichier n’est pas pris en charge.",
+        "generic": "Échec de l’envoi",
+        "network": "Erreur réseau. Vérifiez votre connexion.",
+        "permission": "Vous n’êtes pas autorisé à envoyer des fichiers.",
+        "processing": "Le fichier n’a pas pu être traité.",
+        "server": "Le serveur a rencontré un problème. Réessayez.",
+        "session": "Votre session a expiré. Reconnectez-vous.",
+        "tooLarge": "Le fichier est trop volumineux.",
+        "labels": "Importé, mais les étiquettes n'ont pas pu être ajoutées."
+      },
+      "labelDuplicate": "Une étiquette portant ce nom existe déjà.",
+      "labelFailed": "Impossible de créer l’étiquette.",
+      "labelInvalidColor": "Cette couleur n’est pas valide.",
+      "labelInvalidName": "Ce nom d’étiquette n’est pas autorisé.",
+      "labelMax": "Vous avez atteint la limite d’étiquettes.",
+      "labels": "Étiquettes",
+      "labelsFailed": "Les étiquettes n’ont pas pu être chargées. Vous pouvez envoyer des fichiers sans elles.",
+      "labelsNetwork": "Les étiquettes n’ont pas pu être chargées à cause d’une erreur réseau.",
+      "labelsPermission": "Vous n’êtes pas autorisé à voir les étiquettes.",
+      "labelsPlaceholder": "Ajouter des étiquettes à chaque fichier envoyé",
+      "languages": "Langues OCR",
+      "maxSize": "max. {{size}} Mo par fichier",
+      "options": "Appliquer à ces envois",
+      "progressOf": "Progression de l’envoi de {{name}}",
+      "rejected": "Certains fichiers n’ont pas été ajoutés",
+      "remove": "Retirer",
+      "removeFile": "Retirer {{name}}",
+      "retryFile": "Réessayer {{name}}",
+      "uploadAll": "Tout envoyer ({{count}})",
+      "uploading": "Envoi de {{done}} sur {{total}}"
+    },
+    "watch": {
+      "avgWait": "Attente moyenne",
+      "col": {
+        "detail": "Détails",
+        "path": "Dossier",
+        "scope": "Portée",
+        "status": "Statut"
+      },
+      "create": "Créer mon dossier surveillé",
+      "createFailed": "Impossible de créer le dossier surveillé",
+      "createHint": "Votre dossier surveillé personnel n’existe pas encore. Créez-le pour y déposer des fichiers.",
+      "created": "Dossier surveillé créé",
+      "exists": "Le dossier existe",
+      "failed": "Échec",
+      "howTitle": "Fonctionnement du dossier surveillé",
+      "loading": "Chargement…",
+      "locations": "Dossiers surveillés",
+      "missing": "Le dossier n’existe pas encore",
+      "nothingToRequeue": "Aucune tâche en échec à relancer",
+      "oldest": "Plus ancienne en attente",
+      "pending": "En attente",
+      "personal": "Le vôtre",
+      "personalFailed": "Impossible de charger votre dossier surveillé.",
+      "processing": "Traitement",
+      "queue": "File de traitement",
+      "queueFailed": "Impossible de charger la file de traitement.",
+      "requeue_one": "Relancer {{count}} tâche en échec",
+      "requeue_other": "Relancer {{count}} tâches en échec",
+      "requeueBody": "Chaque tâche OCR en échec retourne dans la file.",
+      "requeueConfirm": "Relancer les tâches",
+      "requeueFailed": "Impossible de relancer les tâches en échec",
+      "requeueTitle": "Relancer les tâches en échec ?",
+      "requeued_one": "{{count}} tâche remise en file",
+      "requeued_other": "{{count}} tâches remises en file",
+      "step": {
+        "dedupe": "Les fichiers déjà présents dans la bibliothèque sont ignorés.",
+        "detect": "Les nouveaux fichiers du dossier sont détectés.",
+        "queue": "Il rejoint la file OCR.",
+        "store": "Le fichier est stocké.",
+        "validate": "Le type et la taille sont vérifiés."
+      },
+      "strategy": "Stratégie : {{strategy}} (événements de fichiers et analyses périodiques)",
+      "system": "Serveur",
+      "systemDetail": "toutes les {{seconds}} s · fichiers de moins de {{hours}} h",
+      "systemInfo": "Le dossier du serveur est défini par votre administrateur et s’applique à tous.",
+      "today": "Terminés aujourd’hui",
+      "types": "Types de fichiers"
+    },
+    "reason": {
+      "details": "Détails techniques"
+    },
+    "connectionFailure": {
+      "auth": "Le serveur a refusé la connexion. Vérifiez l'identifiant, le mot de passe ou les clés.",
+      "notFound": "Le dossier ou le bucket est introuvable. Vérifiez l'adresse et le chemin.",
+      "tls": "Le certificat de sécurité du serveur n'est pas approuvé.",
+      "unreachable": "Impossible de joindre le serveur. Vérifiez l'adresse et qu'il est en ligne.",
+      "server": "Le serveur a signalé une erreur. Réessayez dans quelques minutes.",
+      "emptySyncs": "Les dernières synchronisations n’ont trouvé aucun nouveau fichier. Vérifiez le chemin du dossier."
+    },
+    "connectionAdvice": {
+      "connectivity": "Vérifiez l’adresse du serveur, la connexion et le réseau.",
+      "noContent": "Si de nouveaux fichiers sont attendus, vérifiez le chemin du dossier et que le serveur est joignable."
+    }
+  },
+  "failure": {
+    "damaged": "Le fichier semble endommagé",
+    "docTools": "Impossible de lire les fichiers .doc : installez antiword ou catdoc",
+    "encrypted": "Le PDF est protégé par un mot de passe",
+    "lowConfidence": "Le texte était trop flou pour être lu de façon fiable",
+    "memory": "Mémoire insuffisante pour lire le fichier",
+    "missing": "Le fichier est introuvable dans le stockage",
+    "ocr": "L'OCR a échoué",
+    "permission": "Readur n'a pas le droit d'ouvrir le fichier",
+    "timeout": "L'OCR a pris trop de temps et a été arrêtée",
+    "tooLarge": "Le fichier est trop volumineux",
+    "unsupported": "Ce type de fichier n'est pas pris en charge",
+    "unknown": "Une erreur s'est produite"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Bonjour, {{name}}",
+      "morningPlain": "Bonjour",
+      "afternoon": "Bon après-midi, {{name}}",
+      "afternoonPlain": "Bon après-midi",
+      "evening": "Bonsoir, {{name}}",
+      "eveningPlain": "Bonsoir"
+    },
+    "week": {
+      "count": "{{formatted}} arrivés cette semaine",
+      "none": "Rien n'est arrivé cette semaine"
+    },
+    "kind": {
+      "upload": "Envois web et API",
+      "watch": "Dossier surveillé",
+      "webdav": "WebDAV",
+      "s3": "S3",
+      "local": "Dossier local"
+    },
+    "lanes": {
+      "title": "Arrivées",
+      "manage": "Gérer les sources",
+      "error": "Les arrivées n'ont pas pu être chargées.",
+      "empty": "Aucune source pour l'instant",
+      "today": "aujourd'hui",
+      "lastArrival": "Dernière arrivée {{age}}",
+      "never": "Rien pour l'instant",
+      "quiet": "Calme",
+      "idle": "Inactif",
+      "uploads": "Envois",
+      "source": "Source",
+      "barsLabel": "{{total}} sur les {{days}} derniers jours, le plus le {{day}} ({{most}})",
+      "barsEmpty": "Rien sur les {{days}} derniers jours",
+      "more": "{{formatted}} autres sources",
+      "allSilent": "Rien n'est arrivé d'aucune source ces {{days}} derniers jours."
+    },
+    "pipeline": {
+      "title": "Traitement",
+      "paused": "L'OCR est en pause",
+      "failed": "{{formatted}} en échec",
+      "failedError": "Les documents en échec n'ont pas pu être chargés.",
+      "review": "Examiner",
+      "showRecent": "Afficher les derniers échecs",
+      "rawError": "Texte de l'erreur",
+      "doneToday": "{{done}} traités aujourd'hui",
+      "oldest": "le plus ancien attend depuis {{wait}}"
+    },
+    "recent": {
+      "title": "Tout juste arrivés"
+    },
+    "status": {
+      "label": "Résumé",
+      "idle": "rien en attente",
+      "busy": "{{processing}} en traitement · {{pending}} en attente",
+      "pending": "{{pending}} en attente"
     }
   }
 }

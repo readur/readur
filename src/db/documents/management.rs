@@ -2,9 +2,9 @@ use anyhow::Result;
 use sqlx::{QueryBuilder, Postgres, Row};
 use uuid::Uuid;
 
-use crate::models::{Document, UserRole, FacetItem};
+use crate::models::{Document, DocumentFilters, UserRole, FacetItem};
 use crate::routes::labels::Label;
-use super::helpers::{map_row_to_document, apply_role_based_filter, DOCUMENT_FIELDS};
+use super::helpers::{map_row_to_document, apply_role_based_filter};
 use crate::db::Database;
 
 impl Database {
@@ -240,77 +240,29 @@ impl Database {
 
     /// Gets documents by user with role-based access and OCR status filtering
     pub async fn get_documents_by_user_with_role_and_filter(
-        &self, 
-        user_id: Uuid, 
-        user_role: UserRole, 
-        ocr_status: Option<&str>, 
-        limit: i64, 
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        ocr_status: Option<&str>,
+        limit: i64,
         offset: i64
     ) -> Result<Vec<Document>> {
-        let mut query = QueryBuilder::<Postgres>::new("SELECT ");
-        query.push(DOCUMENT_FIELDS);
-        query.push(" FROM documents WHERE 1=1");
-
-        apply_role_based_filter(&mut query, user_id, user_role);
-
-        if let Some(status) = ocr_status {
-            match status {
-                "pending" => {
-                    query.push(" AND (ocr_status IS NULL OR ocr_status = 'pending')");
-                }
-                "completed" => {
-                    query.push(" AND ocr_status = 'completed'");
-                }
-                "failed" => {
-                    query.push(" AND ocr_status = 'failed'");
-                }
-                _ => {
-                    query.push(" AND ocr_status = ");
-                    query.push_bind(status);
-                }
-            }
-        }
-
-        query.push(" ORDER BY created_at DESC");
-        query.push(" LIMIT ");
-        query.push_bind(limit);
-        query.push(" OFFSET ");
-        query.push_bind(offset);
-
-        let rows = query.build().fetch_all(&self.pool).await?;
-        Ok(rows.iter().map(map_row_to_document).collect())
+        let filters = DocumentFilters { ocr_status: ocr_status.map(str::to_string), ..Default::default() };
+        Ok(self
+            .list_documents_filtered(user_id, user_role, &filters, None, None, limit, offset)
+            .await?
+            .into_iter()
+            .map(|d| d.document)
+            .collect())
     }
 
     /// Counts documents with role-based access and OCR status filtering
     pub async fn get_documents_count_with_role_and_filter(
-        &self, 
-        user_id: Uuid, 
-        user_role: UserRole, 
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
         ocr_status: Option<&str>
     ) -> Result<i64> {
-        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
-
-        apply_role_based_filter(&mut query, user_id, user_role);
-
-        if let Some(status) = ocr_status {
-            match status {
-                "pending" => {
-                    query.push(" AND (ocr_status IS NULL OR ocr_status = 'pending')");
-                }
-                "completed" => {
-                    query.push(" AND ocr_status = 'completed'");
-                }
-                "failed" => {
-                    query.push(" AND ocr_status = 'failed'");
-                }
-                _ => {
-                    query.push(" AND ocr_status = ");
-                    query.push_bind(status);
-                }
-            }
-        }
-
-        let row = query.build().fetch_one(&self.pool).await?;
-        Ok(row.get(0))
+        self.count_documents_by_user_with_role_and_filter(user_id, user_role, ocr_status).await
     }
 }

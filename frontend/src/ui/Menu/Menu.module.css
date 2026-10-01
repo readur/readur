@@ -1,0 +1,50 @@
+.popover {
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+}
+
+.menu {
+  padding: var(--s-1);
+  outline: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--fg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.item[data-hovered],
+.item[data-focused] {
+  background: var(--surface-2);
+}
+
+.item[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.danger[data-hovered],
+.danger[data-focused] {
+  background: var(--danger-soft);
+}
+
+.item[data-disabled] {
+  color: var(--fg-meta);
+  cursor: not-allowed;
+}

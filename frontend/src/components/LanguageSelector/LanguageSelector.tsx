@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import { LanguageInfo, ocrService } from '../../services/api'
-import { useTheme } from '@mui/material/styles'
-import { Box, Typography, Chip, Button, Paper, Divider, Popper, ClickAwayListener, CircularProgress, Alert } from '@mui/material'
+import { useEffect, useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Button, Checkbox, IconButton } from '../../ui'
+import { Close } from '../../ui/icons'
+import { ocrService, type LanguageInfo } from '../../services/api'
+import styles from './LanguageSelector.module.css'
 
 interface LanguageSelectorProps {
   selectedLanguages: string[]
@@ -14,6 +15,10 @@ interface LanguageSelectorProps {
   className?: string
 }
 
+/**
+ * Pick up to `maxLanguages` installed OCR languages and mark one as primary.
+ * The picker unfolds inline (no portal), so it also works inside modal dialogs.
+ */
 function LanguageSelector({
   selectedLanguages,
   primaryLanguage,
@@ -23,416 +28,185 @@ function LanguageSelector({
   showPrimarySelector = true,
   className = '',
 }: LanguageSelectorProps) {
-  const theme = useTheme()
+  const { t } = useTranslation()
+  const panelId = useId()
   const [availableLanguages, setAvailableLanguages] = useState<LanguageInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isOpen, setIsOpen] = useState(false)
-  const anchorRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
+    let alive = true
     const fetchLanguages = async () => {
       try {
         setLoading(true)
         setError('')
         const response = await ocrService.getAvailableLanguages()
-        setAvailableLanguages(response.data.available_languages)
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to load OCR languages')
-        setAvailableLanguages([{ code: 'eng', name: 'English', installed: true }])
+        if (alive) setAvailableLanguages(response.data.available_languages)
+      } catch (err: unknown) {
+        const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        if (alive) {
+          setError(message || t('settings.languageSelector.loadFailed', 'Failed to load OCR languages'))
+          setAvailableLanguages([{ code: 'eng', name: 'English', installed: true }])
+        }
       } finally {
-        setLoading(false)
+        if (alive) setLoading(false)
       }
     }
-    fetchLanguages()
-  }, [])
+    void fetchLanguages()
+    return () => {
+      alive = false
+    }
+  }, [t])
 
-  // Auto-set primary language to first selected if not specified
+  // The first selected language is primary when none is given.
   const effectivePrimary = primaryLanguage || selectedLanguages[0] || ''
+  const remaining = Math.max(0, maxLanguages - selectedLanguages.length)
+  const atMax = selectedLanguages.length >= maxLanguages
 
-  const handleLanguageToggle = (languageCode: string) => {
+  const toggleLanguage = (code: string) => {
     if (disabled) return
-
-    let newLanguages: string[]
-    let newPrimary = effectivePrimary
-
-    if (selectedLanguages.includes(languageCode)) {
-      // Remove language
-      newLanguages = selectedLanguages.filter(lang => lang !== languageCode)
-      // If removing the primary language, set new primary to first remaining language
-      if (languageCode === effectivePrimary && newLanguages.length > 0) {
-        newPrimary = newLanguages[0]
-      } else if (newLanguages.length === 0) {
-        newPrimary = ''
-      }
+    let next: string[]
+    let nextPrimary = effectivePrimary
+    if (selectedLanguages.includes(code)) {
+      next = selectedLanguages.filter((c) => c !== code)
+      if (code === effectivePrimary && next.length > 0) nextPrimary = next[0]
+      else if (next.length === 0) nextPrimary = ''
     } else {
-      // Add language (check max limit)
-      if (selectedLanguages.length >= maxLanguages) {
-        return
-      }
-      newLanguages = [...selectedLanguages, languageCode]
-      // If this is the first language, make it primary
-      if (newLanguages.length === 1) {
-        newPrimary = languageCode
-      }
+      if (atMax) return
+      next = [...selectedLanguages, code]
+      if (next.length === 1) nextPrimary = code
     }
-
-    onLanguagesChange(newLanguages, newPrimary)
+    onLanguagesChange(next, nextPrimary)
   }
 
-  const handlePrimaryChange = (languageCode: string) => {
-    if (disabled || !selectedLanguages.includes(languageCode)) return
-    onLanguagesChange(selectedLanguages, languageCode)
+  const setPrimary = (code: string) => {
+    if (disabled || !selectedLanguages.includes(code)) return
+    onLanguagesChange(selectedLanguages, code)
   }
 
-  const removeLanguage = (languageCode: string) => {
-    handleLanguageToggle(languageCode)
-  }
-
-  const handleClose = () => {
-    setIsOpen(false)
-  }
-
-  const getLanguageName = (code: string) => {
-    const language = availableLanguages.find(lang => lang.code === code)
-    return language?.name || code
-  }
+  const nameOf = (code: string) => availableLanguages.find((l) => l.code === code)?.name || code
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', p: 2 }} className={className}>
-        <CircularProgress size={20} sx={{ mr: 1 }} />
-        <Typography variant="body2" color="text.secondary">
-          Loading languages...
-        </Typography>
-      </Box>
+      <div className={className} role="status">
+        <span className={styles.meta}>{t('settings.languageSelector.loading', 'Loading languages...')}</span>
+      </div>
     )
   }
 
   if (error) {
     return (
-      <Box className={className}>
-        <Alert severity="warning" sx={{ mb: 1 }}>
+      <div className={className}>
+        <p className={styles.error} role="alert">
           {error}
-        </Alert>
-      </Box>
+        </p>
+      </div>
     )
   }
 
+  const title = t('settings.languageSelector.title', 'OCR Languages')
+
   return (
-    <Box sx={{ position: 'relative' }} className={className}>
-      {/* Selected Languages Display */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="body2" sx={{ 
-          fontWeight: 500, 
-          color: 'text.primary', 
-          mb: 2 
-        }}>
-          OCR Languages {selectedLanguages.length > 0 && `(${selectedLanguages.length}/${maxLanguages})`}
-        </Typography>
-        
-        {selectedLanguages.length > 0 ? (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {selectedLanguages.map((langCode) => (
-              <Chip
-                key={langCode}
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <span>{getLanguageName(langCode)}</span>
-                    {langCode === effectivePrimary && (
-                      <Typography variant="caption" sx={{ 
-                        ml: 1, 
-                        fontWeight: 'bold',
-                        color: 'primary.main'
-                      }}>
-                        (Primary)
-                      </Typography>
-                    )}
-                  </Box>
-                }
-                variant={langCode === effectivePrimary ? 'filled' : 'outlined'}
-                color={langCode === effectivePrimary ? 'primary' : 'default'}
-                size="small"
-                onDelete={!disabled ? () => removeLanguage(langCode) : undefined}
-                deleteIcon={<XMarkIcon style={{ width: 16, height: 16 }} />}
-                sx={{
-                  '& .MuiChip-deleteIcon': {
-                    color: 'text.secondary',
-                    '&:hover': {
-                      color: 'text.primary',
-                    },
-                  },
-                }}
-              />
-            ))}
-          </Box>
-        ) : (
-          <Typography variant="body2" sx={{ 
-            color: 'text.secondary', 
-            fontStyle: 'italic' 
-          }}>
-            No languages selected. Documents will use default OCR language.
-          </Typography>
-        )}
-      </Box>
+    <div className={`${styles.root} ${className}`.trim()}>
+      <p className={styles.heading}>
+        {selectedLanguages.length > 0 ? `${title} (${selectedLanguages.length}/${maxLanguages})` : title}
+      </p>
 
-      {/* Language Selector Button */}
-      {!disabled && (
+      {selectedLanguages.length > 0 ? (
+        <ul className={styles.tags} aria-label={t('settings.languageSelector.selected', 'Selected languages')}>
+          {selectedLanguages.map((code) => {
+            const isPrimary = code === effectivePrimary
+            return (
+              <li key={code} className={styles.tag} data-primary={isPrimary || undefined}>
+                <span>{nameOf(code)}</span>
+                {isPrimary ? (
+                  <span className={styles.primaryNote}>{t('settings.languageSelector.primaryNote', '(Primary)')}</span>
+                ) : null}
+                {!disabled ? (
+                  <IconButton
+                    size="sm"
+                    label={t('settings.languageSelector.remove', 'Remove {{language}}', { language: nameOf(code) })}
+                    icon={<Close fontSize="inherit" />}
+                    onPress={() => toggleLanguage(code)}
+                    className={styles.remove}
+                  />
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className={styles.empty}>
+          {t('settings.languageSelector.none', 'No languages selected. Documents will use default OCR language.')}
+        </p>
+      )}
+
+      {!disabled ? (
         <Button
-          ref={anchorRef}
-          variant="outlined"
-          onClick={() => setIsOpen(!isOpen)}
-          fullWidth
-          sx={{
-            justifyContent: 'flex-start',
-            textTransform: 'none',
-            color: 'text.secondary',
-            borderColor: 'divider',
-            py: 1,
-            backgroundColor: (theme) => theme.palette.mode === 'dark' 
-              ? 'rgba(255, 255, 255, 0.02)'
-              : 'rgba(0, 0, 0, 0.02)',
-            '&:hover': {
-              backgroundColor: (theme) => theme.palette.mode === 'dark'
-                ? 'rgba(255, 255, 255, 0.05)'
-                : 'rgba(0, 0, 0, 0.04)',
-              borderColor: 'divider',
-            },
-          }}
+          className={styles.trigger}
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onPress={() => setIsOpen((o) => !o)}
         >
-          {selectedLanguages.length === 0 
-            ? 'Select OCR languages...' 
-            : `Add more languages (${maxLanguages - selectedLanguages.length} remaining)`
-          }
+          {selectedLanguages.length === 0
+            ? t('settings.languageSelector.select', 'Select OCR languages...')
+            : t('settings.languageSelector.addMore', 'Add more languages ({{count}} remaining)', { count: remaining })}
         </Button>
-      )}
+      ) : null}
 
-      {/* Dropdown Panel */}
-      <Popper
-        open={isOpen && !disabled}
-        anchorEl={anchorRef.current}
-        placement="bottom-start"
-        sx={{ zIndex: 1300 }}
-        modifiers={[
-          {
-            name: 'offset',
-            options: {
-              offset: [0, 8],
-            },
-          },
-        ]}
-      >
-        <ClickAwayListener onClickAway={handleClose}>
-          <Paper
-            elevation={8}
-            sx={{
-              width: anchorRef.current?.offsetWidth || 300,
-              maxWidth: 500,
-              maxHeight: '60vh',
-              overflow: 'auto',
-              borderRadius: 2,
-              '&::-webkit-scrollbar': {
-                width: '6px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: 'divider',
-                borderRadius: '3px',
-                '&:hover': {
-                  background: 'text.disabled',
-                },
-              },
-            }}
-          >
-          <Box sx={{ p: 3 }}>
-            <Typography variant="subtitle2" sx={{ 
-              color: 'text.secondary', 
-              mb: 2, 
-              textTransform: 'uppercase', 
-              letterSpacing: 1,
-              fontWeight: 600,
-              fontSize: '0.75rem'
-            }}>
-              Available Languages
-            </Typography>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {availableLanguages
-                .filter(lang => lang.installed)
-                .map((language) => {
-                  const isSelected = selectedLanguages.includes(language.code)
-                  const isPrimary = language.code === effectivePrimary
-                  const canSelect = !isSelected && selectedLanguages.length < maxLanguages
-                  
-                  return (
-                    <Box
-                      key={language.code}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 2,
-                        borderRadius: 1.5,
-                        backgroundColor: isSelected 
-                          ? (theme) => theme.palette.mode === 'dark' 
-                              ? 'rgba(144, 202, 249, 0.08)' 
-                              : 'rgba(25, 118, 210, 0.08)'
-                          : 'transparent',
-                        cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
-                        opacity: !canSelect && !isSelected ? 0.5 : 1,
-                        transition: 'all 0.2s ease-in-out',
-                        '&:hover': canSelect ? {
-                          backgroundColor: (theme) => theme.palette.mode === 'dark'
-                            ? 'rgba(255, 255, 255, 0.05)'
-                            : 'rgba(0, 0, 0, 0.04)',
-                          transform: 'translateY(-1px)',
-                        } : {},
-                      }}
-                    >
-                      <Box 
-                        sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center',
-                          cursor: canSelect || isSelected ? 'pointer' : 'not-allowed',
-                          gap: 2,
-                        }}
-                        onClick={() => canSelect || isSelected ? handleLanguageToggle(language.code) : undefined}
-                      >
-                        <Box
-                          sx={{
-                            width: 22,
-                            height: 22,
-                            border: 2,
-                            borderRadius: 1,
-                            borderColor: isSelected ? 'primary.main' : 'divider',
-                            backgroundColor: isSelected ? 'primary.main' : 'transparent',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease-in-out',
-                            '&:hover': canSelect && !isSelected ? {
-                              borderColor: 'primary.light',
-                            } : {},
-                          }}
-                        >
-                          {isSelected && (
-                            <CheckIcon 
-                              style={{ 
-                                width: 14, 
-                                height: 14, 
-                                color: theme.palette.primary.contrastText,
-                              }} 
-                            />
-                          )}
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: isSelected ? 500 : 400,
-                            color: isSelected ? 'primary.main' : 'text.primary',
-                          }}
-                        >
-                          {language.name}
-                        </Typography>
-                        {isPrimary && (
-                          <Chip
-                            label="PRIMARY"
-                            size="small"
-                            color="primary"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.65rem',
-                              fontWeight: 'bold',
-                            }}
-                          />
-                        )}
-                      </Box>
-                      
-                      {/* Primary selector */}
-                      {isSelected && showPrimarySelector && selectedLanguages.length > 1 && (
-                        <Button
-                          size="small"
-                          variant={isPrimary ? "contained" : "text"}
-                          color="primary"
-                          onClick={() => handlePrimaryChange(language.code)}
-                          disabled={isPrimary}
-                          sx={{
-                            fontSize: '0.7rem',
-                            py: 0.5,
-                            px: 1,
-                            minWidth: 'auto',
-                            textTransform: 'none',
-                            opacity: isPrimary ? 0.7 : 1,
-                          }}
-                        >
-                          {isPrimary ? 'Primary' : 'Set Primary'}
-                        </Button>
-                      )}
-                    </Box>
-                  )
-                })}
-            </Box>
-            
-            {selectedLanguages.length >= maxLanguages && (
-              <Box sx={{ 
-                mt: 3, 
-                p: 2, 
-                backgroundColor: (theme) => theme.palette.mode === 'dark'
-                  ? 'rgba(255, 193, 7, 0.08)'
-                  : 'rgba(255, 193, 7, 0.08)',
-                border: '1px solid', 
-                borderColor: (theme) => theme.palette.mode === 'dark'
-                  ? 'rgba(255, 193, 7, 0.3)'
-                  : 'rgba(255, 193, 7, 0.3)',
-                borderRadius: 2,
-              }}>
-                <Typography variant="body2" sx={{ 
-                  color: 'warning.main',
-                  fontWeight: 500,
-                }}>
-                  Maximum {maxLanguages} languages allowed for optimal performance.
-                </Typography>
-              </Box>
-            )}
-          </Box>
-          
-          <Divider sx={{ borderColor: 'divider' }} />
-          <Box sx={{ p: 2.5 }}>
-            <Button
-              variant="text"
-              onClick={handleClose}
-              fullWidth
-              sx={{
-                textTransform: 'none',
-                color: 'text.secondary',
-                py: 1.5,
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                '&:hover': {
-                  color: 'text.primary',
-                  backgroundColor: 'action.hover',
-                },
-              }}
-            >
-              Close
-            </Button>
-          </Box>
-          </Paper>
-        </ClickAwayListener>
-      </Popper>
+      {isOpen && !disabled ? (
+        <div id={panelId} className={styles.panel} role="group" aria-labelledby={`${panelId}-title`}>
+          <p id={`${panelId}-title`} className={styles.panelTitle}>
+            {t('settings.languageSelector.available', 'Available Languages')}
+          </p>
+          <ul className={styles.options}>
+            {availableLanguages
+              .filter((lang) => lang.installed)
+              .map((lang) => {
+                const isSelected = selectedLanguages.includes(lang.code)
+                const isPrimary = lang.code === effectivePrimary
+                return (
+                  <li key={lang.code} className={styles.option} data-selected={isSelected || undefined}>
+                    <Checkbox
+                      label={lang.name}
+                      isSelected={isSelected}
+                      isDisabled={!isSelected && atMax}
+                      onChange={() => toggleLanguage(lang.code)}
+                    />
+                    {isPrimary ? <span className={styles.primaryTag}>{t('settings.languageSelector.primaryTag', 'Primary')}</span> : null}
+                    {isSelected && showPrimarySelector && selectedLanguages.length > 1 && !isPrimary ? (
+                      <Button size="sm" variant="ghost" onPress={() => setPrimary(lang.code)}>
+                        {`${t('settings.languageSelector.setPrimary', 'Set Primary')} `}
+                        <span className="visually-hidden">{lang.name}</span>
+                      </Button>
+                    ) : null}
+                  </li>
+                )
+              })}
+          </ul>
+          {atMax ? (
+            <p className={styles.limit} role="status">
+              {t('settings.languageSelector.max', 'Maximum {{count}} languages allowed for optimal performance.', {
+                count: maxLanguages,
+              })}
+            </p>
+          ) : null}
+          <Button variant="ghost" onPress={() => setIsOpen(false)} className={styles.close}>
+            {t('common.actions.close', 'Close')}
+          </Button>
+        </div>
+      ) : null}
 
-      {/* Help Text */}
-      {selectedLanguages.length > 1 && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            <strong>Primary language</strong> is processed first for better accuracy. 
-            Multiple languages help with mixed-language documents.
-          </Typography>
-        </Box>
-      )}
-    </Box>
+      {selectedLanguages.length > 1 ? (
+        <p className={styles.meta}>
+          {t(
+            'settings.languageSelector.help',
+            'The primary language is processed first for better accuracy. Multiple languages help with mixed-language documents.',
+          )}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
