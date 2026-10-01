@@ -413,7 +413,7 @@ OIDC login failures often stem from configuration mismatches that can be systema
 
 JWT token issues often manifest as unexpected logouts or authentication errors. **Check system time** synchronization between all servers - even a few minutes of drift can cause token validation failures. Use NTP to maintain accurate time across your infrastructure.
 
-**JWT secret** configuration must be consistent across all application instances. Verify the JWT_SECRET environment variable is set correctly, contains a sufficiently random value, and hasn't been accidentally changed during deployment. The secret must be at least 32 bytes long; the server refuses to start otherwise.
+**JWT secret** configuration must be consistent across all application instances. Verify the JWT_SECRET environment variable is set correctly, contains a sufficiently random value, and hasn't been accidentally changed during deployment. The secret must be at least 32 bytes long; a shorter value is ignored with a startup warning and the server falls back to the signing key stored in the database.
 
 **Token expiration** after 24 hours is by design for security. If users report frequent logouts before this time, check for token validation issues, server restarts clearing in-memory state, or client-side storage problems. **Browser storage** issues can be resolved by clearing localStorage and cookies, then logging in fresh. Check browser console for storage quota errors or security restrictions. Also investigate **Clock Skew** tolerance settings and verify **Token Signature** algorithms match between signing and validation.
 
