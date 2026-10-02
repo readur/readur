@@ -41,7 +41,7 @@ node = "24.21.0"
 # Config in .oxfmtrc.json, ignores in .prettierignore.
 oxfmt = "0.71.0"
 # Git hooks; definitions live in .lefthook.toml. Installed by [hooks] below.
-lefthook = "2.1.14"
+lefthook = "2.1.15"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 # Prebuilt release binary (aqua), so onboarding never compiles zizmor from source
