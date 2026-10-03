@@ -28,7 +28,7 @@
     "eventemitter3": "^5.0.4",
     "i18next": "^25.10.10",
     "i18next-browser-languagedetector": "^8.2.1",
-    "i18next-http-backend": "^3.0.6",
+    "i18next-http-backend": "^4.0.2",
     "lucide-react": "^1.49.0",
     "react": "^19.3.0",
     "react-aria-components": "^1.21.1",
