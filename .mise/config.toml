@@ -33,7 +33,7 @@ compile = false
 
 [tools]
 # Matches `FROM rust:1.98-bookworm` in Dockerfile / Dockerfile.dev.
-rust = { version = "1.98.1", components = "rustfmt,clippy" }
+rust = { version = "1.99.0", components = "rustfmt,clippy" }
 # Matches `FROM node:24-bookworm` in Dockerfile and `node-version: "24"` in CI.
 # npm ships with node; frontend/package-lock.json is an npm lockfile.
 node = "24.21.0"
