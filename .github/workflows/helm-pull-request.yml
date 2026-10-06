@@ -46,7 +46,7 @@ jobs:
         run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false > main/charts/readur/build/manifest.yaml
 
       - name: create diff comment
-        uses: int128/diff-action@c8988a2606d2c85af614a5675addf44b94c66989 # v2.40.0
+        uses: int128/diff-action@274034d712aef611adcbd41e5a647f43e4edd5a5 # v2.41.0
         with:
           base: main/charts/readur/build
           head: charts/readur/build
