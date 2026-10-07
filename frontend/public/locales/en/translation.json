@@ -2393,7 +2393,8 @@
       "pages_one": "1 page",
       "pages_other": "{{count}} pages",
       "added": "Added {{date}}",
-      "ocr": "OCR {{value}}%"
+      "ocr": "OCR {{value}}%",
+      "openNamed": "Open {{name}}"
     },
     "empty": {
       "clearFilters": "Clear filters",

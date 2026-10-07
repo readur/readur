@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { documentService } from '../../services/api';
 import { labelService } from '../../services/api/labels';
 import { Button, Dialog, Skeleton, SlideOver, useToast } from '../../ui';
@@ -52,6 +52,10 @@ interface PanelState {
 
 type InnerProps = DetailPanelProps & { row: LibraryRow; panel: PanelState };
 
+/** Where the document opens: the caller's page, else the document page. */
+const documentHref = (row: LibraryRow, openHref?: (row: LibraryRow) => string) =>
+  openHref ? openHref(row) : `/documents/${row.id}`;
+
 /** Right-hand panel for one document: facts, preview, OCR excerpt, labels and actions. */
 export function DetailPanel(props: DetailPanelProps) {
   const { row, isOpen, onOpenChange, onNavigate } = props;
@@ -97,6 +101,7 @@ function DetailBody({
   availableLabels,
   onLabelCreated,
   onRowChange,
+  openHref,
   panel,
 }: InnerProps) {
   const { t, i18n } = useTranslation();
@@ -144,7 +149,11 @@ function DetailBody({
         </p>
       </div>
 
-      <div className={styles.preview}>
+      <Link
+        to={documentHref(row, openHref)}
+        className={styles.preview}
+        aria-label={t('library.detail.openNamed', { name: displayName(row), defaultValue: 'Open {{name}}' })}
+      >
         <DocumentThumbnail
           key={row.id}
           documentId={row.id}
@@ -152,7 +161,11 @@ function DetailBody({
           size="fill"
           emptyText={t('library.detail.noPreview', 'No preview yet')}
         />
-      </div>
+        <span className={styles.previewHint} aria-hidden="true">
+          <OpenInNew fontSize="inherit" />
+          {t('library.detail.open', 'Open')}
+        </span>
+      </Link>
 
       <section className={styles.detailSection} aria-labelledby={`ocr-${row.id}`}>
         <h3 id={`ocr-${row.id}`} className={styles.sectionHeading}>
@@ -238,7 +251,7 @@ function DetailActions({ row, onRowChange, onDeleted, openHref, panel }: InnerPr
 
   return (
     <div className={styles.actions}>
-      <Button variant="primary" icon={<OpenInNew fontSize="small" />} onPress={() => navigate(openHref ? openHref(row) : `/documents/${row.id}`)}>
+      <Button variant="primary" icon={<OpenInNew fontSize="small" />} onPress={() => navigate(documentHref(row, openHref))}>
         {t('library.detail.open', 'Open')}
       </Button>
       <Button variant="secondary" icon={<Download fontSize="small" />} isPending={busy === 'download'} onPress={() => void download()}>

@@ -453,8 +453,44 @@
 
 /* The first page on a sunken tray, 4:3 and letterboxed (never cropped). */
 .preview {
+  position: relative;
   display: flex;
   border-radius: var(--radius);
+  cursor: pointer;
+  transition: box-shadow var(--dur-1) var(--ease);
+}
+
+.preview:hover {
+  box-shadow: var(--shadow-overlay);
+}
+
+.preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* "Open" chip, shown while the preview is hovered or focused. */
+.previewHint {
+  position: absolute;
+  right: var(--s-2);
+  bottom: var(--s-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-1);
+  color: var(--fg);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.preview:hover .previewHint,
+.preview:focus-visible .previewHint {
+  opacity: 1;
 }
 
 .preview > * {
