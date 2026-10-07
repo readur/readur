@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Button } from '../Button';
-import { Menu, MenuItem, MenuTrigger } from './Menu';
+import { Menu, MenuItem, MenuSection, MenuTrigger } from './Menu';
 
 const setup = (onAction = vi.fn()) =>
   render(
@@ -46,5 +46,20 @@ describe('Menu', () => {
     await screen.findByRole('menu');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('groups items under a named section', async () => {
+    render(
+      <MenuTrigger>
+        <Button>Open</Button>
+        <Menu aria-label="Actions">
+          <MenuSection title="Document">
+            <MenuItem>Download</MenuItem>
+          </MenuSection>
+        </Menu>
+      </MenuTrigger>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(await screen.findByRole('group', { name: 'Document' })).toBeInTheDocument();
   });
 });

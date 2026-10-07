@@ -1,5 +1,8 @@
+import type { ReactNode } from 'react';
 import {
+  Header,
   Menu as RACMenu,
+  MenuSection as RACMenuSection,
   MenuItem as RACMenuItem,
   Popover as RACPopover,
   type MenuItemProps as RACMenuItemProps,
@@ -29,4 +32,14 @@ export interface MenuItemProps extends Omit<RACMenuItemProps, 'className'> {
 
 export function MenuItem({ danger, className, ...rest }: MenuItemProps) {
   return <RACMenuItem {...rest} className={cx(styles.item, danger && styles.danger, className)} />;
+}
+
+/** A titled group of menu items (renders a named group with an uppercase heading). */
+export function MenuSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <RACMenuSection className={styles.section}>
+      <Header className={styles.sectionTitle}>{title}</Header>
+      {children}
+    </RACMenuSection>
+  );
 }

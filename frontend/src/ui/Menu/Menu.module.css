@@ -1,13 +1,13 @@
 .popover {
-  min-width: 180px;
-  background: var(--surface);
+  min-width: 220px;
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
 }
 
 .menu {
-  padding: var(--s-1);
+  padding: 6px;
   outline: none;
 }
 
@@ -16,18 +16,19 @@
   align-items: center;
   gap: var(--s-2);
   min-height: 36px;
-  padding: 0 var(--s-3);
+  padding: 0 10px;
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   color: var(--fg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   cursor: pointer;
   outline: none;
 }
 
 .item[data-hovered],
 .item[data-focused] {
-  background: var(--surface-2);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .item[data-focus-visible] {
@@ -41,10 +42,27 @@
 
 .danger[data-hovered],
 .danger[data-focused] {
+  color: var(--danger);
   background: var(--danger-soft);
 }
 
 .item[data-disabled] {
   color: var(--fg-meta);
   cursor: not-allowed;
+}
+
+.section + .section {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.sectionTitle {
+  padding: 8px 10px 4px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--fg-meta);
 }

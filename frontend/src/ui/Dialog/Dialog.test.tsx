@@ -64,4 +64,21 @@ describe('Dialog', () => {
     await user.keyboard('{Enter}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('shows an icon tile and a help link', () => {
+    render(
+      <Dialog
+        isOpen
+        title="Retry OCR for 3 documents"
+        icon={<span data-testid="dialog-icon" />}
+        helpLink={<a href="#help">What does this do?</a>}
+        actions={<button type="button">Retry</button>}
+      >
+        body
+      </Dialog>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Retry OCR for 3 documents' })).toBeInTheDocument();
+    expect(screen.getByTestId('dialog-icon').closest('[data-icon-tile]')).not.toBeNull();
+    expect(screen.getByRole('link', { name: 'What does this do?' })).toBeInTheDocument();
+  });
 });
