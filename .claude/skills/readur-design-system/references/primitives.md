@@ -30,7 +30,7 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 **LabelChip** — `name`, `color`, `icon`, `count`, `size`, `onPress`, `onRemove` + `removeLabel`. Feature code with a `LabelData` uses `features/labels/Label`.
 **FilterChip** — `label`, `value`, `isActive`, `onPress`, `onClear`, `popover`.
 **SourceBadge** — `sourceId`, `kind` (`upload`, `watch`, or the source type), `name`, `type` (icon), `variant: 'tile' | 'chip'`, `showType`. Library rows use `features/library/SourceBadge` (`row`, `name`). **SourceTile** — the icon tile alone (`sourceId`, `kind`, `type`) for rows that print the name themselves (sidebar, lists).
-**ChangeTag** — children "New"/"Changed" (coral dot + word). **Kbd** — key text in the data face.
+**ChangeTag** — children "New"/"Changed" (amber dot + word). **Kbd** — key text in the data face.
 **Notice** — `tone: info | ok | warning | danger`, `title`, children, `action`, `onDismiss`, `live: 'alert' | 'status' | 'off'` (default: danger → alert), `prefix` (hidden word).
 ```tsx
 <Notice tone="danger" title={t('sync.unreachable', { host })} action={<Button variant="ghost" size="sm" onPress={edit}>{t('edit')}</Button>}>

@@ -6,40 +6,40 @@ Source of truth: `frontend/src/styles/tokens.css`. This table is generated from 
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--bg` | `#EEF3F1` | `#0F1716` | page background |
-| `--surface` | `#FFFFFF` | `#16211F` | cards, sidebar, top bar |
-| `--surface-2` | `#FFFFFF` | `#1C2826` | raised: popovers, dialogs, toasts, menus |
-| `--surface-sunken` | `#E3EBE8` | `#0B1110` | wells, tracks, search bar, table head |
-| `--line` | `#D5E0DC` | `#26332F` | hairlines |
-| `--line-strong` | `#74867F` | `#5F746E` | control borders (3:1) |
-| `--fg` | `#13211E` | `#E6F0ED` | text |
-| `--fg-2` | `#45564F` | `#B4C4BF` | secondary text |
-| `--fg-meta` | `#56665F` | `#93A6A1` | meta text |
-| `--accent` | `#0F6E63` | `#4FD1BD` | actions, focus, selection |
-| `--accent-hover` | `#0B5B52` | `#6EDCCB` | primary hover |
-| `--accent-soft` | `#D3ECE7` | `#173A35` | tonal buttons, selected rows, active nav |
-| `--accent-fg` | `#FFFFFF` | `#062420` | text on accent |
-| `--new` | `#B23F18` | `#FF9A76` | "changed since you looked" (coral) |
-| `--new-fill` | `#DC5229` | `#FF9A76` | decorative new marks |
-| `--new-soft` | `#FCE9E2` | `#3A2119` | new tint |
-| `--new-fg` | `#FFFFFF` | `#1A0B05` | text on new |
+| `--bg` | `#F0F1F7` | `#10121C` | page background |
+| `--surface` | `#FFFFFF` | `#171A28` | cards, sidebar, top bar |
+| `--surface-2` | `#FFFFFF` | `#1D2132` | raised: popovers, dialogs, toasts, menus |
+| `--surface-sunken` | `#E4E6F0` | `#0B0D15` | wells, tracks, search bar, table head |
+| `--line` | `#D8DBE8` | `#272B3D` | hairlines |
+| `--line-strong` | `#737896` | `#646A88` | control borders (3:1) |
+| `--fg` | `#161A2E` | `#E7E9F5` | text |
+| `--fg-2` | `#474C66` | `#B3B8CF` | secondary text |
+| `--fg-meta` | `#585D78` | `#959BB6` | meta text |
+| `--accent` | `#4338CA` | `#A5B4FC` | actions, focus, selection |
+| `--accent-hover` | `#3730A3` | `#C0CBFD` | primary hover |
+| `--accent-soft` | `#E2E3F9` | `#262B52` | tonal buttons, selected rows, active nav |
+| `--accent-fg` | `#FFFFFF` | `#12153A` | text on accent |
+| `--new` | `#8F5300` | `#FBC15E` | "changed since you looked" (amber) |
+| `--new-fill` | `#BF7A0A` | `#FBC15E` | decorative new marks |
+| `--new-soft` | `#FCEFD6` | `#3A2C10` | new tint |
+| `--new-fg` | `#FFFFFF` | `#1F1400` | text on new |
 | `--ok` | `#1C7247` | `#6FD69F` | success |
 | `--ok-soft` | `#D8F0E2` | `#15301F` | success tint |
-| `--warn` | `#8A5B06` | `#F0C062` | warning |
-| `--warn-fill` | `#F0B44C` | `#F0C062` | decorative warning |
-| `--warn-soft` | `#F7EACB` | `#30270F` | warning tint |
+| `--warn` | `#A3440C` | `#FFA066` | warning (orange, kept apart from the amber "new") |
+| `--warn-fill` | `#E8782E` | `#FFA066` | decorative warning |
+| `--warn-soft` | `#FCE5D5` | `#3A2312` | warning tint |
 | `--danger` | `#B4313A` | `#F28B93` | errors, destructive |
 | `--danger-soft` | `#F8DDE0` | `#3A1A1E` | danger tint / tonal danger button |
 | `--danger-fg` | `#FFFFFF` | `#2A0A0E` | text on danger |
-| `--selection` | `#BFE3DC` | `#1F4A43` | text selection |
-| `--scrollbar` | `#B9C9C4` | `#374743` | scrollbar thumb |
-| `--shadow-1` | `0 1px 2px rgba(19, 33, 30, 0.06), 0 4px 14px rgba(19, 33, 30, 0.06)` | `0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25)` | resting cards |
-| `--shadow-overlay` | `0 2px 6px rgba(19, 33, 30, 0.08), 0 16px 40px rgba(19, 33, 30, 0.14)` | `0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45)` | anything floating |
-| `--scrim` | `rgba(15, 40, 36, 0.32)` | `rgba(3, 8, 7, 0.6)` | modal backdrop |
-| `--accent-soft-hover` | `#C2E4DD` | `#1E4842` | tonal hover |
-| `--focus-halo` | `rgba(15, 110, 99, 0.32)` | `rgba(79, 209, 189, 0.35)` | 3px input focus halo |
-| `--hover` | `rgba(19, 33, 30, 0.05)` | `rgba(230, 240, 237, 0.06)` | neutral hover overlay |
-| `--press` | `rgba(19, 33, 30, 0.09)` | `rgba(230, 240, 237, 0.1)` | neutral press overlay |
+| `--selection` | `#CDD0F7` | `#2E3570` | text selection |
+| `--scrollbar` | `#BDC1D6` | `#383D55` | scrollbar thumb |
+| `--shadow-1` | `0 1px 2px rgba(22, 26, 46, 0.06), 0 4px 14px rgba(22, 26, 46, 0.06)` | `0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25)` | resting cards |
+| `--shadow-overlay` | `0 2px 6px rgba(22, 26, 46, 0.08), 0 16px 40px rgba(22, 26, 46, 0.14)` | `0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45)` | anything floating |
+| `--scrim` | `rgba(16, 18, 40, 0.32)` | `rgba(4, 5, 12, 0.6)` | modal backdrop |
+| `--accent-soft-hover` | `#D3D5F5` | `#2F3563` | tonal hover |
+| `--focus-halo` | `rgba(67, 56, 202, 0.32)` | `rgba(165, 180, 252, 0.35)` | 3px input focus halo |
+| `--hover` | `rgba(22, 26, 46, 0.05)` | `rgba(231, 233, 245, 0.06)` | neutral hover overlay |
+| `--press` | `rgba(22, 26, 46, 0.09)` | `rgba(231, 233, 245, 0.1)` | neutral press overlay |
 | `--bevel` | `inset 0 1px 0 rgba(255, 255, 255, 0.18)` | `inset 0 1px 0 rgba(255, 255, 255, 0.06)` | raised-button inner highlight |
 | `--src-1` … `--src-8` (+ `-soft`) | | | source hues; pick through `sourceHue()` / `SourceBadge`, never by number |
 

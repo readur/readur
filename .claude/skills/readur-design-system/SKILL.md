@@ -14,7 +14,7 @@ Every visible object is rendered by a primitive from `frontend/src/ui` (import f
 3. **Focus rings come from the primitive.** Don't write `:focus-visible` outlines for buttons, links-as-buttons, chips or cards — use `Button`, `IconButton`, `DocumentCard`, `LabelChip`.
 4. **Never colour alone, never coloured body text.** A failure is `<StatusMark state="failed" />` plus a neutral reason (`--fg-2`); a source is `SourceBadge`; a label is `LabelChip`. Don't colour paragraphs with `--danger`/`--ok`.
 5. **Light and dark are equal.** Check both (`/dev/ui`, theme toggle) before finishing.
-6. **Accent is swappable.** Never encode teal outside the accent tokens.
+6. **Accent is swappable.** Never encode the accent colour (indigo) outside the accent tokens.
 7. **Copy goes through i18n** in en, de, es and fr.
 
 ## Which primitive

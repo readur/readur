@@ -1,95 +1,95 @@
 ---
 name: Readur
-description: Studio — calm tinted surfaces, one teal accent, rounded and soft; every colour carries a job.
+description: Studio — calm tinted surfaces, one indigo accent, an amber "new" signal, rounded and soft; every colour carries a job.
 colors:
-  bg: "#EEF3F1"
+  bg: "#F0F1F7"
   surface: "#FFFFFF"
   surface-2: "#FFFFFF"
-  surface-sunken: "#E3EBE8"
-  line: "#D5E0DC"
-  line-strong: "#74867F"
-  fg: "#13211E"
-  fg-2: "#45564F"
-  fg-meta: "#56665F"
-  accent: "#0F6E63"
-  accent-hover: "#0B5B52"
-  accent-soft: "#D3ECE7"
+  surface-sunken: "#E4E6F0"
+  line: "#D8DBE8"
+  line-strong: "#737896"
+  fg: "#161A2E"
+  fg-2: "#474C66"
+  fg-meta: "#585D78"
+  accent: "#4338CA"
+  accent-hover: "#3730A3"
+  accent-soft: "#E2E3F9"
   accent-fg: "#FFFFFF"
-  new: "#B23F18"
-  new-fill: "#DC5229"
-  new-soft: "#FCE9E2"
+  new: "#8F5300"
+  new-fill: "#BF7A0A"
+  new-soft: "#FCEFD6"
   new-fg: "#FFFFFF"
   ok: "#1C7247"
   ok-soft: "#D8F0E2"
-  warn: "#8A5B06"
-  warn-fill: "#F0B44C"
-  warn-soft: "#F7EACB"
+  warn: "#A3440C"
+  warn-fill: "#E8782E"
+  warn-soft: "#FCE5D5"
   danger: "#B4313A"
   danger-soft: "#F8DDE0"
   danger-fg: "#FFFFFF"
-  src-1: "#2F63A8"
+  src-1: "#1F6E9E"
   src-2: "#9636BC"
   src-3: "#22732C"
   src-4: "#5A6B13"
   src-5: "#9A5111"
   src-6: "#BA2859"
   src-7: "#A83198"
-  src-8: "#6151CC"
-  src-1-soft: "#E3ECF7"
+  src-8: "#12766A"
+  src-1-soft: "#DFEEF7"
   src-2-soft: "#F1E3F7"
   src-3-soft: "#E3F7E6"
   src-4-soft: "#F3F7E3"
   src-5-soft: "#F7ECE3"
   src-6-soft: "#F7E3EA"
   src-7-soft: "#F7E3F4"
-  src-8-soft: "#E6E3F7"
-  selection: "#BFE3DC"
-  scrollbar: "#B9C9C4"
-  accent-soft-hover: "#C2E4DD"
-  dark-bg: "#0F1716"
-  dark-surface: "#16211F"
-  dark-surface-2: "#1C2826"
-  dark-surface-sunken: "#0B1110"
-  dark-line: "#26332F"
-  dark-line-strong: "#5F746E"
-  dark-fg: "#E6F0ED"
-  dark-fg-2: "#B4C4BF"
-  dark-fg-meta: "#93A6A1"
-  dark-accent: "#4FD1BD"
-  dark-accent-hover: "#6EDCCB"
-  dark-accent-soft: "#173A35"
-  dark-accent-fg: "#062420"
-  dark-new: "#FF9A76"
-  dark-new-fill: "#FF9A76"
-  dark-new-soft: "#3A2119"
-  dark-new-fg: "#1A0B05"
+  src-8-soft: "#DDF2EE"
+  selection: "#CDD0F7"
+  scrollbar: "#BDC1D6"
+  accent-soft-hover: "#D3D5F5"
+  dark-bg: "#10121C"
+  dark-surface: "#171A28"
+  dark-surface-2: "#1D2132"
+  dark-surface-sunken: "#0B0D15"
+  dark-line: "#272B3D"
+  dark-line-strong: "#646A88"
+  dark-fg: "#E7E9F5"
+  dark-fg-2: "#B3B8CF"
+  dark-fg-meta: "#959BB6"
+  dark-accent: "#A5B4FC"
+  dark-accent-hover: "#C0CBFD"
+  dark-accent-soft: "#262B52"
+  dark-accent-fg: "#12153A"
+  dark-new: "#FBC15E"
+  dark-new-fill: "#FBC15E"
+  dark-new-soft: "#3A2C10"
+  dark-new-fg: "#1F1400"
   dark-ok: "#6FD69F"
   dark-ok-soft: "#15301F"
-  dark-warn: "#F0C062"
-  dark-warn-fill: "#F0C062"
-  dark-warn-soft: "#30270F"
+  dark-warn: "#FFA066"
+  dark-warn-fill: "#FFA066"
+  dark-warn-soft: "#3A2312"
   dark-danger: "#F28B93"
   dark-danger-soft: "#3A1A1E"
   dark-danger-fg: "#2A0A0E"
-  dark-src-1: "#8DB3EA"
+  dark-src-1: "#7CC0E8"
   dark-src-2: "#C79ED7"
   dark-src-3: "#66C072"
   dark-src-4: "#9EB739"
   dark-src-5: "#DBA16E"
   dark-src-6: "#DC9AB0"
   dark-src-7: "#D59ACD"
-  dark-src-8: "#ADA7DA"
-  dark-src-1-soft: "#1D2D44"
+  dark-src-8: "#6FCFBF"
+  dark-src-1-soft: "#16303F"
   dark-src-2-soft: "#2D1736"
   dark-src-3-soft: "#17361B"
   dark-src-4-soft: "#2F3617"
   dark-src-5-soft: "#362517"
   dark-src-6-soft: "#361721"
   dark-src-7-soft: "#361731"
-  dark-src-8-soft: "#1B1736"
-  dark-selection: "#1F4A43"
-  dark-scrollbar: "#374743"
-  dark-accent-soft-hover: "#1E4842"
+  dark-src-8-soft: "#163330"
+  dark-selection: "#2E3570"
+  dark-scrollbar: "#383D55"
+  dark-accent-soft-hover: "#2F3563"
 typography:
   page-title:
     fontFamily: "Plus Jakarta Sans Variable, system-ui, sans-serif"
@@ -187,7 +187,7 @@ Spec: `docs/superpowers/specs/2026-10-07-readur-design-system-design.md`. Workin
 
 ## Overview
 
-Studio is calm and soft. Pages sit on a tinted background (`--bg`), content sits on white (or dark-teal in dark mode) cards with 14px corners and a gentle shadow, and one teal accent marks what you can act on. Light and dark are designed as equals. Density is comfortable: 36px buttons, 40px inputs, 40px table rows.
+Studio is calm and soft. Pages sit on a tinted background (`--bg`), content sits on white (or deep indigo-grey in dark mode) cards with 14px corners and a gentle shadow, and one indigo accent marks what you can act on. Light and dark are designed as equals. Density is comfortable: 36px buttons, 40px inputs, 40px table rows.
 
 Colour is never the only signal. Status is a dot or spinner plus a word; a source is a hue tile plus a type icon plus its name; a label is a dot plus its name.
 
@@ -196,10 +196,10 @@ Colour is never the only signal. Status is a dot or spinner plus a word; a sourc
 All colours live in `frontend/src/styles/tokens.css` and nowhere else. Primitives are checked by `src/ui/__tests__/tokens-only.test.ts`; both themes are checked by `scripts/contrast-check.mjs` (4.5:1 for text, 3:1 for marks and control borders).
 
 ### Accent
-`--accent` (teal) is the brand and the action colour: primary buttons, focus rings, selected rows, active nav, current page. `--accent-soft` is its tint for secondary buttons, selection and highlights. The accent is one swappable group: `--accent`, `--accent-hover`, `--accent-soft`, `--accent-soft-hover`, `--accent-fg`, `--focus-halo` and `--selection`. Changing those in the light block, the dark block and the pre-theme media block rebrands the app; nothing else may encode teal.
+`--accent` (indigo) is the brand and the action colour: primary buttons, focus rings, selected rows, active nav, current page. `--accent-soft` is its tint for secondary buttons, selection and highlights. The accent is one swappable group: `--accent`, `--accent-hover`, `--accent-soft`, `--accent-soft-hover`, `--accent-fg`, `--focus-halo` and `--selection`. Changing those in the light block, the dark block and the pre-theme media block rebrands the app; nothing else may encode the accent hue.
 
 ### Status
-`--ok`, `--warn`, `--danger` and `--new` (coral, for things that changed since you last looked), each with a `-soft` tint.
+`--ok`, `--warn`, `--danger` and `--new` (amber, for things that changed since you last looked), each with a `-soft` tint.
 
 ### Source hues
 `--src-1` … `--src-8` give each source a stable hue (uploads blue, the watch folder purple, other sources hashed). They stay at least 25° of hue away from the accent so a source never reads as an action.
@@ -254,4 +254,4 @@ Short and functional: `--dur-1` 120ms for hovers, `--dur-2` 200ms for panels. Ev
 - Write hex colours, px radii, literal shadows or z-index numbers in feature CSS.
 - Recreate a badge, chip, card or spinner locally.
 - Use colour as the only way to tell states apart.
-- Hard-code teal anywhere outside the accent tokens.
+- Hard-code the accent colour (indigo) anywhere outside the accent tokens.

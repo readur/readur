@@ -41,8 +41,8 @@ describe('contrast-check script', () => {
   });
 
   it('reports a source hue that sits on the accent', () => {
-    const tealSource = css.replace('--src-1: #2F63A8;', '--src-1: #127A6C;');
-    expect(hueFailures(tealSource)).toEqual([expect.objectContaining({ theme: 'light', token: 'src-1' })]);
+    const accentSource = css.replace('--src-1: #1F6E9E;', '--src-1: #4A3FD0;');
+    expect(hueFailures(accentSource)).toEqual([expect.objectContaining({ theme: 'light', token: 'src-1' })]);
   });
 
   it('measures hue in degrees', () => {
@@ -53,7 +53,7 @@ describe('contrast-check script', () => {
   });
 
   it('reports a failing pair', () => {
-    const broken = css.replace('--fg-meta: #56665F;', '--fg-meta: #C0C4C8;');
+    const broken = css.replace('--fg-meta: #585D78;', '--fg-meta: #C0C4C8;');
     const failures = check(broken) as { theme: string; fg: string }[];
     expect(failures.some((f) => f.theme === 'light' && f.fg === 'fg-meta')).toBe(true);
   });
