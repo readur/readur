@@ -55,6 +55,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.wrap {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .header .cell {
   padding: var(--s-3) var(--s-4);
 }

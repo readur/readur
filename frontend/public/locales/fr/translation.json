@@ -2796,7 +2796,8 @@
       "syncStarted": "Synchronisation lancée",
       "syncStopped": "Synchronisation arrêtée",
       "toggleFailed": "Impossible de modifier la connexion",
-      "healthFindings": "Contrôle de santé"
+      "healthFindings": "Contrôle de santé",
+      "foldersGroup": "Dossiers surveillés"
     },
     "duplicates": {
       "col": {

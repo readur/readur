@@ -2796,7 +2796,8 @@
       "syncStarted": "Sync started",
       "syncStopped": "Sync stopped",
       "toggleFailed": "Could not change the connection",
-      "healthFindings": "Health check"
+      "healthFindings": "Health check",
+      "foldersGroup": "Watched folders"
     },
     "duplicates": {
       "col": {

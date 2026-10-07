@@ -77,3 +77,14 @@
   color: var(--fg-2);
   overflow-wrap: anywhere;
 }
+
+/* Watched folders in the details panel: one path per line, wrapping, never cut off. */
+.folderList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}

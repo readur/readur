@@ -43,17 +43,19 @@ export interface PassCellProps {
    * 400px instead of being cut. Callers keep the cells before it paired.
    */
   wide?: boolean;
+  /** Show the whole value, wrapping over several lines (lists of paths), instead of truncating. */
+  wrap?: boolean;
   className?: string;
 }
 
-export function PassCell({ label, children, mono, span, wide, className }: PassCellProps) {
+export function PassCell({ label, children, mono, span, wide, wrap, className }: PassCellProps) {
   const style = span && span > 1 ? { gridColumn: `span ${span}` } : undefined;
   const isText = typeof children === 'string' || typeof children === 'number';
   return (
     <div className={cx(styles.cell, wide && styles.wide, className)} style={style}>
       <dt className={styles.label}>{label}</dt>
-      <dd className={cx(styles.value, mono && styles.mono)}>
-        {isText ? <TruncatedText>{children}</TruncatedText> : children}
+      <dd className={cx(styles.value, mono && styles.mono, wrap && styles.wrap)} data-wrap={wrap || undefined}>
+        {isText && !wrap ? <TruncatedText>{children}</TruncatedText> : children}
       </dd>
     </div>
   );

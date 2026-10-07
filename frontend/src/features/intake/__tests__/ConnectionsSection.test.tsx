@@ -150,6 +150,16 @@ describe('Connection details panel', () => {
     expect(within(panel).getByRole('group', { name: 'Counts' })).toHaveTextContent('2 KB');
   });
 
+  it('lists every watched folder on its own line, whole', async () => {
+    const folders = ['/Documents/Scans/2024/Receipts/Household', '/Shared/Team/Accounting/Invoices'];
+    serveSources([source('s9', { name: 'Deep tree', source_type: 'local_folder', config: { watch_folders: folders } })]);
+    const user = userEvent.setup();
+    renderIntake(<ConnectionsSection />);
+    const panel = await openRow(user, 'Deep tree');
+    const list = within(panel).getByRole('list', { name: 'Folders' });
+    expect(within(list).getAllByRole('listitem').map((el) => el.textContent)).toEqual(folders);
+  });
+
   it('lists recent errors with PascalCase types mapped to words and marks', async () => {
     sourceErrorService.listFailures.mockImplementation(() =>
       ok([

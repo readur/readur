@@ -133,10 +133,20 @@ export function SourceDetailPanel({ source: current, isOpen, onOpenChange, onEdi
               {formatBytes(source.total_size_bytes)}
             </PassCell>
           </Pass>
-          <Pass aria-label={t('intake.detail.scope', 'Scope')}>
-            <PassCell label={t('intake.detail.folders', 'Folders')} mono>
-              {folders.length > 0 ? folders.join(', ') : '—'}
+          <Pass aria-label={t('intake.detail.foldersGroup', 'Watched folders')}>
+            <PassCell label={t('intake.detail.folders', 'Folders')} mono wrap>
+              {folders.length > 0 ? (
+                <ul className={styles.folderList} aria-label={t('intake.detail.folders', 'Folders')}>
+                  {folders.map((folder) => (
+                    <li key={folder}>{folder}</li>
+                  ))}
+                </ul>
+              ) : (
+                '—'
+              )}
             </PassCell>
+          </Pass>
+          <Pass aria-label={t('intake.detail.scope', 'Scope')}>
             <PassCell label={t('intake.detail.extensions', 'File types')} mono>
               {extensions.length > 0 ? extensions.join(' ') : '—'}
             </PassCell>

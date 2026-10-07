@@ -105,4 +105,17 @@ describe('Pass', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
+  it('lets a `wrap` cell show its whole value over several lines instead of truncating', () => {
+    render(
+      <Pass>
+        <PassCell label="Folders" mono wrap>
+          /Documents/Very/Long/Path/To/A/Folder
+        </PassCell>
+      </Pass>,
+    );
+    const value = screen.getByRole('definition');
+    expect(value).toHaveAttribute('data-wrap');
+    expect(value.querySelector('[class*="truncate"]')).toBeNull();
+    expect(value).toHaveTextContent('/Documents/Very/Long/Path/To/A/Folder');
+  });
 });

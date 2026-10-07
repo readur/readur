@@ -2796,7 +2796,8 @@
       "syncStarted": "Sincronización iniciada",
       "syncStopped": "Sincronización detenida",
       "toggleFailed": "No se pudo cambiar la conexión",
-      "healthFindings": "Comprobación de estado"
+      "healthFindings": "Comprobación de estado",
+      "foldersGroup": "Carpetas vigiladas"
     },
     "duplicates": {
       "col": {
