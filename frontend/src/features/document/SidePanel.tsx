@@ -1,7 +1,7 @@
 import type { Key } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { SlideOver, Tab, TabList, TabPanel, Tabs } from '../../ui';
-import { CommentsPanel } from './comments/CommentsPanel';
+import { CommentsPanel, useComments } from './comments/CommentsPanel';
 import { SharedLinksManager } from './sharing/SharedLinksManager';
 
 export type SidePanelTab = 'comments' | 'links';
@@ -31,7 +31,7 @@ export function SidePanel({ documentId, isOpen, onOpenChange, tab, onTabChange }
           <Tab id="links">{t('document.panel.links', 'Share links')}</Tab>
         </TabList>
         <TabPanel id="comments">
-          <CommentsPanel documentId={documentId} />
+          <CommentsTab documentId={documentId} />
         </TabPanel>
         <TabPanel id="links">
           <SharedLinksManager documentId={documentId} />
@@ -39,4 +39,9 @@ export function SidePanel({ documentId, isOpen, onOpenChange, tab, onTabChange }
       </Tabs>
     </SlideOver>
   );
+}
+
+function CommentsTab({ documentId }: { documentId: string }) {
+  const comments = useComments(documentId, { poll: true });
+  return <CommentsPanel documentId={documentId} comments={comments} />;
 }

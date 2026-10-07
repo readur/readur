@@ -10,15 +10,28 @@ import styles from './Comments.module.css';
 /** Comments refresh in the background so other people's replies show up. */
 export const COMMENTS_POLL_MS = 30_000;
 
-/** Comment list for one document with a new-comment box on top. */
-export function CommentsPanel({ documentId }: { documentId: string }) {
-  const { t } = useTranslation();
+export interface CommentsState {
+  threads: Thread[];
+  loading: boolean;
+  error: boolean;
+  /** Threads plus their replies. */
+  count: number;
+  reload: () => Promise<void>;
+  /** Posts a comment, showing it right away; throws (after rolling back) when posting fails. */
+  create: (content: string) => Promise<void>;
+}
+
+/**
+ * A document's comments. Loads once; with `poll`, refreshes in the background so other people's
+ * replies show up (only while someone is looking at them).
+ */
+export function useComments(documentId: string, { poll }: { poll: boolean }): CommentsState {
   const { user } = useAuth();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const fetchComments = useCallback(async () => {
+  const reload = useCallback(async () => {
     try {
       const res = await commentsService.list(documentId);
       setThreads(Array.isArray(res.data) ? res.data : []);
@@ -31,10 +44,15 @@ export function CommentsPanel({ documentId }: { documentId: string }) {
   }, [documentId]);
 
   useEffect(() => {
-    void fetchComments();
-    const timer = setInterval(() => void fetchComments(), COMMENTS_POLL_MS);
+    setLoading(true);
+    void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    if (!poll) return undefined;
+    const timer = setInterval(() => void reload(), COMMENTS_POLL_MS);
     return () => clearInterval(timer);
-  }, [fetchComments]);
+  }, [poll, reload]);
 
   const create = async (content: string) => {
     if (!user) return;
@@ -60,8 +78,18 @@ export function CommentsPanel({ documentId }: { documentId: string }) {
       setThreads((prev) => prev.filter((c) => c.id !== optimistic.id));
       throw err;
     }
-    await fetchComments();
+    await reload();
   };
+
+  const count = threads.reduce((sum, thread) => sum + 1 + (thread.reply_count ?? 0), 0);
+  return { threads, loading, error, count, reload, create };
+}
+
+/** Comment list for one document with a new-comment box on top; `comments` comes from useComments. */
+export function CommentsPanel({ documentId, comments }: { documentId: string; comments: CommentsState }) {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { threads, loading, error, reload: fetchComments, create } = comments;
 
   return (
     <div className={styles.panel}>
