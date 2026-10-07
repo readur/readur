@@ -35,14 +35,8 @@ pub async fn reset_admin_password(db: &Database) -> Result<()> {
     }
 
     // Get new password from env var or generate one
-    let new_password = if let Ok(pwd) = env::var("ADMIN_PASSWORD") {
-        if pwd.len() < 8 {
-            anyhow::bail!("ADMIN_PASSWORD must be at least 8 characters long");
-        }
-        pwd
-    } else {
-        generate_secure_password(24)
-    };
+    let new_password = crate::seed::configured_admin_password(env::var("ADMIN_PASSWORD").ok())?
+        .unwrap_or_else(|| generate_secure_password(24));
 
     // Reset the password
     db.reset_user_password(&admin_username, &new_password)
