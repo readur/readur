@@ -295,7 +295,8 @@ describe('Connection details panel', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Delete connection' }));
     await waitFor(() => expect(sourcesService.remove).toHaveBeenCalledWith('s1'));
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Delete “Office cloud”?' })).not.toBeInTheDocument());
-    expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument();
+    // Closing goes back a history step (the drawer lives in ?source=), which settles a tick later.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument());
   });
 
   it('cancels a delete without calling the server', async () => {
