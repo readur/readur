@@ -13,6 +13,7 @@
   white-space: nowrap;
   border: 1px solid transparent;
   border-radius: var(--radius);
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color var(--dur-1) var(--ease),

@@ -55,7 +55,7 @@ export function DocumentCard({
   return (
     <El className={styles.card} data-selected={isSelected || undefined} data-changed={isChanged || undefined}>
       {href ? (
-        <Link href={href} className={styles.open}>
+        <Link href={href} className={styles.open} onPress={onOpen}>
           {body}
         </Link>
       ) : (

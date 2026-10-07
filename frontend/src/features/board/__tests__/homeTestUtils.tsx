@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import i18n from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { AuthContext } from '../../../contexts/AuthContext';
+import { RacRouterBridge } from '../../../app/RacRouterBridge';
 import type { UserRole } from '../../../types/generated';
 import { acknowledgeAll, flushLit } from '../litStore';
 import { resetDocumentBaseline, syncDocuments } from '../litFeeders';
@@ -78,6 +79,7 @@ export function renderPage(page: ReactNode, role: UserRole = 'admin') {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={['/home']}>
+        <RacRouterBridge>
         <AuthContext.Provider value={auth as never}>
           <Routes>
             <Route
@@ -91,6 +93,7 @@ export function renderPage(page: ReactNode, role: UserRole = 'admin') {
             />
           </Routes>
         </AuthContext.Provider>
+        </RacRouterBridge>
       </MemoryRouter>
     </I18nextProvider>,
   );

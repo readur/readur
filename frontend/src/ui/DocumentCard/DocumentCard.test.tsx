@@ -1,3 +1,4 @@
+import { RouterProvider } from 'react-aria-components';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
@@ -75,4 +76,11 @@ it('keeps corner flags visible on a selected card (they sit opposite the checkbo
   const css = readFileSync(resolve(__dirname, 'DocumentCard.module.css'), 'utf8');
   expect(css).toMatch(/\.flags\s*\{[^}]*right:\s*var\(--s-2\)/);
   expect(css).not.toMatch(/\[data-selected\][^{]*\.flags/);
+});
+
+it('reports the open when it is a link too', async () => {
+  const onOpen = vi.fn();
+  render(<RouterProvider navigate={() => undefined}><ul><DocumentCard {...base} href="/documents/1" onOpen={onOpen} /></ul></RouterProvider>);
+  await userEvent.click(screen.getByRole('link', { name: 'Lease.pdf' }));
+  expect(onOpen).toHaveBeenCalled();
 });

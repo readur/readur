@@ -3323,7 +3323,9 @@
       "barsLabel": "{{total}} en los últimos {{days}} días, la mayoría el {{day}} ({{most}})",
       "barsEmpty": "Nada en los últimos {{days}} días",
       "more": "{{formatted}} fuentes más",
-      "allSilent": "No ha llegado nada de ninguna fuente en los últimos {{days}} días."
+      "allSilent": "No ha llegado nada de ninguna fuente en los últimos {{days}} días.",
+      "todayCount_one": "{{formatted}} hoy",
+      "todayCount_other": "{{formatted}} hoy"
     },
     "pipeline": {
       "title": "Procesamiento",
@@ -3334,16 +3336,33 @@
       "showRecent": "Mostrar los últimos errores",
       "rawError": "Texto del error",
       "doneToday": "{{done}} completados hoy",
-      "oldest": "el más antiguo espera desde hace {{wait}}"
+      "oldest": "el más antiguo espera desde hace {{wait}}",
+      "cardTitle": "Procesamiento",
+      "done": "Hechos hoy",
+      "processing": "En proceso",
+      "failedSegment": "Fallidos",
+      "queued": "En cola"
     },
     "recent": {
-      "title": "Recién llegados"
+      "title": "Recién llegados",
+      "viewAll": "Ver todo"
     },
     "status": {
       "label": "Resumen",
       "idle": "nada en espera",
       "busy": "{{processing}} procesando · {{pending}} en espera",
       "pending": "{{pending}} en espera"
+    },
+    "connectSource": "Conectar fuente",
+    "upload": "Subir",
+    "attention": {
+      "title": "Requiere atención",
+      "failed_one": "{{formatted}} documento falló en el OCR",
+      "failed_other": "{{formatted}} documentos fallaron en el OCR"
+    },
+    "sources": {
+      "title": "Fuentes",
+      "manage": "Gestionar"
     }
   },
   "sourcesPage": {

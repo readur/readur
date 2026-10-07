@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { RacRouterBridge } from './app/RacRouterBridge'
 import App from './App'
 import '@fontsource-variable/plus-jakarta-sans'
 import '@fontsource-variable/jetbrains-mono'
@@ -16,11 +17,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <Suspense fallback={<div>Loading...</div>}>
       <ThemeModeProvider>
       <BrowserRouter>
+        <RacRouterBridge>
         <AuthProvider>
           <FeatureFlagsProvider>
             <App />
           </FeatureFlagsProvider>
         </AuthProvider>
+        </RacRouterBridge>
       </BrowserRouter>
       </ThemeModeProvider>
     </Suspense>

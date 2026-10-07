@@ -1,8 +1,12 @@
-import { Fragment, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { EmptyState, Skeleton, SourceDot } from '../../ui';
+import { ButtonLink, DocumentCard, EmptyState, Skeleton, SourceBadge, StatusMark } from '../../ui';
+import { Upload } from '../../ui/icons';
+import { shortType } from '../../lib/fileType';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
+import { Label } from '../labels/Label';
+import { formatBytes, ocrState } from '../library/format';
 import type { SourceArrivals } from './arrivals';
 import { fetchRecent, POLL_MS } from './data';
 import { formatAge, formatCount } from './format';
@@ -15,16 +19,10 @@ import { useResource } from './useResource';
 import styles from './Home.module.css';
 
 const DAY_MS = 24 * 3600 * 1000;
-
-/** A file name with break chances after _ - . so long names wrap between words, not mid-word. */
-function breakable(name: string) {
-  return name.split(/(?<=[_\-.])/).map((part, i) => (
-    <Fragment key={i}>
-      {i > 0 ? <wbr /> : null}
-      {part}
-    </Fragment>
-  ));
-}
+/** Two rows of four on a wide screen. */
+const SHOWN = 8;
+/** Labels shown on a card before "+N". */
+const CARD_LABELS = 2;
 
 /** "5 min ago" within a day, otherwise the date. */
 function arrivedLabel(iso: string | undefined, locale: string, now: number): string {
@@ -34,13 +32,26 @@ function arrivedLabel(iso: string | undefined, locale: string, now: number): str
   return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(at);
 }
 
-interface CardProps {
-  doc: BoardDocument;
-  sourceName: string;
-  now: number;
+function CardLabels({ doc }: { doc: BoardDocument }) {
+  const { t } = useTranslation();
+  const labels = doc.labels ?? [];
+  if (labels.length === 0) return null;
+  const extra = labels.length - CARD_LABELS;
+  return (
+    <>
+      {labels.slice(0, CARD_LABELS).map((l) => (
+        <Label key={l.id} label={l} size="small" />
+      ))}
+      {extra > 0 ? (
+        <span className={styles.moreLabels} aria-label={t('library.labelsMore', { count: extra, defaultValue: '{{count}} more' })}>
+          +{extra}
+        </span>
+      ) : null}
+    </>
+  );
 }
 
-function Card({ doc, sourceName, now }: CardProps) {
+function ArrivedCard({ doc, sourceName, now }: { doc: BoardDocument; sourceName: string; now: number }) {
   const { i18n } = useTranslation();
   const lane = documentLane(doc);
   const shown = useShownLit('document', doc.id);
@@ -48,24 +59,34 @@ function Card({ doc, sourceName, now }: CardProps) {
   const bulk = useBulkArrivals() > 0 && isBulkArrival(doc.id);
   const lit = shown.lit || bulk;
   const reason = shown.lit ? shown.reason : 'new';
-  const name = docName(doc);
+  const progress =
+    doc.ocr_progress_total && doc.ocr_progress_total > 0
+      ? { current: doc.ocr_progress_current ?? 0, total: doc.ocr_progress_total }
+      : undefined;
+  const meta = [shortType(doc.mime_type ?? ''), formatBytes(doc.file_size, i18n.language), arrivedLabel(doc.created_at, i18n.language, now)]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <li className={styles.card} data-changed={lit || undefined}>
-      <Link className={styles.cardLink} to={`/documents/${doc.id}`} onClick={() => acknowledge('document', doc.id)}>
-        <span className={styles.cardThumb}>
-          <DocumentThumbnail documentId={doc.id} mimeType={doc.mime_type ?? ''} size="fill" lazy />
-          {lit ? <ChangedTag reason={reason} className={styles.cardTag} /> : null}
-        </span>
-        <span className={styles.cardName} title={name}>
-          {breakable(name)}
-        </span>
-      </Link>
-      <span className={styles.cardMeta}>
-        <SourceDot sourceId={lane.key} kind={lane.kind === 'source' ? undefined : lane.kind} size="sm" />
-        <span className={styles.cardSource}>{sourceName}</span>
-        <span className={styles.cardDate}>{arrivedLabel(doc.created_at, i18n.language, now)}</span>
-      </span>
-    </li>
+    <DocumentCard
+      title={docName(doc)}
+      href={`/documents/${doc.id}`}
+      onOpen={() => acknowledge('document', doc.id)}
+      thumbnail={<DocumentThumbnail documentId={doc.id} mimeType={doc.mime_type ?? ''} size="fill" lazy />}
+      meta={meta}
+      status={<StatusMark state={ocrState(doc.ocr_status)} progress={progress} size="sm" />}
+      labels={doc.labels?.length ? <CardLabels doc={doc} /> : undefined}
+      source={
+        <SourceBadge
+          sourceId={lane.kind === 'source' ? lane.key : null}
+          kind={lane.kind === 'source' ? doc.source_type : lane.kind}
+          type={lane.kind === 'source' ? doc.source_type : lane.kind}
+          name={sourceName}
+        />
+      }
+      flags={lit ? <ChangedTag reason={reason} /> : undefined}
+      isChanged={lit}
+    />
   );
 }
 
@@ -73,10 +94,11 @@ export interface JustArrivedProps {
   /** The lanes, to name each document's source. */
   lanes: SourceArrivals[] | undefined;
   now: number;
+  className?: string;
 }
 
-/** The newest documents as page thumbnails; items that changed are marked until opened. */
-export function JustArrived({ lanes, now }: JustArrivedProps) {
+/** The newest documents as thumbnail cards; items that changed are marked until opened. */
+export function JustArrived({ lanes, now, className }: JustArrivedProps) {
   const { t, i18n } = useTranslation();
   const { data, error, reload } = useResource(fetchRecent, POLL_MS);
   useLitCount('document'); // re-render when an item is marked or acknowledged
@@ -87,8 +109,9 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
     if (data) syncDocuments(data.documents, Date.now() - DAY_MS, data.total);
   }, [data]);
 
+  const docs = useMemo(() => (data?.documents ?? []).slice(0, SHOWN), [data]);
   // Items (and a bulk summary) seen flagged during this visit are acknowledged when the user leaves.
-  const ids = useMemo(() => (data?.documents ?? []).map((d) => d.id), [data]);
+  const ids = useMemo(() => docs.map((d) => d.id), [docs]);
   useAcknowledgeOnLeave('document', ids, bulk > 0 ? clearBulkArrivals : undefined);
 
   const names = useMemo(() => new Map((lanes ?? []).map((l) => [l.key, l.name])), [lanes]);
@@ -101,32 +124,34 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
         : t('home.lanes.source', 'Source'));
 
   const title = t('home.recent.title', 'Just arrived');
-  const add = (
-    <Link className={styles.primaryLink} to="/intake?section=upload">
-      {t('board.addDocuments', 'Add documents')}
-    </Link>
+  const upload = (
+    <ButtonLink href="/intake?section=upload" variant="primary" icon={<Upload fontSize="inherit" />}>
+      {t('home.upload', 'Upload')}
+    </ButtonLink>
   );
 
   return (
     <Region
+      surface="plain"
       title={title}
+      count={docs.length ? formatCount(docs.length, i18n.language) : undefined}
+      className={className}
       headerAction={
         <Link className={styles.link} to="/documents">
-          {t('board.arrivals.library', 'Open library')}
+          {t('home.recent.viewAll', 'View all')}
         </Link>
       }
     >
       {error && !data ? (
         <RegionError message={t('board.arrivals.error', 'Recent documents could not be loaded.')} onRetry={reload} />
       ) : !data ? (
-        <div className={styles.panelBody}>
-          <Skeleton lines={3} label={t('board.loading', 'Loading')} />
-        </div>
-      ) : data.documents.length === 0 ? (
+        <Skeleton lines={3} label={t('board.loading', 'Loading')} />
+      ) : docs.length === 0 ? (
         <EmptyState
+          illustration
           title={t('board.arrivals.empty', 'No documents yet')}
           description={t('board.arrivals.emptyHint', 'Documents you add appear here as they arrive.')}
-          action={add}
+          action={upload}
         />
       ) : (
         <>
@@ -143,17 +168,10 @@ export function JustArrived({ lanes, now }: JustArrivedProps) {
               </Link>
             </p>
           ) : null}
-          <ul className={styles.cards} aria-label={title} data-count={data.documents.length}>
-            {data.documents.map((d) => {
+          <ul className={styles.cards} aria-label={title} data-count={docs.length}>
+            {docs.map((d) => {
               const lane = documentLane(d);
-              return (
-                <Card
-                  key={d.id}
-                  doc={d}
-                  now={now}
-                  sourceName={nameOf(lane.key, lane.kind)}
-                />
-              );
+              return <ArrivedCard key={d.id} doc={d} now={now} sourceName={nameOf(lane.key, lane.kind)} />;
             })}
           </ul>
         </>

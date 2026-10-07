@@ -1,5 +1,10 @@
 import { useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
-import { Button as RACButton, type ButtonProps as RACButtonProps } from 'react-aria-components';
+import {
+  Button as RACButton,
+  Link as RACLink,
+  type ButtonProps as RACButtonProps,
+  type LinkProps as RACLinkProps,
+} from 'react-aria-components';
 import { cx } from '../shared/FieldParts';
 import { Spinner } from '../Spinner';
 import styles from './Button.module.css';
@@ -70,5 +75,31 @@ export function Button({
       ) : null}
       {children}
     </RACButton>
+  );
+}
+
+export interface ButtonLinkProps extends Omit<RACLinkProps, 'children' | 'className'> {
+  href: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}
+
+/**
+ * A link that looks like a Button, for actions that go somewhere ("Upload", "Connect source").
+ * Navigates through the app's router (see app/RacRouterBridge).
+ */
+export function ButtonLink({ variant = 'secondary', size = 'md', icon, children, className, ...rest }: ButtonLinkProps) {
+  return (
+    <RACLink {...rest} className={cx(styles.button, VARIANT_CLASS[variant], styles[size], className)}>
+      {icon ? (
+        <span className={styles.icon} aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      {children}
+    </RACLink>
   );
 }

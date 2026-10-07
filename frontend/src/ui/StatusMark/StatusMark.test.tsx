@@ -86,3 +86,9 @@ describe('StatusMark', () => {
     expect(screen.getByRole('button', { name: 'Failed' })).toBeInTheDocument();
   });
 });
+
+it('can say a more specific word in the same tone', () => {
+  const { container } = render(<StatusMark state="healthy" label="Idle" />);
+  expect(container).toHaveTextContent('Idle');
+  expect(container.firstElementChild).toHaveAttribute('data-tone', 'ok');
+});

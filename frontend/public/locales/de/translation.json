@@ -3323,7 +3323,9 @@
       "barsLabel": "{{total}} in den letzten {{days}} Tagen, die meisten am {{day}} ({{most}})",
       "barsEmpty": "Nichts in den letzten {{days}} Tagen",
       "more": "{{formatted}} weitere Quellen",
-      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen."
+      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen.",
+      "todayCount_one": "{{formatted}} heute",
+      "todayCount_other": "{{formatted}} heute"
     },
     "pipeline": {
       "title": "Verarbeitung",
@@ -3334,16 +3336,33 @@
       "showRecent": "Letzte Fehler anzeigen",
       "rawError": "Fehlertext",
       "doneToday": "{{done}} heute erledigt",
-      "oldest": "älteste wartet seit {{wait}}"
+      "oldest": "älteste wartet seit {{wait}}",
+      "cardTitle": "Verarbeitung",
+      "done": "Heute fertig",
+      "processing": "In Arbeit",
+      "failedSegment": "Fehlgeschlagen",
+      "queued": "Wartend"
     },
     "recent": {
-      "title": "Gerade eingegangen"
+      "title": "Gerade eingegangen",
+      "viewAll": "Alle anzeigen"
     },
     "status": {
       "label": "Überblick",
       "idle": "nichts in der Warteschlange",
       "busy": "{{processing}} in Verarbeitung · {{pending}} wartend",
       "pending": "{{pending}} wartend"
+    },
+    "connectSource": "Quelle verbinden",
+    "upload": "Hochladen",
+    "attention": {
+      "title": "Braucht Aufmerksamkeit",
+      "failed_one": "{{formatted}} Dokument: OCR fehlgeschlagen",
+      "failed_other": "{{formatted}} Dokumente: OCR fehlgeschlagen"
+    },
+    "sources": {
+      "title": "Quellen",
+      "manage": "Verwalten"
     }
   },
   "sourcesPage": {

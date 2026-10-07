@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { PageHeader } from '../shell';
-import { Add } from '../../ui/icons';
+import { ButtonLink } from '../../ui';
+import { Cloud, Upload } from '../../ui/icons';
 import { fetchArrivals, weekTotal } from './arrivals';
 import { fetchFailedOcr, fetchQueueFigures, POLL_MS } from './data';
 import { JustArrived } from './JustArrived';
 import { MarkAllSeen } from './MarkAllSeen';
+import { NeedsAttention } from './NeedsAttention';
 import { PipelinePanel } from './PipelinePanel';
-import { SourceLanes } from './SourceLanes';
+import { SourcesCard } from './SourcesCard';
 import { StatusLine } from './StatusLine';
 import { useResource } from './useResource';
 import styles from './Home.module.css';
@@ -37,7 +38,11 @@ function useGreeting(now: number): string {
   return name ? t('home.greeting.afternoon', 'Good afternoon, {{name}}', { name }) : t('home.greeting.afternoonPlain', 'Good afternoon');
 }
 
-/** Home: what just arrived, whether everything is still coming in, and what needs a look. */
+/**
+ * Home, laid out as the Studio mockup: the processing pipeline and what just arrived on the left,
+ * what needs attention and the sources on the right. When the page is too narrow for two columns
+ * the right column drops in under the pipeline (the DOM is already in that reading order).
+ */
 export default function Home() {
   const { t } = useTranslation();
   const now = useNow();
@@ -57,17 +62,22 @@ export default function Home() {
         actions={
           <>
             <MarkAllSeen kinds={HOME_KINDS} />
-            <Link className={`${styles.primaryLink} ${styles.addLink}`} to="/intake?section=upload">
-              <Add fontSize={18} aria-hidden="true" />
-              <span className={styles.addLabel}>{t('board.addDocuments', 'Add documents')}</span>
-            </Link>
+            <ButtonLink href="/sources?section=connections&new=1" variant="secondary" icon={<Cloud fontSize="inherit" />}>
+              {t('home.connectSource', 'Connect source')}
+            </ButtonLink>
+            <ButtonLink href="/intake?section=upload" variant="primary" icon={<Upload fontSize="inherit" />}>
+              {t('home.upload', 'Upload')}
+            </ButtonLink>
           </>
         }
       />
-      <div className={styles.page}>
-        <JustArrived lanes={arrivals.data} now={now} />
-        <SourceLanes arrivals={arrivals} now={now} />
+      <div className={styles.layout}>
         <PipelinePanel failed={failed} stats={stats} />
+        <div className={styles.side}>
+          <NeedsAttention failed={failed} />
+          <SourcesCard arrivals={arrivals} now={now} />
+        </div>
+        <JustArrived lanes={arrivals.data} now={now} className={styles.recent} />
       </div>
     </>
   );

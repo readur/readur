@@ -20,6 +20,8 @@ export interface StatusMarkProps {
   /** Known progress for `processing`; renders as `OCR 3/12`. */
   progress?: { current: number; total: number };
   size?: 'sm' | 'md';
+  /** A more specific word for the same state ("Idle", "Quiet"); the tone still comes from `state`. */
+  label?: string;
   className?: string;
 }
 
@@ -40,7 +42,7 @@ const VOCAB: Record<StatusState, { word: string; tone: Tone }> = {
 export const STATUS_STATES = Object.keys(VOCAB) as StatusState[];
 
 /** Document or connection state: a haloed dot (a spinner while in progress) plus a word, never colour alone. */
-export function StatusMark({ state, progress, size = 'md', className }: StatusMarkProps) {
+export function StatusMark({ state, progress, size = 'md', label, className }: StatusMarkProps) {
   const { t } = useTranslation();
   const entry = VOCAB[state] ?? VOCAB.pending;
   const showProgress = state === 'processing' && progress && progress.total > 0;
@@ -50,7 +52,7 @@ export function StatusMark({ state, progress, size = 'md', className }: StatusMa
         current: progress.current,
         total: progress.total,
       })
-    : t(`status.${state}`, { defaultValue: entry.word });
+    : (label ?? t(`status.${state}`, { defaultValue: entry.word }));
 
   const pct = showProgress ? Math.round((progress.current / progress.total) * 100) : 0;
   const active = entry.tone === 'active';

@@ -1,15 +1,12 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Skeleton, useToast } from '../../ui';
+import { Button, OutcomeBar, Skeleton, useToast, type OutcomeSegment } from '../../ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAdmin } from '../../auth/roles';
-import { failureKind, humanizeFailureReason } from '../../lib/failureReason';
 import { queueService } from '../../services/api';
 import { POLL_MS, type FailedOcrPage, type QueueFigures } from './data';
-import { formatAge, formatCount, formatMinutes } from './format';
+import { formatCount, formatMinutes } from './format';
 import { Region, RegionError } from './Region';
-import { docName, type FailedOcrDocument } from './types';
 import { useResource, type Resource } from './useResource';
 import styles from './Home.module.css';
 
@@ -19,40 +16,15 @@ export interface PipelinePanelProps {
   stats: Resource<QueueFigures | null>;
 }
 
-/** How many recent failures the details list shows. */
-const RECENT_FAILURES = 5;
-/** How many distinct causes the failures line names. */
-const CAUSES = 2;
-
-const rawOf = (d: FailedOcrDocument) => d.error_message ?? '';
-
-/** The most frequent causes among the recent failures, in plain words. */
-function topCauses(docs: FailedOcrDocument[]): string[] {
-  const counts = new Map<string, { n: number; summary: string }>();
-  for (const d of docs) {
-    const kind = failureKind(rawOf(d), d.failure_reason);
-    const key = kind === 'other' ? `other:${humanizeFailureReason(rawOf(d), d.failure_reason).summary}` : kind;
-    const entry = counts.get(key) ?? { n: 0, summary: humanizeFailureReason(rawOf(d), d.failure_reason).summary };
-    entry.n += 1;
-    counts.set(key, entry);
-  }
-  return [...counts.values()]
-    .sort((a, b) => b.n - a.n)
-    .slice(0, CAUSES)
-    .map((c) => c.summary);
-}
-
-function ProcessingLine({ stats }: { stats: Resource<QueueFigures | null> }) {
-  const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+/** Pause or resume OCR (admins only), with the OCR state it reflects. */
+function useOcrToggle() {
+  const { t } = useTranslation();
   const toast = useToast();
-  const canManage = isAdmin(user);
   const ocr = useResource(() => queueService.getOcrStatus().then((r) => r.data), POLL_MS);
   const [busy, setBusy] = useState(false);
-  const q = stats.data;
   const paused = ocr.data?.is_paused ?? false;
-
-  const toggle = async (pause: boolean) => {
+  const toggle = async () => {
+    const pause = !paused;
     setBusy(true);
     try {
       await (pause ? queueService.pauseOcr() : queueService.resumeOcr());
@@ -66,115 +38,81 @@ function ProcessingLine({ stats }: { stats: Resource<QueueFigures | null> }) {
       setBusy(false);
     }
   };
+  return { ocr, paused, busy, toggle };
+}
 
-  if (stats.error && q === undefined) {
-    return <RegionError message={t('board.processing.error', 'The OCR queue could not be loaded.')} onRetry={stats.reload} />;
-  }
-  if (q === undefined) return <Skeleton lines={1} label={t('board.loading', 'Loading')} />;
-  if (q === null) return null;
-
-  const idle = q.pending + q.processing === 0;
+/**
+ * Today's OCR pipeline as one segmented bar (done, processing, failed, queued) with "done / total"
+ * beside the title, pause and resume for admins, and the oldest wait. Users who cannot see the
+ * queue get only the failures; with nothing to show the card is left out.
+ */
+export function PipelinePanel({ failed, stats }: PipelinePanelProps) {
+  const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const { ocr, paused, busy, toggle } = useOcrToggle();
   const n = (v: number) => formatCount(v, i18n.language);
+  const q = stats.data;
+  const failedTotal = failed.data?.total ?? 0;
+
+  if (q === null && !stats.error && failedTotal === 0) return null;
+
+  const segments: OutcomeSegment[] = q
+    ? [
+        { id: 'done', label: t('home.pipeline.done', 'Done today'), value: q.completedToday, tone: 'ok' },
+        { id: 'processing', label: t('home.pipeline.processing', 'Processing'), value: q.processing, tone: 'accent' },
+        { id: 'failed', label: t('home.pipeline.failedSegment', 'Failed'), value: failedTotal, tone: 'danger' },
+        { id: 'queued', label: t('home.pipeline.queued', 'Queued'), value: q.pending, tone: 'neutral' },
+      ]
+    : [{ id: 'failed', label: t('home.pipeline.failedSegment', 'Failed'), value: failedTotal, tone: 'danger' }];
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  const idle = q ? q.pending + q.processing === 0 : true;
+
+  const notes = [
+    !idle && q && q.oldestPendingMinutes !== null && q.oldestPendingMinutes >= 1
+      ? t('home.pipeline.oldest', 'oldest waiting {{wait}}', { wait: formatMinutes(q.oldestPendingMinutes) })
+      : null,
+    paused ? t('home.pipeline.paused', 'OCR is paused') : null,
+  ].filter((x): x is string => Boolean(x));
+
+  const title = t('home.pipeline.cardTitle', 'Processing pipeline');
   return (
-    <div className={styles.line} data-tone={paused ? 'warn' : idle ? 'ok' : 'accent'}>
-      <span className={styles.lineMark} aria-hidden="true">
-        {paused ? '◆' : idle ? '■' : '◐'}
-      </span>
-      <p className={styles.lineText}>
-        {t('home.pipeline.doneToday', '{{done}} done today', { count: q.completedToday, done: n(q.completedToday) })}
-        {!idle && q.oldestPendingMinutes !== null && q.oldestPendingMinutes >= 1 ? (
-          <span className={styles.lineNote}>
-            {t('home.pipeline.oldest', 'oldest waiting {{wait}}', { wait: formatMinutes(q.oldestPendingMinutes) })}
-          </span>
-        ) : null}
-        {paused ? <span className={styles.lineNote}>{t('home.pipeline.paused', 'OCR is paused')}</span> : null}
-      </p>
-      {canManage && ocr.data ? (
-        <Button size="sm" variant="secondary" isPending={busy} onPress={() => void toggle(!paused)}>
-          {paused ? t('board.processing.resume', 'Resume OCR') : t('board.processing.pause', 'Pause OCR')}
-        </Button>
+    <Region
+      title={title}
+      className={styles.pipeline}
+      headerAction={
+        <>
+          {q ? (
+            <span className={styles.figure}>
+              {n(q.completedToday)} / {n(total)}
+            </span>
+          ) : null}
+          {isAdmin(user) && ocr.data ? (
+            <Button size="sm" variant="secondary" isPending={busy} onPress={() => void toggle()}>
+              {paused ? t('board.processing.resume', 'Resume OCR') : t('board.processing.pause', 'Pause OCR')}
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      {stats.error && q === undefined ? (
+        <RegionError message={t('board.processing.error', 'The OCR queue could not be loaded.')} onRetry={stats.reload} />
+      ) : q === undefined ? (
+        <Skeleton lines={1} label={t('board.loading', 'Loading')} />
+      ) : (
+        <OutcomeBar label={title} segments={segments} />
+      )}
+      {notes.length ? (
+        <p className={styles.note}>
+          {notes.map((note) => (
+            <span key={note} className={styles.notePart}>
+              {note}
+            </span>
+          ))}
+        </p>
       ) : null}
       {ocr.error && !ocr.data ? (
         <RegionError message={t('board.processing.statusError', 'The OCR state could not be loaded.')} onRetry={ocr.reload} />
       ) : null}
-    </div>
-  );
-}
-
-function FailureDetails({ docs }: { docs: FailedOcrDocument[] }) {
-  const { t, i18n } = useTranslation();
-  return (
-    <details className={styles.details}>
-      <summary>{t('home.pipeline.showRecent', 'Show the latest failures')}</summary>
-      <ul className={styles.failures}>
-        {docs.slice(0, RECENT_FAILURES).map((d) => {
-          const human = humanizeFailureReason(rawOf(d), d.failure_reason);
-          return (
-            <li key={d.id} className={styles.failure}>
-              <Link className={styles.failureName} to={`/documents/${d.id}`}>
-                {docName(d)}
-              </Link>
-              <span className={styles.failureWhy}>{human.summary}</span>
-              <span className={styles.failureAge}>{formatAge(d.last_retry_at || d.updated_at || d.created_at, i18n.language)}</span>
-              {human.detail ? (
-                <details className={styles.raw}>
-                  <summary>{t('home.pipeline.rawError', 'Error text')}</summary>
-                  <pre>{human.detail}</pre>
-                </details>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </details>
-  );
-}
-
-function FailuresLine({ failed }: { failed: Resource<FailedOcrPage> }) {
-  const { t, i18n } = useTranslation();
-  const docs = failed.data?.documents;
-  const causes = useMemo(() => topCauses(docs ?? []), [docs]);
-
-  if (failed.error && !failed.data) {
-    return <RegionError message={t('home.pipeline.failedError', 'Failed documents could not be loaded.')} onRetry={failed.reload} />;
-  }
-  if (!failed.data) return null;
-  const total = failed.data.total;
-  if (total === 0) return null;
-
-  return (
-    <div className={styles.failureBlock}>
-      <div className={styles.line} data-tone="danger">
-        <span className={styles.lineMark} aria-hidden="true">
-          ▲
-        </span>
-        <p className={styles.lineText}>
-          <strong className={styles.failCount}>
-            {t('home.pipeline.failed', '{{formatted}} failed', { count: total, formatted: formatCount(total, i18n.language) })}
-          </strong>
-          {causes.length ? <span className={styles.lineNote}>{causes.join(' · ')}</span> : null}
-        </p>
-      </div>
-      {failed.data.documents.length ? <FailureDetails docs={failed.data.documents} /> : null}
-    </div>
-  );
-}
-
-/**
- * The detail behind the status line: the day's OCR throughput with pause and resume for admins,
- * and why documents failed. Renders nothing when it would add nothing.
- */
-export function PipelinePanel({ failed, stats }: PipelinePanelProps) {
-  const { t } = useTranslation();
-  const noQueue = stats.data === null && !stats.error;
-  const noFailures = failed.data?.total === 0 && !failed.error;
-  if (noQueue && noFailures) return null;
-  return (
-    <Region title={t('home.pipeline.title', 'Processing')}>
-      <div className={styles.lines}>
-        <ProcessingLine stats={stats} />
-        <FailuresLine failed={failed} />
-      </div>
     </Region>
   );
 }

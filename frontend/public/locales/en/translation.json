@@ -3323,7 +3323,9 @@
       "barsLabel": "{{total}} in the last {{days}} days, most on {{day}} ({{most}})",
       "barsEmpty": "Nothing in the last {{days}} days",
       "more": "{{formatted}} more sources",
-      "allSilent": "Nothing arrived from any source in the last {{days}} days."
+      "allSilent": "Nothing arrived from any source in the last {{days}} days.",
+      "todayCount_one": "{{formatted}} today",
+      "todayCount_other": "{{formatted}} today"
     },
     "pipeline": {
       "title": "Processing",
@@ -3334,16 +3336,33 @@
       "showRecent": "Show the latest failures",
       "rawError": "Error text",
       "doneToday": "{{done}} done today",
-      "oldest": "oldest waiting {{wait}}"
+      "oldest": "oldest waiting {{wait}}",
+      "cardTitle": "Processing pipeline",
+      "done": "Done today",
+      "processing": "Processing",
+      "failedSegment": "Failed",
+      "queued": "Queued"
     },
     "recent": {
-      "title": "Just arrived"
+      "title": "Just arrived",
+      "viewAll": "View all"
     },
     "status": {
       "label": "Summary",
       "idle": "nothing waiting",
       "busy": "{{processing}} processing · {{pending}} pending",
       "pending": "{{pending}} pending"
+    },
+    "connectSource": "Connect source",
+    "upload": "Upload",
+    "attention": {
+      "title": "Needs attention",
+      "failed_one": "{{formatted}} document failed OCR",
+      "failed_other": "{{formatted}} documents failed OCR"
+    },
+    "sources": {
+      "title": "Sources",
+      "manage": "Manage"
     }
   },
   "sourcesPage": {
