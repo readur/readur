@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/auth';
 import type { Page } from '@playwright/test';
 import { TEST_FILES, TIMEOUTS, EXPECTED_TEXT_CONTENT } from './utils/test-data';
-import { TestHelpers, resolveTestFile } from './utils/test-helpers';
+import { TestHelpers, openDocumentId, resolveTestFile } from './utils/test-helpers';
 import * as fs from 'fs';
 
 // Upload now lives at Intake → Add documents (/intake?section=upload; /upload redirects there).
@@ -117,9 +117,10 @@ test.describe('Document Upload', () => {
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.image);
     await uploadQueued(page);
 
+    // The document opens in the drawer over the upload board.
     await queueRow(page, 'test1.png').click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/, { timeout: TIMEOUTS.medium });
-    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+    await expect(page).toHaveURL(/[?&]document=[0-9a-f-]{36}/, { timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible();
   });
 
   test('should show OCR processing status', async ({ dynamicUserPage: page }) => {
@@ -137,9 +138,8 @@ test.describe('Document Upload', () => {
 
     // Once OCR finishes the Library reports it as indexed
     await row.click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/);
-    const docId = page.url().split('/').pop()!.split('?')[0];
+    await expect(page).toHaveURL(/[?&]document=[0-9a-f-]{36}/);
+    const docId = openDocumentId(page);
     expect((await helpers.waitForOCRComplete(docId)).ocr_status).toBe('completed');
     await page.goto('/documents');
     await expect(helpers.documentRows().filter({ hasText: 'test5.jpg' })).toContainText('Indexed');
@@ -152,8 +152,8 @@ test.describe('Document Upload', () => {
     await uploadQueued(page);
 
     await queueRow(page, 'test2.jpg').click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/);
-    const docId = page.url().split('/').pop()!.split('?')[0];
+    await expect(page).toHaveURL(/[?&]document=[0-9a-f-]{36}/);
+    const docId = openDocumentId(page);
     const doc = await helpers.waitForOCRComplete(docId);
     expect(doc.ocr_status).toBe('completed');
 
@@ -205,8 +205,8 @@ test.describe('Document Upload', () => {
       await uploadQueued(page);
 
       await queueRow(page, name).click();
-      await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/);
-      const docId = page.url().split('/').pop()!.split('?')[0];
+      await expect(page).toHaveURL(/[?&]document=[0-9a-f-]{36}/);
+      const docId = openDocumentId(page);
       const doc = await helpers.waitForOCRComplete(docId);
 
       await page.reload();

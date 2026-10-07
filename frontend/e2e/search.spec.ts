@@ -120,21 +120,18 @@ test.describe('Search Functionality', () => {
     await expect(page.getByText(/Check the spelling/)).toBeVisible();
   });
 
-  test('should open a document from a result, carrying the search', async ({ dynamicUserPage: page }) => {
+  test('should open a result in the drawer over the results, finding the search words', async ({ dynamicUserPage: page }) => {
     await search(page, 'text 1');
-    await results(page).filter({ hasText: 'test1.png' }).getByRole('link').click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}\?q=text(\+|%20)1/, { timeout: TIMEOUTS.medium });
-    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
-  });
-
-  test('should preview a result without leaving the page', async ({ dynamicUserPage: page }) => {
-    await search(page, 'text 1');
-    await page.getByRole('button', { name: /Quick look at test1\.png/ }).click();
-    const panel = page.getByRole('dialog', { name: /test1\.png/ });
-    await expect(panel).toBeVisible();
-    await expect(panel.locator('mark').first()).toBeVisible();
+    await results(page).filter({ hasText: 'test1.png' }).getByRole('link').first().click();
+    await expect(page).toHaveURL(/\/search\?q=text(\+|%20)1.*&document=[0-9a-f-]{36}/, { timeout: TIMEOUTS.medium });
+    const drawer = page.getByRole('dialog', { name: 'test1.png' });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('region', { name: 'Extracted text' }).locator('mark').first()).toBeVisible();
+    // Closing leaves you on the same results.
     await page.keyboard.press('Escape');
-    await expect(page).toHaveURL(/\/search\?/);
+    await expect(page).toHaveURL(/\/search\?q=text(\+|%20)1/);
+    await expect(page).not.toHaveURL(/document=/);
+    await expect(results(page).filter({ hasText: 'test1.png' })).toBeVisible();
   });
 
   test('should save the matches as a collection that appears in the sidebar', async ({ dynamicUserPage: page }) => {

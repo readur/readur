@@ -74,7 +74,9 @@ test.describe('Home', () => {
     const item = recent.getByRole('link', { name: /test2\.jpg/ });
     await expect(item).toBeVisible({ timeout: 20000 });
 
+    // It opens in the document drawer over Home.
     await item.click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/);
+    await expect(page).toHaveURL(/\/home\?document=[0-9a-f-]{36}/);
+    await expect(page.getByRole('dialog', { name: 'test2.jpg' })).toBeVisible();
   });
 });

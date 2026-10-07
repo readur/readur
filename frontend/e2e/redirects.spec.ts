@@ -39,6 +39,16 @@ test.describe('Legacy redirects', () => {
     }
   });
 
+  test('an old document page link opens the document drawer instead', async ({ dynamicAdminPage: page }) => {
+    // An unknown id is enough: the redirect does not depend on the document existing.
+    const id = '00000000-0000-4000-8000-000000000000';
+    await page.goto(`/documents/${id}`);
+    await expect(page).toHaveURL(new RegExp(`/documents\\?document=${id}$`));
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Document not found' })).toBeVisible();
+    await page.goto(`/documents/${id}?q=lease`);
+    await expect(page).toHaveURL(new RegExp(`/search\\?q=lease&document=${id}$`));
+  });
+
   test('extra query parameters and the hash are kept', async ({ dynamicAdminPage: page }) => {
     await page.goto('/watch?foo=bar#top');
     await expect(page).toHaveURL(/\/sources\?/);

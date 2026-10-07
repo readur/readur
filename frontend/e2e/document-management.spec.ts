@@ -4,7 +4,7 @@ import { TEST_FILES, TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
 /**
- * Library list + document page. Every test signs in as a fresh user and seeds its own
+ * Library list + the document drawer. Every test signs in as a fresh user and seeds its own
  * document through the API, so nothing depends on data left by other tests.
  */
 test.describe('Document Management', () => {
@@ -17,12 +17,13 @@ test.describe('Document Management', () => {
     await helpers.waitForOCRComplete(docId);
   });
 
+  /** Opens the seeded document's drawer from the Library and returns it. */
   const openDocument = async (page: Page) => {
     await page.goto('/documents');
-    const panel = await helpers.openDocumentCard('test1.png');
-    await panel.getByRole('button', { name: 'Open', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/documents/${docId}`), { timeout: TIMEOUTS.medium });
-    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+    const drawer = await helpers.openDocumentCard('test1.png');
+    await expect(page).toHaveURL(new RegExp(`/documents\\?document=${docId}`), { timeout: TIMEOUTS.medium });
+    await expect(drawer.getByRole('group', { name: 'Document summary' })).toBeVisible();
+    return drawer;
   };
 
   test('should display document list', async ({ dynamicUserPage: page }) => {
@@ -44,16 +45,26 @@ test.describe('Document Management', () => {
     await expect(row.getByRole('gridcell', { name: 'Indexed', exact: true })).toBeVisible();
   });
 
-  test('should navigate to document details', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Library' })).toBeVisible();
+  test('should open the document in a drawer that lives in the URL', async ({ dynamicUserPage: page }) => {
+    const drawer = await openDocument(page);
+    // A reload or a shared link reopens it.
+    await page.reload();
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    // Closing keeps you on the Library; Back reopens the drawer.
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/documents$/);
+    await expect(drawer).toBeHidden();
+    // An old /documents/<id> link lands on the same drawer.
+    await page.goto(`/documents/${docId}`);
+    await expect(page).toHaveURL(new RegExp(`/documents\\?document=${docId}`));
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
   test('should display document metadata', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
+    const drawer = await openDocument(page);
 
     // One facts line under the name: type, size, source, when it was added and the OCR score.
-    const summary = page.getByRole('group', { name: 'Document summary' });
+    const summary = drawer.getByRole('group', { name: 'Document summary' });
     await expect(summary).toContainText('Indexed');
     await expect(summary).toContainText('PNG');
     await expect(summary).toContainText(/KB/);
@@ -62,43 +73,38 @@ test.describe('Document Management', () => {
     await expect(summary).toContainText(/OCR \d+%/);
     await expect(summary).not.toContainText('—');
 
-    // The rest sits behind the Details disclosure.
-    await page.getByRole('button', { name: 'Details' }).click();
-    await expect(page.getByRole('region', { name: 'Details' }).getByText('SHA-256')).toBeVisible();
+    // The rest sits in the Details tab.
+    await drawer.getByRole('tab', { name: 'Details' }).click();
+    await expect(drawer.getByRole('region', { name: 'Details' }).getByText('SHA-256')).toBeVisible();
   });
 
-  test('should switch between document, side by side and text views', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
-    const views = page.getByRole('radiogroup', { name: 'View' });
-    await views.getByRole('radio', { name: 'Text' }).click();
-    await expect(page.getByRole('region', { name: 'Extracted text' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Document', exact: true })).toBeHidden();
-
-    // The choice is remembered on the next document visit.
-    await page.reload();
-    await expect(views.getByRole('radio', { name: 'Text' })).toBeChecked();
-    await views.getByRole('radio', { name: 'Document' }).click();
-    await expect(page.getByRole('region', { name: 'Document', exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Extracted text' })).toBeHidden();
-
-    // The page itself does not scroll: the reading area fills the window.
-    const overflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
-    expect(overflow).toBeLessThanOrEqual(1);
+  test('should keep the file above the Text, Details, Comments and Share links tabs', async ({ dynamicUserPage: page }) => {
+    const drawer = await openDocument(page);
+    await expect(drawer.getByRole('region', { name: 'Preview' })).toBeVisible();
+    const tabs = drawer.getByRole('tablist', { name: 'About this document' });
+    await expect(tabs.getByRole('tab', { name: 'Text' })).toHaveAttribute('aria-selected', 'true');
+    await expect(drawer.getByRole('region', { name: 'Extracted text' })).toBeVisible();
+    await tabs.getByRole('tab', { name: 'Share links' }).click();
+    await expect(drawer.getByRole('button', { name: 'Create link' })).toBeVisible();
+    await tabs.getByRole('tab', { name: /Comments/ }).click();
+    await expect(drawer.getByRole('textbox', { name: 'New comment' })).toBeVisible();
+    // The preview stays put whichever tab is chosen.
+    await expect(drawer.getByRole('region', { name: 'Preview' })).toBeVisible();
   });
 
   test('should allow document download', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
+    const drawer = await openDocument(page);
 
     const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('main').getByRole('button', { name: 'Download' }).click();
+    await drawer.getByRole('button', { name: 'Download' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('test1.png');
   });
 
   test('should allow document deletion', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
+    const drawer = await openDocument(page);
 
-    await page.getByRole('button', { name: 'More actions' }).click();
+    await drawer.getByRole('button', { name: 'More actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete document' }).click();
 
     const confirm = page.getByRole('alertdialog', { name: 'Delete this document?' });
@@ -107,7 +113,8 @@ test.describe('Document Management', () => {
     await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
     expect((await deleted).ok()).toBe(true);
 
-    await expect(page).toHaveURL(/\/documents(\?|$)/, { timeout: TIMEOUTS.medium });
+    await expect(page).toHaveURL(/\/documents$/, { timeout: TIMEOUTS.medium });
+    await expect(drawer).toBeHidden();
     await expect(page.getByText('0 documents', { exact: true })).toBeVisible({ timeout: TIMEOUTS.medium });
     await expect(helpers.documentCard('test1.png')).toHaveCount(0);
   });
@@ -144,19 +151,20 @@ test.describe('Document Management', () => {
   });
 
   test('should display OCR status', async ({ dynamicUserPage: page }) => {
-    await openDocument(page);
-    await expect(page.getByRole('group', { name: 'Document summary' })).toContainText('Indexed');
+    const drawer = await openDocument(page);
+    await expect(drawer.getByRole('group', { name: 'Document summary' })).toContainText('Indexed');
   });
 
   test('should search within document content', async ({ dynamicUserPage: page }) => {
     await openDocument(page);
     await helpers.extractedText();
 
-    await page.getByRole('searchbox', { name: 'Find in text' }).fill('text');
-    await expect(page.getByRole('region', { name: 'Extracted text' }).locator('mark').first()).toBeVisible({
+    const drawer = page.getByRole('dialog');
+    await drawer.getByRole('searchbox', { name: 'Find in text' }).fill('text');
+    await expect(drawer.getByRole('region', { name: 'Extracted text' }).locator('mark').first()).toBeVisible({
       timeout: TIMEOUTS.short,
     });
-    await expect(page.getByRole('button', { name: 'Next match' })).toBeEnabled();
+    await expect(drawer.getByRole('button', { name: 'Next match' })).toBeEnabled();
   });
 
   // Pagination across pages is covered by library.spec.ts ("should sort by name across pages"),
@@ -165,10 +173,12 @@ test.describe('Document Management', () => {
 
   test('should show document thumbnails', async ({ dynamicUserPage: page }) => {
     await page.goto('/documents');
-    const panel = await helpers.openDocumentCard('test1.png');
-    await expect(panel.locator('img').first()).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(helpers.documentCard('test1.png').locator('img').first()).toBeVisible({ timeout: TIMEOUTS.medium });
 
-    await panel.getByRole('button', { name: 'Open', exact: true }).click();
-    await expect(page.getByRole('img', { name: 'test1.png' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    // The drawer shows the file itself above its tabs.
+    const drawer = await helpers.openDocumentCard('test1.png');
+    await expect(drawer.getByRole('region', { name: 'Preview' }).getByRole('img', { name: 'test1.png' })).toBeVisible({
+      timeout: TIMEOUTS.medium,
+    });
   });
 });
