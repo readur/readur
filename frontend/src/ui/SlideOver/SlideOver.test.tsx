@@ -106,20 +106,22 @@ describe('SlideOver resizing', () => {
   );
   const panelWidth = () => (screen.getByRole('dialog').closest('[style]') as HTMLElement | null)?.style.getPropertyValue('--slideover-width');
 
-  it('has a labelled vertical grab handle that widens with ArrowLeft and remembers the width', async () => {
+  it('opens at half the window with a labelled grab handle that widens with ArrowLeft and remembers the width', async () => {
     window.localStorage.removeItem(KEY);
     const user = userEvent.setup();
     render(<Panel />);
     const handle = screen.getByRole('separator', { name: 'Resize panel' });
     expect(handle).toHaveAttribute('aria-orientation', 'vertical');
-    expect(handle).toHaveAttribute('aria-valuenow', '440');
+    expect(handle).toHaveAttribute('aria-valuenow', String(Math.round(window.innerWidth * 0.5)));
+    expect(handle).toHaveAttribute('aria-valuemax', String(Math.round(window.innerWidth * 0.85)));
     handle.focus();
     await user.keyboard('{ArrowLeft}');
-    expect(handle).toHaveAttribute('aria-valuenow', '464');
-    expect(panelWidth()).toBe('464px');
-    expect(window.localStorage.getItem(KEY)).toBe('464');
+    const half = Math.round(window.innerWidth * 0.5);
+    expect(handle).toHaveAttribute('aria-valuenow', String(half + 24));
+    expect(panelWidth()).toBe(`${half + 24}px`);
+    expect(window.localStorage.getItem(KEY)).toBe(String(half + 24));
     await user.keyboard('{ArrowRight}{ArrowRight}');
-    expect(handle).toHaveAttribute('aria-valuenow', '416');
+    expect(handle).toHaveAttribute('aria-valuenow', String(half - 24));
   });
 
   it('opens at the remembered width, kept within bounds', () => {
@@ -145,8 +147,9 @@ describe('SlideOver resizing', () => {
       handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 500, pointerId: 1 }));
       handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 500, pointerId: 1 }));
     });
-    expect(handle).toHaveAttribute('aria-valuenow', '540');
-    expect(window.localStorage.getItem(KEY)).toBe('540');
+    const dragged = Math.round(window.innerWidth * 0.5) + 100;
+    expect(handle).toHaveAttribute('aria-valuenow', String(dragged));
+    expect(window.localStorage.getItem(KEY)).toBe(String(dragged));
   });
 
   it('has no handle unless asked for one', () => {

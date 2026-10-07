@@ -39,13 +39,13 @@ export interface SlideOverProps {
 
 const DEFAULT_WIDTH = 440;
 export const SLIDEOVER_MIN_WIDTH = 360;
-const MAX_WIDTH = 960;
-/** Room left of a widened panel so the page behind stays reachable. */
-const PAGE_MARGIN = 96;
+/** A resizable panel opens at half the window and can grow to 85% of it. */
+const DEFAULT_SHARE = 0.5;
+const MAX_SHARE = 0.85;
 const KEY_STEP = 24;
 
-const maxWidth = () =>
-  Math.max(SLIDEOVER_MIN_WIDTH, Math.min(MAX_WIDTH, (typeof window !== 'undefined' ? window.innerWidth : MAX_WIDTH) - PAGE_MARGIN));
+const windowWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1280);
+const maxWidth = () => Math.max(SLIDEOVER_MIN_WIDTH, Math.round(windowWidth() * MAX_SHARE));
 const clampWidth = (w: number) => Math.round(Math.min(maxWidth(), Math.max(SLIDEOVER_MIN_WIDTH, w)));
 
 const storageName = (key: string) => `readur.slideover.${key}`;
@@ -59,6 +59,9 @@ function readWidth(key: string | undefined): number | null {
     return null;
   }
 }
+
+/** Where a resizable panel opens: its remembered width, else half the window. */
+const openingWidth = (key: string | undefined) => readWidth(key) ?? clampWidth(windowWidth() * DEFAULT_SHARE);
 
 function writeWidth(key: string | undefined, width: number) {
   if (!key) return;
@@ -152,7 +155,11 @@ export function SlideOver({
   const reportToastInset = useToastInsetReporter();
   const [owner] = useState(() => Symbol('SlideOver'));
   const hasFooter = Boolean(footer);
-  const [dragWidth, setDragWidth] = useState<number | null>(() => (resizable ? readWidth(storageKey) : null));
+  const [dragWidth, setDragWidth] = useState<number | null>(() => (resizable ? openingWidth(storageKey) : null));
+  // Re-read on each opening: the window may have changed size since.
+  useEffect(() => {
+    if (isOpen && resizable) setDragWidth(openingWidth(storageKey));
+  }, [isOpen, resizable, storageKey]);
 
   // Keep toasts off the panel: beside it when there is room, else above its footer (phones).
   useLayoutEffect(() => {
