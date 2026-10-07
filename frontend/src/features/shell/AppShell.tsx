@@ -129,7 +129,7 @@ export function AppShell({ children }: AppShellProps) {
         <DocumentDrawerHost />
 
         {isDrawerLayout ? (
-          <MobileDrawer isOpen={drawerOpen} onOpenChange={setDrawerOpen}>
+          <MobileDrawer isOpen={drawerOpen} onOpenChange={setDrawerOpen} swipeEnabled>
             {sidebar}
           </MobileDrawer>
         ) : null}

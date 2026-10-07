@@ -77,8 +77,8 @@ describe('layer scale', () => {
 });
 
 describe('backdrops', () => {
-  it('the phone drawer backdrop uses the --scrim token', () => {
-    const block = read('features/shell/AppShell.module.css').match(/(?:^|\n)\.drawerOverlay\s*\{([^}]*)\}/)?.[1] ?? '';
+  it('the phone drawer backdrop uses the --scrim token (on a layer that fades with a drag)', () => {
+    const block = read('features/shell/AppShell.module.css').match(/(?:^|\n)\.drawerOverlay::before\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(block).toMatch(/background:\s*var\(--scrim\);/);
   });
 

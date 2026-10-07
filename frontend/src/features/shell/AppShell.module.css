@@ -101,7 +101,16 @@
   inset: 0;
   z-index: var(--z-overlay);
   display: flex;
+}
+
+/* The scrim darkens with the drawer as a finger drags it (--drawer-shown, 0 to 1). */
+.drawerOverlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background: var(--scrim);
+  opacity: var(--drawer-shown, 1);
+  transition: opacity var(--dur-2) var(--ease);
 }
 
 .drawer {
@@ -124,6 +133,22 @@
 
 .drawer[data-exiting] {
   animation: drawer-in var(--dur-2) var(--ease) reverse;
+}
+
+/* Let go after a drag, the panel eases on from wherever the finger left it. */
+.drawer {
+  transition: translate var(--dur-2) var(--ease-out-expo);
+}
+
+/* While a finger holds it, the panel and scrim follow it exactly, with no animation of their own. */
+.drawerOverlay[data-dragging] .drawer,
+.drawerOverlay[data-dragging]::before {
+  transition: none;
+}
+
+.drawerOverlay[data-dragging] .drawer[data-entering],
+.drawerOverlay[data-swiped-shut] .drawer[data-exiting] {
+  animation: none;
 }
 
 @keyframes drawer-in {
