@@ -1,0 +1,116 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  list-style: none;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  transition: box-shadow var(--dur-1) var(--ease);
+}
+
+.card:hover { box-shadow: var(--shadow-overlay); }
+.card[data-selected] { box-shadow: 0 0 0 2px var(--accent), var(--shadow-1); }
+
+.open {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.open[data-focus-visible] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-lg);
+}
+
+.thumb {
+  display: block;
+  aspect-ratio: 3 / 3.4;
+  padding: var(--s-3) var(--s-4) 0;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.card[data-changed] .thumb { box-shadow: inset 0 0 0 2px var(--new-fill); }
+
+.name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: var(--s-2) var(--s-3) 0;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--s-1) var(--s-3) var(--s-3);
+}
+
+.meta {
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+
+.flags { position: absolute; top: var(--s-2); left: var(--s-2); display: flex; gap: var(--s-1); }
+
+.check {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  padding: 2px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.actions {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  display: flex;
+  gap: var(--s-1);
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.actions :global([data-icon-button]) { background: var(--surface-2); box-shadow: var(--shadow-1); }
+
+.card:hover .check,
+.card:focus-within .check,
+.card[data-selected] .check,
+.card:hover .actions,
+.card:focus-within .actions { opacity: 1; }
+
+.card:has(.check):hover .flags,
+.card:has(.check):focus-within .flags,
+.card[data-selected]:has(.check) .flags { opacity: 0; }
+
+@media (hover: none) {
+  .check,
+  .actions { opacity: 1; }
+}

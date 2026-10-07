@@ -27,6 +27,7 @@ export * from './Pass';
 export * from './FilterChip';
 export * from './Label';
 export * from './BoardTable';
+export * from './DocumentCard';
 export * from './SlideOver';
 export * from './CommandPalette';
 export * from './BulkActionBar';
