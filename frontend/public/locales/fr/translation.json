@@ -2052,13 +2052,10 @@
     }
   },
   "document": {
-    "breadcrumb": "Fil d’Ariane",
-    "library": "Bibliothèque",
     "actions": {
       "retry": "Relancer l’OCR",
       "download": "Télécharger",
       "share": "Partager",
-      "comments": "Commentaires",
       "more": "Plus d’actions",
       "processedImage": "Voir l’image traitée",
       "delete": "Supprimer le document"
@@ -2078,17 +2075,11 @@
       "caption": "Voici l’image nettoyée que le moteur OCR a lue."
     },
     "loading": "Chargement du document",
-    "panel": {
-      "comments": "Commentaires",
-      "links": "Liens de partage",
-      "label": "Panneau latéral"
-    },
     "notFound": "Document introuvable",
     "loadFailed": "Impossible de charger ce document",
     "notFoundHint": "Il a peut-être été supprimé, ou le lien est erroné.",
     "loadFailedHint": "Vérifiez votre connexion et réessayez.",
     "retry": "Réessayer",
-    "backToLibrary": "Retour à la bibliothèque",
     "toast": {
       "downloadFailed": "Impossible de télécharger le fichier",
       "retryQueued": "OCR remis en file d’attente",
@@ -2100,32 +2091,16 @@
     "labels": {
       "editor": "Modifier les étiquettes",
       "placeholder": "Rechercher ou créer des étiquettes…",
-      "cancel": "Annuler",
-      "save": "Enregistrer les étiquettes",
       "add": "Ajouter une étiquette",
       "done": "Terminé"
-    },
-    "type": {
-      "image": "Image",
-      "text": "Texte",
-      "other": "Fichier"
     },
     "pass": {
       "uploaded": "Import",
       "sourceLocalFolder": "Dossier local",
       "sourceBatch": "Import par lot",
       "label": "Résumé du document",
-      "status": "Statut",
       "progress": "Progression de l’OCR",
-      "type": "Type",
-      "pages": "Pages",
-      "size": "Taille",
-      "source": "Source",
-      "added": "Ajouté",
-      "language": "Langue",
-      "confidence": "Confiance",
       "labels": "Étiquettes",
-      "noLabels": "Aucune",
       "editLabels": "Modifier les étiquettes"
     },
     "share": {
@@ -2209,9 +2184,7 @@
       "activity": "Activité",
       "retryHistory_one": "Historique des relances ({{count}})",
       "retryHistory_other": "Historique des relances ({{count}})",
-      "title": "Détails",
-      "hide": "Masquer les détails",
-      "show": "Afficher les détails"
+      "title": "Détails"
     },
     "activity": {
       "uploaded": "Ajouté",
@@ -2288,8 +2261,6 @@
       "passwordHint": "Ce document est protégé. Saisissez le mot de passe qui vous a été donné.",
       "password": "Mot de passe",
       "submit": "Ouvrir le document",
-      "file": "Fichier",
-      "expires": "Expire",
       "preview": "Afficher l’aperçu",
       "previewHint": "Ouvrir l’aperçu compte comme une vue de ce lien.",
       "expiresOn": "Le lien expire le {{date}}",
@@ -2302,8 +2273,6 @@
       "unsupportedHint": "Les fichiers {{type}} ne peuvent pas s’afficher dans le navigateur. Téléchargez le fichier pour l’ouvrir."
     },
     "tabs": {
-      "preview": "Aperçu",
-      "label": "Vues du document",
       "text": "Texte",
       "details": "Détails",
       "comments": "Commentaires",
@@ -2316,10 +2285,7 @@
       "ocr": "OCR {{value}} %"
     },
     "view": {
-      "label": "Affichage",
-      "document": "Document",
-      "split": "Côte à côte",
-      "text": "Texte"
+      "document": "Document"
     },
     "drawer": {
       "title": "Document",
@@ -2378,37 +2344,6 @@
     "count": "{{formatted}} documents",
     "count_one": "{{formatted}} document",
     "counting": "Comptage…",
-    "detail": {
-      "confidence": "Confiance",
-      "delete": "Supprimer",
-      "deleteBody": "« {{name}} » et son texte seront supprimés. Action irréversible.",
-      "deleteFailed": "Impossible de supprimer le document",
-      "deleteTitle": "Supprimer ce document ?",
-      "deleted": "Document supprimé",
-      "download": "Télécharger",
-      "downloadFailed": "Le téléchargement a échoué",
-      "facts": "Informations du document",
-      "labelsFailed": "Impossible d’enregistrer les étiquettes",
-      "labelsSaved": "Étiquettes enregistrées",
-      "language": "Langue",
-      "loadingText": "Chargement du texte",
-      "noPreview": "Pas encore d’aperçu",
-      "noText": "Aucun texte n’a encore été lu dans ce document.",
-      "open": "Ouvrir",
-      "pagesOcr": "Pages/OCR",
-      "retry": "Relancer l’OCR",
-      "retryFailed": "Impossible de relancer la reconnaissance de texte",
-      "retryQueued": "Reconnaissance de texte remise en file",
-      "share": "Partager",
-      "text": "Texte",
-      "textFailed": "Le texte n’a pas pu être chargé.",
-      "title": "Document",
-      "pages_one": "1 page",
-      "pages_other": "{{count}} pages",
-      "added": "Ajouté le {{date}}",
-      "ocr": "OCR {{value}} %",
-      "openNamed": "Ouvrir {{name}}"
-    },
     "empty": {
       "clearFilters": "Effacer les filtres",
       "error": "Impossible de charger les documents",
@@ -2481,7 +2416,6 @@
       "newest": "Plus récents d’abord",
       "noMatchesHint": "Vérifiez l’orthographe, essayez moins de mots ou activez « Orthographe proche » dans l’aide à la recherche.",
       "order": "Ordre",
-      "preview": "Aperçu de {{name}}",
       "results": "Résultats",
       "selectAll_one": "Sélectionner le seul résultat",
       "selectAll_other": "Sélectionner les {{formatted}} résultats",

@@ -18,7 +18,9 @@ vi.mock('../../services/api', () => ({
 vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
 vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
 vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
-vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
+vi.mock('../../features/document/drawer/DocumentDrawer', () => ({
+  default: ({ id }: { id: string }) => <div role="dialog" aria-label={`Document ${id}`} />,
+}));
 vi.mock('../../features/document/SharedRoute', async () => ({ default: (await import('./routeProbe')).probe('shared') }));
 vi.mock('../../features/intake', async () => ({ default: (await import('./routeProbe')).probe('intake') }));
 vi.mock('../../features/sources', async () => ({ default: (await import('./routeProbe')).probe('sources') }));
@@ -118,10 +120,17 @@ describe('destinations', () => {
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: `${name} entry` }));
   });
 
-  it('passes the document id', async () => {
+  it('sends an old document link to the Library with the document drawer open', async () => {
     renderAt('/documents/abc-123');
-    expect(await entry('document')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'params' })).toHaveTextContent('"id":"abc-123"');
+    expect(await entry('library')).toBeInTheDocument();
+    expect(location().textContent).toBe('/documents?document=abc-123');
+    expect(await screen.findByRole('dialog', { name: 'Document abc-123' })).toBeInTheDocument();
+  });
+
+  it('sends an old document link with a search to the Search page, keeping both', async () => {
+    renderAt('/documents/abc-123?q=lease&mode=fuzzy');
+    expect(await entry('search')).toBeInTheDocument();
+    expect(location().textContent).toBe('/search?q=lease&mode=fuzzy&document=abc-123');
   });
 
   it('passes the settings section', async () => {

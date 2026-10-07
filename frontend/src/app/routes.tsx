@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AppShell, HOME_PATH, PageFallback } from '../features/shell';
 import { safeRedirect } from '../features/auth/authErrors';
+import { DocumentRedirect } from './DocumentRedirect';
 import { LegacyRedirect } from './LegacyRedirect';
 import { LEGACY_ROUTES, searchAliasTarget } from './legacyRoutes';
 
@@ -23,7 +24,6 @@ const Search = lazy(async (): Promise<{ default: ComponentType }> => {
   if (page) return { default: page };
   return import('../features/library/SearchRoute');
 });
-const Document = lazy(() => import('../features/document'));
 const Shared = lazy(() => import('../features/document/SharedRoute'));
 const Intake = lazy(() => import('../features/intake'));
 const Sources = lazy(() => import('../features/sources'));
@@ -90,7 +90,7 @@ export function AppRoutes() {
       <Route element={<RequireUser />}>
         <Route path={HOME_PATH} element={<Home />} />
         <Route path="/documents" element={<Library />} />
-        <Route path="/documents/:id" element={<Document />} />
+        <Route path="/documents/:id" element={<DocumentRedirect />} />
         <Route path="/search" element={<SearchEntry />} />
         <Route path="/intake" element={<Intake />} />
         <Route path="/sources" element={<Sources />} />

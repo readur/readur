@@ -1,0 +1,26 @@
+.dialogText {
+  margin: 0;
+  color: var(--fg-2);
+}
+
+/* The processed image: the cleaned-up page the OCR engine read, as large as the dialog allows. */
+.processed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  margin: 0;
+}
+
+.processed img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+}
+
+.processed figcaption {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}

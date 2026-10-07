@@ -2052,13 +2052,10 @@
     }
   },
   "document": {
-    "breadcrumb": "Breadcrumb",
-    "library": "Library",
     "actions": {
       "retry": "Retry OCR",
       "download": "Download",
       "share": "Share",
-      "comments": "Comments",
       "more": "More actions",
       "processedImage": "View processed image",
       "delete": "Delete document"
@@ -2078,17 +2075,11 @@
       "caption": "This is the cleaned-up image the OCR engine read."
     },
     "loading": "Loading document",
-    "panel": {
-      "comments": "Comments",
-      "links": "Share links",
-      "label": "Side panel"
-    },
     "notFound": "Document not found",
     "loadFailed": "Couldn't load this document",
     "notFoundHint": "It may have been deleted, or the link is wrong.",
     "loadFailedHint": "Check your connection and try again.",
     "retry": "Try again",
-    "backToLibrary": "Back to Library",
     "toast": {
       "downloadFailed": "Couldn't download the file",
       "retryQueued": "OCR queued again",
@@ -2100,32 +2091,16 @@
     "labels": {
       "editor": "Edit labels",
       "placeholder": "Search or create labels…",
-      "cancel": "Cancel",
-      "save": "Save labels",
       "add": "Add label",
       "done": "Done"
-    },
-    "type": {
-      "image": "Image",
-      "text": "Text",
-      "other": "File"
     },
     "pass": {
       "uploaded": "Upload",
       "sourceLocalFolder": "Local folder",
       "sourceBatch": "Batch import",
       "label": "Document summary",
-      "status": "Status",
       "progress": "OCR progress",
-      "type": "Type",
-      "pages": "Pages",
-      "size": "Size",
-      "source": "Source",
-      "added": "Added",
-      "language": "Language",
-      "confidence": "Confidence",
       "labels": "Labels",
-      "noLabels": "None",
       "editLabels": "Edit labels"
     },
     "share": {
@@ -2209,9 +2184,7 @@
       "activity": "Activity",
       "retryHistory_one": "Retry history ({{count}})",
       "retryHistory_other": "Retry history ({{count}})",
-      "title": "Details",
-      "hide": "Hide details",
-      "show": "Show details"
+      "title": "Details"
     },
     "activity": {
       "uploaded": "Added",
@@ -2288,8 +2261,6 @@
       "passwordHint": "This document is protected. Enter the password you were given.",
       "password": "Password",
       "submit": "Open document",
-      "file": "File",
-      "expires": "Expires",
       "preview": "Show preview",
       "previewHint": "Opening the preview counts as a view of this link.",
       "expiresOn": "Link expires {{date}}",
@@ -2302,8 +2273,6 @@
       "unsupportedHint": "{{type}} files can’t be shown in the browser. Download the file to open it."
     },
     "tabs": {
-      "preview": "Preview",
-      "label": "Document views",
       "text": "Text",
       "details": "Details",
       "comments": "Comments",
@@ -2316,10 +2285,7 @@
       "ocr": "OCR {{value}}%"
     },
     "view": {
-      "label": "View",
-      "document": "Document",
-      "split": "Side by side",
-      "text": "Text"
+      "document": "Document"
     },
     "drawer": {
       "title": "Document",
@@ -2378,37 +2344,6 @@
     "count": "{{formatted}} documents",
     "count_one": "{{formatted}} document",
     "counting": "Counting…",
-    "detail": {
-      "confidence": "Confidence",
-      "delete": "Delete",
-      "deleteBody": "“{{name}}” and its text will be removed. This cannot be undone.",
-      "deleteFailed": "Could not delete the document",
-      "deleteTitle": "Delete this document?",
-      "deleted": "Document deleted",
-      "download": "Download",
-      "downloadFailed": "Download failed",
-      "facts": "Document facts",
-      "labelsFailed": "Could not save labels",
-      "labelsSaved": "Labels saved",
-      "language": "Language",
-      "loadingText": "Loading text",
-      "noPreview": "No preview yet",
-      "noText": "No text has been read from this document yet.",
-      "open": "Open",
-      "pagesOcr": "Pages/OCR",
-      "retry": "Retry OCR",
-      "retryFailed": "Could not retry text recognition",
-      "retryQueued": "Text recognition queued again",
-      "share": "Share",
-      "text": "Text",
-      "textFailed": "The text could not be loaded.",
-      "title": "Document",
-      "pages_one": "1 page",
-      "pages_other": "{{count}} pages",
-      "added": "Added {{date}}",
-      "ocr": "OCR {{value}}%",
-      "openNamed": "Open {{name}}"
-    },
     "empty": {
       "clearFilters": "Clear filters",
       "error": "Documents could not be loaded",
@@ -2481,7 +2416,6 @@
       "newest": "Newest first",
       "noMatchesHint": "Check the spelling, try fewer words, or switch on “Similar spelling” in search help.",
       "order": "Order",
-      "preview": "Quick look at {{name}}",
       "results": "Results",
       "selectAll_one": "Select the 1 match",
       "selectAll_other": "Select all {{formatted}} matches",

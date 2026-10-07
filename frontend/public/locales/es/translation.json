@@ -2052,13 +2052,10 @@
     }
   },
   "document": {
-    "breadcrumb": "Ruta de navegación",
-    "library": "Biblioteca",
     "actions": {
       "retry": "Reintentar OCR",
       "download": "Descargar",
       "share": "Compartir",
-      "comments": "Comentarios",
       "more": "Más acciones",
       "processedImage": "Ver imagen procesada",
       "delete": "Eliminar documento"
@@ -2078,17 +2075,11 @@
       "caption": "Esta es la imagen depurada que leyó el motor OCR."
     },
     "loading": "Cargando documento",
-    "panel": {
-      "comments": "Comentarios",
-      "links": "Enlaces compartidos",
-      "label": "Panel lateral"
-    },
     "notFound": "Documento no encontrado",
     "loadFailed": "No se pudo cargar este documento",
     "notFoundHint": "Puede que se haya eliminado o que el enlace sea incorrecto.",
     "loadFailedHint": "Revisa tu conexión e inténtalo de nuevo.",
     "retry": "Reintentar",
-    "backToLibrary": "Volver a la biblioteca",
     "toast": {
       "downloadFailed": "No se pudo descargar el archivo",
       "retryQueued": "OCR en cola de nuevo",
@@ -2100,32 +2091,16 @@
     "labels": {
       "editor": "Editar etiquetas",
       "placeholder": "Buscar o crear etiquetas…",
-      "cancel": "Cancelar",
-      "save": "Guardar etiquetas",
       "add": "Añadir etiqueta",
       "done": "Listo"
-    },
-    "type": {
-      "image": "Imagen",
-      "text": "Texto",
-      "other": "Archivo"
     },
     "pass": {
       "uploaded": "Subida",
       "sourceLocalFolder": "Carpeta local",
       "sourceBatch": "Importación por lotes",
       "label": "Resumen del documento",
-      "status": "Estado",
       "progress": "Progreso del OCR",
-      "type": "Tipo",
-      "pages": "Páginas",
-      "size": "Tamaño",
-      "source": "Origen",
-      "added": "Añadido",
-      "language": "Idioma",
-      "confidence": "Confianza",
       "labels": "Etiquetas",
-      "noLabels": "Ninguna",
       "editLabels": "Editar etiquetas"
     },
     "share": {
@@ -2209,9 +2184,7 @@
       "activity": "Actividad",
       "retryHistory_one": "Historial de reintentos ({{count}})",
       "retryHistory_other": "Historial de reintentos ({{count}})",
-      "title": "Detalles",
-      "hide": "Ocultar detalles",
-      "show": "Mostrar detalles"
+      "title": "Detalles"
     },
     "activity": {
       "uploaded": "Añadido",
@@ -2288,8 +2261,6 @@
       "passwordHint": "Este documento está protegido. Introduce la contraseña que te dieron.",
       "password": "Contraseña",
       "submit": "Abrir documento",
-      "file": "Archivo",
-      "expires": "Caduca",
       "preview": "Mostrar vista previa",
       "previewHint": "Abrir la vista previa cuenta como una vista de este enlace.",
       "expiresOn": "El enlace caduca el {{date}}",
@@ -2302,8 +2273,6 @@
       "unsupportedHint": "Los archivos {{type}} no se pueden mostrar en el navegador. Descarga el archivo para abrirlo."
     },
     "tabs": {
-      "preview": "Vista previa",
-      "label": "Vistas del documento",
       "text": "Texto",
       "details": "Detalles",
       "comments": "Comentarios",
@@ -2316,10 +2285,7 @@
       "ocr": "OCR {{value}} %"
     },
     "view": {
-      "label": "Vista",
-      "document": "Documento",
-      "split": "En paralelo",
-      "text": "Texto"
+      "document": "Documento"
     },
     "drawer": {
       "title": "Documento",
@@ -2378,37 +2344,6 @@
     "count": "{{formatted}} documentos",
     "count_one": "{{formatted}} documento",
     "counting": "Contando…",
-    "detail": {
-      "confidence": "Confianza",
-      "delete": "Eliminar",
-      "deleteBody": "Se eliminarán «{{name}}» y su texto. No se puede deshacer.",
-      "deleteFailed": "No se pudo eliminar el documento",
-      "deleteTitle": "¿Eliminar este documento?",
-      "deleted": "Documento eliminado",
-      "download": "Descargar",
-      "downloadFailed": "La descarga falló",
-      "facts": "Datos del documento",
-      "labelsFailed": "No se pudieron guardar las etiquetas",
-      "labelsSaved": "Etiquetas guardadas",
-      "language": "Idioma",
-      "loadingText": "Cargando texto",
-      "noPreview": "Aún no hay vista previa",
-      "noText": "Todavía no se ha leído texto de este documento.",
-      "open": "Abrir",
-      "pagesOcr": "Páginas/OCR",
-      "retry": "Reintentar OCR",
-      "retryFailed": "No se pudo reintentar el reconocimiento de texto",
-      "retryQueued": "Reconocimiento de texto en cola de nuevo",
-      "share": "Compartir",
-      "text": "Texto",
-      "textFailed": "No se pudo cargar el texto.",
-      "title": "Documento",
-      "pages_one": "1 página",
-      "pages_other": "{{count}} páginas",
-      "added": "Añadido {{date}}",
-      "ocr": "OCR {{value}} %",
-      "openNamed": "Abrir {{name}}"
-    },
     "empty": {
       "clearFilters": "Quitar filtros",
       "error": "No se pudieron cargar los documentos",
@@ -2481,7 +2416,6 @@
       "newest": "Más recientes primero",
       "noMatchesHint": "Revisa la ortografía, prueba con menos palabras o activa «Ortografía parecida» en la ayuda de búsqueda.",
       "order": "Orden",
-      "preview": "Vista rápida de {{name}}",
       "results": "Resultados",
       "selectAll_one": "Seleccionar la única coincidencia",
       "selectAll_other": "Seleccionar las {{formatted}} coincidencias",
