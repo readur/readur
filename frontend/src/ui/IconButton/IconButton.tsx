@@ -18,6 +18,7 @@ export function IconButton({ label, icon, variant = 'ghost', size = 'md', classN
         variant={variant}
         size={size}
         aria-label={label}
+        data-icon-button=""
         className={cx(styles.iconButton, styles[size], className)}
       >
         <span className={styles.glyph} aria-hidden="true">

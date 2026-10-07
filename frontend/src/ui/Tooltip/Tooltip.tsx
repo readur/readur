@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  OverlayArrow,
   Tooltip as RACTooltip,
   TooltipTrigger as RACTooltipTrigger,
   type TooltipProps as RACTooltipProps,
@@ -17,6 +18,11 @@ export type TooltipProps = Omit<RACTooltipProps, 'children' | 'className'> & {
 export function Tooltip({ children, className, offset = 6, ...rest }: TooltipProps) {
   return (
     <RACTooltip {...rest} offset={offset} className={cx(styles.tooltip, className)}>
+      <OverlayArrow className={styles.arrow}>
+        <svg width={10} height={6} viewBox="0 0 10 6" aria-hidden="true">
+          <path d="M0 0 L5 6 L10 0" />
+        </svg>
+      </OverlayArrow>
       {children}
     </RACTooltip>
   );

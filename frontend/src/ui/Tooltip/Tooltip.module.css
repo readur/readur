@@ -1,11 +1,17 @@
 .tooltip {
   max-width: 280px;
-  padding: var(--s-1) var(--s-2);
+  padding: 5px var(--s-2);
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
   line-height: var(--lh-body);
   color: var(--surface);
   background: var(--fg);
   border-radius: var(--radius-sm);
+  font-weight: 600;
   box-shadow: var(--shadow-overlay);
 }
+
+.arrow svg { display: block; fill: var(--fg); }
+.tooltip[data-placement='bottom'] .arrow svg { transform: rotate(180deg); }
+.tooltip[data-placement='left'] .arrow svg { transform: rotate(-90deg); }
+.tooltip[data-placement='right'] .arrow svg { transform: rotate(90deg); }

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
 import { Button as RACButton, type ButtonProps as RACButtonProps } from 'react-aria-components';
 import { cx } from '../shared/FieldParts';
+import { Spinner } from '../Spinner';
 import styles from './Button.module.css';
 
 /**
@@ -61,7 +62,7 @@ export function Button({
       className={cx(styles.button, VARIANT_CLASS[variant], styles[size], className)}
     >
       {isPending ? (
-        <span className={styles.spinner} aria-hidden="true" />
+        <Spinner size={14} />
       ) : icon ? (
         <span className={styles.icon} aria-hidden="true">
           {icon}

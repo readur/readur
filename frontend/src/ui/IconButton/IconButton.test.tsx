@@ -19,4 +19,9 @@ describe('IconButton', () => {
     await user.keyboard('{Enter}');
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('renders as a filled soft square regardless of variant', () => {
+    render(<IconButton label="Download" icon={<span />} />);
+    expect(screen.getByRole('button', { name: 'Download' })).toHaveAttribute('data-icon-button');
+  });
 });
