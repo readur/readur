@@ -175,6 +175,16 @@ export function DocumentPage() {
     }
   };
 
+  // Removing from a chip saves at once; on failure the chip simply stays (state updates on success only).
+  const removeLabel = async (labelId: string) => {
+    try {
+      await labels.save(labels.labels.filter((l) => l.id !== labelId));
+      announceLabelsChanged();
+    } catch {
+      toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
+    }
+  };
+
   return (
     <div className={styles.page}>
       <div ref={headRef} className={styles.head}>
@@ -202,6 +212,7 @@ export function DocumentPage() {
           tags={doc.tags ?? []}
           isEditingLabels={draftLabels !== null}
           onEditLabels={() => setDraftLabels((d) => (d === null ? labels.labels : null))}
+          onRemoveLabel={(id) => void removeLabel(id)}
           detailsId={detailsId}
           isDetailsOpen={detailsOpen}
           onToggleDetails={() => setDetailsOpen((open) => !open)}

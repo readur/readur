@@ -190,6 +190,49 @@ describe('document page: labels', () => {
     window.removeEventListener('readur:labels-changed', changed);
   });
 
+  it('removes a label straight from its chip and saves', async () => {
+    const user = userEvent.setup();
+    load();
+    m.default.get.mockImplementation((url: string) =>
+      Promise.resolve({ status: 200, data: url.startsWith('/labels/documents/') ? [tax, receipts] : [tax, receipts] }),
+    );
+    m.default.put.mockResolvedValue({ status: 200, data: {} });
+    renderPage();
+    await title();
+    const group = screen.getByRole('group', { name: 'Labels' });
+    await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
+    await waitFor(() => expect(m.default.put).toHaveBeenCalledWith('/labels/documents/doc-1', { label_ids: ['l-2'] }));
+    await waitFor(() => expect(within(group).queryByText('Tax')).not.toBeInTheDocument());
+    expect(within(group).getByText('Receipts')).toBeInTheDocument();
+  });
+
+  it('keeps the label and says so when removing it fails', async () => {
+    const user = userEvent.setup();
+    load();
+    m.default.get.mockImplementation((url: string) =>
+      Promise.resolve({ status: 200, data: url.startsWith('/labels/documents/') ? [tax] : [tax] }),
+    );
+    m.default.put.mockRejectedValue(new Error('nope'));
+    renderPage();
+    await title();
+    const group = screen.getByRole('group', { name: 'Labels' });
+    await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
+    expect(await screen.findByText("Couldn't save the labels")).toBeInTheDocument();
+    expect(within(group).getByText('Tax')).toBeInTheDocument();
+  });
+
+  it('cannot remove a system label from its chip', async () => {
+    load();
+    m.default.get.mockImplementation((url: string) =>
+      Promise.resolve({ status: 200, data: url.startsWith('/labels/documents/') ? [{ ...tax, is_system: true }] : [tax] }),
+    );
+    renderPage();
+    await title();
+    const group = screen.getByRole('group', { name: 'Labels' });
+    await within(group).findByText('Tax');
+    expect(within(group).queryByRole('button', { name: 'Remove Tax' })).not.toBeInTheDocument();
+  });
+
   it('cancels editing without saving', async () => {
     const user = userEvent.setup();
     load();

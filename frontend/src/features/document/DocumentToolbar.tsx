@@ -11,6 +11,8 @@ export interface DocumentToolbarProps {
   tags: string[];
   isEditingLabels: boolean;
   onEditLabels: () => void;
+  /** Removes one label from the document (its chip shows a remove button; system labels have none). */
+  onRemoveLabel?: (labelId: string) => void;
   detailsId: string;
   isDetailsOpen: boolean;
   onToggleDetails: () => void;
@@ -24,6 +26,7 @@ export function DocumentToolbar({
   tags,
   isEditingLabels,
   onEditLabels,
+  onRemoveLabel,
   detailsId,
   isDetailsOpen,
   onToggleDetails,
@@ -41,7 +44,13 @@ export function DocumentToolbar({
           </span>
         ))}
         {labels.map((label) => (
-          <Label key={label.id} label={label} size="medium" />
+          <Label
+            key={label.id}
+            label={label}
+            size="medium"
+            deletable={Boolean(onRemoveLabel) && !isEditingLabels}
+            onDelete={onRemoveLabel}
+          />
         ))}
         <Button
           variant="ghost"
