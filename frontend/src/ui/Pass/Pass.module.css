@@ -9,8 +9,8 @@
   grid-auto-columns: minmax(0, 1fr);
   margin: 0;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
 }
 
@@ -32,9 +32,7 @@
   font-stretch: var(--font-label-stretch);
   font-size: var(--fs-xs);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--fg-meta);
+  color: var(--fg-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

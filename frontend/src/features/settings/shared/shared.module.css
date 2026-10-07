@@ -78,55 +78,13 @@
 
 
 /* Facts */
-.factsBox {
-  min-width: 0;
-  padding: var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-1);
-}
 
-.factsTitle {
-  font-family: var(--font-ui);
-  margin: 0 0 var(--s-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--fg-2);
-}
 
-.facts {
-  display: grid;
-  gap: var(--s-1);
-  margin: 0;
-}
 
-.fact {
-  display: grid;
-  grid-template-columns: minmax(120px, 40%) 1fr;
-  gap: var(--s-2);
-  font-size: var(--fs-sm);
-}
 
-.fact dt {
-  color: var(--fg-meta);
-}
 
-.fact dd {
-  margin: 0;
-  min-width: 0;
-  color: var(--fg);
-  overflow-wrap: anywhere;
-}
 
-.yesNo {
-  font-family: var(--font-ui);
-  font-weight: 600;
-}
 
-.yesNo[data-value='yes'] > span {
-  color: var(--ok);
-}
 
 .tag {
   font-family: var(--font-ui);
