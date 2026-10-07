@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -96,5 +98,40 @@ describe('Toast', () => {
     await screen.findByText('All good');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('All good');
+  });
+});
+
+describe('Toast pauses while hovered', () => {
+  it('stays while the pointer is on it, its timer bar paused, and leaves after the rest of its time', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    setup(1000);
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    const title = await screen.findByText('Saved');
+    const toast = title.closest('[data-tone], [class*="toast"]') as HTMLElement;
+    const region = screen.getByRole('region', { name: 'Notifications' });
+
+    act(() => {
+      toast.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+    });
+    expect(region).toHaveAttribute('data-paused', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+
+    act(() => {
+      toast.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: document.body }));
+    });
+    expect(region).not.toHaveAttribute('data-paused');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+  });
+
+  it('pauses the drain bar with the timer', () => {
+    const css = readFileSync(resolve(__dirname, 'Toast.module.css'), 'utf8');
+    expect(css).toMatch(/\.region\[data-paused\][^{]*\.timer\s*\{[^}]*animation-play-state:\s*paused/);
   });
 });

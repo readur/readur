@@ -115,6 +115,11 @@
 
 @keyframes drain { to { transform: scaleX(0); } }
 
+/* The timers stop while a toast is hovered or focused; the bars stop with them. */
+.region[data-paused] .timer,
+.region[data-hovered] .timer,
+.region[data-focused] .timer { animation-play-state: paused; }
+
 @media (prefers-reduced-motion: reduce) {
   .timer { display: none; animation: none; }
 }

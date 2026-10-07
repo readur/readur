@@ -1,4 +1,14 @@
-import { createContext, useCallback, useContext, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import {
   Button,
   Text,
@@ -85,6 +95,42 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     '--toast-inset-right': `${right}px`,
     '--toast-inset-bottom': `${bottom}px`,
   } as CSSProperties;
+  // Hovering a toast holds every timer (and the drain bars) until the pointer leaves the stack.
+  // Listen natively on the region: it lets pointer events through to the toasts, so React Aria's
+  // own region hover cannot be relied on. The region only exists while toasts do, hence the
+  // callback ref.
+  const [region, setRegion] = useState<HTMLDivElement | null>(null);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (!region) return undefined;
+    const onOver = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      setPaused(true);
+    };
+    const onOut = (e: PointerEvent) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && region.contains(next)) return;
+      setPaused(false);
+    };
+    region.addEventListener('pointerover', onOver);
+    region.addEventListener('pointerout', onOut);
+    return () => {
+      region.removeEventListener('pointerover', onOver);
+      region.removeEventListener('pointerout', onOut);
+      setPaused(false);
+    };
+  }, [region]);
+  // Only act on a change: React Aria's Timer.resume() starts a second timeout if one is running.
+  const wasPaused = useRef(false);
+  useEffect(() => {
+    if (paused !== wasPaused.current) {
+      if (paused) queue.pauseAll();
+      else queue.resumeAll();
+      wasPaused.current = paused;
+    }
+    if (paused) region?.setAttribute('data-paused', 'true');
+    else region?.removeAttribute('data-paused');
+  }, [paused, queue, region]);
   const api = useMemo<ToastApi>(
     () => ({
       show: ({ title, description, tone = 'info', timeout = DEFAULT_TIMEOUT }) => {
@@ -98,6 +144,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={api}>
       <ToastInsetContext.Provider value={reportInset}>{children}</ToastInsetContext.Provider>
       <ToastRegion
+        ref={setRegion}
         queue={queue}
         className={styles.region}
         style={regionStyle}
