@@ -18,6 +18,7 @@ import { nextSyncAt, problemOf, sourceState } from './sourceModel';
 import { useSourceActions } from './useSourceActions';
 import { useSources } from './useSources';
 import { humanizeConnectionFailure } from './connectionFailure';
+import { useDrawerParam } from '../../../lib/useDrawerParam';
 
 type SortKey = 'name' | 'lastSync' | 'files';
 
@@ -41,7 +42,9 @@ export function ConnectionsSection() {
   useLitCount('source'); // re-render when a row is acknowledged elsewhere
   const [sort, setSort] = useState<BoardSort>({ column: 'name', direction: 'ascending' });
   const [params, setParams] = useSearchParams();
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The open connection lives in `?source=` (the sidebar links there too): Back closes it.
+  const detail = useDrawerParam('source');
+  const openId = detail.id;
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SourceResponse | null>(null);
   const actions = useSourceActions(() => void sources.reload(), (id) => {
@@ -55,13 +58,14 @@ export function ConnectionsSection() {
   }, [sources.data, sort]);
   const open = rows.find((s) => s.id === openId) ?? null;
 
-  // `?source=<id>` (the sidebar's links) opens that connection's details.
-  const wanted = params.get('source');
+  // Opening a connection, from a row or a link, marks it seen; one that does not exist is dropped.
+  const { close: closeDrawer } = detail;
+  const loaded = sources.data;
   useEffect(() => {
-    if (!wanted || !sources.data?.some((s) => s.id === wanted)) return;
-    acknowledge('source', wanted);
-    setOpenId(wanted);
-  }, [wanted, sources.data]);
+    if (!openId || !loaded) return;
+    if (loaded.some((s) => s.id === openId)) acknowledge('source', openId);
+    else closeDrawer();
+  }, [openId, loaded, closeDrawer]);
   // `?new=1` (Home's "Connect source") opens the add-connection form once.
   const wantsNew = params.get('new') === '1';
   useEffect(() => {
@@ -72,14 +76,7 @@ export function ConnectionsSection() {
     next.delete('new');
     setParams(next, { replace: true });
   }, [wantsNew, params, setParams]);
-  const closeDetail = () => {
-    setOpenId(null);
-    if (params.has('source')) {
-      const next = new URLSearchParams(params);
-      next.delete('source');
-      setParams(next, { replace: true });
-    }
-  };
+  const closeDetail = closeDrawer;
   const lng = i18n.language;
 
   const columns: BoardColumn<SourceResponse>[] = [
@@ -122,10 +119,7 @@ export function ConnectionsSection() {
     },
   ];
 
-  const openRow = (id: string) => {
-    acknowledge('source', id);
-    setOpenId(id);
-  };
+  const openRow = (id: string) => detail.open(id);
   const startCreate = () => {
     setEditing(null);
     setFormOpen(true);

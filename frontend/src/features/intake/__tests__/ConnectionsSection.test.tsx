@@ -1,5 +1,6 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
@@ -26,6 +27,15 @@ const SOURCES = [
 
 function serveSources(list: unknown = SOURCES) {
   sourcesService.list.mockImplementation(() => (list instanceof Error ? Promise.reject(list) : ok(list)));
+}
+
+function BackButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      browser back
+    </button>
+  );
 }
 
 async function board() {
@@ -504,10 +514,31 @@ describe('Connections health and deep links', () => {
     );
   });
 
-  it('ignores a ?source= that matches no connection', async () => {
+  it('drops a ?source= that matches no connection', async () => {
     renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=nope' });
     await board();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/intake?section=connections'),
+    );
+  });
+
+  it('a row click puts the connection in the URL, and Back closes it', async () => {
+    const user = userEvent.setup();
+    renderIntake(
+      <>
+        <ConnectionsSection />
+        <BackButton />
+      </>,
+      { path: '/sources?section=connections' },
+    );
+    await openRow(user, 'Archive bucket');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent(
+      '/sources?section=connections&source=s2',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'browser back', hidden: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/sources?section=connections');
   });
 });
 
