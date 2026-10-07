@@ -1,83 +1,61 @@
 # Gallery
 
-Explore Readur's intuitive interface and powerful features through these screenshots. Each image showcases different aspects of the system, from document management to advanced search capabilities.
+A tour of Readur's interface. Every screenshot uses sample documents, and all names, companies and numbers in them are made up.
 
-## Dashboard Overview
+## Home
 
-![Readur Dashboard](images/readur_dashboard.png)
+![Readur Home](images/readur_dashboard.png)
 
-The main dashboard provides a comprehensive view of your document library. The clean, modern interface displays documents in an organized grid layout with thumbnails for quick visual identification. The left sidebar offers easy access to navigation, labels, and sources, while the top bar provides quick actions for uploading, searching, and managing your documents. Notice the document statistics at the top showing total documents, processing status, and storage usage.
+Home shows what needs you at a glance: the processing pipeline with today's done, failed and queued counts, anything that needs attention (such as a document OCR couldn't read), the health of each source, and the documents that just arrived. The sidebar holds the destinations, your collections with their counts, and your sources.
 
-## Advanced Search Interface
+## Advanced Search
 
 ![Advanced Search](images/readur_search.png)
 
-Readur's search capabilities go far beyond simple keyword matching. This view demonstrates the advanced search interface where you can combine multiple criteria, use boolean operators, and filter by document properties. The search results display instantly with highlighted matching terms, making it easy to identify relevant documents. The faceted filtering on the left allows you to further refine results by date, document type, labels, and OCR status.
+Search reads the text of every document, including scanned images and photos, and shows the matching passage with your words highlighted. Filter by type, collection, source, date added and OCR status, sort by newest or best match, and use the timeline to narrow the results to the months you care about. A search can be saved as a collection.
 
-## Document Processing & OCR
+## The Library and the Document Drawer
 
-![Document Processing View](images/gallery/image_2.png)
+![Library with a document open](images/gallery/image_2.png)
 
-Watch as Readur processes your documents in real-time. This screen shows the OCR queue in action, with documents being analyzed and converted to searchable text. The progress indicators and status updates keep you informed about processing status. Each document shows its current state - queued, processing, or completed - along with relevant metadata like language detection results and processing time.
+The Library shows every document as a thumbnail grouped by month, or as a dense table. Opening a document slides in a drawer over the page: its status and facts, its labels, the file itself, and the extracted text with find. The drawer lives in the URL, so a link opens it straight away, the browser's Back button closes it, and ↑/↓ moves through the list.
 
-## Label Management System
+## Collections and Labels
 
-![Label Organization](images/gallery/image_3.png)
+![Labels](images/gallery/image_3.png)
 
-The label management interface demonstrates Readur's flexible organizational capabilities. Create hierarchical label structures with custom colors for visual distinction. Documents can have multiple labels applied, enabling multi-dimensional categorization that goes beyond traditional folder structures. The drag-and-drop interface makes it simple to reorganize your label hierarchy as your needs evolve.
+Labels group documents into collections across folders and sources. Give each one a colour, apply several to a document, and find them in the sidebar with their counts. Readur ships with a few system labels such as Important and To Review.
 
-## Source Configuration
+## Sources
 
-![Source Management](images/gallery/image_4.png)
+![Sources](images/gallery/image_4.png)
 
-Configure multiple document sources to automatically sync with Readur. This interface shows the source configuration panel where you can set up connections to WebDAV servers, S3-compatible storage, or local folders. Each source can have its own sync schedule, filters, and processing rules. The health monitoring indicators show the status of each source, ensuring your documents are always up to date.
+Connect WebDAV servers (Nextcloud, ownCloud), S3-compatible storage or local folders, and Readur imports new files on a schedule. Each connection shows its health, when it last synced, how many files it brought in and when it syncs next.
 
-## Document Detail View
+## Document Details
 
-![Document Details](images/readur_2.png)
+![Document details](images/readur_2.png)
 
-The document detail view provides comprehensive information about individual documents. View the original document alongside its extracted text, manage labels, see processing history, and access document metadata. The split-pane interface allows you to review the original document while searching within its extracted text. Quick actions for downloading, sharing, or reprocessing are readily accessible.
+PDFs open in the browser's own viewer inside the drawer, above tabs for the extracted text, the details (file, source, processing history and metadata), comments and share links. Drag the dotted handle between the file and the tabs to give either one more room. Download, share, retry OCR or delete from the bar along the bottom.
 
-## Analytics Dashboard
+## Dark Mode
 
-![Analytics Overview](images/gallery/image_5.png)
+![Home in dark mode](images/gallery/image_5.png)
 
-Track your document management metrics with the analytics dashboard. Visualize document growth over time, processing statistics, storage usage trends, and search patterns. The interactive charts help you understand how your document library is being used and identify opportunities for optimization. Export reports for compliance or audit purposes with a single click.
+Light and dark themes are designed together, and Readur follows your system setting unless you choose one in the sidebar.
 
 ## User Management
 
-![User Administration](images/gallery/image_6.png)
+![Users](images/gallery/image_6.png)
 
-The administration panel provides comprehensive user management capabilities. Create and manage user accounts, assign roles and permissions, configure authentication methods including OIDC/SSO integration, and monitor user activity. The interface clearly shows user status, last login times, and document access patterns, making it easy to maintain security and compliance.
+Administrators add people, set their roles, and turn accounts on or off. Readur also supports OIDC single sign-on.
 
-## Mobile Responsive Design
+## On Your Phone
 
-![Mobile View](images/gallery/image_7.png)
+![Readur on a phone](images/gallery/image_7.png)
 
-Readur's responsive design ensures full functionality on mobile devices. Access your documents, perform searches, and manage your library from smartphones and tablets. The touch-optimized interface adapts to smaller screens without sacrificing features. Swipe gestures, pinch-to-zoom on documents, and streamlined navigation make mobile document management effortless.
+On a phone, Readur becomes a tab bar with the main destinations, and documents open full screen with the same tabs and actions as on the desktop.
 
 ## Getting Started
 
-Ready to transform your document management? Check out our [Quick Start Guide](quickstart/docker.md) to get Readur running in minutes, or explore the [User Guide](user-guide.md) for detailed instructions on using all these features.
-
-### Key Interface Elements
-
-Throughout Readur's interface, you'll notice consistent design patterns that make navigation intuitive:
-
-- **Action buttons** are prominently displayed and color-coded for quick identification
-- **Status indicators** use clear icons and colors to communicate document states
-- **Contextual menus** provide relevant actions based on your current selection
-- **Keyboard shortcuts** are available for power users who prefer efficient navigation
-- **Dark mode support** reduces eye strain during extended use sessions
-
-### Customization Options
-
-Readur's interface can be customized to match your workflow:
-
-- Choose between list and grid views for document display
-- Configure which columns appear in list view
-- Set your preferred sort order and filtering defaults
-- Customize the sidebar to show your most-used sections
-- Adjust thumbnail sizes in grid view for optimal density
-
-The gallery images above represent just a fraction of Readur's capabilities. The system is designed to grow with your needs, from personal document management to enterprise-scale deployments handling millions of documents.
+Ready to try it? The [Quick Start Guide](quickstart/docker.md) gets Readur running in minutes, and the [User Guide](user-guide.md) covers everything shown here in detail.
