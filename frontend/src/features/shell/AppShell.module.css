@@ -2,6 +2,9 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* Installed on a notched phone the page reaches the screen edges: keep clear of the notch. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--bg);
   color: var(--fg);
 }
@@ -103,8 +106,12 @@
 
 .drawer {
   position: relative;
+  box-sizing: border-box;
   width: min(320px, 86vw);
   height: 100%;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
   background: var(--surface);
   box-shadow: var(--shadow-overlay);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
