@@ -469,3 +469,43 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
     expect(within(panel).getByRole('group', { name: 'OCR result' })).toHaveTextContent('0.0%');
   });
 });
+
+describe('failure drawers in the URL', () => {
+  const url = () => screen.getByRole('status', { name: 'location', hidden: true }).textContent;
+  const PATH = '/intake?section=attention&view=failed';
+
+  it('a failed document opens as ?failure=, and a link to it opens the same drawer', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderIntake(<FailedOcrPanel />, { path: PATH });
+    await openDoc(user, 'scan1.pdf');
+    expect(url()).toBe(`${PATH}&failure=doc-1`);
+    unmount();
+    renderIntake(<FailedOcrPanel />, { path: `${PATH}&failure=doc-1` });
+    expect(await screen.findByRole('dialog', { name: 'scan1.pdf' })).toBeInTheDocument();
+  });
+
+  it('drops a ?failure= that is not on the list', async () => {
+    renderIntake(<FailedOcrPanel />, { path: `${PATH}&failure=gone` });
+    await board();
+    await waitFor(() => expect(url()).toBe(PATH));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('an import failure opens as ?import=, and a link to it opens the same drawer', async () => {
+    const user = userEvent.setup();
+    serveImports([failedDoc('rec-9', { failure_stage: 'ingestion' })]);
+    const { unmount } = renderIntake(<FailedOcrPanel />, { path: PATH });
+    await user.click(within(await importsBoard()).getByRole('rowheader', { name: /rec-9\.pdf/ }));
+    await screen.findByRole('dialog', { name: 'rec-9.pdf' });
+    expect(url()).toBe(`${PATH}&import=rec-9`);
+    unmount();
+    renderIntake(<FailedOcrPanel />, { path: `${PATH}&import=rec-9` });
+    expect(await screen.findByRole('dialog', { name: 'rec-9.pdf' })).toBeInTheDocument();
+  });
+
+  it('drops an ?import= that is not on the list', async () => {
+    renderIntake(<FailedOcrPanel />, { path: `${PATH}&import=gone` });
+    await importsBoard();
+    await waitFor(() => expect(url()).toBe(PATH));
+  });
+});

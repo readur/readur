@@ -7,6 +7,7 @@ import { Notice, sharedStyles } from '../shared/parts';
 import { useLoader } from '../shared/useLoader';
 import { FAILURE_REASONS, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
 import { fetchImportFailures, NON_OCR_STAGES } from './importFailures';
+import { useRecordDrawer } from '../shared/useRecordDrawer';
 import { ImportFailureDetail } from './ImportFailureDetail';
 
 export const IMPORT_FAILURES_PAGE_SIZE = 25;
@@ -25,7 +26,6 @@ export function ImportFailuresPanel() {
   const [reason, setReason] = useState(ALL);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(IMPORT_FAILURES_PAGE_SIZE);
-  const [openId, setOpenId] = useState<string | null>(null);
 
   const list = useLoader(
     () =>
@@ -39,7 +39,8 @@ export function ImportFailuresPanel() {
   );
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
-  const open = rows.find((d) => d.id === openId) ?? null;
+  const detail = useRecordDrawer('import', rows, Boolean(list.data) && !list.isLoading);
+  const open = detail.record;
 
   const columns: BoardColumn<FailedDocumentRow>[] = [
     { id: 'name', label: t('intake.attention.col.name', 'Name'), render: (d) => failedName(d) },
@@ -92,7 +93,7 @@ export function ImportFailuresPanel() {
           columns={columns}
           rows={rows}
           getRowId={(d) => d.id}
-          onRowAction={setOpenId}
+          onRowAction={(id) => detail.open(String(id))}
           renderRowDetail={(d) => d.error_message || null}
           isLoading={list.isLoading}
           density="compact"
@@ -102,7 +103,7 @@ export function ImportFailuresPanel() {
       {total > pageSize ? (
         <Pagination page={page} pageSize={pageSize} total={total} onChange={(p, size) => { setPage(p); setPageSize(size); }} />
       ) : null}
-      <ImportFailureDetail record={open} isOpen={Boolean(open)} onOpenChange={(o) => !o && setOpenId(null)} />
+      <ImportFailureDetail record={open} isOpen={Boolean(open)} onOpenChange={(o) => !o && detail.close()} />
     </section>
   );
 }
