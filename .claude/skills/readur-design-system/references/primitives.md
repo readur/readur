@@ -10,6 +10,11 @@ All exported from `frontend/src/ui/index.ts`. Icons are React components from `f
 ```
 Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side by side.
 
+**ButtonLink** — the same looks for an action that goes somewhere: `href`, `variant`, `size`, `icon`. Navigates in-app through `app/RacRouterBridge`.
+```tsx
+<ButtonLink href="/sources?section=connections&new=1" variant="secondary" icon={<Cloud fontSize="inherit" />}>{t('home.connectSource')}</ButtonLink>
+```
+
 **IconButton** — `label` (required: accessible name *and* tooltip), `icon`, `size`, `variant` (`danger` tints the glyph). Always a visible soft square.
 
 **Avatar** — `name`, `size: 'sm' | 'md'`. **Spinner** — `size`, `label` (with a label it is a status region). Use `Spinner` only inline; loading regions use `Skeleton`.
@@ -21,10 +26,10 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 
 ## Status and labelling
 
-**StatusMark** — `state: pending | processing | completed | failed | healthy | syncing | warning | error | disabled`, `progress?: {current, total}` (processing only → "OCR 3/12" + bar), `size`. Dot + word; spinner for processing/syncing. Never put it on a coloured background.
+**StatusMark** — `state: pending | processing | completed | failed | healthy | syncing | warning | error | disabled`, `progress?: {current, total}` (processing only → "OCR 3/12" + bar), `size`, `label` (a more specific word in the same tone, e.g. "Idle", "Quiet"). Dot + word; spinner for processing/syncing. Never put it on a coloured background.
 **LabelChip** — `name`, `color`, `icon`, `count`, `size`, `onPress`, `onRemove` + `removeLabel`. Feature code with a `LabelData` uses `features/labels/Label`.
 **FilterChip** — `label`, `value`, `isActive`, `onPress`, `onClear`, `popover`.
-**SourceBadge** — `sourceId`, `kind` (`upload`, `watch`, or the source type), `name`, `type` (icon), `variant: 'tile' | 'chip'`, `showType`. Library rows use `features/library/SourceBadge` (`row`, `name`).
+**SourceBadge** — `sourceId`, `kind` (`upload`, `watch`, or the source type), `name`, `type` (icon), `variant: 'tile' | 'chip'`, `showType`. Library rows use `features/library/SourceBadge` (`row`, `name`). **SourceTile** — the icon tile alone (`sourceId`, `kind`, `type`) for rows that print the name themselves (sidebar, lists).
 **ChangeTag** — children "New"/"Changed" (coral dot + word). **Kbd** — key text in the data face.
 **Notice** — `tone: info | ok | warning | danger`, `title`, children, `action`, `onDismiss`, `live: 'alert' | 'status' | 'off'` (default: danger → alert), `prefix` (hidden word).
 ```tsx
@@ -37,7 +42,7 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 ## Data
 
 **Card** — `as`, `padding: 'none' | 'sm' | 'md'`, `interactive`. The only way to get a surface panel. Don't nest Cards.
-**DocumentCard** — `title`, `thumbnail` (pass `DocumentThumbnail size="fill"`), `meta`, `status`, `labels`, `source`, `flags`, `href` | `onOpen`, `isSelected` + `onSelectionChange` + `selectLabel`, `isChanged`, `quickActions`, `as` (default `li` — wrap in a `ul`).
+**DocumentCard** — `title`, `thumbnail` (pass `DocumentThumbnail size="fill"`), `meta` (mono "PDF · 412 KB · 2d ago"), `status` (`StatusMark`), `labels` (first two + "+N"), `source` (`SourceBadge`), `flags` (top-right), `href` and/or `onOpen` (both fire on a link), `isSelected` + `onSelectionChange` + `selectLabel`, `isChanged`, `quickActions`, `as` (default `li` — wrap in a `ul`).
 **BoardTable** — `columns: BoardColumn[]` (`id`, `label`, `render`, `sortable`, `mono`, `isRowHeader`, `hideOnNarrow`, `fold`), `rows`, `getRowId`, `aria-label`, `sort`/`onSortChange`, `selectionMode`/`selectedKeys`/`onSelectionChange`, `onRowAction`, `isLoading`, `emptyState`, `density`.
 **Facts** — `items: {label, value, mono?}[]`, `title`. **YesNo** — `value`, `yes`, `no`. **Pass** + **PassCell** (`label`, `mono`, `span`, `wide`) for header strips.
 **EmptyState** — `title`, `description`, `action`, `icon` | `illustration`, `headingAs`.
@@ -47,5 +52,5 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 ## Overlays
 
 **Dialog** — `title`, children, `actions`, `isOpen`/`onOpenChange`, `size`, `icon` (accent tile), `helpLink` (footer left), `role="alertdialog"` for destructive confirms, `isDismissable`. Footer order: help link left; ghost Cancel then primary on the right.
-**SlideOver** — `title`, `isOpen`, `onOpenChange`, `footer`, `width`, `onNavigate`. **Menu** + **MenuItem** (`danger`) + **MenuSection** (`title`) inside **MenuTrigger**. **Popover** + **PopoverTrigger**. **Tooltip** + **TooltipTrigger** (IconButton already has one).
+**SlideOver** — `title`, `isOpen`, `onOpenChange`, `footer`, `width`, `onNavigate`, `resizable` + `storageKey` (left-edge grab handle; width remembered per key). Keep the record mounted while it closes (`useLastDefined` from `lib/`) so it can slide out. **Menu** + **MenuItem** (`danger`) + **MenuSection** (`title`) inside **MenuTrigger**. **Popover** + **PopoverTrigger**. **Tooltip** + **TooltipTrigger** (IconButton already has one).
 **BulkActionBar** — `count`, `actions: {id, label, icon?, tone?: 'danger', onPress}[]`, `onClear`. **CommandPalette** — `sources: CommandSource[]`; items may carry `preview`.
