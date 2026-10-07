@@ -931,7 +931,8 @@
       "settingsLoadFailed": "No se pudieron cargar los ajustes",
       "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta",
       "userDisabled": "{{username}} se ha desactivado y se ha cerrado su sesión",
-      "userEnabled": "{{username}} ya puede iniciar sesión"
+      "userEnabled": "{{username}} ya puede iniciar sesión",
+      "cannotChangeSelf": "No puedes desactivar ni eliminar tu propia cuenta"
     },
     "adminOnly": {
       "title": "Solo administradores",

@@ -52,3 +52,23 @@
 .ok { --c: var(--ok); --cs: var(--ok-soft); }
 .warn { --c: var(--warn); --cs: var(--warn-soft); }
 .danger { --c: var(--danger); --cs: var(--danger-soft); }
+
+/* With a reason: the word is underlined to say "there's more", the trigger takes focus. */
+.mark[data-reason] .word {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--c);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.reasonTrigger {
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.reasonTrigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

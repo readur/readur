@@ -9,6 +9,8 @@
 .iconButton.iconButton[data-hovered],
 .iconButton.iconButton[data-pressed] { background: var(--press); color: var(--fg); transform: none; }
 .iconButton.iconButton[class*='danger'] { color: var(--danger); }
+.iconButton.iconButton[data-muted] { color: var(--fg-meta); background: transparent; cursor: not-allowed; }
+.iconButton.iconButton[data-muted][data-hovered] { background: var(--hover); color: var(--fg-meta); }
 
 .sm { width: 28px; height: 28px; }
 .md { width: 34px; height: 34px; }

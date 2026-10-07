@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { cx } from '../shared/FieldParts';
 import { Spinner } from '../Spinner';
 import styles from './StatusMark.module.css';
+import { Focusable } from 'react-aria-components';
+import { Tooltip, TooltipTrigger } from '../Tooltip';
 
 export type StatusState =
   | 'pending'
@@ -22,6 +24,11 @@ export interface StatusMarkProps {
   size?: 'sm' | 'md';
   /** A more specific word for the same state ("Idle", "Quiet"); the tone still comes from `state`. */
   label?: string;
+  /**
+   * Why it is in this state ("Can't reach the server."). The mark becomes focusable and shows
+   * the reason in a tooltip, so a row never needs a second line for its error.
+   */
+  reason?: string;
   className?: string;
 }
 
@@ -42,7 +49,7 @@ const VOCAB: Record<StatusState, { word: string; tone: Tone }> = {
 export const STATUS_STATES = Object.keys(VOCAB) as StatusState[];
 
 /** Document or connection state: a haloed dot (a spinner while in progress) plus a word, never colour alone. */
-export function StatusMark({ state, progress, size = 'md', label, className }: StatusMarkProps) {
+export function StatusMark({ state, progress, size = 'md', label, reason, className }: StatusMarkProps) {
   const { t } = useTranslation();
   const entry = VOCAB[state] ?? VOCAB.pending;
   const showProgress = state === 'processing' && progress && progress.total > 0;
@@ -57,8 +64,13 @@ export function StatusMark({ state, progress, size = 'md', label, className }: S
   const pct = showProgress ? Math.round((progress.current / progress.total) * 100) : 0;
   const active = entry.tone === 'active';
 
-  return (
-    <span className={cx(styles.mark, styles[size], styles[entry.tone], className)} data-state={state} data-tone={entry.tone}>
+  const mark = (
+    <span
+      className={cx(styles.mark, styles[size], styles[entry.tone], className)}
+      data-state={state}
+      data-tone={entry.tone}
+      data-reason={reason ? '' : undefined}
+    >
       <span className={styles.lead} data-lead="" aria-hidden="true">
         {active ? (
           state === 'syncing' ? (
@@ -77,5 +89,16 @@ export function StatusMark({ state, progress, size = 'md', label, className }: S
         </span>
       ) : null}
     </span>
+  );
+  if (!reason) return mark;
+  return (
+    <TooltipTrigger delay={300}>
+      <Focusable>
+        <span tabIndex={0} className={styles.reasonTrigger}>
+          {mark}
+        </span>
+      </Focusable>
+      <Tooltip>{reason}</Tooltip>
+    </TooltipTrigger>
   );
 }

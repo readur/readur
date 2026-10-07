@@ -1030,7 +1030,8 @@
       "settingsLoadFailed": "Impossible de charger les paramètres",
       "cannotDeactivateSelf": "Vous ne pouvez pas désactiver votre propre compte",
       "userDisabled": "{{username}} a été désactivé et déconnecté",
-      "userEnabled": "{{username}} peut maintenant se connecter"
+      "userEnabled": "{{username}} peut maintenant se connecter",
+      "cannotChangeSelf": "Vous ne pouvez ni désactiver ni supprimer votre propre compte"
     },
     "adminOnly": {
       "title": "Réservé aux administrateurs",

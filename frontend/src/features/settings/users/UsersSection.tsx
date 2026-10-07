@@ -88,14 +88,12 @@ export default function UsersSection() {
         />
         <IconButton
           size="sm"
-          label={
-            isSelf
-              ? t('settings.messages.cannotDeleteSelf')
-              : t('settings.users.deleteNamed', 'Delete {{name}}', { name: user.username })
+          label={t('settings.users.deleteNamed', 'Delete {{name}}', { name: user.username })}
+          disabledReason={
+            isSelf ? t('settings.messages.cannotChangeSelf', "You can't deactivate or delete your own account") : undefined
           }
           icon={<Delete fontSize="inherit" />}
           onPress={() => setConfirm({ kind: 'delete', user })}
-          isDisabled={isSelf}
         />
       </span>
     );

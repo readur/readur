@@ -25,3 +25,19 @@ describe('IconButton', () => {
     expect(screen.getByRole('button', { name: 'Download' })).toHaveAttribute('data-icon-button');
   });
 });
+
+describe('IconButton with a disabled reason', () => {
+  it('looks muted, ignores presses and says why in its tooltip', async () => {
+    const user = userEvent.setup();
+    const onPress = vi.fn();
+    render(<IconButton label="Delete ada" disabledReason="You can't delete your own account" icon={<span />} onPress={onPress} />);
+    const button = screen.getByRole('button', { name: 'Delete ada' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await user.click(button);
+    expect(onPress).not.toHaveBeenCalled();
+    await user.click(document.body);
+    await user.tab();
+    expect(button).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent("You can't delete your own account");
+  });
+});

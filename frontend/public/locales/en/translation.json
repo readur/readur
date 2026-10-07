@@ -1030,7 +1030,8 @@
       "settingsLoadFailed": "Failed to load settings",
       "cannotDeactivateSelf": "You cannot deactivate your own account",
       "userDisabled": "{{username}} has been disabled and signed out",
-      "userEnabled": "{{username}} can now sign in"
+      "userEnabled": "{{username}} can now sign in",
+      "cannotChangeSelf": "You can’t deactivate or delete your own account"
     },
     "adminOnly": {
       "title": "Admins only",

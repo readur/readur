@@ -92,3 +92,19 @@ it('can say a more specific word in the same tone', () => {
   expect(container).toHaveTextContent('Idle');
   expect(container.firstElementChild).toHaveAttribute('data-tone', 'ok');
 });
+
+describe('StatusMark with a reason', () => {
+  it('stays one line and explains itself in a tooltip on focus', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = render(<StatusMark state="error" reason="Can't reach the server." />);
+    expect(container).toHaveTextContent(/^Error$/);
+    await user.tab();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent("Can't reach the server.");
+    expect(document.activeElement).toHaveAccessibleDescription("Can't reach the server.");
+  });
+
+  it('is not focusable without a reason', () => {
+    const { container } = render(<StatusMark state="error" />);
+    expect(container.querySelector('[tabindex]')).toBeNull();
+  });
+});

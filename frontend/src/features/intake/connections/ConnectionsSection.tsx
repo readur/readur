@@ -8,7 +8,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { isAdmin } from '../../../auth/roles';
 import { acknowledge, isLit, useLitCount } from '../../board/litStore';
 import { formatCount, formatRelative } from '../shared/format';
-import { HumanReason } from '../shared/HumanReason';
 import { ChangedTag, Notice, sharedStyles } from '../shared/parts';
 import { ConnectionDot } from './ConnectionDot';
 import { sourceTypeLabel } from '../shared/sourceTypes';
@@ -18,6 +17,7 @@ import { SourceDetailPanel } from './SourceDetailPanel';
 import { nextSyncAt, problemOf, sourceState } from './sourceModel';
 import { useSourceActions } from './useSourceActions';
 import { useSources } from './useSources';
+import { humanizeConnectionFailure } from './connectionFailure';
 
 type SortKey = 'name' | 'lastSync' | 'files';
 
@@ -25,6 +25,12 @@ function compare(a: SourceResponse, b: SourceResponse, key: SortKey): number {
   if (key === 'files') return a.total_files_synced - b.total_files_synced;
   if (key === 'lastSync') return (Date.parse(a.last_sync_at ?? '') || 0) - (Date.parse(b.last_sync_at ?? '') || 0);
   return a.name.localeCompare(b.name);
+}
+
+/** A connection's problem in plain words, for its status tooltip; undefined when healthy. */
+function problemSummary(s: SourceResponse): string | undefined {
+  const text = problemOf(s)?.text?.trim();
+  return text ? humanizeConnectionFailure(text).summary : undefined;
 }
 
 /** Every connection with its health; a row opens its details and actions. */
@@ -88,16 +94,11 @@ export function ConnectionsSection() {
             <span className={sharedStyles.nameText}>{s.name}</span>
             {isLit('source', s.id) ? <ChangedTag reason="changed" /> : null}
           </span>
-          {problemOf(s) ? (
-            <span className={sharedStyles.nameSub} data-tone={problemOf(s)?.tone}>
-              <HumanReason kind="connection" raw={problemOf(s)?.text} summaryOnly />
-            </span>
-          ) : null}
         </span>
       ),
     },
     { id: 'type', hideOnNarrow: true, label: t('intake.connections.col.type', 'Type'), width: 120, render: (s) => sourceTypeLabel(t, s.source_type) },
-    { id: 'status', label: t('intake.connections.col.status', 'Status'), width: 130, render: (s) => <StatusMark state={sourceState(s)} size="sm" /> },
+    { id: 'status', label: t('intake.connections.col.status', 'Status'), width: 130, render: (s) => <StatusMark state={sourceState(s)} reason={problemSummary(s)} size="sm" /> },
     {
       id: 'lastSync',
       hideOnNarrow: true,

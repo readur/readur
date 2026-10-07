@@ -86,9 +86,9 @@ describe('Connections board', () => {
     renderIntake(<ConnectionsSection />);
     const grid = await board();
     const names = () => within(grid).getAllByRole('rowheader').map((c) => c.textContent);
-    expect(names()).toEqual(['Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.', 'Office cloud', 'Scanner share']);
+    expect(names()).toEqual(['Archive bucketChanged', 'Office cloud', 'Scanner share']);
     await user.click(within(grid).getByRole('columnheader', { name: /Name/ }));
-    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.']);
+    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChanged']);
   });
 
   it('shows the empty state with an add button', async () => {
@@ -448,12 +448,16 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
 });
 
 describe('Connections health and deep links', () => {
-  it("shows the failing connection's last error in plain words under its name", async () => {
+  it("keeps a failing connection's row on one line and gives its last error in plain words on its status", async () => {
+    const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const grid = await board();
     const row = within(grid).getByRole('row', { name: /Archive bucket/ });
-    expect(within(row).getByText(/server refused the sign-in/i)).toBeInTheDocument();
-    expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveTextContent(/refused the sign-in/i);
+    expect(row).not.toHaveTextContent(/refused the sign-in/i);
+    await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
+    await user.hover(row.querySelector('[data-reason]') as HTMLElement);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/server refused the sign-in/i);
+    expect(within(grid).getByRole('row', { name: /Office cloud/ }).querySelector('[data-reason]')).toBeNull();
   });
 
   it('lists a health warning under the name and its recommendation in the panel', async () => {
@@ -469,7 +473,11 @@ describe('Connections health and deep links', () => {
     ]);
     renderIntake(<ConnectionsSection />);
     const grid = await board();
-    expect(within(grid).getByText(/Can't reach the server/)).toBeInTheDocument();
+    const row = within(grid).getByRole('row', { name: /Office cloud/ });
+    await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
+    await user.hover(row.querySelector('[data-reason]') as HTMLElement);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Can't reach the server/);
+    await user.unhover(row.querySelector('[data-reason]') as HTMLElement);
     const panel = await openRow(user, 'Office cloud');
     expect(within(panel).getByRole('heading', { name: 'Health check' })).toBeInTheDocument();
     expect(within(panel).getByText('Check server URL and network')).toBeInTheDocument();

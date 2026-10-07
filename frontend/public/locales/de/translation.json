@@ -1030,7 +1030,8 @@
       "settingsLoadFailed": "Einstellungen konnten nicht geladen werden",
       "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
       "userDisabled": "{{username}} wurde deaktiviert und abgemeldet",
-      "userEnabled": "{{username}} kann sich jetzt anmelden"
+      "userEnabled": "{{username}} kann sich jetzt anmelden",
+      "cannotChangeSelf": "Ihr eigenes Konto können Sie weder deaktivieren noch löschen"
     },
     "adminOnly": {
       "title": "Nur für Administratoren",

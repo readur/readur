@@ -136,7 +136,11 @@ describe('UsersSection', () => {
 
   it('never lets you delete yourself', async () => {
     render();
-    expect(await screen.findByRole('button', { name: 'You cannot delete your own account' })).toBeDisabled();
+    const user = userEvent.setup();
+    const del = await screen.findByRole('button', { name: 'Delete ada' });
+    expect(del).toHaveAttribute('aria-disabled', 'true');
+    await user.click(del);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
   it('explains a restricted delete', async () => {
@@ -199,7 +203,14 @@ describe('UsersSection', () => {
     const grid = await screen.findByRole('grid', { name: 'User Management' });
     expect(within(grid).getByRole('switch', { name: 'Account active for bob' })).toBeChecked();
     expect(within(grid).getByRole('switch', { name: 'Account active for ada' })).toBeDisabled();
-    expect(within(grid).getByText('You cannot deactivate your own account')).toBeInTheDocument();
+    // The reason is on the muted delete button's tooltip, not a line that unbalances the row.
+    expect(within(grid).queryByText(/cannot deactivate your own account/)).not.toBeInTheDocument();
+    const del = within(grid).getAllByRole('button').find((b) => b.getAttribute('aria-disabled') === 'true') as HTMLElement;
+    expect(del).toBeDefined();
+    const user = userEvent.setup();
+    await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
+    await user.hover(del);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/deactivate or delete your own account/);
   });
 
   it('flags accounts that are disabled or awaiting approval', async () => {
