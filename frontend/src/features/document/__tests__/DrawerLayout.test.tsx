@@ -261,6 +261,21 @@ describe('document drawer: preview and tabs', () => {
     expect(await screen.findByRole('region', { name: 'Extracted text' })).toHaveTextContent('Invoice 42');
   });
 
+  it('keeps the document actions in a bar at the bottom, after the tabs', async () => {
+    load(makeDocument({ ocr_status: 'failed', has_ocr_text: false }));
+    renderDrawer();
+    const dialog = await title();
+    const bar = within(dialog).getByRole('toolbar', { name: 'Document actions' });
+    expect(within(bar).getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual([
+      'Download',
+      'Share',
+      'Retry OCR',
+      'More actions',
+    ]);
+    const tabs = within(dialog).getByRole('tablist', { name: 'About this document' });
+    expect(tabs.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('opens the PDF with the thumbnail sidebar closed and the page fitted to the width', async () => {
     load();
     renderDrawer();

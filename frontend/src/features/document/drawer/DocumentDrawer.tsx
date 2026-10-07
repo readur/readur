@@ -20,7 +20,7 @@ import { DocumentViewer } from '../reading/DocumentViewer';
 import { OcrTextPanel } from '../reading/OcrTextPanel';
 import { SharedLinksManager } from '../sharing/SharedLinksManager';
 import { notifyDocumentsChanged, useDocumentList, type DocumentListProvider } from './DocumentDrawerContext';
-import { DrawerHead } from './DrawerHead';
+import { DrawerActions, DrawerHead } from './DrawerHead';
 import { DrawerLabels } from './DrawerLabels';
 import styles from './DocumentDrawer.module.css';
 
@@ -251,18 +251,7 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
 
   return (
     <>
-      <DrawerHead
-        document={doc}
-        ocr={ocr}
-        sourceName={sourceName}
-        isRetrying={retrying}
-        isDownloading={downloading}
-        onDownload={download}
-        onShare={() => onTabChange('links')}
-        onRetry={retryOcr}
-        onDelete={() => setDeleteOpen(true)}
-        onViewProcessed={() => setProcessedOpen(true)}
-      />
+      <DrawerHead document={doc} ocr={ocr} sourceName={sourceName} />
       <DrawerLabels labels={labels} tags={doc.tags ?? []} onSave={(next) => void saveLabels(next)} />
 
       <section
@@ -317,6 +306,17 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
           <SharedLinksManager documentId={doc.id} />
         </TabPanel>
       </Tabs>
+
+      <DrawerActions
+        document={doc}
+        isRetrying={retrying}
+        isDownloading={downloading}
+        onDownload={download}
+        onShare={() => onTabChange('links')}
+        onRetry={retryOcr}
+        onDelete={() => setDeleteOpen(true)}
+        onViewProcessed={() => setProcessedOpen(true)}
+      />
 
       <DeleteDocumentDialog
         filename={doc.original_filename}

@@ -2291,7 +2291,8 @@
       "title": "Documento",
       "close": "Cerrar",
       "preview": "Vista previa",
-      "tabs": "Sobre este documento"
+      "tabs": "Sobre este documento",
+      "actions": "Acciones del documento"
     }
   },
   "library": {
