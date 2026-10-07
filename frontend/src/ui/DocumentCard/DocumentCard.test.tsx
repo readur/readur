@@ -70,3 +70,9 @@ describe('DocumentCard', () => {
     expect(readFileSync(resolve(__dirname, 'DocumentCard.module.css'), 'utf8')).toMatch(/\.name\s*\{[^}]*-webkit-line-clamp:\s*2/);
   });
 });
+
+it('keeps corner flags visible on a selected card (they sit opposite the checkbox)', () => {
+  const css = readFileSync(resolve(__dirname, 'DocumentCard.module.css'), 'utf8');
+  expect(css).toMatch(/\.flags\s*\{[^}]*right:\s*var\(--s-2\)/);
+  expect(css).not.toMatch(/\[data-selected\][^{]*\.flags/);
+});

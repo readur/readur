@@ -75,7 +75,8 @@
 
 .row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 
-.flags { position: absolute; top: var(--s-2); left: var(--s-2); display: flex; gap: var(--s-1); }
+/* Flags sit top-right, opposite the selection checkbox, so a selected card keeps its New tag. */
+.flags { position: absolute; top: var(--s-2); right: var(--s-2); display: flex; gap: var(--s-1); transition: opacity var(--dur-1) var(--ease); }
 
 .check {
   position: absolute;
@@ -106,9 +107,8 @@
 .card:hover .actions,
 .card:focus-within .actions { opacity: 1; }
 
-.card:has(.check):hover .flags,
-.card:has(.check):focus-within .flags,
-.card[data-selected]:has(.check) .flags { opacity: 0; }
+.card:has(.actions):hover .flags,
+.card:has(.actions):focus-within .flags { opacity: 0; }
 
 @media (hover: none) {
   .check,

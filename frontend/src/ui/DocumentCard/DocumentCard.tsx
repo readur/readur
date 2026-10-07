@@ -71,7 +71,7 @@ export function DocumentCard({
       </span>
       {flags ? <span className={styles.flags}>{flags}</span> : null}
       {onSelectionChange && selectLabel ? (
-        <span className={styles.check}>
+        <span className={styles.check} data-card-check="">
           <Checkbox aria-label={selectLabel} isSelected={!!isSelected} onChange={onSelectionChange} />
         </span>
       ) : null}

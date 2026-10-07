@@ -1,11 +1,12 @@
 import { useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Checkbox, Skeleton } from '../../ui';
+import { Card, DocumentCard, Skeleton } from '../../ui';
+import { shortType } from '../../lib/fileType';
 import { isShownLit, useAcknowledgeOnLeave } from '../board/litStore';
 import { DocumentThumbnail } from '../document/DocumentThumbnail';
-import { ChangeTag, StatusCell } from './cells';
+import { ChangeTag, LabelsCell, StatusCell } from './cells';
 import { displayName, type LibraryRow } from './data';
-import { formatDateTime, formatRelative, ocrState } from './format';
+import { formatBytes, formatDateTime, formatRelative } from './format';
 import { groupByMonth, monthLabel } from './months';
 import { SourceBadge } from './SourceBadge';
 import styles from './LibraryGrid.module.css';
@@ -40,15 +41,15 @@ export function LibraryGrid({ rows, selected, onToggle, onOpen, sourceName, byMo
     return (
       <div className={styles.grid} role="status" aria-label={t('library.loading', 'Loading documents')}>
         {Array.from({ length: SKELETON_CARDS }, (_, i) => (
-          <div key={i} className={styles.skeletonCard} aria-hidden="true">
-            <span className={styles.skeletonThumb} />
+          <Card key={i} padding="sm" className={styles.skeletonCard} aria-hidden="true">
+            <Skeleton height={160} />
             <Skeleton lines={2} height={12} />
-          </div>
+          </Card>
         ))}
       </div>
     );
   }
-  if (rows.length === 0) return <div className={styles.empty}>{emptyState}</div>;
+  if (rows.length === 0) return <Card className={styles.empty}>{emptyState}</Card>;
 
   return (
     <div className={styles.groups} aria-busy={isLoading || undefined} data-lit-version={litVersion}>
@@ -59,7 +60,7 @@ export function LibraryGrid({ rows, selected, onToggle, onOpen, sourceName, byMo
           count={g.items.length}
         >
           {g.items.map((row) => (
-            <Card
+            <GridCard
               key={row.id}
               row={row}
               isSelected={selected.has(row.id)}
@@ -101,38 +102,32 @@ interface CardProps {
   lng: string;
 }
 
-function Card({ row, isSelected, onToggle, onOpen, sourceName, lng }: CardProps) {
+/** "PDF · 412 KB · 2 days ago": type, size and when it arrived, for the card's mono line. */
+export function cardMeta(row: Pick<LibraryRow, 'mime_type' | 'file_size' | 'created_at'>, lng: string): string {
+  return [shortType(row.mime_type), formatBytes(row.file_size, lng), formatRelative(row.created_at, lng)].join(' · ');
+}
+
+function GridCard({ row, isSelected, onToggle, onOpen, sourceName, lng }: CardProps) {
   const { t } = useTranslation();
   const name = displayName(row);
-  const lit = isShownLit('document', row.id);
-  const showStatus = ocrState(row.ocr_status) !== 'completed';
   return (
-    <li className={styles.card} data-selected={isSelected || undefined} data-lit={lit || undefined}>
-      <button type="button" className={styles.open} onClick={() => onOpen(row.id)}>
-        <span className={styles.thumb}>
-          <DocumentThumbnail documentId={row.id} mimeType={row.mime_type} size="fill" lazy />
-        </span>
-        <span className={styles.body}>
-          <span className={styles.name}>{name}</span>
-          <span className={styles.meta}>
-            <SourceBadge row={row} name={sourceName} />
-            <time className={styles.date} dateTime={row.created_at} title={formatDateTime(row.created_at, lng)}>
-              {formatRelative(row.created_at, lng)}
-            </time>
-          </span>
-        </span>
-      </button>
-      <span className={styles.flags}>
-        <ChangeTag id={row.id} />
-        {showStatus ? <StatusCell row={row} /> : null}
-      </span>
-      <span className={styles.check}>
-        <Checkbox
-          aria-label={t('library.selectDocument', { name, defaultValue: 'Select {{name}}' })}
-          isSelected={isSelected}
-          onChange={(next) => onToggle(row.id, next)}
-        />
-      </span>
-    </li>
+    <DocumentCard
+      title={name}
+      thumbnail={<DocumentThumbnail documentId={row.id} mimeType={row.mime_type} size="fill" lazy />}
+      meta={
+        <time dateTime={row.created_at} title={formatDateTime(row.created_at, lng)}>
+          {cardMeta(row, lng)}
+        </time>
+      }
+      status={<StatusCell row={row} />}
+      labels={row.labels.length > 0 ? <LabelsCell row={row} /> : undefined}
+      source={<SourceBadge row={row} name={sourceName} />}
+      flags={<ChangeTag id={row.id} />}
+      isChanged={isShownLit('document', row.id)}
+      onOpen={() => onOpen(row.id)}
+      isSelected={isSelected}
+      onSelectionChange={(next) => onToggle(row.id, next)}
+      selectLabel={t('library.selectDocument', { name, defaultValue: 'Select {{name}}' })}
+    />
   );
 }

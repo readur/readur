@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { markLit } from '../../board/litStore';
 import { currentUrl, lastListParams, renderLibrary, settle, useGrid } from './libraryTestUtils';
 import { DOCS, LABELS, doc, documentService, labelService, label, listResponse, setupLibraryMocks } from './serviceMocks';
+import { LIBRARY_OCR_POLL_MS } from '../useLibraryData';
 
 vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
 vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
@@ -61,14 +62,28 @@ describe('Library grid', () => {
     await waitFor(() => expect(currentUrl()).toBe('/documents?sort=file_size&order=desc'));
   });
 
-  test('a card names its source and shows status only when not indexed', async () => {
+  test('a card names its source and always shows its OCR status', async () => {
     renderLibrary();
     const lease = (await card(/lease\.pdf/)).closest('li') as HTMLElement;
     expect(await within(lease).findByText('Office NAS')).toBeInTheDocument();
     expect(within(lease).getByText(/failed/i)).toBeInTheDocument();
     const invoice = (await card(/invoice-march\.pdf/)).closest('li') as HTMLElement;
     expect(within(invoice).getByText('Upload')).toBeInTheDocument();
-    expect(within(invoice).queryByText(/indexed/i)).not.toBeInTheDocument();
+    expect(within(invoice).getByText('Indexed')).toBeInTheDocument();
+    const photo = (await card(/photo\.png/)).closest('li') as HTMLElement;
+    expect(within(photo).getByText('OCR 3/12')).toBeInTheDocument();
+    expect(photo.querySelector('[data-lead] svg')).not.toBeNull(); // the in-progress spinner
+  });
+
+  test('a card shows type and size, its first labels, and the source icon', async () => {
+    renderLibrary();
+    const invoice = (await card(/invoice-march\.pdf/)).closest('li') as HTMLElement;
+    expect(within(invoice).getByText(/^PDF · 2\.0 KB · /)).toBeInTheDocument();
+    expect(within(invoice).getByText('Tax')).toBeInTheDocument();
+    expect(within(invoice).getByText('Home')).toBeInTheDocument();
+    expect(within(invoice).queryByText('Work')).not.toBeInTheDocument();
+    expect(within(invoice).getByLabelText('1 more')).toHaveTextContent('+1');
+    expect(invoice.querySelector('[data-tile] svg')).not.toBeNull();
   });
 
   test('a new document carries the New marker until opened', async () => {
@@ -153,5 +168,32 @@ describe('Collection page', () => {
     labelService.list.mockResolvedValue({ data: [...LABELS, label('l-new', 'Knee')] });
     window.dispatchEvent(new CustomEvent('readur:labels-changed'));
     expect(await screen.findByRole('heading', { level: 1, name: 'Knee' })).toBeInTheDocument();
+  });
+});
+
+describe('OCR progress', () => {
+  beforeEach(() => {
+    setupLibraryMocks();
+    useGrid();
+  });
+
+  test('refreshes quietly while a document is still in OCR, and stops once none is', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderLibrary();
+      await card(/photo\.png/);
+      const calls = documentService.listFiltered.mock.calls.length;
+      documentService.listFiltered.mockResolvedValue(
+        listResponse([doc('d3', 'photo.png', { mime_type: 'image/png', ocr_status: 'completed' })]),
+      );
+      await vi.advanceTimersByTimeAsync(LIBRARY_OCR_POLL_MS);
+      await waitFor(() => expect(documentService.listFiltered.mock.calls.length).toBe(calls + 1));
+      expect(screen.queryByRole('status', { name: 'Loading documents' })).not.toBeInTheDocument();
+      expect(await screen.findByText('Indexed')).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(LIBRARY_OCR_POLL_MS * 2);
+      expect(documentService.listFiltered.mock.calls.length).toBe(calls + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

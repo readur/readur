@@ -96,6 +96,7 @@ describe('Needs attention: low confidence', () => {
               documents: [
                 { id: 'd1', filename: 'a.pdf', file_size: 1024, ocr_confidence: 12.34, ocr_status: 'completed', created_at: '2026-01-01T00:00:00Z' },
                 { id: 'd2', filename: 'b.pdf', file_size: 0, ocr_confidence: null, ocr_status: 'failed', created_at: '2026-01-01T00:00:00Z' },
+                { id: 'd3', filename: 'c.pdf', file_size: 0, ocr_confidence: 20, ocr_status: 'processing', created_at: '2026-01-01T00:00:00Z' },
               ],
             }
           : { message: 'Deleted 2 documents', matched_count: 2, deleted_count: 2 },
@@ -111,6 +112,7 @@ describe('Needs attention: low confidence', () => {
     const results = await screen.findByRole('grid', { name: 'Preview results' });
     expect(within(results).getByRole('row', { name: /a\.pdf/ })).toHaveTextContent('12.3%');
     expect(within(results).getByRole('row', { name: /b\.pdf/ })).toHaveTextContent('n/a');
+    expect(within(results).getByRole('row', { name: /c\.pdf/ })).toHaveTextContent('OCR');
     await user.click(screen.getByRole('button', { name: 'Delete matches' }));
     const confirm = screen.getByRole('alertdialog', { name: 'Delete 2 documents below 45%?' });
     await user.click(within(confirm).getByRole('button', { name: 'Delete documents' }));
