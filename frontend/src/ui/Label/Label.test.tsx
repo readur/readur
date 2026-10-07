@@ -38,4 +38,9 @@ describe('LabelChip', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove Taxes' }));
     expect(onRemove).toHaveBeenCalled();
   });
+
+  it('ignores an invalid colour so the neutral dot shows', () => {
+    const { container } = render(<LabelChip name="Odd" color="notacolor" dataId="l3" />);
+    expect((container.querySelector('[data-label="l3"]') as HTMLElement).style.getPropertyValue('--label-color')).toBe('');
+  });
 });

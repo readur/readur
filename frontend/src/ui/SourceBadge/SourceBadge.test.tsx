@@ -29,4 +29,12 @@ describe('SourceBadge', () => {
     const tile = container.querySelector('[data-tile]') as HTMLElement;
     expect(root.className.split(' ')).not.toContain(tile.className);
   });
+
+  it('understands the backend type names for uploads and the watch folder', () => {
+    const { container, rerender } = render(<SourceBadge sourceId={null} kind="upload" type="direct_upload" name="Upload" showType />);
+    expect(container.querySelector('[data-tile] svg.lucide-upload')).not.toBeNull();
+    expect(screen.getByText('Upload', { selector: '[class*="type"]' })).toBeInTheDocument();
+    rerender(<SourceBadge sourceId={null} kind="watch" type="watch_folder" name="Watch folder" />);
+    expect(container.querySelector('[data-tile] svg.lucide-folder-search')).not.toBeNull();
+  });
 });

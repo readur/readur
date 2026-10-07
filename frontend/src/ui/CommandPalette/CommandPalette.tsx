@@ -139,7 +139,7 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
               </Menu>
             </Autocomplete>
             {hasPreview ? (
-              <aside className={styles.preview} aria-live="polite">
+              <aside className={styles.preview}>
                 {active?.preview ?? null}
               </aside>
             ) : null}

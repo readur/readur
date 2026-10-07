@@ -236,6 +236,8 @@ describe('CommandPalette preview', () => {
     await user.keyboard('lease');
     await screen.findByRole('menuitem', { name: 'Lease.pdf' });
     expect(await screen.findByText('the tenant agrees')).toBeInTheDocument();
+    // Supplementary: arrowing through results must not read the OCR snippet aloud each time.
+    expect(screen.getByText('the tenant agrees').closest('[aria-live]')).toBeNull();
     await user.keyboard('{ArrowDown}');
     expect(await screen.findByText('renewal terms')).toBeInTheDocument();
     expect(screen.queryByText('the tenant agrees')).not.toBeInTheDocument();

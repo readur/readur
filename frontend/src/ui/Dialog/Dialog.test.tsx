@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -80,5 +82,13 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog', { name: 'Retry OCR for 3 documents' })).toBeInTheDocument();
     expect(screen.getByTestId('dialog-icon').closest('[data-icon-tile]')).not.toBeNull();
     expect(screen.getByRole('link', { name: 'What does this do?' })).toBeInTheDocument();
+  });
+});
+
+describe('Dialog layout', () => {
+  it('keeps a top-anchored dialog (and its footer) inside the viewport', () => {
+    const css = readFileSync(resolve(__dirname, 'Dialog.module.css'), 'utf8');
+    const modal = css.match(/\.modal\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(modal).toMatch(/max-height:\s*calc\(100dvh - min\(10vh, 96px\) - var\(--s-4\)\)/);
   });
 });

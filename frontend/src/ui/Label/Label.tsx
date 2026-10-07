@@ -6,7 +6,7 @@ import styles from './Label.module.css';
 
 export interface LabelChipProps {
   name: string;
-  /** Any CSS colour for the dot; omit for a neutral dot. */
+  /** Any CSS colour for the dot; omitted or invalid values give a neutral dot. */
   color?: string;
   icon?: ReactNode;
   /** Shown as `(n)` after the name when above zero. */
@@ -22,6 +22,16 @@ export interface LabelChipProps {
   className?: string;
   /** Rendered as `data-label` so callers can find the chip for a label id. */
   dataId?: string;
+}
+
+const HEX = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** True for a value the browser accepts as a colour (hex only where CSS.supports is unavailable). */
+function isColor(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function') return CSS.supports('color', v);
+  return HEX.test(v);
 }
 
 /**
@@ -42,7 +52,8 @@ export function LabelChip({
   className,
   dataId,
 }: LabelChipProps) {
-  const style = color ? ({ '--label-color': color } as CSSProperties) : undefined;
+  // An invalid value would make the custom property invalid and hide the dot, so fall back to neutral.
+  const style = color && isColor(color) ? ({ '--label-color': color.trim() } as CSSProperties) : undefined;
   const content: ReactNode = (
     <>
       <span className={styles.swatch} data-swatch="" aria-hidden="true" />

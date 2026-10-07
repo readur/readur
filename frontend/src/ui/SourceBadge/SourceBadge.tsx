@@ -4,7 +4,7 @@ import { sourceHue, type SourceKind } from '../../lib/sourceColor';
 import { cx } from '../shared/FieldParts';
 import styles from './SourceBadge.module.css';
 
-export type SourceType = 'webdav' | 's3' | 'local' | 'local_folder' | 'upload' | 'watch';
+export type SourceType = 'webdav' | 's3' | 'local' | 'local_folder' | 'upload' | 'direct_upload' | 'watch' | 'watch_folder';
 
 const ICON: Record<string, typeof Cloud> = {
   webdav: Cloud,
@@ -12,7 +12,9 @@ const ICON: Record<string, typeof Cloud> = {
   local: Folder,
   local_folder: Folder,
   upload: Upload,
+  direct_upload: Upload,
   watch: FolderSearch,
+  watch_folder: FolderSearch,
 };
 const TYPE_LABEL: Record<string, string> = {
   webdav: 'WebDAV',
@@ -20,7 +22,9 @@ const TYPE_LABEL: Record<string, string> = {
   local: 'Local',
   local_folder: 'Local',
   upload: 'Upload',
+  direct_upload: 'Upload',
   watch: 'Watch',
+  watch_folder: 'Watch',
 };
 
 export interface SourceBadgeProps {

@@ -12,7 +12,7 @@
 .modal {
   box-sizing: border-box;
   width: 100%;
-  max-height: calc(100vh - var(--s-6));
+  max-height: calc(100dvh - min(10vh, 96px) - var(--s-4));
   display: flex;
   flex-direction: column;
   background: var(--surface-2);
