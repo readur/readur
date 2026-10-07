@@ -163,11 +163,11 @@ describe('Needs attention: duplicates', () => {
     expect(screen.getByText(/^1 groups? of identical files$/)).toBeInTheDocument();
     await user.click(within(copy).getByRole('button', { name: 'Download invoice (1).pdf' }));
     expect(documentService.downloadFile).toHaveBeenCalledWith('d2', 'invoice-copy.pdf');
-    // View opens the document page (a bare /api URL would carry no sign-in and fail).
+    // View opens the document drawer over this page (a bare /api URL would carry no sign-in and fail).
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     await user.click(within(copy).getByRole('button', { name: 'View invoice (1).pdf' }));
     expect(open).not.toHaveBeenCalled();
-    expect(location()).toBe('/documents/d2');
+    expect(location()).toMatch(/^\/intake\?.*view=duplicates.*&document=d2$/);
     open.mockRestore();
   });
 

@@ -182,7 +182,7 @@ describe('command palette', () => {
     const doc = await screen.findByRole('menuitem', { name: /Invoice March\.pdf/ });
     expect(mockedSearch).toHaveBeenCalledWith(expect.objectContaining({ query: 'invoice', limit: 8 }));
     await user.click(doc);
-    expect(location()).toHaveTextContent('/documents/d1');
+    expect(location()).toHaveTextContent('/home?document=d1');
     expect(JSON.parse(storage.getItem('recentSearches') ?? '[]')).toEqual(['invoice']);
   });
 

@@ -250,7 +250,7 @@ describe('Add documents: upload board', () => {
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
     await waitFor(() => expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveAttribute('data-changed', 'true'));
     await user.click(within(grid).getByRole('rowheader', { name: /a\.pdf/ }));
-    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/documents/doc-9');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/intake?document=doc-9');
   });
 
   it('offers the OCR language and label pickers', async () => {

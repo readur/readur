@@ -16,6 +16,7 @@ import { ChangedTag, Region, RegionError } from './Region';
 import { documentLane, type LaneKind } from './sourceTint';
 import { docName, type BoardDocument } from './types';
 import { useResource } from './useResource';
+import { useDocumentDrawer } from '../document/drawer/DocumentDrawerContext';
 import styles from './Home.module.css';
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -53,6 +54,7 @@ function CardLabels({ doc }: { doc: BoardDocument }) {
 
 function ArrivedCard({ doc, sourceName, now }: { doc: BoardDocument; sourceName: string; now: number }) {
   const { i18n } = useTranslation();
+  const drawer = useDocumentDrawer();
   const lane = documentLane(doc);
   const shown = useShownLit('document', doc.id);
   // Part of a pending bulk import: new with the summary, though not flagged on its own.
@@ -70,7 +72,8 @@ function ArrivedCard({ doc, sourceName, now }: { doc: BoardDocument; sourceName:
   return (
     <DocumentCard
       title={docName(doc)}
-      href={`/documents/${doc.id}`}
+      href={drawer.href(doc.id)}
+      routerOptions={{ state: drawer.linkState }}
       onOpen={() => acknowledge('document', doc.id)}
       thumbnail={<DocumentThumbnail documentId={doc.id} mimeType={doc.mime_type ?? ''} size="fill" lazy />}
       meta={meta}

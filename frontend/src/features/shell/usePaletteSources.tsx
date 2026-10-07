@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentDrawer } from '../document/drawer/DocumentDrawerContext';
 import { useTranslation } from 'react-i18next';
 import type { CommandItem, CommandSource } from '../../ui';
 import { Description, History, Search } from '../../ui/icons';
@@ -18,6 +19,10 @@ const searchPath = (q: string) => `/search?q=${encodeURIComponent(q)}`;
 export function usePaletteSources(): CommandSource[] {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // Read at selection time: the drawer opens over whatever page is showing by then.
+  const openDrawer = useDocumentDrawer();
+  const drawer = useRef(openDrawer);
+  drawer.current = openDrawer;
 
   return useMemo<CommandSource[]>(() => {
     const intakeTitle = t('shell.nav.intake', 'Intake');
@@ -90,7 +95,7 @@ export function usePaletteSources(): CommandSource[] {
             icon: <Description fontSize="inherit" />,
             onSelect: () => {
               saveRecentSearch(query);
-              navigate(`/documents/${doc.id}`);
+              drawer.current.open(doc.id);
             },
           }));
         } catch {

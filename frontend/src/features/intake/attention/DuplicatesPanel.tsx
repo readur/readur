@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, EmptyState, Pagination, useToast, type BoardColumn } from '../../../ui';
 import { documentService } from '../../../services/api';
 import { formatBytes, formatDateTime, shortHash } from '../shared/format';
 import { Notice, sharedStyles } from '../shared/parts';
 import { useLoader } from '../shared/useLoader';
+import { useDocumentDrawer } from '../../document/drawer/DocumentDrawerContext';
+import { DOCUMENTS_CHANGED_EVENT } from '../../shell/useDocumentTotal';
 
 export const DUPLICATES_PAGE_SIZE = 25;
 
@@ -42,7 +43,7 @@ interface DuplicateRow {
 /** Documents with identical content, one row per file, grouped by content hash. */
 export function DuplicatesPanel() {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
+  const drawer = useDocumentDrawer();
   const toast = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DUPLICATES_PAGE_SIZE);
@@ -50,6 +51,14 @@ export function DuplicatesPanel() {
     async () => (await documentService.getDuplicates(pageSize, (page - 1) * pageSize)).data as DuplicatesResponse,
     [page, pageSize],
   );
+
+  // A document deleted from the drawer leaves its group.
+  const { reload } = result;
+  useEffect(() => {
+    const onChanged = () => void reload();
+    window.addEventListener(DOCUMENTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(DOCUMENTS_CHANGED_EVENT, onChanged);
+  }, [reload]);
 
   const groups = result.data?.duplicates ?? [];
   const rows = useMemo<DuplicateRow[]>(
@@ -95,7 +104,7 @@ export function DuplicatesPanel() {
             size="sm"
             variant="ghost"
             aria-label={t('intake.duplicates.viewFile', 'View {{name}}', { name: r.doc.filename })}
-            onPress={() => navigate(`/documents/${r.doc.id}`)}
+            onPress={() => drawer.open(r.doc.id)}
           >
             {t('intake.duplicates.view', 'View')}
           </Button>
@@ -137,7 +146,7 @@ export function DuplicatesPanel() {
           getRowId={(r) => r.key}
           onRowAction={(key) => {
             const row = rows.find((r) => r.key === key);
-            if (row) navigate(`/documents/${row.doc.id}`);
+            if (row) drawer.open(row.doc.id);
           }}
           renderRowDetail={(r) =>
             r.doc.original_filename && r.doc.original_filename !== r.doc.filename

@@ -181,12 +181,12 @@ describe('DebugSection', () => {
     });
     await waitFor(() => expect(apiMock.get).toHaveBeenCalledWith('/documents/new-doc/debug'));
     expect(await screen.findByRole('tab', { name: 'Debug Results' })).toHaveAttribute('aria-selected', 'true');
-    // View Document opens the document page (a bare /api URL would carry no sign-in and fail).
+    // View Document opens the document drawer (a bare /api URL would carry no sign-in and fail).
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     await user.click(screen.getByRole('tab', { name: 'Upload & Debug' }));
     await user.click(await screen.findByRole('button', { name: 'View Document' }));
     expect(open).not.toHaveBeenCalled();
-    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/documents/new-doc');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/settings/debug?document=new-doc');
     open.mockRestore();
   });
 });

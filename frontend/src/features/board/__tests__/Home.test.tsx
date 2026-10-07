@@ -403,7 +403,7 @@ describe('Home', () => {
       expect(within(card('d1.pdf')).getByText(/^PDF · 2\.0 KB · .*(5 min|5m)/)).toBeInTheDocument();
       expect(within(card('d1.pdf')).getByText('Indexed')).toBeInTheDocument();
       expect(card('d1.pdf').querySelector('[data-tile] svg')).not.toBeNull();
-      expect(within(card('d1.pdf')).getByRole('link')).toHaveAttribute('href', '/documents/d1');
+      expect(within(card('d1.pdf')).getByRole('link')).toHaveAttribute('href', '/home?document=d1');
       expect(m.documentService.listWithPagination).toHaveBeenCalledWith(12, 0);
     });
 
@@ -457,7 +457,7 @@ describe('Home', () => {
       expect(within(card('d1.pdf')).getByText('New')).toBeInTheDocument();
       expect(within(card('d2.pdf')).queryByText('New')).not.toBeInTheDocument();
       await user.click(within(card('d1.pdf')).getByRole('link'));
-      expect(loc()).toBe('/documents/d1');
+      expect(loc()).toBe('/home?document=d1');
       expect(isLit('document', 'd1')).toBe(false);
     });
 
