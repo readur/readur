@@ -25,5 +25,8 @@ export * from './BoardTable';
 export * from './SlideOver';
 export * from './CommandPalette';
 export * from './BulkActionBar';
+export * from './Spinner';
+export * from './Card';
+export * from './Avatar';
 export * from './motion';
 export { focusPageHeading } from './shared/focusPageHeading';
