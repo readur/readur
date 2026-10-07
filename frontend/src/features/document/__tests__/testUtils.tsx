@@ -8,6 +8,8 @@ import { createResponsiveMatchMediaMock } from '../../../test/pwa-test-utils';
 import { ToastProvider } from '../../../ui';
 import type { UserRole } from '../../../types/generated';
 import { DocumentPage } from '../DocumentPage';
+import { DocumentDrawerProvider, useRegisterDocumentList, type DocumentListProvider } from '../drawer/DocumentDrawerContext';
+import { DocumentDrawerHost } from '../drawer/DocumentDrawerHost';
 
 export const makeDocument = (overrides: Partial<Document> = {}): Document => ({
   id: 'doc-1',
@@ -108,6 +110,35 @@ export function renderPage({ path = '/documents/doc-1', state, user = testUser }
           <Route path="/documents/:id" element={<DocumentPage />} />
           <Route path="/documents" element={<LocationProbe />} />
         </Routes>
+      </MemoryRouter>
+    </Providers>,
+  );
+}
+
+function ListPage({ list }: { list?: DocumentListProvider }) {
+  useRegisterDocumentList(list ?? null);
+  return <LocationProbe />;
+}
+
+export interface RenderDrawerOptions {
+  /** The page URL with the drawer open on it. */
+  path?: string;
+  /** What the page under the drawer registers (its rows, for ↑/↓ and row updates). */
+  list?: DocumentListProvider;
+  user?: typeof testUser | null;
+}
+
+/** The document drawer over a stand-in page at `path` (default `/documents?document=doc-1`). */
+export function renderDrawer({ path = '/documents?document=doc-1', list, user = testUser }: RenderDrawerOptions = {}) {
+  return render(
+    <Providers user={user}>
+      <MemoryRouter initialEntries={[path]}>
+        <DocumentDrawerProvider>
+          <Routes>
+            <Route path="*" element={<ListPage list={list} />} />
+          </Routes>
+          <DocumentDrawerHost />
+        </DocumentDrawerProvider>
       </MemoryRouter>
     </Providers>,
   );

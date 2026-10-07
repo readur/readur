@@ -2102,7 +2102,8 @@
       "placeholder": "Labels suchen oder erstellen…",
       "cancel": "Abbrechen",
       "save": "Labels speichern",
-      "add": "Label hinzufügen"
+      "add": "Label hinzufügen",
+      "done": "Fertig"
     },
     "type": {
       "image": "Bild",
@@ -2304,7 +2305,9 @@
       "preview": "Vorschau",
       "label": "Dokumentansichten",
       "text": "Text",
-      "details": "Details"
+      "details": "Details",
+      "comments": "Kommentare",
+      "links": "Freigabelinks"
     },
     "meta": {
       "pages_one": "{{count}} Seite",
@@ -2317,6 +2320,12 @@
       "document": "Dokument",
       "split": "Nebeneinander",
       "text": "Text"
+    },
+    "drawer": {
+      "title": "Dokument",
+      "close": "Schließen",
+      "preview": "Vorschau",
+      "tabs": "Zu diesem Dokument"
     }
   },
   "library": {

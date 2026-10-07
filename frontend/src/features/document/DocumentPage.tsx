@@ -37,11 +37,6 @@ function useLibraryHref(query: string): string {
   return query ? `/documents?q=${encodeURIComponent(query)}` : '/documents';
 }
 
-/** Tells the sidebar and anything else listing labels that their counts moved. */
-function announceLabelsChanged() {
-  window.dispatchEvent(new CustomEvent('readur:labels-changed'));
-}
-
 /** /documents/:id: read one document, its text, or both side by side. */
 export function DocumentPage() {
   const { t } = useTranslation();
@@ -164,23 +159,14 @@ export function DocumentPage() {
   const saveLabels = async () => {
     if (!draftLabels) return;
     setSavingLabels(true);
-    try {
-      await labels.save(draftLabels);
-      setDraftLabels(null);
-      announceLabelsChanged();
-    } catch {
-      toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
-    } finally {
-      setSavingLabels(false);
-    }
+    if (await labels.save(draftLabels)) setDraftLabels(null);
+    else toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
+    setSavingLabels(false);
   };
 
   // Removing from a chip saves at once; on failure the chip simply stays (state updates on success only).
   const removeLabel = async (labelId: string) => {
-    try {
-      await labels.save(labels.labels.filter((l) => l.id !== labelId));
-      announceLabelsChanged();
-    } catch {
+    if (!(await labels.save(labels.labels.filter((l) => l.id !== labelId)))) {
       toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
     }
   };

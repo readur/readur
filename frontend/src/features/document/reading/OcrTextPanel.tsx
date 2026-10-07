@@ -143,6 +143,7 @@ export function OcrTextPanel({ document, ocr, ocrState: loadState, failure, init
           tabIndex={0}
           aria-label={t('document.text.body', 'Extracted text')}
           className={styles.scroller}
+          data-own-arrows=""
         >
           <article className={mono ? `${styles.prose} ${styles.mono}` : styles.prose}>
             {paragraphs.map((paragraph, p) => (

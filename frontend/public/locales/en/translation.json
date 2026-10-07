@@ -2102,7 +2102,8 @@
       "placeholder": "Search or create labels…",
       "cancel": "Cancel",
       "save": "Save labels",
-      "add": "Add label"
+      "add": "Add label",
+      "done": "Done"
     },
     "type": {
       "image": "Image",
@@ -2304,7 +2305,9 @@
       "preview": "Preview",
       "label": "Document views",
       "text": "Text",
-      "details": "Details"
+      "details": "Details",
+      "comments": "Comments",
+      "links": "Share links"
     },
     "meta": {
       "pages_one": "{{count}} page",
@@ -2317,6 +2320,12 @@
       "document": "Document",
       "split": "Side by side",
       "text": "Text"
+    },
+    "drawer": {
+      "title": "Document",
+      "close": "Close",
+      "preview": "Preview",
+      "tabs": "About this document"
     }
   },
   "library": {

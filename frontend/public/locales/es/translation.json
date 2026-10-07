@@ -2102,7 +2102,8 @@
       "placeholder": "Buscar o crear etiquetas…",
       "cancel": "Cancelar",
       "save": "Guardar etiquetas",
-      "add": "Añadir etiqueta"
+      "add": "Añadir etiqueta",
+      "done": "Listo"
     },
     "type": {
       "image": "Imagen",
@@ -2304,7 +2305,9 @@
       "preview": "Vista previa",
       "label": "Vistas del documento",
       "text": "Texto",
-      "details": "Detalles"
+      "details": "Detalles",
+      "comments": "Comentarios",
+      "links": "Enlaces compartidos"
     },
     "meta": {
       "pages_one": "{{count}} página",
@@ -2317,6 +2320,12 @@
       "document": "Documento",
       "split": "En paralelo",
       "text": "Texto"
+    },
+    "drawer": {
+      "title": "Documento",
+      "close": "Cerrar",
+      "preview": "Vista previa",
+      "tabs": "Sobre este documento"
     }
   },
   "library": {

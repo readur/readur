@@ -17,6 +17,7 @@ export function createApiMock() {
       download: vi.fn(),
       delete: vi.fn(),
       bulkRetryOcr: vi.fn(),
+      retryOcr: vi.fn(),
       getProcessedImage: vi.fn(),
       getThumbnail: vi.fn(),
       getDocumentRetryHistory: vi.fn(),
@@ -34,6 +35,12 @@ export function createApiMock() {
       listAll: vi.fn(),
       listByDocument: vi.fn(),
       revoke: vi.fn(),
+    },
+    labelService: {
+      list: vi.fn(),
+      create: vi.fn(),
+      getDocumentLabels: vi.fn(),
+      setDocumentLabels: vi.fn(),
     },
     sourcesService: {
       list: vi.fn(),
@@ -60,6 +67,9 @@ export function primeApi(m: ApiMock) {
     data: { document_id: 'doc-1', retry_history: [], total_retries: 0 },
   });
   m.commentsService.list.mockResolvedValue({ data: [] });
+  m.labelService.list.mockResolvedValue({ data: [] });
+  m.labelService.getDocumentLabels.mockResolvedValue({ data: [] });
+  m.labelService.setDocumentLabels.mockResolvedValue({ data: {} });
   m.sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
   m.sourcesService.list.mockResolvedValue({ data: [] });
   window.localStorage.clear();

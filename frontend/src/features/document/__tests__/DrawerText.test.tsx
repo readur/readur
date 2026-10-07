@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiModule from '../../../services/api';
 import { POLL_INTERVAL_MS } from '../hooks/useDocument';
 import { primeApi, type ApiMock } from './mockApi';
-import { makeDocument, makeOcr, renderPage, setViewport, stubClipboard, stubObjectUrls } from './testUtils';
+import { makeDocument, makeOcr, renderDrawer, stubClipboard, stubObjectUrls } from './testUtils';
 
 vi.mock('../../../services/api', async () => (await import('./mockApi')).createApiMock());
 vi.mock('../../board/litStore', () => ({ acknowledge: vi.fn() }));
@@ -18,12 +18,11 @@ function load(doc = makeDocument(), ocr = makeOcr()) {
   m.documentService.getOcrText.mockResolvedValue({ data: ocr });
 }
 
-const title = () => screen.findByRole('heading', { level: 1, name: 'invoice.pdf' });
+const title = () => screen.findByRole('dialog', { name: 'invoice.pdf' });
 const textSection = () => screen.getByRole('region', { name: 'Text' });
 const textBody = () => screen.findByRole('region', { name: 'Extracted text' });
 
 beforeEach(() => {
-  setViewport(true);
   stubObjectUrls();
   primeApi(m);
 });
@@ -31,7 +30,7 @@ beforeEach(() => {
 describe('extracted text: word count and stats', () => {
   it('shows a word count of 0', async () => {
     load(makeDocument({ ocr_word_count: 0 }), makeOcr({ ocr_word_count: 0, ocr_text: '' }));
-    renderPage();
+    renderDrawer();
     await title();
     await waitFor(() => expect(m.documentService.getOcrText).toHaveBeenCalled());
     expect(await within(textSection()).findByText(/(^|· )0 words/)).toBeInTheDocument();
@@ -39,7 +38,7 @@ describe('extracted text: word count and stats', () => {
 
   it('shows no word count when it is null', async () => {
     load(makeDocument({ ocr_word_count: undefined }), makeOcr({ ocr_word_count: null as unknown as number }));
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     expect(screen.queryByText(/\d+ words/i)).not.toBeInTheDocument();
@@ -49,7 +48,7 @@ describe('extracted text: word count and stats', () => {
     const ocr = makeOcr();
     delete ocr.ocr_word_count;
     load(makeDocument({ ocr_word_count: undefined }), ocr);
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     expect(screen.queryByText(/\d+ words/i)).not.toBeInTheDocument();
@@ -57,7 +56,7 @@ describe('extracted text: word count and stats', () => {
 
   it('shows confidence, words and processing time in one line', async () => {
     load();
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     const stats = within(textSection()).getByText(/confidence/);
@@ -68,14 +67,14 @@ describe('extracted text: word count and stats', () => {
 
   it('says so when OCR found no text', async () => {
     load(makeDocument(), makeOcr({ ocr_text: '' }));
-    renderPage();
+    renderDrawer();
     await title();
     expect(await within(textSection()).findByText('No text was found in this document.')).toBeInTheDocument();
   });
 
   it('shows the status while OCR is still pending', async () => {
     load(makeDocument({ ocr_status: 'pending', has_ocr_text: false }));
-    renderPage();
+    renderDrawer();
     await title();
     expect(within(textSection()).getByText('The text appears here when OCR finishes.')).toBeInTheDocument();
     expect(within(textSection()).getByText('Pending')).toBeInTheDocument();
@@ -86,7 +85,7 @@ describe('extracted text: word count and stats', () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();
     load();
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     await user.click(screen.getByRole('button', { name: 'Copy all text' }));
@@ -97,7 +96,7 @@ describe('extracted text: word count and stats', () => {
   it('switches to monospace from the display options and remembers it', async () => {
     const user = userEvent.setup();
     load();
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     await user.click(screen.getByRole('button', { name: 'Text display options' }));
@@ -117,7 +116,7 @@ describe('extracted text: reading layout', () => {
 
   it('turns runs of blank lines into single paragraph gaps and keeps line breaks', async () => {
     load(makeDocument(), makeOcr({ ocr_text: raw }));
-    renderPage();
+    renderDrawer();
     await title();
     const body = await textBody();
     const paragraphs = Array.from(body.querySelectorAll('p')).map((p) => p.textContent);
@@ -128,7 +127,7 @@ describe('extracted text: reading layout', () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();
     load(makeDocument(), makeOcr({ ocr_text: raw }));
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     await user.click(screen.getByRole('button', { name: 'Copy all text' }));
@@ -140,7 +139,7 @@ describe('extracted text: reading layout', () => {
     const writeText = stubClipboard();
     writeText.mockRejectedValue(new Error('denied'));
     load();
-    renderPage();
+    renderDrawer();
     await title();
     await textBody();
     await user.click(screen.getByRole('button', { name: 'Copy all text' }));
@@ -164,7 +163,7 @@ describe('extracted text: reading layout', () => {
         ],
       },
     });
-    renderPage();
+    renderDrawer();
     await title();
     const section = textSection();
     expect(await within(section).findByText('OCR took too long and was stopped')).toBeInTheDocument();
@@ -174,7 +173,7 @@ describe('extracted text: reading layout', () => {
   it('says so when the text could not be loaded', async () => {
     load();
     m.documentService.getOcrText.mockRejectedValue(new Error('down'));
-    renderPage();
+    renderDrawer();
     await title();
     expect(await within(textSection()).findByText("Couldn't load the extracted text.")).toBeInTheDocument();
   });
@@ -184,7 +183,7 @@ describe('extracted text: find', () => {
   it('highlights every match and reports the position', async () => {
     const user = userEvent.setup();
     load();
-    renderPage();
+    renderDrawer();
     await title();
     const body = await textBody();
     await user.type(screen.getByRole('searchbox', { name: 'Find in text' }), 'invoice');
@@ -209,7 +208,7 @@ describe('extracted text: find', () => {
   it('clears the find field with its clear button', async () => {
     const user = userEvent.setup();
     load();
-    renderPage();
+    renderDrawer();
     await title();
     const body = await textBody();
     const field = screen.getByRole('searchbox', { name: 'Find in text' });
@@ -222,7 +221,7 @@ describe('extracted text: find', () => {
 
   it('matches the words of a search one by one when the phrase is not in the text', async () => {
     load(makeDocument(), makeOcr({ ocr_text: 'Injury to the left shoulder. The shoulder healed.' }));
-    renderPage({ path: '/documents/doc-1?q=shoulder injury' });
+    renderDrawer({ path: '/search?q=shoulder injury&document=doc-1' });
     await title();
     const body = await textBody();
     expect(Array.from(body.querySelectorAll('mark')).map((mk) => mk.textContent)).toEqual([
@@ -236,7 +235,7 @@ describe('extracted text: find', () => {
   it('says when nothing matches', async () => {
     const user = userEvent.setup();
     load();
-    renderPage();
+    renderDrawer();
     await title();
     const body = await textBody();
     await user.type(screen.getByRole('searchbox', { name: 'Find in text' }), 'zebra');
@@ -248,7 +247,7 @@ describe('extracted text: find', () => {
   it('treats the search text literally', async () => {
     const user = userEvent.setup();
     load(makeDocument(), makeOcr({ ocr_text: 'Price (net): 5.00 / (gross) 6.00' }));
-    renderPage();
+    renderDrawer();
     await title();
     const body = await textBody();
     await user.type(screen.getByRole('searchbox', { name: 'Find in text' }), '(net)');
@@ -259,7 +258,7 @@ describe('extracted text: find', () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
     load();
-    renderPage({ path: '/documents/doc-1?q=total' });
+    renderDrawer({ path: '/search?q=total&document=doc-1' });
     await title();
     const body = await textBody();
     expect(screen.getByRole('searchbox', { name: 'Find in text' })).toHaveValue('total');
@@ -279,7 +278,7 @@ describe('document polling', () => {
   it.each(['pending', 'processing'])('re-reads the document every 10s while OCR is %s', async (status) => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     load(makeDocument({ ocr_status: status, has_ocr_text: false }));
-    renderPage();
+    renderDrawer();
     await waitFor(() => expect(m.documentService.getById).toHaveBeenCalledTimes(1));
     await act(async () => {
       vi.advanceTimersByTime(POLL_INTERVAL_MS - 100);
@@ -294,7 +293,7 @@ describe('document polling', () => {
   it('does not poll a completed document', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     load();
-    renderPage();
+    renderDrawer();
     await waitFor(() => expect(m.documentService.getById).toHaveBeenCalledTimes(1));
     await act(async () => {
       vi.advanceTimersByTime(POLL_INTERVAL_MS * 3);
@@ -308,7 +307,7 @@ describe('document polling', () => {
       .mockResolvedValueOnce({ data: makeDocument({ ocr_status: 'processing', has_ocr_text: false }) })
       .mockResolvedValue({ data: makeDocument() });
     m.documentService.getOcrText.mockResolvedValue({ data: makeOcr() });
-    renderPage();
+    renderDrawer();
     await title();
     expect(screen.getByRole('group', { name: 'Document summary' })).toHaveTextContent('OCR');
     await act(async () => {
