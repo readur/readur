@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button as RACButton, Dialog as RACDialog } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import { Close, ExpandMore } from '../icons';
+import { Check, Close, ExpandMore } from '../icons';
 import { Popover, PopoverTrigger } from '../Popover';
 import { cx } from '../shared/FieldParts';
 import styles from './FilterChip.module.css';
@@ -22,13 +22,18 @@ export interface FilterChipProps {
   className?: string;
 }
 
-/** Compact 28px filter trigger: condensed label, mono value, optional clear. */
+/** Compact 30px filter pill: label, mono value, optional clear; a check marks it active. */
 export function FilterChip({ label, value, isActive, onPress, onClear, popover, className }: FilterChipProps) {
   const { t } = useTranslation();
   const hasValue = value !== undefined && value !== null && value !== '';
 
   const trigger = (
     <RACButton className={styles.trigger} onPress={onPress} aria-pressed={popover ? undefined : isActive}>
+      {isActive ? (
+        <span className={styles.check} data-check="" aria-hidden="true">
+          <Check fontSize="inherit" />
+        </span>
+      ) : null}
       <span className={styles.label}>{label}</span>
       {hasValue ? (
         <>

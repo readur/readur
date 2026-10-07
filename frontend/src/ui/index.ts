@@ -23,6 +23,7 @@ export * from './SourceDot';
 export * from './StatusMark';
 export * from './Pass';
 export * from './FilterChip';
+export * from './Label';
 export * from './BoardTable';
 export * from './SlideOver';
 export * from './CommandPalette';

@@ -54,4 +54,11 @@ describe('FilterChip', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
   });
+
+  it('shows a check mark only while active', () => {
+    const { container, rerender } = render(<FilterChip label="Needs review" isActive onPress={() => {}} />);
+    expect(container.querySelector('[data-check]')).toHaveAttribute('aria-hidden', 'true');
+    rerender(<FilterChip label="Needs review" isActive={false} onPress={() => {}} />);
+    expect(container.querySelector('[data-check]')).toBeNull();
+  });
 });
