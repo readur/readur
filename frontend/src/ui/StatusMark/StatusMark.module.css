@@ -26,6 +26,8 @@
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 .word {
+  /* Room for descenders: the mark itself is line-height 1 and this clips its overflow. */
+  line-height: 1.3;
   font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
   overflow: hidden;

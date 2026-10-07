@@ -43,6 +43,17 @@
   overflow: hidden;
 }
 
+/* The preview fills the well down to its bottom edge, like a page standing in a tray. */
+.thumb > * {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-bottom: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  box-shadow: var(--shadow-1);
+}
+
 .card[data-changed] .thumb { box-shadow: inset 0 0 0 2px var(--new-fill); }
 
 .name {
