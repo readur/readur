@@ -21,6 +21,7 @@ vi.mock('../../features/library/SearchRoute', async () => ({ default: (await imp
 vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
 vi.mock('../../features/document/SharedRoute', async () => ({ default: (await import('./routeProbe')).probe('shared') }));
 vi.mock('../../features/intake', async () => ({ default: (await import('./routeProbe')).probe('intake') }));
+vi.mock('../../features/sources', async () => ({ default: (await import('./routeProbe')).probe('sources') }));
 vi.mock('../../features/settings', async () => ({ default: (await import('./routeProbe')).probe('settings') }));
 vi.mock('../../features/auth/LoginRoute', async () => ({ default: (await import('./routeProbe')).probe('login') }));
 vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
@@ -56,13 +57,14 @@ beforeEach(() => {
 describe('legacy redirects', () => {
   it('covers every old URL', () => {
     expect(LEGACY_ROUTES.map((r) => r.from).sort()).toEqual(
-      ['/', '/board', '/dashboard', '/upload', '/sources', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
+      ['/', '/board', '/dashboard', '/upload', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
     );
   });
 
   const expectedEntry: Record<string, string> = {
     '/home': 'home',
     '/intake': 'intake',
+    '/sources': 'sources',
     '/settings': 'settings',
     '/settings/labels': 'settings',
     '/settings/debug': 'settings',
@@ -106,7 +108,8 @@ describe('destinations', () => {
     ['/home', 'home'],
     ['/documents', 'library'],
     ['/search?q=tax', 'search'],
-    ['/intake?section=watch', 'intake'],
+    ['/intake?section=upload', 'intake'],
+    ['/sources?section=watch', 'sources'],
     ['/settings', 'settings'],
   ])('%s loads the %s entry inside the shell', async (path, name) => {
     renderAt(path);

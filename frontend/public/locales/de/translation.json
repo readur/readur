@@ -1877,7 +1877,8 @@
       "intake": "Eingang",
       "settings": "Einstellungen",
       "home": "Start",
-      "search": "Suche"
+      "search": "Suche",
+      "sources": "Quellen"
     },
     "search": {
       "open": "Dokumente durchsuchen",
@@ -3339,6 +3340,18 @@
       "idle": "nichts in der Warteschlange",
       "busy": "{{processing}} in Verarbeitung · {{pending}} wartend",
       "pending": "{{pending}} wartend"
+    }
+  },
+  "sourcesPage": {
+    "title": "Quellen",
+    "sections": {
+      "connections": "Verbindungen",
+      "watch": "Überwachter Ordner",
+      "label": "Quellbereiche"
+    },
+    "meta": {
+      "connections_one": "{{count}} Verbindung",
+      "connections_other": "{{count}} Verbindungen"
     }
   }
 }

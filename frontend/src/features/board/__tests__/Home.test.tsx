@@ -183,7 +183,7 @@ describe('Home', () => {
       expect(within(uploads).getByText('Healthy')).toBeInTheDocument();
 
       const watch = laneItem('Watch folder');
-      expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/intake?section=watch');
+      expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/sources?section=watch');
       expect(within(watch).getByText('Nothing yet')).toBeInTheDocument();
       expect(within(watch).getByRole('img', { name: 'Nothing in the last 14 days' })).toBeInTheDocument();
       // A lane that never received anything is idle, not healthy; its kind is not repeated under its name.
@@ -196,7 +196,7 @@ describe('Home', () => {
       const scanner = laneItem('Scanner inbox');
       expect(within(scanner).getByRole('link', { name: 'Scanner inbox' })).toHaveAttribute(
         'href',
-        '/intake?section=connections&source=s1',
+        '/sources?section=connections&source=s1',
       );
       expect(within(scanner).getByText('Local folder')).toBeInTheDocument();
       expect(within(scanner).getByText('Quiet')).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe('Home', () => {
       expect(shown.map((a) => a.textContent)).toEqual(['Active 5', 'Active 4', 'Active 3', 'Active 2', 'Broken share']);
       expect(within(region('Coming in')).getByRole('link', { name: /^192 more sources/ })).toHaveAttribute(
         'href',
-        '/intake?section=connections',
+        '/sources?section=connections',
       );
       expect(within(region('Coming in')).getByRole('link', { name: 'Manage sources' })).toBeInTheDocument();
       expect(within(region('Coming in')).queryByText('Idle 0')).not.toBeInTheDocument();

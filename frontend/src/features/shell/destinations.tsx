@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Download, Home, LibraryIcon, Search, Settings } from '../../ui/icons';
+import { Cloud, Download, Home, LibraryIcon, Search, Settings } from '../../ui/icons';
 
-export type DestinationId = 'home' | 'search' | 'library' | 'intake' | 'settings';
+export type DestinationId = 'home' | 'search' | 'library' | 'intake' | 'sources' | 'settings';
 
 export interface Destination {
   id: DestinationId;
@@ -56,6 +56,15 @@ export const DESTINATIONS: readonly Destination[] = [
     inTabBar: true,
   },
   {
+    id: 'sources',
+    labelKey: 'shell.nav.sources',
+    fallback: 'Sources',
+    path: '/sources',
+    icon: <Cloud fontSize="inherit" />,
+    matches: ['/sources'],
+    inTabBar: false,
+  },
+  {
     id: 'settings',
     labelKey: 'shell.nav.settings',
     fallback: 'Settings',
@@ -82,10 +91,13 @@ export interface SectionLink {
 
 export const INTAKE_SECTIONS: readonly SectionLink[] = [
   { id: 'upload', labelKey: 'shell.intake.upload', fallback: 'Upload', path: '/intake?section=upload' },
-  { id: 'connections', labelKey: 'shell.intake.connections', fallback: 'Connections', path: '/intake?section=connections' },
-  { id: 'watch', labelKey: 'shell.intake.watch', fallback: 'Watch folder', path: '/intake?section=watch' },
   { id: 'attention', labelKey: 'shell.intake.attention', fallback: 'Needs attention', path: '/intake?section=attention' },
   { id: 'ignored', labelKey: 'shell.intake.ignored', fallback: 'Ignored files', path: '/intake?section=ignored' },
+];
+
+export const SOURCES_SECTIONS: readonly SectionLink[] = [
+  { id: 'connections', labelKey: 'shell.intake.connections', fallback: 'Connections', path: '/sources?section=connections' },
+  { id: 'watch', labelKey: 'shell.intake.watch', fallback: 'Watch folder', path: '/sources?section=watch' },
 ];
 
 export const SETTINGS_SECTIONS: readonly SectionLink[] = [

@@ -104,15 +104,15 @@ export function sourceHealth(
 
 const HEALTH_FALLBACK: Record<Health, string> = { syncing: 'Syncing', error: 'Error', check: 'Check', off: 'Off' };
 
-export const sourcePath = (id: string) => `/intake?section=connections&source=${encodeURIComponent(id)}`;
+export const sourcePath = (id: string) => `/sources?section=connections&source=${encodeURIComponent(id)}`;
 
 /** Uploads, the watch folder and every configured source, each in its own colour. */
 export function SourcesList({ sources, aside }: { sources: SourceResponse[] | null; aside?: ReactNode }) {
   const { t } = useTranslation();
   const { pathname, search } = useLocation();
-  const params = pathname === '/intake' ? new URLSearchParams(search) : null;
-  const section = params?.get('section');
-  const currentSource = section === 'connections' ? params?.get('source') : null;
+  const params = pathname === '/intake' || pathname === '/sources' ? new URLSearchParams(search) : null;
+  const section = params?.get('section') ?? (pathname === '/sources' ? 'connections' : null);
+  const currentSource = pathname === '/sources' && section === 'connections' ? params?.get('source') : null;
   const sorted = (sources ?? [])
     .filter((s) => typeof s?.id === 'string' && typeof s.name === 'string')
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -121,13 +121,13 @@ export function SourcesList({ sources, aside }: { sources: SourceResponse[] | nu
     <SidebarList title={t('shell.sources.title', 'Sources')} aside={aside}>
       <SidebarItem
         to="/intake?section=upload"
-        isCurrent={section === 'upload'}
+        isCurrent={pathname === '/intake' && section === 'upload'}
         name={t('shell.sources.uploads', 'Uploads')}
         mark={<SourceDot sourceId={null} kind="upload" size="sm" />}
       />
       <SidebarItem
-        to="/intake?section=watch"
-        isCurrent={section === 'watch'}
+        to="/sources?section=watch"
+        isCurrent={pathname === '/sources' && section === 'watch'}
         name={t('shell.sources.watch', 'Watch folder')}
         mark={<SourceDot sourceId={null} kind="watch" size="sm" />}
       />

@@ -50,7 +50,7 @@ test.describe('Navigation', () => {
 
     const sources = page.getByRole('navigation', { name: 'Sources' });
     await sources.getByRole('link', { name: 'Watch folder' }).click();
-    await expect(page).toHaveURL(/\/intake\?section=watch/);
+    await expect(page).toHaveURL(/\/sources\?section=watch/);
     await expect(sources.getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page');
     await sources.getByRole('link', { name: 'Uploads' }).click();
     await expect(page).toHaveURL(/\/intake\?section=upload/);

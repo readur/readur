@@ -1877,7 +1877,8 @@
       "intake": "Entrada",
       "settings": "Configuración",
       "home": "Inicio",
-      "search": "Buscar"
+      "search": "Buscar",
+      "sources": "Fuentes"
     },
     "search": {
       "open": "Buscar documentos",
@@ -3339,6 +3340,18 @@
       "idle": "nada en espera",
       "busy": "{{processing}} procesando · {{pending}} en espera",
       "pending": "{{pending}} en espera"
+    }
+  },
+  "sourcesPage": {
+    "title": "Fuentes",
+    "sections": {
+      "connections": "Conexiones",
+      "watch": "Carpeta vigilada",
+      "label": "Secciones de fuentes"
+    },
+    "meta": {
+      "connections_one": "{{count}} conexión",
+      "connections_other": "{{count}} conexiones"
     }
   }
 }

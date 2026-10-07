@@ -209,9 +209,13 @@ export class TestHelpers {
     await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
   }
 
+  /** Connections and the watch folder live on the Sources page; the rest in Intake. */
   async openIntake(section: IntakeSection) {
-    await this.page.goto(`/intake?section=${section}`);
-    await expect(this.page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible({ timeout: 15000 });
+    const onSources = section === 'connections' || section === 'watch';
+    await this.page.goto(`${onSources ? '/sources' : '/intake'}?section=${section}`);
+    await expect(this.page.getByRole('heading', { level: 1, name: onSources ? 'Sources' : 'Intake' })).toBeVisible({
+      timeout: 15000,
+    });
   }
 
   /**

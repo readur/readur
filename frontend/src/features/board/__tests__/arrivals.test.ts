@@ -61,11 +61,11 @@ describe('laneHealth', () => {
 });
 
 describe('laneHref', () => {
-  it('leads each lane to its Intake section', () => {
+  it('leads uploads to Intake and every other lane to its Sources tab', () => {
     expect(laneHref({ kind: 'upload', source_id: null })).toBe('/intake?section=upload');
-    expect(laneHref({ kind: 'watch', source_id: null })).toBe('/intake?section=watch');
-    expect(laneHref({ kind: 'webdav', source_id: 'a b' })).toBe('/intake?section=connections&source=a%20b');
-    expect(laneHref({ kind: 's3', source_id: null })).toBe('/intake?section=connections&source=');
+    expect(laneHref({ kind: 'watch', source_id: null })).toBe('/sources?section=watch');
+    expect(laneHref({ kind: 'webdav', source_id: 'a b' })).toBe('/sources?section=connections&source=a%20b');
+    expect(laneHref({ kind: 's3', source_id: null })).toBe('/sources?section=connections&source=');
   });
 });
 

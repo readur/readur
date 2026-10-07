@@ -56,6 +56,16 @@ export function ConnectionsSection() {
     acknowledge('source', wanted);
     setOpenId(wanted);
   }, [wanted, sources.data]);
+  // `?new=1` (Home's "Connect source") opens the add-connection form once.
+  const wantsNew = params.get('new') === '1';
+  useEffect(() => {
+    if (!wantsNew) return;
+    setEditing(null);
+    setFormOpen(true);
+    const next = new URLSearchParams(params);
+    next.delete('new');
+    setParams(next, { replace: true });
+  }, [wantsNew, params, setParams]);
   const closeDetail = () => {
     setOpenId(null);
     if (params.has('source')) {

@@ -26,6 +26,7 @@ const Search = lazy(async (): Promise<{ default: ComponentType }> => {
 const Document = lazy(() => import('../features/document'));
 const Shared = lazy(() => import('../features/document/SharedRoute'));
 const Intake = lazy(() => import('../features/intake'));
+const Sources = lazy(() => import('../features/sources'));
 const Settings = lazy(() => import('../features/settings'));
 const Login = lazy(() => import('../features/auth/LoginRoute'));
 const Callback = lazy(() => import('../features/auth/CallbackRoute'));
@@ -92,6 +93,7 @@ export function AppRoutes() {
         <Route path="/documents/:id" element={<Document />} />
         <Route path="/search" element={<SearchEntry />} />
         <Route path="/intake" element={<Intake />} />
+        <Route path="/sources" element={<Sources />} />
         <Route path="/settings/:section?" element={<Settings />} />
         {LEGACY_ROUTES.map(({ from, to }) => (
           <Route key={from} path={from} element={<LegacyRedirect to={to} />} />

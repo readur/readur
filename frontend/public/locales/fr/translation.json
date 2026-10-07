@@ -1877,7 +1877,8 @@
       "intake": "Entrée",
       "settings": "Paramètres",
       "home": "Accueil",
-      "search": "Recherche"
+      "search": "Recherche",
+      "sources": "Sources"
     },
     "search": {
       "open": "Rechercher des documents",
@@ -3339,6 +3340,18 @@
       "idle": "rien en attente",
       "busy": "{{processing}} en traitement · {{pending}} en attente",
       "pending": "{{pending}} en attente"
+    }
+  },
+  "sourcesPage": {
+    "title": "Sources",
+    "sections": {
+      "connections": "Connexions",
+      "watch": "Dossier surveillé",
+      "label": "Sections des sources"
+    },
+    "meta": {
+      "connections_one": "{{count}} connexion",
+      "connections_other": "{{count}} connexions"
     }
   }
 }

@@ -138,19 +138,19 @@ describe('sources', () => {
       'Scanner inboxCheck',
     ]);
     expect(links[0]).toHaveAttribute('href', '/intake?section=upload');
-    expect(links[1]).toHaveAttribute('href', '/intake?section=watch');
-    expect(links[3]).toHaveAttribute('href', '/intake?section=connections&source=s1');
+    expect(links[1]).toHaveAttribute('href', '/sources?section=watch');
+    expect(links[3]).toHaveAttribute('href', '/sources?section=connections&source=s1');
   });
 
   it('marks the open source and section', async () => {
     mockedGet.mockResolvedValue({ data: [source('s1', 'Nextcloud')] } as never);
-    renderShell({ path: '/intake?section=connections&source=s1' });
+    renderShell({ path: '/sources?section=connections&source=s1' });
     expect(await within(sources()).findByRole('link', { name: /Nextcloud/ })).toHaveAttribute('aria-current', 'page');
     expect(within(sources()).getByRole('link', { name: 'Uploads' })).not.toHaveAttribute('aria-current');
   });
 
   it('marks the watch folder when that section is open', async () => {
-    renderShell({ path: '/intake?section=watch' });
+    renderShell({ path: '/sources?section=watch' });
     await waitFor(() =>
       expect(within(sources()).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page'),
     );

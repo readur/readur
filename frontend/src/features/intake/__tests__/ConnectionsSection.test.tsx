@@ -116,6 +116,14 @@ describe('Connections board', () => {
     expect(screen.getByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
   });
 
+  it('opens the connection form from ?new=1 and drops the param', async () => {
+    renderIntake(<ConnectionsSection />, { path: '/sources?section=connections&new=1' });
+    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/sources?section=connections'),
+    );
+  });
+
   it('offers Pause OCR to admins only, and pauses', async () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);

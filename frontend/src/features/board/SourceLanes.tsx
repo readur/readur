@@ -117,7 +117,7 @@ export function SourceLanes({ arrivals, now }: { arrivals: Resource<SourceArriva
     <Region
       title={title}
       headerAction={
-        <Link className={styles.link} to="/intake?section=connections">
+        <Link className={styles.link} to="/sources?section=connections">
           {t('home.lanes.manage', 'Manage sources')}
         </Link>
       }
@@ -138,7 +138,7 @@ export function SourceLanes({ arrivals, now }: { arrivals: Resource<SourceArriva
             <p className={styles.panelBody}>{t('home.lanes.allSilent', 'Nothing arrived from any source in the last {{days}} days.', { days: ARRIVAL_DAYS })}</p>
           )}
           {groups.hidden > 0 ? (
-            <Link className={styles.moreRow} to="/intake?section=connections">
+            <Link className={styles.moreRow} to="/sources?section=connections">
               {t('home.lanes.more', '{{formatted}} more sources', { count: groups.hidden, formatted: n(groups.hidden) })}
               <span aria-hidden="true">→</span>
             </Link>

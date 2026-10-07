@@ -63,12 +63,12 @@ describe('AppShell layout', () => {
 });
 
 describe('primary navigation', () => {
-  it('shows the five destinations in order', () => {
+  it('shows the six destinations in order', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const links = within(nav).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Search', 'Library', 'Intake', 'Settings']);
-    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/home', '/search', '/documents', '/intake', '/settings']);
+    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Search', 'Library', 'Intake', 'Sources', 'Settings']);
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/home', '/search', '/documents', '/intake', '/sources', '/settings']);
   });
 
   it.each([

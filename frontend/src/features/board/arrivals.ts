@@ -137,9 +137,9 @@ export function groupLanes(lanes: readonly SourceArrivals[], now?: number, cap: 
   return { shown, hidden: ranked.length - shown.length };
 }
 
-/** Where a lane's name leads: the matching Intake section. */
+/** Where a lane's name leads: Intake for uploads, otherwise the matching Sources tab. */
 export function laneHref(lane: Pick<SourceArrivals, 'kind' | 'source_id'>): string {
   if (lane.kind === 'upload') return '/intake?section=upload';
-  if (lane.kind === 'watch') return '/intake?section=watch';
-  return `/intake?section=connections&source=${encodeURIComponent(lane.source_id ?? '')}`;
+  if (lane.kind === 'watch') return '/sources?section=watch';
+  return `/sources?section=connections&source=${encodeURIComponent(lane.source_id ?? '')}`;
 }

@@ -1877,7 +1877,8 @@
       "intake": "Intake",
       "settings": "Settings",
       "home": "Home",
-      "search": "Search"
+      "search": "Search",
+      "sources": "Sources"
     },
     "search": {
       "open": "Search documents",
@@ -3339,6 +3340,18 @@
       "idle": "nothing waiting",
       "busy": "{{processing}} processing · {{pending}} pending",
       "pending": "{{pending}} pending"
+    }
+  },
+  "sourcesPage": {
+    "title": "Sources",
+    "sections": {
+      "connections": "Connections",
+      "watch": "Watch folder",
+      "label": "Source sections"
+    },
+    "meta": {
+      "connections_one": "{{count}} connection",
+      "connections_other": "{{count}} connections"
     }
   }
 }
