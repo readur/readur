@@ -13,25 +13,31 @@
   flex: none;
   box-sizing: border-box;
   position: relative;
-  width: 36px;
-  height: 20px;
-  margin-top: 2px;
+  width: 42px;
+  height: 24px;
   background: var(--surface-sunken);
-  border: 1px solid var(--line-strong);
+  border: 2px solid var(--line-strong);
   border-radius: var(--radius-pill);
-  transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+  transition: background-color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
 
 .thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
+  top: 50%;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
   background: var(--line-strong);
-  border-radius: 50%;
-  transition: transform var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+  border-radius: var(--radius-pill);
+  transform: translateY(-50%);
+  transition: left var(--dur-2) var(--ease), width var(--dur-2) var(--ease), height var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease);
 }
+
+.thumbCheck { width: 12px; height: 12px; opacity: 0; }
+.switch[data-selected] .thumbCheck { opacity: 1; }
 
 .switch[data-selected] .track {
   background: var(--accent);
@@ -39,7 +45,9 @@
 }
 
 .switch[data-selected] .thumb {
-  transform: translateX(16px);
+  left: 19px;
+  width: 18px;
+  height: 18px;
   background: var(--accent-fg);
 }
 

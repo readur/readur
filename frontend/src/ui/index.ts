@@ -5,6 +5,7 @@ export * from './SearchField';
 export * from './Select';
 export * from './ComboBox';
 export * from './Checkbox';
+export * from './ChoiceTile';
 export * from './Switch';
 export * from './Tabs';
 export * from './Dialog';

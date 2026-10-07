@@ -20,7 +20,7 @@
   margin-top: 1px;
   color: var(--accent-fg);
   background: var(--surface);
-  border: 1px solid var(--line-strong);
+  border: 1.5px solid var(--line-strong);
   border-radius: calc(var(--radius-sm) - 3px);
   transition: background-color var(--dur-1) var(--ease);
 }
