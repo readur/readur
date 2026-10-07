@@ -29,7 +29,7 @@
     "i18next": "^25.10.10",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-http-backend": "^3.0.6",
-    "lucide-react": "^1.51.0",
+    "lucide-react": "^1.52.0",
     "react": "^19.3.0",
     "react-aria-components": "^1.21.1",
     "react-dom": "^19.3.0",
