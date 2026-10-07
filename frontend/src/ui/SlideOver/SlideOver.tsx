@@ -34,6 +34,13 @@ export interface SlideOverProps {
   resizable?: boolean;
   /** With `resizable`, remembers the width in this browser under `readur.slideover.<key>`. */
   storageKey?: string;
+  /** With `resizable`, the share of the window it opens at when no width is remembered (default 0.5). */
+  defaultShare?: number;
+  /**
+   * `fill`: the body has no padding and is a column the content divides itself (a fixed preview
+   * above a scrolling pane, say). The body still scrolls if the content cannot fit.
+   */
+  layout?: 'padded' | 'fill';
   className?: string;
 }
 
@@ -60,8 +67,9 @@ function readWidth(key: string | undefined): number | null {
   }
 }
 
-/** Where a resizable panel opens: its remembered width, else half the window. */
-const openingWidth = (key: string | undefined) => readWidth(key) ?? clampWidth(windowWidth() * DEFAULT_SHARE);
+/** Where a resizable panel opens: its remembered width, else its share of the window. */
+const openingWidth = (key: string | undefined, share = DEFAULT_SHARE) =>
+  readWidth(key) ?? clampWidth(windowWidth() * share);
 
 function writeWidth(key: string | undefined, width: number) {
   if (!key) return;
@@ -127,8 +135,9 @@ function ResizeHandle({ width, onResize, onCommit }: { width: number; onResize: 
 /** Room a toast needs beside the panel: the 360px region plus its 16px gutters. */
 const TOAST_CLEARANCE = 360 + 2 * 16;
 
+/** Where ↑/↓ belong to the content, not to record navigation. `data-own-arrows` opts a pane in. */
 const EDITABLE =
-  'input, textarea, select, [contenteditable="true"], [role="listbox"], [role="menu"], [role="grid"], [role="slider"]';
+  'input, textarea, select, [contenteditable="true"], [role="listbox"], [role="menu"], [role="grid"], [role="slider"], [data-own-arrows]';
 
 /**
  * Right-anchored detail panel. Focus moves into the panel, Esc closes it and focus returns to the
@@ -144,6 +153,8 @@ export function SlideOver({
   onNavigate,
   resizable = false,
   storageKey,
+  defaultShare,
+  layout = 'padded',
   className,
 }: SlideOverProps) {
   const { t } = useTranslation();
@@ -155,11 +166,13 @@ export function SlideOver({
   const reportToastInset = useToastInsetReporter();
   const [owner] = useState(() => Symbol('SlideOver'));
   const hasFooter = Boolean(footer);
-  const [dragWidth, setDragWidth] = useState<number | null>(() => (resizable ? openingWidth(storageKey) : null));
+  const [dragWidth, setDragWidth] = useState<number | null>(() =>
+    resizable ? openingWidth(storageKey, defaultShare) : null,
+  );
   // Re-read on each opening: the window may have changed size since.
   useEffect(() => {
-    if (isOpen && resizable) setDragWidth(openingWidth(storageKey));
-  }, [isOpen, resizable, storageKey]);
+    if (isOpen && resizable) setDragWidth(openingWidth(storageKey, defaultShare));
+  }, [isOpen, resizable, storageKey, defaultShare]);
 
   // Keep toasts off the panel: beside it when there is room, else above its footer (phones).
   useLayoutEffect(() => {
@@ -235,7 +248,9 @@ export function SlideOver({
               onPress={() => onOpenChange(false)}
             />
           </header>
-          <div className={styles.body}>{children}</div>
+          <div className={styles.body} data-layout={layout}>
+            {children}
+          </div>
           {footer ? (
             <footer ref={footerRef} className={styles.footer}>
               {footer}

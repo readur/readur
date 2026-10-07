@@ -154,6 +154,12 @@
   line-height: var(--lh-body);
 }
 
+.body[data-layout="fill"] {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
 .footer {
   position: sticky;
   bottom: 0;

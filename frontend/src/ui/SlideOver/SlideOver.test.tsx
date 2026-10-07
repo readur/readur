@@ -97,6 +97,34 @@ describe('SlideOver', () => {
   });
 });
 
+describe('SlideOver content that keeps its arrow keys', () => {
+  it('leaves ↑/↓ to an element marked data-own-arrows, such as a long text pane', async () => {
+    const spy = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SlideOver title="Doc" isOpen onOpenChange={() => undefined} onNavigate={spy}>
+        <div data-own-arrows="" tabIndex={0} aria-label="Text">
+          long text
+        </div>
+      </SlideOver>,
+    );
+    act(() => screen.getByLabelText('Text').focus());
+    await user.keyboard('{ArrowDown}');
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('SlideOver fill layout', () => {
+  it('marks the body so its content lays itself out edge to edge', () => {
+    render(
+      <SlideOver title="Doc" isOpen onOpenChange={() => undefined} layout="fill">
+        <p>Body</p>
+      </SlideOver>,
+    );
+    expect(screen.getByText('Body').parentElement).toHaveAttribute('data-layout', 'fill');
+  });
+});
+
 describe('SlideOver resizing', () => {
   const KEY = 'readur.slideover.test';
   const Panel = ({ resizable = true }: { resizable?: boolean }) => (
@@ -150,6 +178,19 @@ describe('SlideOver resizing', () => {
     const dragged = Math.round(window.innerWidth * 0.5) + 100;
     expect(handle).toHaveAttribute('aria-valuenow', String(dragged));
     expect(window.localStorage.getItem(KEY)).toBe(String(dragged));
+  });
+
+  it('opens at the given share of the window when nothing is remembered', () => {
+    window.localStorage.removeItem('readur.slideover.share');
+    render(
+      <SlideOver title="Details" isOpen onOpenChange={() => undefined} resizable storageKey="share" defaultShare={0.6}>
+        <p>Body</p>
+      </SlideOver>,
+    );
+    expect(screen.getByRole('separator', { name: 'Resize panel' })).toHaveAttribute(
+      'aria-valuenow',
+      String(Math.round(window.innerWidth * 0.6)),
+    );
   });
 
   it('has no handle unless asked for one', () => {
