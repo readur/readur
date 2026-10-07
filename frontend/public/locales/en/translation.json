@@ -1881,7 +1881,7 @@
       "intake": "Intake",
       "settings": "Settings",
       "home": "Home",
-      "search": "Search",
+      "search": "Advanced search",
       "sources": "Sources"
     },
     "search": {
@@ -2422,7 +2422,7 @@
       "selectPage": "Select all on this page",
       "startHint": "Readur searches file names and every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.",
       "startTitle": "Find anything in your documents",
-      "title": "Search"
+      "title": "Advanced search"
     },
     "sort": {
       "asc": "{{field}}, ascending",

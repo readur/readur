@@ -17,7 +17,7 @@ test.describe('Search Functionality', () => {
     const ids = [await helpers.uploadDocumentViaAPI(TEST_FILES.test1), await helpers.uploadDocumentViaAPI(TEST_FILES.test3)];
     for (const id of ids) await helpers.waitForOCRComplete(id);
     await dynamicUserPage.goto('/search');
-    await expect(dynamicUserPage.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+    await expect(dynamicUserPage.getByRole('heading', { level: 1, name: 'Advanced search' })).toBeVisible();
   });
 
   const searchBox = (page: Page) => page.getByRole('searchbox', { name: 'Search documents' });

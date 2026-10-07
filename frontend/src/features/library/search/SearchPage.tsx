@@ -87,7 +87,7 @@ export function SearchPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t('library.search.title', 'Search')} />
+      <PageHeader title={t('library.search.title', 'Advanced search')} />
       <div className={styles.searchRow}>
         <SearchBox
           value={query.q}

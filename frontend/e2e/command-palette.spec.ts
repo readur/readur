@@ -18,7 +18,7 @@ test.describe('Command palette', () => {
 
     // With nothing typed it offers the destinations
     const goTo = palette(page).getByRole('group', { name: 'Go to' });
-    for (const d of ['Home', 'Search', 'Library', 'Intake', 'Sources', 'Settings']) {
+    for (const d of ['Home', 'Advanced search', 'Library', 'Intake', 'Sources', 'Settings']) {
       await expect(goTo.getByRole('menuitem', { name: d, exact: true })).toBeVisible();
     }
 

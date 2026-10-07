@@ -1881,7 +1881,7 @@
       "intake": "Entrada",
       "settings": "Configuración",
       "home": "Inicio",
-      "search": "Buscar",
+      "search": "Búsqueda avanzada",
       "sources": "Fuentes"
     },
     "search": {
@@ -2422,7 +2422,7 @@
       "selectPage": "Seleccionar todo en esta página",
       "startHint": "Readur busca en los nombres de archivo y en cada palabra leída de tus escaneos y PDF. Prueba con un nombre, un lugar o un tema, como «hombro» o «factura 2024».",
       "startTitle": "Encuentra cualquier cosa en tus documentos",
-      "title": "Búsqueda"
+      "title": "Búsqueda avanzada"
     },
     "sort": {
       "asc": "{{field}}, ascendente",

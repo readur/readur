@@ -31,7 +31,7 @@ export const DESTINATIONS: readonly Destination[] = [
   {
     id: 'search',
     labelKey: 'shell.nav.search',
-    fallback: 'Search',
+    fallback: 'Advanced search',
     path: '/search',
     icon: <Search fontSize="inherit" />,
     matches: ['/search'],

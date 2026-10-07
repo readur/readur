@@ -15,7 +15,7 @@ vi.mock('../../../services/api', () => ({
 const location = () => screen.getByRole('status', { name: 'location' });
 const DESTINATIONS = [
   ['Home', '/home'],
-  ['Search', '/search'],
+  ['Advanced search', '/search'],
   ['Library', '/documents'],
   ['Intake', '/intake'],
 ] as const;
@@ -93,7 +93,7 @@ describe('bottom tab bar items', () => {
     renderShell({ path: '/intake?section=watch' });
     const bar = screen.getByRole('navigation', { name: 'Main' });
     expect(within(bar).getByRole('link', { name: 'Intake' })).toHaveAttribute('aria-current', 'page');
-    ['Home', 'Search', 'Library'].forEach((name) =>
+    ['Home', 'Advanced search', 'Library'].forEach((name) =>
       expect(within(bar).getByRole('link', { name })).not.toHaveAttribute('aria-current'),
     );
   });

@@ -1881,7 +1881,7 @@
       "intake": "Eingang",
       "settings": "Einstellungen",
       "home": "Start",
-      "search": "Suche",
+      "search": "Erweiterte Suche",
       "sources": "Quellen"
     },
     "search": {
@@ -2422,7 +2422,7 @@
       "selectPage": "Alle auf dieser Seite auswählen",
       "startHint": "Readur durchsucht Dateinamen und jedes Wort, das aus Ihren Scans und PDFs gelesen wurde. Versuchen Sie einen Namen, einen Ort oder ein Thema, etwa „Schulter“ oder „Rechnung 2024“.",
       "startTitle": "Finden Sie alles in Ihren Dokumenten",
-      "title": "Suche"
+      "title": "Erweiterte Suche"
     },
     "sort": {
       "asc": "{{field}}, aufsteigend",

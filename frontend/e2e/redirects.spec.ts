@@ -67,7 +67,7 @@ test.describe('Legacy redirects', () => {
   test('/search is its own page and the old ?query= spelling becomes ?q=', async ({ dynamicAdminPage: page }) => {
     await page.goto('/search?query=receipt');
     await expect(page).toHaveURL(/\/search\?q=receipt$/);
-    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Search' })).toHaveAttribute(
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Advanced search' })).toHaveAttribute(
       'aria-current',
       'page',
     );

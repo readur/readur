@@ -3,7 +3,7 @@ import { test, expect } from './fixtures/auth';
 /** `heading: null` means the page names itself (Home greets, Search shows the query). */
 const DESTINATIONS: { name: string; path: string; heading: string | null }[] = [
   { name: 'Home', path: '/home', heading: null },
-  { name: 'Search', path: '/search', heading: null },
+  { name: 'Advanced search', path: '/search', heading: null },
   { name: 'Library', path: '/documents', heading: 'Library' },
   { name: 'Intake', path: '/intake', heading: 'Intake' },
   { name: 'Settings', path: '/settings', heading: 'Settings' },

@@ -21,7 +21,7 @@ test.describe('Mobile navigation', () => {
     const destinations: [string, RegExp][] = [
       ['Library', /\/documents$/],
       ['Intake', /\/intake/],
-      ['Search', /\/search/],
+      ['Advanced search', /\/search/],
       ['Home', /\/home$/],
     ];
     for (const [name, url] of destinations) {

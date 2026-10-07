@@ -86,7 +86,7 @@ describe('primary navigation', () => {
     renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const links = within(nav).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Search', 'Library', 'Intake', 'Sources', 'Settings']);
+    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Advanced search', 'Library', 'Intake', 'Sources', 'Settings']);
     expect(links.map((l) => l.getAttribute('href'))).toEqual(['/home', '/search', '/documents', '/intake', '/sources', '/settings']);
   });
 
@@ -94,7 +94,7 @@ describe('primary navigation', () => {
     ['/home', 'Home'],
     ['/documents', 'Library'],
     ['/documents/abc', 'Library'],
-    ['/search', 'Search'],
+    ['/search', 'Advanced search'],
     ['/intake', 'Intake'],
     ['/settings/labels', 'Settings'],
   ])('marks the current destination for %s', (path, name) => {

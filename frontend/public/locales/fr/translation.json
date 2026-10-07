@@ -1881,7 +1881,7 @@
       "intake": "Entrée",
       "settings": "Paramètres",
       "home": "Accueil",
-      "search": "Recherche",
+      "search": "Recherche avancée",
       "sources": "Sources"
     },
     "search": {
@@ -2422,7 +2422,7 @@
       "selectPage": "Tout sélectionner sur cette page",
       "startHint": "Readur cherche dans les noms de fichiers et dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
       "startTitle": "Retrouvez tout dans vos documents",
-      "title": "Recherche"
+      "title": "Recherche avancée"
     },
     "sort": {
       "asc": "{{field}}, croissant",

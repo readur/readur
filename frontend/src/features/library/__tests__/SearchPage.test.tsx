@@ -20,11 +20,11 @@ describe('Search page', () => {
   });
 
   describe('page', () => {
-    test('has one h1 "Search" and a large named field that has focus', async () => {
+    test('has one h1 "Advanced search" and a large named field that has focus', async () => {
       renderSearch();
       await settle();
       expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-      expect(screen.getByRole('heading', { level: 1, name: 'Search' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Advanced search' })).toBeInTheDocument();
       expect(searchbox()).toHaveFocus();
       expect(searchbox()).toHaveAttribute('placeholder', 'Search every document by name or by the words inside it');
     });
