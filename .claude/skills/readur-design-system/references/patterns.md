@@ -38,7 +38,11 @@ Row CSS: `display: flex; align-items: center; gap: var(--s-3); padding: var(--s-
 Stack `TextField`s with `gap: var(--s-4)`. Instant on/off → `Switch`; a set of options with explanations → `ChoiceGroup`; pick one of many → `Select`/`ComboBox`; 2–3 visible options → `Segmented`. Errors go in `errorMessage` + `isInvalid`, never a red paragraph.
 
 ## Overlays
-Short confirmation or form → `Dialog` (`icon`, `helpLink`, `role="alertdialog"` when destructive). Details beside a list → `SlideOver`. Actions on a row → `Menu` from an `IconButton label={t('more')}`. Several selected → `BulkActionBar`.
+Short confirmation or form → `Dialog` (`icon`, `helpLink`, `role="alertdialog"` when destructive). Details beside a list → `SlideOver`.
+
+**A drawer lives in the URL.** Open it with `useDrawerParam(key)` (`lib/useDrawerParam.ts`): `?<key>=<id>` on the current page, so Back closes it, a reload or a shared link reopens it, and ↑/↓ (`step`) replace rather than pile up history. Never hold an open record in `useState`. Records that exist only in a loaded list use `useRecordDrawer` (intake) and drop an id that is not on the list. Keys in use: `document`, `source`, `failure`, `import`.
+
+**A document opens in the document drawer, never a page.** `useDocumentDrawer().open(id)` (or `href(id)` + `linkState` for a real link) puts `?document=<id>` on whatever page is showing; the shell renders the drawer. A page that lists documents registers them with `useRegisterDocumentList` (Library and Search do, via `useLibraryDrawer`) so ↑/↓ walk its rows and changes made in the drawer patch the row. `/documents/:id` only redirects there. Actions on a row → `Menu` from an `IconButton label={t('more')}`. Several selected → `BulkActionBar`.
 
 ## Grid vs table
 Visual browsing of documents → `DocumentCard` grid. Comparing fields, sorting, bulk selection → `BoardTable`. Offer both with a `Segmented` (Grid | Table) when users need both.
