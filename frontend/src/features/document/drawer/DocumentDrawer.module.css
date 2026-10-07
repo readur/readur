@@ -94,7 +94,7 @@
 
 .preview {
   flex: none;
-  height: clamp(220px, 42vh, 560px);
+  height: clamp(200px, 34vh, 520px);
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--surface-sunken);

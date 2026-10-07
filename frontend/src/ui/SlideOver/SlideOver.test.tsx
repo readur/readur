@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -191,6 +193,14 @@ describe('SlideOver resizing', () => {
       'aria-valuenow',
       String(Math.round(window.innerWidth * 0.6)),
     );
+  });
+
+  it('hides the handle on phones: the phone rule comes after the handle\'s own styles', () => {
+    const css = readFileSync(resolve(__dirname, 'SlideOver.module.css'), 'utf8');
+    const base = css.search(/^\.handle \{/m);
+    const phone = css.search(/@media \(max-width: 719px\) \{\s*\.handle \{\s*display: none/);
+    expect(base).toBeGreaterThan(-1);
+    expect(phone).toBeGreaterThan(base);
   });
 
   it('has no handle unless asked for one', () => {
