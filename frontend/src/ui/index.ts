@@ -18,6 +18,7 @@ export * from './Notice';
 export * from './EmptyState';
 export * from './Skeleton';
 export * from './Pagination';
+export * from './Progress';
 export * from './Kbd';
 export * from './ChangeTag';
 export * from './SourceDot';

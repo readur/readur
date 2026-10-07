@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, ChangeTag, Dialog, Notice as UiNotice } from '../../../ui';
+import { Button, ChangeTag, Dialog, Notice as UiNotice, ProgressBar } from '../../../ui';
 import type { LitReason } from '../../board/litStore';
 import { litTagOf } from '../../board/litTag';
 import styles from './Shared.module.css';
@@ -51,26 +51,9 @@ export function NameCell({ name, tag }: { name: ReactNode; tag?: LitReason | str
   );
 }
 
-/** Mono percentage plus a thin bar. */
+/** Mono percentage plus a thin bar (the ui ProgressBar). */
 export function ProgressCell({ value, label }: { value: number; label: string }) {
-  const pct = Math.max(0, Math.min(100, Math.round(value)));
-  return (
-    <span className={styles.progress}>
-      <span
-        className={styles.bar}
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={pct}
-      >
-        <span className={styles.barFill} style={{ transform: `scaleX(${pct / 100})` }} />
-      </span>
-      <span className={`${styles.mono} ${styles.progressValue}`} aria-hidden="true">
-        {pct}%
-      </span>
-    </span>
-  );
+  return <ProgressBar value={value} label={label} showValue />;
 }
 
 export interface ConfirmDialogProps {
