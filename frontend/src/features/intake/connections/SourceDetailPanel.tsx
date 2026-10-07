@@ -14,6 +14,7 @@ import { RecentErrors } from './RecentErrors';
 import { listOf, nextSyncAt, sourceAuth, sourceLocation, sourceState, syncIntervalMinutes, validationIssues } from './sourceModel';
 import type { useSourceActions } from './useSourceActions';
 import styles from './Connections.module.css';
+import { useLastDefined } from '../../../lib/useLastDefined';
 
 export interface SourceDetailPanelProps {
   source: SourceResponse | null;
@@ -24,7 +25,8 @@ export interface SourceDetailPanelProps {
 }
 
 /** Everything about one connection plus its actions, in a panel beside the board. */
-export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, actions }: SourceDetailPanelProps) {
+export function SourceDetailPanel({ source: current, isOpen, onOpenChange, onEdit, actions }: SourceDetailPanelProps) {
+  const source = useLastDefined(current);
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const errorsHeadingId = useId();
@@ -90,7 +92,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
 
   return (
     <>
-      <SlideOver title={source.name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer}>
+      <SlideOver title={source.name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer} resizable storageKey="source-detail">
         <div className={sharedStyles.stack}>
           <div className={styles.detailStatus}>
             <StatusMark state={sourceState(source)} />

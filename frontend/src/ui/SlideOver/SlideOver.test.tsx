@@ -96,3 +96,61 @@ describe('SlideOver', () => {
     expect(screen.getByRole('dialog', { name: 'invoice.pdf' })).toBeInTheDocument();
   });
 });
+
+describe('SlideOver resizing', () => {
+  const KEY = 'readur.slideover.test';
+  const Panel = ({ resizable = true }: { resizable?: boolean }) => (
+    <SlideOver title="Details" isOpen onOpenChange={() => undefined} resizable={resizable} storageKey="test">
+      <p>Body</p>
+    </SlideOver>
+  );
+  const panelWidth = () => (screen.getByRole('dialog').closest('[style]') as HTMLElement | null)?.style.getPropertyValue('--slideover-width');
+
+  it('has a labelled vertical grab handle that widens with ArrowLeft and remembers the width', async () => {
+    window.localStorage.removeItem(KEY);
+    const user = userEvent.setup();
+    render(<Panel />);
+    const handle = screen.getByRole('separator', { name: 'Resize panel' });
+    expect(handle).toHaveAttribute('aria-orientation', 'vertical');
+    expect(handle).toHaveAttribute('aria-valuenow', '440');
+    handle.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(handle).toHaveAttribute('aria-valuenow', '464');
+    expect(panelWidth()).toBe('464px');
+    expect(window.localStorage.getItem(KEY)).toBe('464');
+    await user.keyboard('{ArrowRight}{ArrowRight}');
+    expect(handle).toHaveAttribute('aria-valuenow', '416');
+  });
+
+  it('opens at the remembered width, kept within bounds', () => {
+    window.localStorage.setItem(KEY, '600');
+    const { unmount } = render(<Panel />);
+    expect(screen.getByRole('separator', { name: 'Resize panel' })).toHaveAttribute('aria-valuenow', '600');
+    expect(panelWidth()).toBe('600px');
+    unmount();
+    window.localStorage.setItem(KEY, '99999');
+    render(<Panel />);
+    const handle = screen.getByRole('separator', { name: 'Resize panel' });
+    expect(Number(handle.getAttribute('aria-valuenow'))).toBe(Number(handle.getAttribute('aria-valuemax')));
+    expect(handle).toHaveAttribute('aria-valuemin', '360');
+  });
+
+  it('follows a pointer drag on the handle', () => {
+    window.localStorage.removeItem(KEY);
+    render(<Panel />);
+    const handle = screen.getByRole('separator', { name: 'Resize panel' });
+    handle.setPointerCapture = vi.fn();
+    act(() => {
+      handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 600, pointerId: 1, button: 0 }));
+      handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 500, pointerId: 1 }));
+      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 500, pointerId: 1 }));
+    });
+    expect(handle).toHaveAttribute('aria-valuenow', '540');
+    expect(window.localStorage.getItem(KEY)).toBe('540');
+  });
+
+  it('has no handle unless asked for one', () => {
+    render(<Panel resizable={false} />);
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+});

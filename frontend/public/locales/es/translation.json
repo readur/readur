@@ -1851,6 +1851,9 @@
     "board": {
       "loading": "Cargando",
       "empty": "Nada que mostrar"
+    },
+    "slideOver": {
+      "resize": "Cambiar el ancho del panel"
     }
   },
   "status": {

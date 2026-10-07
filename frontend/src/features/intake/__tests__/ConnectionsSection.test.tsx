@@ -492,3 +492,24 @@ describe('Connections health and deep links', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
+
+describe('closing the details panel', () => {
+  it('keeps the connection on screen while the panel slides out', async () => {
+    // Pretend the exit animation is still running, as it does in a browser.
+    const running = [{ finished: new Promise(() => {}) }] as unknown as Animation[];
+    const original = Element.prototype.getAnimations;
+    Element.prototype.getAnimations = function getAnimations(this: Element) {
+      return this.hasAttribute('data-exiting') ? running : [];
+    };
+    try {
+      const user = userEvent.setup();
+      renderIntake(<ConnectionsSection />);
+      const panel = await openRow(user, 'Archive bucket');
+      await user.click(within(panel).getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(document.querySelector('[data-exiting]')).not.toBeNull());
+      expect(within(document.querySelector('[data-exiting]') as HTMLElement).getByText('Archive bucket')).toBeInTheDocument();
+    } finally {
+      Element.prototype.getAnimations = original;
+    }
+  });
+});

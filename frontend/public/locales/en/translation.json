@@ -1851,6 +1851,9 @@
     "board": {
       "loading": "Loading",
       "empty": "Nothing to show"
+    },
+    "slideOver": {
+      "resize": "Resize panel"
     }
   },
   "status": {

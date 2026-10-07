@@ -8,6 +8,19 @@
   background: var(--scrim);
 }
 
+.overlay[data-entering] {
+  animation: fade-in var(--dur-2) var(--ease);
+}
+
+.overlay[data-exiting] {
+  animation: fade-in var(--dur-2) var(--ease) reverse;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .panel {
   box-sizing: border-box;
   display: flex;
@@ -40,6 +53,10 @@
 }
 
 @media (max-width: 719px) {
+  .handle {
+    display: none;
+  }
+
   .panel {
     inset: 0;
     width: 100vw;
@@ -50,13 +67,51 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .overlay[data-entering],
+  .overlay[data-exiting],
   .panel[data-entering],
   .panel[data-exiting] {
     animation: none;
   }
 }
 
+/* Grab handle on the left edge: a pill centred top to bottom, wider hit area around it. */
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-local);
+  display: grid;
+  place-items: center;
+  width: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.grip {
+  width: 5px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: background-color var(--dur-1) var(--ease), height var(--dur-1) var(--ease);
+}
+
+.handle:hover .grip,
+.handle:active .grip {
+  height: 56px;
+  background: var(--accent);
+}
+
+.handle:focus-visible .grip {
+  background: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .dialog {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;

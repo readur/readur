@@ -69,6 +69,8 @@ export function DetailPanel(props: DetailPanelProps) {
   );
   return (
     <SlideOver
+      resizable
+      storageKey="library-detail"
       isOpen={isOpen && row !== null}
       onOpenChange={onOpenChange}
       onNavigate={onNavigate}

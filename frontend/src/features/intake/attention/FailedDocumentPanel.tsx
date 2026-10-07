@@ -13,6 +13,7 @@ import { ConfirmDialog, sharedStyles } from '../shared/parts';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
 import { attentionKeyOf, canRetry, failedName, ocrFailureSummary, reasonLabel } from './failureLabels';
 import { outcomeOf } from './outcome';
+import { useLastDefined } from '../../../lib/useLastDefined';
 
 export interface FailedDocumentPanelProps {
   document: FailedOcrDocumentRow | null;
@@ -22,7 +23,8 @@ export interface FailedDocumentPanelProps {
 }
 
 /** Why a document's OCR failed, what it looks like, its retry history, and a retry. */
-export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onChanged }: FailedDocumentPanelProps) {
+export function FailedDocumentPanel({ document: current, isOpen, onOpenChange, onChanged }: FailedDocumentPanelProps) {
+  const doc = useLastDefined(current);
   const { t, i18n } = useTranslation();
   const toast = useToast();
   const ids = { preview: useId(), history: useId(), error: useId() };
@@ -121,7 +123,7 @@ export function FailedDocumentPanel({ document: doc, isOpen, onOpenChange, onCha
   );
 
   return (
-    <SlideOver title={name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer}>
+    <SlideOver title={name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer} resizable storageKey="failed-document">
       <div className={sharedStyles.stack}>
         <StatusMark state="failed" />
         <Pass aria-label={t('intake.attention.failure', 'Failure')}>

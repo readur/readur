@@ -394,7 +394,7 @@ export default function Gallery() {
         >
           They’ll be re-queued. Existing text is kept until the new run succeeds.
         </Dialog>
-        <SlideOver isOpen={slideOpen} onOpenChange={setSlideOpen} title="Lease_Agreement_Signed.pdf">
+        <SlideOver isOpen={slideOpen} onOpenChange={setSlideOpen} title="Lease_Agreement_Signed.pdf" resizable storageKey="gallery">
           <Facts items={[{ label: 'Status', value: <StatusMark state="completed" /> }, { label: 'Pages', value: '14', mono: true }]} />
         </SlideOver>
         <CommandPalette isOpen={paletteOpen} onOpenChange={setPaletteOpen} sources={PALETTE_SOURCES} />

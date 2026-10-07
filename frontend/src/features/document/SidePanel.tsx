@@ -19,6 +19,8 @@ export function SidePanel({ documentId, isOpen, onOpenChange, tab, onTabChange }
   const { t } = useTranslation();
   return (
     <SlideOver
+      resizable
+      storageKey="document-side"
       title={tab === 'comments' ? t('document.panel.comments', 'Comments') : t('document.panel.links', 'Share links')}
       isOpen={isOpen}
       onOpenChange={onOpenChange}
