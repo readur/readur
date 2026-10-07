@@ -1,3 +1,5 @@
+> **Superseded** by the Studio design system: `docs/superpowers/specs/2026-10-07-readur-design-system-design.md` and `DESIGN.md`. Kept for history.
+
 # Readur redesign — shared brief for every implementer
 
 Branch `feat/ui-departure-board`. Frontend lives in `frontend/`, backend in `src/`. Product truth is in `PRODUCT.md` at the repo root; read it once.
