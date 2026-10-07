@@ -7,16 +7,17 @@
 .bar {
   display: block;
   max-width: 100%;
-  background: var(--surface-sunken);
   border-radius: var(--radius-sm);
-  animation: pulse calc(var(--dur-2) * 8) var(--ease) infinite alternate;
+  background: linear-gradient(90deg, var(--surface-sunken) 0%, var(--line) 40%, var(--surface-sunken) 80%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s linear infinite;
 }
 
-@keyframes pulse {
-  from { opacity: 1; }
-  to { opacity: 0.45; }
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bar { animation: none; }
+  .bar { animation: none; background: var(--surface-sunken); }
 }

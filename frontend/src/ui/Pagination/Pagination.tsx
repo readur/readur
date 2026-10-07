@@ -1,3 +1,4 @@
+import { Button as RACButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from '../icons';
 import { IconButton } from '../IconButton';
@@ -12,6 +13,19 @@ export interface PaginationProps {
   /** Called with the new page (and page size when it changed; the page resets to 1 then). */
   onChange: (page: number, pageSize: number) => void;
   pageSizeOptions?: number[];
+}
+
+/** Page numbers to show: first, last, and the current page with its neighbours; gaps elsewhere. */
+export function pageItems(page: number, count: number): Array<number | 'gap'> {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
+  const set = new Set([1, count, page - 1, page, page + 1].filter((n) => n >= 1 && n <= count));
+  const sorted = [...set].sort((a, b) => a - b);
+  const out: Array<number | 'gap'> = [];
+  sorted.forEach((n, i) => {
+    if (i > 0 && n - sorted[i - 1] > 1) out.push('gap');
+    out.push(n);
+  });
+  return out;
 }
 
 export function Pagination({ page, pageSize, total, onChange, pageSizeOptions }: PaginationProps) {
@@ -48,6 +62,25 @@ export function Pagination({ page, pageSize, total, onChange, pageSizeOptions }:
           isDisabled={page <= 1}
           onPress={() => onChange(page - 1, pageSize)}
         />
+        <span className={styles.pages}>
+          {pageItems(page, pageCount).map((p, i) =>
+            p === 'gap' ? (
+              <span key={`gap-${i}`} className={styles.gap} aria-hidden="true">
+                …
+              </span>
+            ) : (
+              <RACButton
+                key={p}
+                className={styles.page}
+                aria-label={t('ui.pagination.page', { defaultValue: 'Page {{n}}', n: p })}
+                aria-current={p === page ? 'page' : undefined}
+                onPress={() => onChange(p, pageSize)}
+              >
+                {p}
+              </RACButton>
+            ),
+          )}
+        </span>
         <IconButton
           variant="secondary"
           size="sm"

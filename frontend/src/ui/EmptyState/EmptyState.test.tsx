@@ -19,4 +19,9 @@ describe('EmptyState', () => {
     await user.keyboard('{Enter}');
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('can show the illustration instead of an icon', () => {
+    const { container } = render(<EmptyState title="No documents yet" illustration />);
+    expect(container.querySelector('[data-illustration]')).toHaveAttribute('aria-hidden', 'true');
+  });
 });

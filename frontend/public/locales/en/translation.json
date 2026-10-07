@@ -1818,7 +1818,8 @@
       "range": "{{start}}–{{end}} of {{total}}",
       "pageSize": "Rows per page",
       "previous": "Previous page",
-      "next": "Next page"
+      "next": "Next page",
+      "page": "Page {{n}}"
     },
     "toast": {
       "info": "Info:",
