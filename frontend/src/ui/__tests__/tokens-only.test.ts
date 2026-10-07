@@ -18,7 +18,7 @@ describe('ui primitives use tokens only', () => {
     expect(css, 'hex colour').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css, 'rgb()/hsl()').not.toMatch(/\b(rgba?|hsla?)\(/);
     expect(css, 'px border-radius').not.toMatch(/border-radius:\s*\d+px/);
-    expect(css, 'literal box-shadow').not.toMatch(/box-shadow:\s*(?!none|var\(|inset 0 0 0 \d+px var\(|0 0 0 \d+px var\()[^;]*\d+px[^;]*rgba?/);
+    expect(css, 'literal box-shadow').not.toMatch(/box-shadow:\s*(?!none|var\(|inset 0 0 0 \d+px var\(|0 0 0 \d+px var\()[^;]*\d+px[^;]*\brgba?\(/);
     expect(css, 'raw z-index').not.toMatch(/z-index:\s*\d/);
   });
 });
