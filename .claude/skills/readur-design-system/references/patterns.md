@@ -29,6 +29,8 @@ Row CSS: `display: flex; align-items: center; gap: var(--s-3); padding: var(--s-
 | Loading | `Skeleton` with the shape of the content (rows → `lines`, cards → card-sized blocks); give one a `label` |
 | Empty | `EmptyState` inside the same `Card` (`illustration` only for first-run screens) |
 | Error | `Notice tone="danger"` with a retry `action`; keep it inside the region that failed |
+| Error on one row | `StatusMark reason="…"` in the status column; never a second line under the name (rows stay one line) |
+| Action not allowed | `IconButton disabledReason="…"`; never an explanatory line in the row |
 | Success after an action | `useToast().show({ tone: 'success' })`; failure → `tone: 'danger'` |
 | In progress per item | `StatusMark state="processing"` (+ `progress`) or `Button isPending` |
 

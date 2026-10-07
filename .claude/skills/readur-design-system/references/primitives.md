@@ -15,7 +15,7 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 <ButtonLink href="/sources?section=connections&new=1" variant="secondary" icon={<Cloud fontSize="inherit" />}>{t('home.connectSource')}</ButtonLink>
 ```
 
-**IconButton** — `label` (required: accessible name *and* tooltip), `icon`, `size`, `variant` (`danger` tints the glyph). Always a visible soft square.
+**IconButton** — `label` (required: accessible name *and* tooltip), `icon`, `size`, `variant` (`danger` tints the glyph), `disabledReason` (muted, focusable, presses ignored, tooltip says why — use instead of `isDisabled` when the person should learn the reason). Always a visible soft square.
 
 **Avatar** — `name`, `size: 'sm' | 'md'`. **Spinner** — `size`, `label` (with a label it is a status region). Use `Spinner` only inline; loading regions use `Skeleton`.
 
@@ -26,7 +26,7 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
 
 ## Status and labelling
 
-**StatusMark** — `state: pending | processing | completed | failed | healthy | syncing | warning | error | disabled`, `progress?: {current, total}` (processing only → "OCR 3/12" + bar), `size`, `label` (a more specific word in the same tone, e.g. "Idle", "Quiet"). Dot + word; spinner for processing/syncing. Never put it on a coloured background.
+**StatusMark** — `state: pending | processing | completed | failed | healthy | syncing | warning | error | disabled`, `progress?: {current, total}` (processing only → "OCR 3/12" + bar), `size`, `label` (a more specific word in the same tone, e.g. "Idle", "Quiet"), `reason` (plain-language why; dotted underline + tooltip — this is how a row shows its error). Dot + word; spinner for processing/syncing. Never put it on a coloured background.
 **LabelChip** — `name`, `color`, `icon`, `count`, `size`, `onPress`, `onRemove` + `removeLabel`. Feature code with a `LabelData` uses `features/labels/Label`.
 **FilterChip** — `label`, `value`, `isActive`, `onPress`, `onClear`, `popover`.
 **SourceBadge** — `sourceId`, `kind` (`upload`, `watch`, or the source type), `name`, `type` (icon), `variant: 'tile' | 'chip'`, `showType`. Library rows use `features/library/SourceBadge` (`row`, `name`). **SourceTile** — the icon tile alone (`sourceId`, `kind`, `type`) for rows that print the name themselves (sidebar, lists).
@@ -37,7 +37,7 @@ Don't: use `danger-solid` outside a confirm dialog; put two primary buttons side
   {t('sync.refused')}
 </Notice>
 ```
-**Toast** — `const toast = useToast(); toast.show({ title, description?, tone: 'info' | 'success' | 'danger', timeout? })`.
+**Toast** — `const toast = useToast(); toast.show({ title, description?, tone: 'info' | 'success' | 'danger', timeout? })`. Long-running work: `toast.progress(id, { title, description?, value? })` updates one toast in place (no timeout); `toast.dismiss(id)` when it ends. Hovering pauses timed toasts.
 
 ## Data
 
