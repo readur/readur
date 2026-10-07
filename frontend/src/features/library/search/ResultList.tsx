@@ -1,8 +1,7 @@
 import { useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Checkbox, IconButton, Skeleton } from '../../../ui';
-import { Visibility } from '../../../ui/icons';
+import { Checkbox, Skeleton } from '../../../ui';
 import { useAcknowledgeOnLeave } from '../../board/litStore';
 import { DocumentThumbnail } from '../../document/DocumentThumbnail';
 import { Label } from '../../labels';
@@ -37,27 +36,23 @@ export function topSnippets(snippets: readonly SearchSnippet[] | undefined, max 
   return chosen.sort((a, b) => a.start_offset - b.start_offset);
 }
 
-/** Where a result opens: the document page, finding the search words on arrival. */
-export function documentHref(id: string, q: string): string {
-  const query = q.trim();
-  return query ? `/documents/${id}?q=${encodeURIComponent(query)}` : `/documents/${id}`;
-}
-
 interface ResultListProps {
   rows: LibraryRow[];
-  query: string;
   /** Month headings between results (date order); a flat list in relevance order. */
   byMonth: boolean;
   selected: ReadonlySet<string>;
   onToggle: (id: string, selected: boolean) => void;
-  onPreview: (id: string) => void;
+  /** Where a result opens: this page with the document drawer on it (it finds the search words). */
+  href: (id: string) => string;
+  /** History state for those links, so closing the drawer goes back to the results. */
+  linkState: unknown;
   sourceName: (row: LibraryRow) => string;
   isLoading: boolean;
   emptyState: ReactNode;
 }
 
 /** Search results: thumbnail, name, source, date and the matching passages, grouped by month. */
-export function ResultList({ rows, query, byMonth, selected, onToggle, onPreview, sourceName, isLoading, emptyState }: ResultListProps) {
+export function ResultList({ rows, byMonth, selected, onToggle, href, linkState, sourceName, isLoading, emptyState }: ResultListProps) {
   const { t, i18n } = useTranslation();
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
   useAcknowledgeOnLeave('document', rowIds);
@@ -81,10 +76,10 @@ export function ResultList({ rows, query, byMonth, selected, onToggle, onPreview
     <Result
       key={row.id}
       row={row}
-      query={query}
       isSelected={selected.has(row.id)}
       onToggle={onToggle}
-      onPreview={onPreview}
+      href={href(row.id)}
+      linkState={linkState}
       sourceName={sourceName(row)}
       lng={i18n.language}
     />
@@ -126,18 +121,17 @@ function MonthGroup({ title, count, children }: { title: string; count: number; 
 
 interface ResultProps {
   row: LibraryRow;
-  query: string;
   isSelected: boolean;
   onToggle: (id: string, selected: boolean) => void;
-  onPreview: (id: string) => void;
+  href: string;
+  linkState: unknown;
   sourceName: string;
   lng: string;
 }
 
-function Result({ row, query, isSelected, onToggle, onPreview, sourceName, lng }: ResultProps) {
+function Result({ row, isSelected, onToggle, href, linkState, sourceName, lng }: ResultProps) {
   const { t } = useTranslation();
   const name = displayName(row);
-  const href = documentHref(row.id, query);
   const snippets = topSnippets(row.snippets);
   const notIndexed = ocrState(row.ocr_status) !== 'completed';
   return (
@@ -150,12 +144,12 @@ function Result({ row, query, isSelected, onToggle, onPreview, sourceName, lng }
         />
       </span>
       {/* The name link below is the one in the tab order; the preview is a larger target for the pointer. */}
-      <Link to={href} className={styles.thumb} tabIndex={-1} aria-hidden="true">
+      <Link to={href} state={linkState} className={styles.thumb} tabIndex={-1} aria-hidden="true">
         <DocumentThumbnail documentId={row.id} mimeType={row.mime_type} size="medium" lazy />
       </Link>
       <div className={styles.main}>
         <h3 className={styles.title}>
-          <Link to={href} className={styles.name}>
+          <Link to={href} state={linkState} className={styles.name}>
             {name}
           </Link>
           <ChangeTag id={row.id} />
@@ -181,14 +175,6 @@ function Result({ row, query, isSelected, onToggle, onPreview, sourceName, lng }
           <p className={styles.nameOnly}>{t('library.search.nameMatch', 'Matched on the file name')}</p>
         )}
       </div>
-      <span className={styles.preview}>
-        <IconButton
-          variant="ghost"
-          label={t('library.search.preview', { name, defaultValue: 'Quick look at {{name}}' })}
-          icon={<Visibility fontSize="small" />}
-          onPress={() => onPreview(row.id)}
-        />
-      </span>
     </li>
   );
 }

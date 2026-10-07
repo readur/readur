@@ -103,13 +103,12 @@ describe('Library grid', () => {
     expect(await screen.findByRole('dialog', { name: /lease\.pdf/ })).toBeInTheDocument();
   });
 
-  test('clicking the preview in the detail panel opens the document', async () => {
+  test('clicking a card opens the document drawer over the grid', async () => {
     const user = userEvent.setup();
     renderLibrary();
     await user.click(await card(/lease\.pdf/));
-    const panel = await screen.findByRole('dialog', { name: /lease\.pdf/ });
-    await user.click(within(panel).getByRole('link', { name: 'Open lease.pdf' }));
-    await waitFor(() => expect(currentUrl()).toBe('/documents/d2'));
+    expect(await screen.findByRole('dialog', { name: 'lease.pdf' })).toBeInTheDocument();
+    await waitFor(() => expect(currentUrl()).toBe('/documents?document=d2'));
   });
 
   test('ticking cards selects them for the bulk bar', async () => {

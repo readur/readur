@@ -238,20 +238,18 @@ describe('Search page', () => {
       expect(invoice.querySelector('time')).toHaveAttribute('dateTime', DOCS[0].created_at);
     });
 
-    test('a result opens the document page carrying the search', async () => {
+    test('a result opens the document drawer over the results, keeping the search', async () => {
       const user = userEvent.setup();
       renderSearch('/search?q=invoice');
       await user.click(await result(/invoice-march/));
-      await waitFor(() => expect(currentUrl()).toBe('/documents/d1?q=invoice'));
+      expect(await screen.findByRole('dialog', { name: 'invoice-march.pdf' })).toBeInTheDocument();
+      await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice&document=d1'));
     });
 
-    test('quick look opens the panel and walks the results', async () => {
-      const user = userEvent.setup();
+    test('has no separate quick look: the drawer is the document', async () => {
       renderSearch('/search?q=invoice');
-      await user.click(await screen.findByRole('button', { name: /quick look at invoice-march/i }));
-      const panel = await screen.findByRole('dialog', { name: /invoice-march/ });
-      await user.click(within(panel).getByRole('button', { name: 'Open' }));
-      await waitFor(() => expect(currentUrl()).toBe('/documents/d1?q=invoice'));
+      await result(/invoice-march/);
+      expect(screen.queryByRole('button', { name: /quick look/i })).not.toBeInTheDocument();
     });
 
     test('too many matches asks the user to refine', async () => {
