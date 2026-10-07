@@ -2293,7 +2293,8 @@
       "close": "Cerrar",
       "preview": "Vista previa",
       "tabs": "Sobre este documento",
-      "actions": "Acciones del documento"
+      "actions": "Acciones del documento",
+      "resizePreview": "Cambiar el tamaño de la vista previa"
     }
   },
   "library": {

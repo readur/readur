@@ -2293,7 +2293,8 @@
       "close": "Close",
       "preview": "Preview",
       "tabs": "About this document",
-      "actions": "Document actions"
+      "actions": "Document actions",
+      "resizePreview": "Resize preview"
     }
   },
   "library": {

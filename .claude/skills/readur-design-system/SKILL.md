@@ -36,6 +36,7 @@ Every visible object is rendered by a primitive from `frontend/src/ui` (import f
 | Loading | `Skeleton` shaped like the content; `Spinner` only inline |
 | Progress | `ProgressBar` (one value), `OutcomeBar` (done/failed/queued split) |
 | Choose | `Select`, `ComboBox`, `Segmented` (2–3 always-visible options), `Tabs`, `Switch`, `Checkbox`, `ChoiceGroup` + `ChoiceTile` |
+| Resize stacked parts | `SplitHandle` |
 | Overlay | `Dialog` (`icon`, `helpLink`), `SlideOver`, `Menu` + `MenuSection`, `Popover`, `BulkActionBar`, `CommandPalette` |
 | Person | `Avatar` |
 

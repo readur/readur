@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiModule from '../../../services/api';
@@ -274,6 +274,40 @@ describe('document drawer: preview and tabs', () => {
     ]);
     const tabs = within(dialog).getByRole('tablist', { name: 'About this document' });
     expect(tabs.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('has a handle between the file and the tabs that resizes the file and is remembered', async () => {
+    const user = userEvent.setup();
+    load();
+    renderDrawer({ list: { ids: ['doc-0', 'doc-1', 'doc-2'] } });
+    const dialog = await title();
+    const preview = within(dialog).getByRole('region', { name: 'Preview' });
+    const handle = within(dialog).getByRole('separator', { name: 'Resize preview' });
+    const tabs = within(dialog).getByRole('tablist', { name: 'About this document' });
+    expect(preview.compareDocumentPosition(handle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(handle.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const before = parseInt(preview.style.height, 10);
+    act(() => handle.focus());
+    await user.keyboard('{ArrowDown}');
+    expect(parseInt(preview.style.height, 10)).toBe(before + 24);
+    expect(window.localStorage.getItem('readur.document.previewHeight')).toBe(String(before + 24));
+    // The arrow resized the file; it did not move to another document.
+    expect(screen.getByRole('dialog', { name: 'invoice.pdf' })).toBeInTheDocument();
+  });
+
+  it('opens with the remembered file height', async () => {
+    window.localStorage.setItem('readur.document.previewHeight', '300');
+    load();
+    renderDrawer();
+    const dialog = await title();
+    expect(within(dialog).getByRole('region', { name: 'Preview' }).style.height).toBe('300px');
+  });
+
+  it('has no resize handle when the file cannot be shown', async () => {
+    load(makeDocument({ mime_type: 'application/msword' }));
+    renderDrawer();
+    const dialog = await title();
+    expect(within(dialog).queryByRole('separator', { name: 'Resize preview' })).not.toBeInTheDocument();
   });
 
   it('opens the PDF with the thumbnail sidebar closed and the page fitted to the width', async () => {

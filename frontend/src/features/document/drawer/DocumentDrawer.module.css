@@ -101,9 +101,8 @@
 
 .preview {
   flex: none;
-  height: clamp(200px, 34vh, 520px);
+  /* Its height is set inline: the user drags the handle under it, and the drawer remembers it. */
   border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
   background: var(--surface-sunken);
 }
 
@@ -117,7 +116,7 @@
 
 .tabs {
   display: flex;
-  flex: 1 0 320px;
+  flex: 1 0 200px;
   flex-direction: column;
   gap: 0;
   min-height: 0;
@@ -126,6 +125,7 @@
 .tabList {
   flex: none;
   padding: 0 var(--s-5);
+  border-top: 1px solid var(--line);
 }
 
 .count {

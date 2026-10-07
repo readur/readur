@@ -1,0 +1,42 @@
+/* An 8px bar between two stacked parts; the three dots say "drag me". */
+.handle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 8px;
+  cursor: row-resize;
+  touch-action: none;
+  background: var(--surface);
+  outline: none;
+}
+
+.grip {
+  display: flex;
+  gap: 3px;
+  padding: 1px 4px;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.handle:hover .dot,
+.handle:active .dot {
+  background: var(--accent);
+}
+
+.handle:focus-visible .grip {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.handle:focus-visible .dot {
+  background: var(--accent);
+}

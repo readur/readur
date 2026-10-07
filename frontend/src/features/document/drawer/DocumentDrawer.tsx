@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { RetryHistoryModal } from '../../../components/RetryHistoryModal';
 import { documentService } from '../../../services/api';
-import { Button, EmptyState, Skeleton, SlideOver, Tab, TabList, TabPanel, Tabs, TruncatedText, useToast } from '../../../ui';
+import { Button, EmptyState, Skeleton, SlideOver, SplitHandle, Tab, TabList, TabPanel, Tabs, TruncatedText, useToast } from '../../../ui';
 import { acknowledge } from '../../board/litStore';
 import type { LabelData } from '../../labels';
 import { CommentsPanel, useComments } from '../comments/CommentsPanel';
@@ -22,6 +22,7 @@ import { SharedLinksManager } from '../sharing/SharedLinksManager';
 import { notifyDocumentsChanged, useDocumentList, type DocumentListProvider } from './DocumentDrawerContext';
 import { DrawerActions, DrawerHead } from './DrawerHead';
 import { DrawerLabels } from './DrawerLabels';
+import { PREVIEW_MIN, usePreviewHeight } from './usePreviewHeight';
 import styles from './DocumentDrawer.module.css';
 
 export type DocumentTab = 'text' | 'details' | 'comments' | 'links';
@@ -128,6 +129,8 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [previewReady, setPreviewReady] = useState(!delayPreview);
   const detailsId = useId();
+  const previewHeight = usePreviewHeight();
+  const previewRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     acknowledge('document', id);
@@ -255,8 +258,10 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
       <DrawerLabels labels={labels} tags={doc.tags ?? []} onSave={(next) => void saveLabels(next)} />
 
       <section
+        ref={previewRef}
         className={styles.preview}
         data-compact={noPreview || undefined}
+        style={noPreview ? undefined : { height: previewHeight.height }}
         aria-label={t('document.drawer.preview', 'Preview')}
       >
         {previewReady ? (
@@ -270,6 +275,16 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
           <Skeleton height="100%" label={t('document.viewer.loading', 'Loading preview')} />
         )}
       </section>
+      {noPreview ? null : (
+        <SplitHandle
+          label={t('document.drawer.resizePreview', 'Resize preview')}
+          value={previewHeight.height}
+          min={PREVIEW_MIN}
+          max={previewHeight.max(previewRef.current?.parentElement?.clientHeight ?? 0)}
+          onChange={previewHeight.setHeight}
+          onCommit={previewHeight.remember}
+        />
+      )}
 
       <Tabs className={styles.tabs} selectedKey={tab} onSelectionChange={(key: Key) => onTabChange(key as DocumentTab)}>
         <TabList aria-label={t('document.drawer.tabs', 'About this document')} className={styles.tabList}>

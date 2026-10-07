@@ -30,6 +30,7 @@ export * from './Label';
 export * from './BoardTable';
 export * from './DocumentCard';
 export * from './SlideOver';
+export * from './SplitHandle';
 export * from './CommandPalette';
 export * from './BulkActionBar';
 export * from './Spinner';
