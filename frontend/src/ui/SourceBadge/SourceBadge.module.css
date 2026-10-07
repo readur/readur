@@ -8,54 +8,49 @@
 [data-slot="7"] { --src: var(--src-7); --src-soft: var(--src-7-soft); }
 [data-slot="8"] { --src: var(--src-8); --src-soft: var(--src-8-soft); }
 
-.dot {
-  display: inline-block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--src);
-  box-shadow: 0 0 0 3px var(--src-soft);
-  vertical-align: middle;
-}
-
-.dot.md {
-  width: 10px;
-  height: 10px;
-}
-
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
   max-width: 100%;
-  padding: 2px var(--s-2);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--fg);
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
   font-weight: 600;
-  line-height: 18px;
+  color: var(--fg);
   white-space: nowrap;
+  vertical-align: middle;
 }
 
-.badge .dot {
-  width: 8px;
-  height: 8px;
-  box-shadow: none;
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--src) 18%, var(--surface));
+  color: color-mix(in srgb, var(--src) 80%, var(--fg));
 }
 
-.badge.sm {
-  padding: 1px 6px;
+.chip {
+  padding: 2px var(--s-2) 2px 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.chip .tile {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+}
+
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.type {
+  font-family: var(--font-data);
   font-size: var(--fs-xs);
-  line-height: 16px;
-}
-
-.name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--fg-meta);
 }

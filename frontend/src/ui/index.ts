@@ -20,6 +20,7 @@ export * from './Pagination';
 export * from './Kbd';
 export * from './ChangeTag';
 export * from './SourceDot';
+export * from './SourceBadge';
 export * from './StatusMark';
 export * from './Pass';
 export * from './FilterChip';
