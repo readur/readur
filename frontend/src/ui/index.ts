@@ -14,6 +14,7 @@ export * from './Menu';
 export * from './Popover';
 export * from './Tooltip';
 export * from './Toast';
+export * from './Notice';
 export * from './EmptyState';
 export * from './Skeleton';
 export * from './Pagination';

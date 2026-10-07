@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, ChangeTag, Dialog } from '../../../ui';
-import { CheckCircle, Error as ErrorIcon, Info } from '../../../ui/icons';
+import { Button, ChangeTag, Dialog, Notice as UiNotice } from '../../../ui';
 import type { LitReason } from '../../board/litStore';
 import { litTagOf } from '../../board/litTag';
 import styles from './Shared.module.css';
@@ -21,7 +20,6 @@ export interface NoticeProps {
 /** Inline message; the tone is carried by an icon and a hidden word as well as the colour. */
 export function Notice({ tone = 'info', title, children, live }: NoticeProps) {
   const { t } = useTranslation();
-  const Icon = tone === 'danger' ? ErrorIcon : tone === 'ok' ? CheckCircle : Info;
   const word =
     tone === 'danger'
       ? t('intake.notice.danger', 'Error:')
@@ -29,22 +27,9 @@ export function Notice({ tone = 'info', title, children, live }: NoticeProps) {
         ? t('intake.notice.ok', 'Done:')
         : t('intake.notice.info', 'Note:');
   return (
-    <div className={styles.notice} data-tone={tone} role={live}>
-      <span className={styles.noticeIcon} aria-hidden="true">
-        <Icon fontSize="inherit" />
-      </span>
-      <div className={styles.noticeBody}>
-        {title ? (
-          <span className={styles.noticeTitle}>
-            <span className={styles.visuallyHidden}>{word} </span>
-            {title}
-          </span>
-        ) : (
-          <span className={styles.visuallyHidden}>{word}</span>
-        )}
-        {children ? <div>{children}</div> : null}
-      </div>
-    </div>
+    <UiNotice tone={tone} title={title} live={live ?? 'off'} prefix={word}>
+      {children}
+    </UiNotice>
   );
 }
 

@@ -104,7 +104,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-label={t('ui.notifications', 'Notifications')}
       >
         {({ toast }) => (
-          <RACToast toast={toast} className={cx(styles.toast, styles[toast.content.tone])}>
+          <RACToast
+            toast={toast}
+            className={cx(styles.toast, styles[toast.content.tone])}
+            style={{ '--toast-timeout': `${toast.timeout ?? 0}ms` } as CSSProperties}
+          >
             <span className={styles.toneIcon} aria-hidden="true">
               {(() => {
                 const Icon = TONE_ICON[toast.content.tone];
@@ -125,6 +129,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <Button slot="close" className={styles.close} aria-label={t('ui.close', 'Close')}>
               <Close fontSize="small" />
             </Button>
+            {toast.timeout ? <span className={styles.timer} aria-hidden="true" /> : null}
           </RACToast>
         )}
       </ToastRegion>

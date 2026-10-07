@@ -145,61 +145,14 @@
   white-space: nowrap;
 }
 
-/* Inline notices: an icon and a word carry the tone, never colour alone. */
-.notice {
-  display: flex;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  font-family: var(--font-ui);
-  font-size: var(--fs-md);
-  line-height: var(--lh-body);
-  color: var(--fg);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
 
-.notice[data-tone='danger'] {
-  background: var(--danger-soft);
-  border-color: var(--danger);
-}
 
-.notice[data-tone='ok'] {
-  background: var(--ok-soft);
-  border-color: var(--ok);
-}
 
-.notice[data-tone='warning'] {
-  background: var(--warn-soft);
-  border-color: var(--warn);
-}
 
-.noticeIcon {
-  flex: none;
-  display: inline-flex;
-  font-size: var(--fs-lg);
-  line-height: 1;
-  padding-top: 2px;
-}
 
-.notice[data-tone='danger'] .noticeIcon {
-  color: var(--danger);
-}
 
-.notice[data-tone='ok'] .noticeIcon {
-  color: var(--ok);
-}
 
-.noticeBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 0;
-}
 
-.noticeTitle {
-  font-weight: 600;
-}
 
 .bar {
   flex: 1;
