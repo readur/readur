@@ -5,6 +5,8 @@ import { CommandPalette, IconButton, Skeleton, useCommandPaletteShortcut } from 
 import { Menu } from '../../ui/icons';
 import { cx } from '../../ui/shared/FieldParts';
 import { useLitFeeders } from '../board/litFeeders';
+import { DocumentDrawerProvider } from '../document/drawer/DocumentDrawerContext';
+import { DocumentDrawerHost } from '../document/drawer/DocumentDrawerHost';
 import { AlertsButton } from './AlertsButton';
 import { HOME_PATH } from './destinations';
 import { MobileDrawer } from './MobileDrawer';
@@ -88,60 +90,65 @@ export function AppShell({ children }: AppShellProps) {
   );
 
   return (
-    <div className={cx(styles.shell, isDrawerLayout && styles.drawerLayout, showBottomBar && styles.withBottomBar)}>
-      <a href="#main" className={styles.skipLink}>
-        {t('shell.skipToContent', 'Skip to content')}
-      </a>
-      <SyncToasts sources={sources} />
-      {isDrawerLayout ? (
-        <header className={styles.mobileBar}>
-          <IconButton
-            label={t('shell.menu.open', 'Open menu')}
-            icon={<Menu fontSize="inherit" />}
-            onPress={() => setDrawerOpen(true)}
-            aria-expanded={drawerOpen}
-          />
-          <Link to={HOME_PATH} className={styles.wordmark} aria-label={t('shell.home', 'Readur home')}>
-            <img src="/readur-64.png" alt="" width={24} height={24} className={styles.logo} />
-            <span className={styles.wordmarkText} aria-hidden="true">
-              {t('common.appName', 'Readur')}
-            </span>
-          </Link>
-          <div className={styles.mobileTools}>
-            <SearchTrigger onOpen={openPalette} compact />
-            <AlertsButton />
+    <DocumentDrawerProvider>
+      <div className={cx(styles.shell, isDrawerLayout && styles.drawerLayout, showBottomBar && styles.withBottomBar)}>
+        <a href="#main" className={styles.skipLink}>
+          {t('shell.skipToContent', 'Skip to content')}
+        </a>
+        <SyncToasts sources={sources} />
+        {isDrawerLayout ? (
+          <header className={styles.mobileBar}>
+            <IconButton
+              label={t('shell.menu.open', 'Open menu')}
+              icon={<Menu fontSize="inherit" />}
+              onPress={() => setDrawerOpen(true)}
+              aria-expanded={drawerOpen}
+            />
+            <Link to={HOME_PATH} className={styles.wordmark} aria-label={t('shell.home', 'Readur home')}>
+              <img src="/readur-64.png" alt="" width={24} height={24} className={styles.logo} />
+              <span className={styles.wordmarkText} aria-hidden="true">
+                {t('common.appName', 'Readur')}
+              </span>
+            </Link>
+            <div className={styles.mobileTools}>
+              <SearchTrigger onOpen={openPalette} compact />
+              <AlertsButton />
+            </div>
+          </header>
+        ) : (
+          <header className={styles.sidebarFrame}>{sidebar}</header>
+        )}
+
+        <main id="main" tabIndex={-1} className={styles.main}>
+          <div className={styles.content}>
+            <Suspense fallback={<PageFallback />}>{children ?? <Outlet />}</Suspense>
           </div>
-        </header>
-      ) : (
-        <header className={styles.sidebarFrame}>{sidebar}</header>
-      )}
+        </main>
 
-      <main id="main" tabIndex={-1} className={styles.main}>
-        <div className={styles.content}>
-          <Suspense fallback={<PageFallback />}>{children ?? <Outlet />}</Suspense>
-        </div>
-      </main>
+        {/* The document named by ?document=, over whatever page is showing. */}
+        <DocumentDrawerHost />
 
-      {isDrawerLayout ? (
-        <MobileDrawer isOpen={drawerOpen} onOpenChange={setDrawerOpen}>
-          {sidebar}
-        </MobileDrawer>
-      ) : null}
+        {isDrawerLayout ? (
+          <MobileDrawer isOpen={drawerOpen} onOpenChange={setDrawerOpen}>
+            {sidebar}
+          </MobileDrawer>
+        ) : null}
 
-      {showBottomBar ? (
-        <PrimaryNav
-          variant="bottom"
-          label={isDrawerLayout ? t('shell.nav.label', 'Main') : t('shell.nav.tabBar', 'Tab bar')}
+        {showBottomBar ? (
+          <PrimaryNav
+            variant="bottom"
+            label={isDrawerLayout ? t('shell.nav.label', 'Main') : t('shell.nav.tabBar', 'Tab bar')}
+          />
+        ) : null}
+
+        <CommandPalette
+          isOpen={paletteOpen}
+          onOpenChange={setPaletteOpen}
+          sources={paletteSources}
+          placeholder={t('shell.search.placeholder', 'Search documents…')}
         />
-      ) : null}
-
-      <CommandPalette
-        isOpen={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        sources={paletteSources}
-        placeholder={t('shell.search.placeholder', 'Search documents…')}
-      />
-    </div>
+      </div>
+    </DocumentDrawerProvider>
   );
 }
 

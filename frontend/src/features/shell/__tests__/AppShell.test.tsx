@@ -12,6 +12,11 @@ vi.mock('../../../services/api', () => ({
   labelService: { list: vi.fn() },
 }));
 
+vi.mock('../../document/drawer/DocumentDrawer', () => ({
+  default: ({ id, isOpen }: { id: string; isOpen: boolean }) =>
+    isOpen ? <div role="dialog" aria-label={`Document ${id}`} /> : null,
+}));
+
 const mockedGet = vi.mocked(api.get);
 const mockedLabels = vi.mocked(labelService.list);
 const sourcesCalls = () => mockedGet.mock.calls.filter(([url]) => url === '/sources').length;
@@ -31,6 +36,20 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('document drawer', () => {
+  it('opens over whatever page names a document in ?document=', async () => {
+    renderShell({ path: '/home?document=d1', page: <p>Home page</p> });
+    expect(await screen.findByRole('dialog', { name: 'Document d1' })).toBeInTheDocument();
+    expect(screen.getByText('Home page')).toBeInTheDocument();
+  });
+
+  it('shows no drawer without ?document=', async () => {
+    renderShell({ path: '/home', page: <p>Home page</p> });
+    await screen.findByText('Home page');
+    expect(screen.queryByRole('dialog', { name: /Document/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('AppShell layout', () => {
