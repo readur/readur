@@ -2270,7 +2270,8 @@
       "loading": "Vorschau wird geladen",
       "error": "Vorschau konnte nicht geladen werden.",
       "unsupported": "Keine Vorschau für diesen Dateityp",
-      "unsupportedHint": "{{type}}-Dateien können nicht im Browser angezeigt werden. Lade die Datei herunter, um sie zu öffnen."
+      "unsupportedHint": "{{type}}-Dateien können nicht im Browser angezeigt werden. Lade die Datei herunter, um sie zu öffnen.",
+      "openImage": "{{name}} in neuem Tab öffnen"
     },
     "tabs": {
       "text": "Text",

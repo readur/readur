@@ -18,6 +18,19 @@
   padding: var(--s-4);
 }
 
+.imageLink {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+  border-radius: var(--radius-sm);
+}
+
+.imageLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .image {
   display: block;
   width: 100%;

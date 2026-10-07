@@ -2270,7 +2270,8 @@
       "loading": "Loading preview",
       "error": "Couldn't load the preview.",
       "unsupported": "No preview for this file type",
-      "unsupportedHint": "{{type}} files can’t be shown in the browser. Download the file to open it."
+      "unsupportedHint": "{{type}} files can’t be shown in the browser. Download the file to open it.",
+      "openImage": "Open {{name}} in a new tab"
     },
     "tabs": {
       "text": "Text",

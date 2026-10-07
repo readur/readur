@@ -2270,7 +2270,8 @@
       "loading": "Cargando vista previa",
       "error": "No se pudo cargar la vista previa.",
       "unsupported": "No hay vista previa para este tipo de archivo",
-      "unsupportedHint": "Los archivos {{type}} no se pueden mostrar en el navegador. Descarga el archivo para abrirlo."
+      "unsupportedHint": "Los archivos {{type}} no se pueden mostrar en el navegador. Descarga el archivo para abrirlo.",
+      "openImage": "Abrir {{name}} en una pestaña nueva"
     },
     "tabs": {
       "text": "Texto",

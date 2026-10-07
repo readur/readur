@@ -16,6 +16,8 @@ export interface DocumentViewerProps {
    * passes its own loader.
    */
   load?: () => Promise<{ data: BlobPart }>;
+  /** Clicking an image opens it full size in a new tab (PDFs keep their own viewer). */
+  openImageInNewTab?: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ export const PDF_VIEW_PARAMS = '#navpanes=0&pagemode=none&view=FitH';
 type ViewState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; url: string; text?: string };
 
 /** Inline preview of the original file: PDF in a frame, images, and plain text. */
-export function DocumentViewer({ documentId, filename, mimeType, load }: DocumentViewerProps) {
+export function DocumentViewer({ documentId, filename, mimeType, load, openImageInNewTab = false }: DocumentViewerProps) {
   const { t } = useTranslation();
   const [view, setView] = useState<ViewState>({ status: 'loading' });
   const kind = fileKind(mimeType);
@@ -71,9 +73,23 @@ export function DocumentViewer({ documentId, filename, mimeType, load }: Documen
     );
   }
   if (kind === 'image') {
+    const image = <img className={styles.image} src={view.url} alt={filename} />;
     return (
       <div className={`${styles.frame} ${styles.imageFrame}`}>
-        <img className={styles.image} src={view.url} alt={filename} />
+        {openImageInNewTab ? (
+          // The file is already here as a blob; a new tab can show it without signing in again.
+          <a
+            className={styles.imageLink}
+            href={view.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('document.viewer.openImage', { name: filename, defaultValue: 'Open {{name}} in a new tab' })}
+          >
+            {image}
+          </a>
+        ) : (
+          image
+        )}
       </div>
     );
   }

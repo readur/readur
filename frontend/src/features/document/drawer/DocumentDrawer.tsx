@@ -260,7 +260,12 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
         aria-label={t('document.drawer.preview', 'Preview')}
       >
         {previewReady ? (
-          <DocumentViewer documentId={doc.id} filename={doc.original_filename} mimeType={doc.mime_type} />
+          <DocumentViewer
+            documentId={doc.id}
+            filename={doc.original_filename}
+            mimeType={doc.mime_type}
+            openImageInNewTab
+          />
         ) : (
           <Skeleton height="100%" label={t('document.viewer.loading', 'Loading preview')} />
         )}
