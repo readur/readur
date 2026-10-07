@@ -1,5 +1,5 @@
 import { RouterProvider } from 'react-aria-components';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -72,10 +72,16 @@ describe('DocumentCard', () => {
   });
 });
 
-it('keeps corner flags visible on a selected card (they sit opposite the checkbox)', () => {
+it('puts flags in the details, never over the preview, and rings the whole card when changed', () => {
+  const { container } = render(<ul><DocumentCard {...base} onOpen={() => {}} isChanged flags={<span>New</span>} status={<span>Indexed</span>} /></ul>);
+  const thumb = container.querySelector('[data-thumb]') as HTMLElement;
+  expect(thumb).not.toBeNull();
+  expect(within(thumb).queryByText('New')).toBeNull();
+  expect(screen.getByText('New').closest('[data-details]')).not.toBeNull();
   const css = readFileSync(resolve(__dirname, 'DocumentCard.module.css'), 'utf8');
-  expect(css).toMatch(/\.flags\s*\{[^}]*right:\s*var\(--s-2\)/);
-  expect(css).not.toMatch(/\[data-selected\][^{]*\.flags/);
+  expect(css).not.toMatch(/\.flags\s*\{[^}]*position:\s*absolute/);
+  expect(css).not.toMatch(/\[data-changed\]\s*\.thumb/);
+  expect(css).toMatch(/\.card\[data-changed\]\s*\{[^}]*--new-fill/);
 });
 
 it('reports the open when it is a link too', async () => {

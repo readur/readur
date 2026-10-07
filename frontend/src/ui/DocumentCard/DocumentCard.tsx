@@ -12,7 +12,7 @@ export interface DocumentCardProps {
   status?: ReactNode;
   labels?: ReactNode;
   source?: ReactNode;
-  /** Corner marks such as a ChangeTag. */
+  /** Marks such as a ChangeTag, shown at the end of the status row (never over the preview). */
   flags?: ReactNode;
   /** Opens as a link when set; otherwise the title is a button calling `onOpen`. */
   href?: string;
@@ -21,7 +21,7 @@ export interface DocumentCardProps {
   /** With `selectLabel`, adds a selection checkbox that appears on hover, focus or selection. */
   onSelectionChange?: (selected: boolean) => void;
   selectLabel?: string;
-  /** Rings the preview with the new-signal colour. */
+  /** Rings the card with the new-signal colour. */
   isChanged?: boolean;
   /** Raised icon buttons shown on hover / focus. */
   quickActions?: ReactNode;
@@ -48,7 +48,9 @@ export function DocumentCard({
 }: DocumentCardProps) {
   const body = (
     <>
-      <span className={styles.thumb}>{thumbnail}</span>
+      <span className={styles.thumb} data-thumb="">
+        {thumbnail}
+      </span>
       <span className={styles.name}>{title}</span>
     </>
   );
@@ -63,13 +65,17 @@ export function DocumentCard({
           {body}
         </RACButton>
       )}
-      <span className={styles.details}>
+      <span className={styles.details} data-details="">
         {meta ? <span className={styles.meta}>{meta}</span> : null}
-        {status ? <span className={styles.row}>{status}</span> : null}
+        {status || flags ? (
+          <span className={styles.statusRow}>
+            {status}
+            {flags ? <span className={styles.flags}>{flags}</span> : null}
+          </span>
+        ) : null}
         {labels ? <span className={styles.row}>{labels}</span> : null}
         {source ? <span className={styles.row}>{source}</span> : null}
       </span>
-      {flags ? <span className={styles.flags}>{flags}</span> : null}
       {onSelectionChange && selectLabel ? (
         <span className={styles.check} data-card-check="">
           <Checkbox aria-label={selectLabel} isSelected={!!isSelected} onChange={onSelectionChange} />

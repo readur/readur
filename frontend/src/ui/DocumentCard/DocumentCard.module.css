@@ -54,7 +54,8 @@
   box-shadow: var(--shadow-1);
 }
 
-.card[data-changed] .thumb { box-shadow: inset 0 0 0 2px var(--new-fill); }
+.card[data-changed] { box-shadow: 0 0 0 2px var(--new-fill), var(--shadow-1); }
+.card[data-changed][data-selected] { box-shadow: 0 0 0 2px var(--accent), var(--shadow-1); }
 
 .name {
   display: -webkit-box;
@@ -86,8 +87,9 @@
 
 .row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 
-/* Flags sit top-right, opposite the selection checkbox, so a selected card keeps its New tag. */
-.flags { position: absolute; top: var(--s-2); right: var(--s-2); display: flex; gap: var(--s-1); transition: opacity var(--dur-1) var(--ease); }
+/* Status on the left, flags (New / Changed) pushed to the right of the same row. */
+.statusRow { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.flags { display: flex; flex: none; gap: var(--s-1); margin-left: auto; }
 
 .check {
   position: absolute;
@@ -118,8 +120,6 @@
 .card:hover .actions,
 .card:focus-within .actions { opacity: 1; }
 
-.card:has(.actions):hover .flags,
-.card:has(.actions):focus-within .flags { opacity: 0; }
 
 @media (hover: none) {
   .check,
