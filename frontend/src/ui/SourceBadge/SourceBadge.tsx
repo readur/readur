@@ -41,16 +41,42 @@ export interface SourceBadgeProps {
   className?: string;
 }
 
+function TileGlyph({ type }: { type: string }) {
+  const Icon = ICON[type] ?? Folder;
+  return (
+    <span className={styles.tile} data-tile="" aria-hidden="true">
+      <Icon width={13} height={13} strokeWidth={2} />
+    </span>
+  );
+}
+
+export interface SourceTileProps {
+  sourceId: string | null | undefined;
+  kind?: SourceKind | string | null;
+  type?: SourceType | string | null;
+  className?: string;
+}
+
+/**
+ * The icon tile on its own, for rows that already print the source's name next to it (sidebar
+ * lists). Decorative: the name beside it carries the meaning.
+ */
+export function SourceTile({ sourceId, kind, type, className }: SourceTileProps) {
+  const { index } = sourceHue(sourceId, kind);
+  return (
+    <span className={cx(styles.badge, className)} data-slot={index}>
+      <TileGlyph type={type ?? kind ?? 'upload'} />
+    </span>
+  );
+}
+
 /** Where something came from: a tile in the source's hue with its type icon, plus the name (never colour alone). */
 export function SourceBadge({ sourceId, kind, name, type, variant = 'tile', showType = false, className }: SourceBadgeProps) {
   const { index } = sourceHue(sourceId, kind);
   const key = type ?? kind ?? 'upload';
-  const Icon = ICON[key] ?? Folder;
   return (
     <span className={cx(styles.badge, variant === 'chip' && styles.chip, className)} data-slot={index}>
-      <span className={styles.tile} data-tile="" aria-hidden="true">
-        <Icon width={13} height={13} strokeWidth={2} />
-      </span>
+      <TileGlyph type={key} />
       <span className={styles.name}>{name}</span>
       {showType && TYPE_LABEL[key] ? <span className={styles.type}>{TYPE_LABEL[key]}</span> : null}
     </span>

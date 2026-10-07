@@ -1924,7 +1924,11 @@
       "settings": "Paramètres",
       "apiDocs": "Documentation de l’API",
       "logout": "Se déconnecter",
-      "menuFor": "Menu du compte, {{name}}"
+      "menuFor": "Menu du compte, {{name}}",
+      "role": {
+        "admin": "Administrateur",
+        "user": "Utilisateur"
+      }
     },
     "intake": {
       "title": "Entrée",

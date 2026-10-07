@@ -1924,7 +1924,11 @@
       "settings": "Configuración",
       "apiDocs": "Documentación de la API",
       "logout": "Cerrar sesión",
-      "menuFor": "Menú de la cuenta, {{name}}"
+      "menuFor": "Menú de la cuenta, {{name}}",
+      "role": {
+        "admin": "Administrador",
+        "user": "Usuario"
+      }
     },
     "intake": {
       "title": "Entrada",

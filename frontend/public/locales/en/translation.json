@@ -1924,7 +1924,11 @@
       "settings": "Settings",
       "apiDocs": "API documentation",
       "logout": "Log out",
-      "menuFor": "Account menu, {{name}}"
+      "menuFor": "Account menu, {{name}}",
+      "role": {
+        "admin": "Admin",
+        "user": "User"
+      }
     },
     "intake": {
       "title": "Intake",

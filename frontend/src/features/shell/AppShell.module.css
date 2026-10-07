@@ -257,12 +257,12 @@
   gap: var(--s-2);
   flex: 1;
   min-width: 0;
-  height: 40px;
+  height: 44px;
   padding: 0 var(--s-2);
   background: transparent;
   color: var(--fg);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -270,7 +270,7 @@
 }
 
 .userRow[data-hovered] {
-  background: var(--surface-2);
+  background: var(--hover);
 }
 
 .userRow[data-focus-visible] {
@@ -278,17 +278,12 @@
   outline-offset: 2px;
 }
 
-.avatar {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--fs-sm);
-  font-weight: 700;
+.userRowText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+  text-align: left;
 }
 
 .userRowName {
@@ -296,6 +291,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.userRowRole {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg-meta);
 }
 
 /* ── Main ────────────────────────────────────────────── */

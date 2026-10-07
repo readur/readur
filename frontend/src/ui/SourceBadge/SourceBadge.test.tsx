@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { sourceHue } from '../../lib/sourceColor';
-import { SourceBadge } from './SourceBadge';
+import { SourceBadge, SourceTile } from './SourceBadge';
 
 describe('SourceBadge', () => {
   it('shows a hue tile with the type icon and the name', () => {
@@ -36,5 +36,16 @@ describe('SourceBadge', () => {
     expect(screen.getByText('Upload', { selector: '[class*="type"]' })).toBeInTheDocument();
     rerender(<SourceBadge sourceId={null} kind="watch" type="watch_folder" name="Watch folder" />);
     expect(container.querySelector('[data-tile] svg.lucide-folder-search')).not.toBeNull();
+  });
+});
+
+describe('SourceTile', () => {
+  it('is the decorative icon tile alone, in the source hue', () => {
+    const { container } = render(<SourceTile sourceId={null} kind="watch" type="watch_folder" />);
+    const tile = container.querySelector('[data-tile]');
+    expect(tile).toHaveAttribute('aria-hidden', 'true');
+    expect(tile?.querySelector('svg')).not.toBeNull();
+    expect(container.firstElementChild).toHaveAttribute('data-slot');
+    expect(container).toHaveTextContent('');
   });
 });

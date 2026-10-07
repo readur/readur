@@ -13,6 +13,7 @@ import { SearchTrigger } from './SearchTrigger';
 import { Sidebar } from './Sidebar';
 import { useCollections } from './useCollections';
 import { useLatestSync, useSourcesList } from './useLastSynced';
+import { useDocumentTotal } from './useDocumentTotal';
 import { useMediaQuery } from './useMediaQuery';
 import { usePaletteSources } from './usePaletteSources';
 import styles from './AppShell.module.css';
@@ -62,6 +63,7 @@ export function AppShell({ children }: AppShellProps) {
   const paletteSources = usePaletteSources();
   const labels = useCollections();
   const sources = useSourcesList();
+  const documentTotal = useDocumentTotal();
   const lastSynced = useLatestSync(sources);
   useCommandPaletteShortcut(openPalette);
   useLitFeeders();
@@ -75,7 +77,13 @@ export function AppShell({ children }: AppShellProps) {
   // The installed app always gets the tab bar (CSS still hides it on wide screens).
   const showBottomBar = isDrawerLayout || isStandalone;
   const sidebar = (
-    <Sidebar onOpenPalette={openPalette} labels={labels} sources={sources} lastSynced={lastSynced} />
+    <Sidebar
+      onOpenPalette={openPalette}
+      labels={labels}
+      sources={sources}
+      lastSynced={lastSynced}
+      counts={documentTotal !== null ? { library: documentTotal } : undefined}
+    />
   );
 
   return (

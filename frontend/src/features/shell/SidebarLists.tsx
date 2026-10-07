@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { LabelResponse, SourceResponse } from '../../services/api';
-import { SourceDot } from '../../ui';
+import { SourceTile } from '../../ui';
 import { cx } from '../../ui/shared/FieldParts';
 import { topCollections } from './useCollections';
 import styles from './Sidebar.module.css';
@@ -123,13 +123,13 @@ export function SourcesList({ sources, aside }: { sources: SourceResponse[] | nu
         to="/intake?section=upload"
         isCurrent={pathname === '/intake' && section === 'upload'}
         name={t('shell.sources.uploads', 'Uploads')}
-        mark={<SourceDot sourceId={null} kind="upload" size="sm" />}
+        mark={<SourceTile sourceId={null} kind="upload" />}
       />
       <SidebarItem
         to="/sources?section=watch"
         isCurrent={pathname === '/sources' && section === 'watch'}
         name={t('shell.sources.watch', 'Watch folder')}
-        mark={<SourceDot sourceId={null} kind="watch" size="sm" />}
+        mark={<SourceTile sourceId={null} kind="watch" />}
       />
       {sorted.map((source) => {
         const health = sourceHealth(source);
@@ -139,7 +139,7 @@ export function SourcesList({ sources, aside }: { sources: SourceResponse[] | nu
             to={sourcePath(source.id)}
             isCurrent={currentSource === source.id}
             name={source.name}
-            mark={<SourceDot sourceId={source.id} kind={source.source_type} size="sm" />}
+            mark={<SourceTile sourceId={source.id} kind={source.source_type} />}
             trailing={
               health ? (
                 <span className={cx(styles.health, styles[`health-${health}`])}>

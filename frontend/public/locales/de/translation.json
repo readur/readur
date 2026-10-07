@@ -1924,7 +1924,11 @@
       "settings": "Einstellungen",
       "apiDocs": "API-Dokumentation",
       "logout": "Abmelden",
-      "menuFor": "Kontomenü, {{name}}"
+      "menuFor": "Kontomenü, {{name}}",
+      "role": {
+        "admin": "Admin",
+        "user": "Benutzer"
+      }
     },
     "intake": {
       "title": "Eingang",
