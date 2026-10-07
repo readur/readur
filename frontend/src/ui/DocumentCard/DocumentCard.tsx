@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button as RACButton, Link } from 'react-aria-components';
+import { Button as RACButton, Link, type LinkProps } from 'react-aria-components';
 import { Checkbox } from '../Checkbox';
 import styles from './DocumentCard.module.css';
 
@@ -16,6 +16,8 @@ export interface DocumentCardProps {
   flags?: ReactNode;
   /** Opens as a link when set; otherwise the title is a button calling `onOpen`. */
   href?: string;
+  /** With `href`, what the router gets along with it (history state, say). */
+  routerOptions?: LinkProps['routerOptions'];
   onOpen?: () => void;
   isSelected?: boolean;
   /** With `selectLabel`, adds a selection checkbox that appears on hover, focus or selection. */
@@ -38,6 +40,7 @@ export function DocumentCard({
   source,
   flags,
   href,
+  routerOptions,
   onOpen,
   isSelected,
   onSelectionChange,
@@ -57,7 +60,7 @@ export function DocumentCard({
   return (
     <El className={styles.card} data-selected={isSelected || undefined} data-changed={isChanged || undefined}>
       {href ? (
-        <Link href={href} className={styles.open} onPress={onOpen}>
+        <Link href={href} routerOptions={routerOptions} className={styles.open} onPress={onOpen}>
           {body}
         </Link>
       ) : (

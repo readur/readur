@@ -26,3 +26,23 @@ it('lets React Aria links (ButtonLink, DocumentCard) navigate inside the app', a
   await userEvent.setup().click(link);
   expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/sources?section=connections&new=1');
 });
+
+function StateOf() {
+  const { state } = useLocation();
+  return <output aria-label="state">{JSON.stringify(state)}</output>;
+}
+
+it('passes routerOptions (history state) through to the router', async () => {
+  render(
+    <MemoryRouter initialEntries={['/home']}>
+      <RacRouterBridge>
+        <ButtonLink href="/home?document=d1" routerOptions={{ state: { drawers: { document: true } } }}>
+          Open d1
+        </ButtonLink>
+        <StateOf />
+      </RacRouterBridge>
+    </MemoryRouter>,
+  );
+  await userEvent.setup().click(screen.getByRole('link', { name: 'Open d1' }));
+  expect(screen.getByRole('status', { name: 'state' })).toHaveTextContent('{"drawers":{"document":true}}');
+});

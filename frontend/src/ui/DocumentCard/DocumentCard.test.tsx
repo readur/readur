@@ -29,6 +29,19 @@ describe('DocumentCard', () => {
     expect(screen.getByRole('link', { name: 'Lease.pdf' })).toHaveAttribute('href', '/documents/1');
   });
 
+  it('hands routerOptions to the router with its link', async () => {
+    const navigate = vi.fn();
+    render(
+      <RouterProvider navigate={navigate}>
+        <ul>
+          <DocumentCard {...base} href="/home?document=1" routerOptions={{ state: { drawers: { document: true } } }} />
+        </ul>
+      </RouterProvider>,
+    );
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Lease.pdf' }));
+    expect(navigate).toHaveBeenCalledWith('/home?document=1', { state: { drawers: { document: true } } });
+  });
+
   it('selects with a named checkbox and marks state', async () => {
     const onSel = vi.fn();
     const { container } = render(
