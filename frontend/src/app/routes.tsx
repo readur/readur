@@ -30,6 +30,8 @@ const Settings = lazy(() => import('../features/settings'));
 const Login = lazy(() => import('../features/auth/LoginRoute'));
 const Callback = lazy(() => import('../features/auth/CallbackRoute'));
 const Register = lazy(() => import('../features/auth/RegisterRoute'));
+// Primitive gallery for visual checks; only built into development bundles.
+const Gallery = import.meta.env.DEV ? lazy(() => import('../features/dev/Gallery')) : null;
 
 export { HOME_PATH };
 
@@ -82,6 +84,7 @@ export function AppRoutes() {
       />
       <Route path="/auth/callback" element={<Public><Callback /></Public>} />
       <Route path="/shared/:token" element={<Public><Shared /></Public>} />
+      {Gallery ? <Route path="/dev/ui" element={<Public><Gallery /></Public>} /> : null}
 
       <Route element={<RequireUser />}>
         <Route path={HOME_PATH} element={<Home />} />

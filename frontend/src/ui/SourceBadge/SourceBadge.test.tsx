@@ -22,4 +22,11 @@ describe('SourceBadge', () => {
     render(<SourceBadge sourceId="abc" kind="s3" type="s3" name="Backups" />);
     expect(screen.queryByText('S3')).not.toBeInTheDocument();
   });
+
+  it('does not style the whole badge as the icon tile', () => {
+    const { container } = render(<SourceBadge sourceId="abc" kind="s3" name="Backups" />);
+    const root = container.firstElementChild as HTMLElement;
+    const tile = container.querySelector('[data-tile]') as HTMLElement;
+    expect(root.className.split(' ')).not.toContain(tile.className);
+  });
 });

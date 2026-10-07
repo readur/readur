@@ -1,6 +1,7 @@
 .group {
   display: inline-flex;
   flex: none;
+  width: fit-content;
   align-items: center;
   gap: 2px;
   padding: 3px;

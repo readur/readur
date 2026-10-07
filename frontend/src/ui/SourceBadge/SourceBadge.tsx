@@ -43,7 +43,7 @@ export function SourceBadge({ sourceId, kind, name, type, variant = 'tile', show
   const key = type ?? kind ?? 'upload';
   const Icon = ICON[key] ?? Folder;
   return (
-    <span className={cx(styles.badge, styles[variant], className)} data-slot={index}>
+    <span className={cx(styles.badge, variant === 'chip' && styles.chip, className)} data-slot={index}>
       <span className={styles.tile} data-tile="" aria-hidden="true">
         <Icon width={13} height={13} strokeWidth={2} />
       </span>
