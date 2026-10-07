@@ -182,6 +182,7 @@
 
 :root {
   /* Layers: the shell sits below every overlay; the palette is topmost. */
+  --z-local: 1; /* stacking inside one component (sticky headers) */
   --z-shell: 1100;
   --z-dock: 1150;
   --z-overlay: 1200;

@@ -21,7 +21,7 @@
   color: var(--accent-fg);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: calc(var(--radius-sm) - 3px);
   transition: background-color var(--dur-1) var(--ease);
 }
 
