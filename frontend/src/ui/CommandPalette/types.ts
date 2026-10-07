@@ -5,6 +5,8 @@ export interface CommandItem {
   title: string;
   subtitle?: string;
   icon?: ReactNode;
+  /** Shown in the preview pane while this result is focused (e.g. a thumbnail and OCR snippet). */
+  preview?: ReactNode;
   onSelect: () => void;
 }
 

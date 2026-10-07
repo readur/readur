@@ -1809,6 +1809,10 @@
     }
   },
   "ui": {
+    "palette": {
+      "navigate": "navigate",
+      "open": "open"
+    },
     "clear": "Clear",
     "close": "Close",
     "showOptions": "Show options",

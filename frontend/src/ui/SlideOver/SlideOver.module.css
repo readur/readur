@@ -12,13 +12,18 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: var(--s-3);
+  right: var(--s-3);
+  bottom: var(--s-3);
   width: var(--slideover-width, 440px);
-  max-width: 100vw;
-  height: 100%;
+  max-width: calc(100vw - 2 * var(--s-3));
   color: var(--fg);
-  background: var(--surface);
-  border-left: 1px solid var(--line);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-overlay);
+  overflow: hidden;
 }
 
 .panel[data-entering] {
@@ -36,8 +41,11 @@
 
 @media (max-width: 719px) {
   .panel {
+    inset: 0;
     width: 100vw;
-    border-left: 0;
+    max-width: 100vw;
+    border: 0;
+    border-radius: 0;
   }
 }
 
