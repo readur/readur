@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -384,5 +386,16 @@ describe('BoardTable on a narrow screen', () => {
     expect(screen.getByRole('columnheader', { name: 'Type' })).toBeInTheDocument();
     expect(screen.getByRole('grid').style.minWidth).toBe('');
     expect(container.firstElementChild).not.toHaveAttribute('data-layout');
+  });
+});
+
+describe('BoardTable styling', () => {
+  const css = readFileSync(resolve(__dirname, 'BoardTable.module.css'), 'utf8');
+  it('tints selected rows and marks them with an accent edge', () => {
+    expect(css).toMatch(/\.row\[data-selected\][^{]*\{[^}]*accent-soft/);
+    expect(css).toMatch(/\.row\[data-selected\] > \.cell:first-child\s*\{[^}]*inset 3px 0 0 var\(--accent\)/);
+  });
+  it('clips to its rounded card without becoming a scroll container', () => {
+    expect(css).toMatch(/\.container\s*\{[^}]*overflow:\s*clip/);
   });
 });
