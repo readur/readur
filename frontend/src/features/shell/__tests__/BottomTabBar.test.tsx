@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +17,7 @@ vi.mock('../../../services/api', () => ({
 const location = () => screen.getByRole('status', { name: 'location' });
 const DESTINATIONS = [
   ['Home', '/home'],
-  ['Advanced search', '/search'],
+  ['Search', '/search'],
   ['Library', '/documents'],
   ['Intake', '/intake'],
 ] as const;
@@ -93,7 +95,7 @@ describe('bottom tab bar items', () => {
     renderShell({ path: '/intake?section=watch' });
     const bar = screen.getByRole('navigation', { name: 'Main' });
     expect(within(bar).getByRole('link', { name: 'Intake' })).toHaveAttribute('aria-current', 'page');
-    ['Home', 'Advanced search', 'Library'].forEach((name) =>
+    ['Home', 'Search', 'Library'].forEach((name) =>
       expect(within(bar).getByRole('link', { name })).not.toHaveAttribute('aria-current'),
     );
   });
@@ -134,5 +136,24 @@ describe('bottom tab bar items', () => {
     expect(search).not.toHaveTextContent('Search documents…');
     await user.click(search);
     expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+  });
+});
+
+describe('bottom tab bar layout', () => {
+  it('lines the icons up on one row and keeps every label to one line', () => {
+    const css = readFileSync(resolve(__dirname, '../AppShell.module.css'), 'utf8');
+    const tabLink = css.match(/\.tabLink \{[^}]*\}/)?.[0] ?? '';
+    expect(tabLink).toMatch(/justify-content:\s*flex-start/);
+    const label = css.match(/\.tabLabel \{[^}]*\}/)?.[0] ?? '';
+    expect(label).toMatch(/white-space:\s*nowrap/);
+    expect(label).toMatch(/text-overflow:\s*ellipsis/);
+  });
+
+  it('uses the short "Search" in the tab bar while the sidebar says "Advanced search"', () => {
+    setMedia(NARROW);
+    renderShell({ path: '/home' });
+    const bar = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(bar).getByRole('link', { name: 'Search' })).toHaveAttribute('href', '/search');
+    expect(within(bar).queryByRole('link', { name: 'Advanced search' })).not.toBeInTheDocument();
   });
 });

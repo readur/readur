@@ -1882,7 +1882,8 @@
       "settings": "Configuración",
       "home": "Inicio",
       "search": "Búsqueda avanzada",
-      "sources": "Fuentes"
+      "sources": "Fuentes",
+      "searchShort": "Buscar"
     },
     "search": {
       "open": "Buscar documentos",

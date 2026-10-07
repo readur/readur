@@ -39,7 +39,9 @@ export function PrimaryNav({ variant, label, counts }: PrimaryNavProps) {
                 <span className={side ? styles.navIcon : shellStyles.tabIcon} aria-hidden="true">
                   {d.icon}
                 </span>
-                <span className={side ? styles.navLabel : shellStyles.tabLabel}>{t(d.labelKey, d.fallback)}</span>
+                <span className={side ? styles.navLabel : shellStyles.tabLabel}>
+                  {!side && d.shortLabelKey ? t(d.shortLabelKey, d.shortFallback ?? d.fallback) : t(d.labelKey, d.fallback)}
+                </span>
                 {side && counts?.[d.id] !== undefined ? (
                   <span className={styles.navCount}>{new Intl.NumberFormat(i18n.language).format(counts[d.id] as number)}</span>
                 ) : null}

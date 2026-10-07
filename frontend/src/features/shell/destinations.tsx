@@ -14,6 +14,9 @@ export interface Destination {
   matches: string[];
   /** Shown in the phone tab bar (Settings lives in the drawer instead). */
   inTabBar: boolean;
+  /** A shorter label for the phone tab bar, where the full one does not fit. */
+  shortLabelKey?: string;
+  shortFallback?: string;
 }
 
 export const HOME_PATH = '/home';
@@ -32,6 +35,8 @@ export const DESTINATIONS: readonly Destination[] = [
     id: 'search',
     labelKey: 'shell.nav.search',
     fallback: 'Advanced search',
+    shortLabelKey: 'shell.nav.searchShort',
+    shortFallback: 'Search',
     path: '/search',
     icon: <Search fontSize="inherit" />,
     matches: ['/search'],

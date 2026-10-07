@@ -1882,7 +1882,8 @@
       "settings": "Einstellungen",
       "home": "Start",
       "search": "Erweiterte Suche",
-      "sources": "Quellen"
+      "sources": "Quellen",
+      "searchShort": "Suche"
     },
     "search": {
       "open": "Dokumente durchsuchen",

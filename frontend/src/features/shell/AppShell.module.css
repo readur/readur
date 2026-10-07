@@ -356,10 +356,12 @@
   flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Icons share one row whatever the label; labels stay on one line under them. */
+  justify-content: flex-start;
   gap: 2px;
   min-height: 44px;
   margin: var(--s-1) 2px;
+  padding-top: var(--s-1);
   color: var(--fg-meta);
   text-decoration: none;
   font-size: var(--fs-xs);
@@ -384,6 +386,7 @@
 .tabIcon {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 48px;
   height: 26px;
   font-size: var(--fs-xl);
@@ -396,7 +399,12 @@
 }
 
 .tabLabel {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .withBottomBar .main {
