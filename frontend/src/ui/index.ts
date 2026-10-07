@@ -8,6 +8,7 @@ export * from './Checkbox';
 export * from './ChoiceTile';
 export * from './Switch';
 export * from './Tabs';
+export * from './Segmented';
 export * from './Dialog';
 export * from './Menu';
 export * from './Popover';
