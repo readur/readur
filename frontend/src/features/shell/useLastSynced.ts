@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../services/api';
 import type { SourceResponse } from '../../services/api';
 
 export const SYNC_POLL_MS = 60_000;
+/** While a source is syncing the list is checked this often, so the sync toast starts and ends promptly. */
+export const ACTIVE_SYNC_POLL_MS = 10_000;
 
 interface SourceLike {
   last_sync_at?: string | null;
@@ -29,6 +31,9 @@ export const SOURCES_CHANGED_EVENT = 'readur:sources-changed';
  */
 export function useSourcesList(): SourceResponse[] | null {
   const [sources, setSources] = useState<SourceResponse[] | null>(null);
+  const anySyncing = (sources ?? []).some((s) => s?.status === 'syncing');
+
+  const loadRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +47,8 @@ export function useSourcesList(): SourceResponse[] | null {
         /* keep the previous list: a failed poll is not a reason to hide the sources */
       }
     };
+    loadRef.current = load;
     void load();
-    const timer = window.setInterval(() => {
-      if (!hidden()) void load();
-    }, SYNC_POLL_MS);
     const onVisibility = () => {
       if (!hidden()) void load();
     };
@@ -54,11 +57,18 @@ export function useSourcesList(): SourceResponse[] | null {
     window.addEventListener(SOURCES_CHANGED_EVENT, onChanged);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener(SOURCES_CHANGED_EVENT, onChanged);
     };
   }, []);
+
+  // The poll interval follows whether anything is syncing; changing it does not load again.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) void loadRef.current();
+    }, anySyncing ? ACTIVE_SYNC_POLL_MS : SYNC_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [anySyncing]);
 
   return sources;
 }

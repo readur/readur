@@ -14,6 +14,7 @@ import { Sidebar } from './Sidebar';
 import { useCollections } from './useCollections';
 import { useLatestSync, useSourcesList } from './useLastSynced';
 import { useDocumentTotal } from './useDocumentTotal';
+import { SyncToasts } from './SyncToasts';
 import { useMediaQuery } from './useMediaQuery';
 import { usePaletteSources } from './usePaletteSources';
 import styles from './AppShell.module.css';
@@ -91,6 +92,7 @@ export function AppShell({ children }: AppShellProps) {
       <a href="#main" className={styles.skipLink}>
         {t('shell.skipToContent', 'Skip to content')}
       </a>
+      <SyncToasts sources={sources} />
       {isDrawerLayout ? (
         <header className={styles.mobileBar}>
           <IconButton

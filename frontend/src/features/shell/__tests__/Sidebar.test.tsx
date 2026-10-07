@@ -243,3 +243,23 @@ describe('library count and source icons', () => {
     expect(within(sources()).getByRole('link', { name: /Watch folder/ }).querySelector('[data-tile] svg')).not.toBeNull();
   });
 });
+
+describe('sources polling while a sync runs', () => {
+  it('checks every 10 seconds while a source is syncing, so the sync toast starts and ends promptly', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedGet.mockImplementation((url: string) =>
+        Promise.resolve(url === '/sources' ? { data: [source('s1', 'Nextcloud', { status: 'syncing' })] } : { data: [] }) as never,
+      );
+      renderShell();
+      const calls = () => mockedGet.mock.calls.filter(([url]) => url === '/sources').length;
+      await waitFor(() => expect(calls()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_500);
+      });
+      expect(calls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

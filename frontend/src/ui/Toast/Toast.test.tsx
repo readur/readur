@@ -135,3 +135,56 @@ describe('Toast pauses while hovered', () => {
     expect(css).toMatch(/\.region\[data-paused\][^{]*\.timer\s*\{[^}]*animation-play-state:\s*paused/);
   });
 });
+
+describe('Progress toasts', () => {
+  function Progress() {
+    const toast = useToast();
+    return (
+      <>
+        <Button onPress={() => toast.progress('sync-1', { title: 'Syncing Nextcloud', description: '240 of 412 files', value: 58 })}>Start</Button>
+        <Button onPress={() => toast.progress('sync-1', { title: 'Syncing Nextcloud', description: '300 of 412 files', value: 73 })}>Advance</Button>
+        <Button onPress={() => toast.dismiss('sync-1')}>Finish</Button>
+      </>
+    );
+  }
+  const renderProgress = () => render(<ToastProvider><Progress /></ToastProvider>);
+
+  it('shows one toast with a progress bar and updates it in place', async () => {
+    const user = userEvent.setup();
+    renderProgress();
+    await user.click(screen.getByRole('button', { name: 'Start' }));
+    expect(await screen.findByText('240 of 412 files')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Syncing Nextcloud' })).toHaveAttribute('aria-valuenow', '58');
+    await user.click(screen.getByRole('button', { name: 'Advance' }));
+    expect(await screen.findByText('300 of 412 files')).toBeInTheDocument();
+    expect(screen.getAllByText('Syncing Nextcloud')).toHaveLength(1);
+    expect(screen.getByRole('progressbar', { name: 'Syncing Nextcloud' })).toHaveAttribute('aria-valuenow', '73');
+  });
+
+  it('does not time out, and goes when dismissed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderProgress();
+    await user.click(screen.getByRole('button', { name: 'Start' }));
+    await screen.findByText('240 of 412 files');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(screen.getByText('Syncing Nextcloud')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Finish' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(screen.queryByText('Syncing Nextcloud')).not.toBeInTheDocument();
+  });
+
+  it('stays closed after the person closes it, even as progress continues', async () => {
+    const user = userEvent.setup();
+    renderProgress();
+    await user.click(screen.getByRole('button', { name: 'Start' }));
+    await screen.findByText('240 of 412 files');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Advance' }));
+    expect(screen.queryByText('300 of 412 files')).not.toBeInTheDocument();
+  });
+});

@@ -1970,6 +1970,10 @@
       "label": "Menu",
       "open": "Open menu",
       "close": "Close menu"
+    },
+    "sync": {
+      "title": "Syncing {{name}}",
+      "files": "{{processed}} of {{total}} files"
     }
   },
   "board": {

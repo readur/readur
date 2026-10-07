@@ -20,6 +20,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Close, Error as ErrorIcon, Info, CheckCircle } from '../icons';
 import { cx } from '../shared/FieldParts';
+import { ProgressBar } from '../Progress';
+import { Spinner } from '../Spinner';
 import styles from './Toast.module.css';
 
 export type ToastTone = 'info' | 'success' | 'danger';
@@ -32,14 +34,30 @@ export interface ToastOptions {
   timeout?: number;
 }
 
+export interface ProgressToastOptions {
+  title: string;
+  description?: string;
+  /** 0–100; omit for an indeterminate spinner. */
+  value?: number;
+}
+
 export interface ToastApi {
   show: (options: ToastOptions) => void;
+  /**
+   * Shows or updates the long-running toast `id` (a sync, an import). It has no timeout: the
+   * owner calls `dismiss(id)` when the work ends. Once the person closes it, updates stop
+   * bringing it back until it is dismissed.
+   */
+  progress: (id: string, options: ProgressToastOptions) => void;
+  dismiss: (id: string) => void;
 }
 
 interface ToastContentValue {
   title: string;
   description?: string;
   tone: ToastTone;
+  /** Set for a progress toast; its live text and value are read from the provider by id. */
+  progressId?: string;
 }
 
 const DEFAULT_TIMEOUT = 5000;
@@ -131,10 +149,42 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (paused) region?.setAttribute('data-paused', 'true');
     else region?.removeAttribute('data-paused');
   }, [paused, queue, region]);
+  // Progress toasts: the queue holds one entry per id; updates only change this map, so the
+  // toast updates in place instead of leaving and re-entering.
+  const [progressById, setProgressById] = useState<ReadonlyMap<string, ProgressToastOptions>>(() => new Map());
+  const progressKeys = useRef(new Map<string, string>());
+  const closedByPerson = useRef(new Set<string>());
   const api = useMemo<ToastApi>(
     () => ({
       show: ({ title, description, tone = 'info', timeout = DEFAULT_TIMEOUT }) => {
         queue.add({ title, description, tone }, { timeout });
+      },
+      progress: (id, options) => {
+        if (closedByPerson.current.has(id)) return;
+        setProgressById((prev) => new Map(prev).set(id, options));
+        if (progressKeys.current.has(id)) return;
+        const key = queue.add(
+          { title: options.title, tone: 'info', progressId: id },
+          {
+            onClose: () => {
+              // Closed by the person (dismiss() deletes the key first).
+              if (progressKeys.current.delete(id)) closedByPerson.current.add(id);
+            },
+          },
+        );
+        progressKeys.current.set(id, key);
+      },
+      dismiss: (id) => {
+        closedByPerson.current.delete(id);
+        const key = progressKeys.current.get(id);
+        progressKeys.current.delete(id);
+        if (key) queue.close(key);
+        setProgressById((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
       },
     }),
     [queue],
@@ -150,7 +200,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         style={regionStyle}
         aria-label={t('ui.notifications', 'Notifications')}
       >
-        {({ toast }) => (
+        {({ toast }) => {
+          const live = toast.content.progressId ? progressById.get(toast.content.progressId) : undefined;
+          const title = live?.title ?? toast.content.title;
+          const description = live ? live.description : toast.content.description;
+          return (
           <RACToast
             toast={toast}
             className={cx(styles.toast, styles[toast.content.tone])}
@@ -165,12 +219,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <ToastContent className={styles.content} role={toast.content.tone === 'danger' ? 'alert' : 'status'}>
               <Text slot="title" className={styles.title}>
                 <span className="visually-hidden">{t(`ui.toast.${toast.content.tone}`, TONE_DEFAULT[toast.content.tone])} </span>
-                {toast.content.title}
+                {title}
               </Text>
-              {toast.content.description ? (
+              {description ? (
                 <Text slot="description" className={styles.description}>
-                  {toast.content.description}
+                  {description}
                 </Text>
+              ) : null}
+              {toast.content.progressId ? (
+                live?.value !== undefined ? (
+                  <ProgressBar value={live.value} label={title} className={styles.progress} />
+                ) : (
+                  <Spinner size={14} />
+                )
               ) : null}
             </ToastContent>
             <Button slot="close" className={styles.close} aria-label={t('ui.close', 'Close')}>
@@ -178,7 +239,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             </Button>
             {toast.timeout ? <span className={styles.timer} aria-hidden="true" /> : null}
           </RACToast>
-        )}
+          );
+        }}
       </ToastRegion>
     </ToastContext.Provider>
   );
@@ -189,4 +251,4 @@ export function useToast(): ToastApi {
   return useContext(ToastContext) ?? NOOP;
 }
 
-const NOOP: ToastApi = { show: () => undefined };
+const NOOP: ToastApi = { show: () => undefined, progress: () => undefined, dismiss: () => undefined };
