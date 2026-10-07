@@ -96,6 +96,12 @@ pub fn restrict_password_file_permissions(path: &Path, restrict_parent: bool) {
         targets.push((dir, 0o700));
     }
     for (target, mode) in targets {
+        // Skip targets already at the right mode: a no-op chmod still emits a
+        // metadata-change event, which restarts file watchers such as cargo-watch.
+        let current = std::fs::metadata(target).map(|m| m.permissions().mode() & 0o777).ok();
+        if current == Some(mode) {
+            continue;
+        }
         if let Err(e) = std::fs::set_permissions(target, std::fs::Permissions::from_mode(mode)) {
             warn!("Failed to restrict permissions of {}: {}", target.display(), e);
         }

@@ -49,7 +49,9 @@ RUN mkdir -p src/bin && \
 EXPOSE 8000
 
 # Use cargo-watch to automatically rebuild and restart on file changes
+# -w: watch only build inputs. /app also holds the uploads and watch-folder
+#     mounts, which the server writes to at runtime; watching them would
+#     restart the server in a loop.
 # --why: shows what triggered the rebuild
-# --ignore: ignore certain file patterns to avoid unnecessary rebuilds
 # Run the main readur binary
-CMD ["cargo", "watch", "-x", "run --bin readur", "--why", "--ignore", "frontend/*", "--ignore", "*.md", "--ignore", "test*"]
+CMD ["cargo", "watch", "-w", "src", "-w", "Cargo.toml", "-w", "Cargo.lock", "-w", "migrations", "-x", "run --bin readur", "--why"]
