@@ -107,6 +107,17 @@ export function toParams(query: LibraryQuery): URLSearchParams {
   return p;
 }
 
+/** Every URL key the Library owns; anything else (an open drawer, say) belongs to someone else. */
+export const LIBRARY_KEYS = ['q', 'sort', 'order', 'type', 'labels', 'label', 'status', 'source', 'from', 'to', 'page', 'size', 'mode'] as const;
+
+/** `query`'s params followed by every param of `prev` the Library does not own, as they were. */
+export function withQuery(prev: URLSearchParams, query: LibraryQuery): URLSearchParams {
+  const next = toParams(query);
+  const owned: readonly string[] = LIBRARY_KEYS;
+  for (const [key, value] of prev) if (!owned.includes(key)) next.append(key, value);
+  return next;
+}
+
 export type QueryPatch = Partial<Omit<LibraryQuery, 'sortExplicit'>>;
 
 /** The patch that removes every filter (not the search text). */
@@ -128,7 +139,8 @@ export const isSearch = (query: LibraryQuery) => query.q.trim().length >= MIN_QU
  */
 export function useLibraryQuery() {
   const [params, setParams] = useSearchParams();
-  const key = params.toString();
+  // Keyed on the Library's own params only, so an open drawer does not make a new query.
+  const key = toParams(parseQuery(params)).toString();
   const query = useMemo(() => parseQuery(new URLSearchParams(key)), [key]);
 
   const update = useCallback(
@@ -143,7 +155,7 @@ export function useLibraryQuery() {
           }
           if (patch.relevance) next.sortExplicit = false;
           if (!('page' in patch)) next.page = 1;
-          return toParams(next);
+          return withQuery(prev, next);
         },
         { replace: isTypingOnly(patch, query) },
       );

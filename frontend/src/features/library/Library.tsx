@@ -19,7 +19,7 @@ import { Segmented } from './Segmented';
 import { useCompactRows } from './useCompactRows';
 import { useFacets, useRows, useSourceName } from './useLibraryData';
 import { useLibraryView, type LibraryView } from './useLibraryView';
-import { NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, parseQuery, toParams, useLibraryQuery, type LibraryQuery } from './urlState';
+import { NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, parseQuery, useLibraryQuery, withQuery, type LibraryQuery } from './urlState';
 import styles from './Library.module.css';
 
 const EMPTY_SELECTION: Selection = new Set();
@@ -33,7 +33,7 @@ export function Library() {
   const [params] = useSearchParams();
   const query = parseQuery(params);
   if (isSearch(query)) {
-    return <Navigate to={`/search?${toParams(query).toString()}`} replace state={{ focusSearch: true }} />;
+    return <Navigate to={`/search?${withQuery(params, query).toString()}`} replace state={{ focusSearch: true }} />;
   }
   return <LibraryBoard />;
 }

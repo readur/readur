@@ -1,12 +1,23 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { currentUrl, lastListParams, renderLibrary } from './libraryTestUtils';
 import { DOCS, apiClient, documentService, listResponse, searchService, setupLibraryMocks } from './serviceMocks';
 
 vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
 vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
 vi.mock('../../../components/BulkRetryModal', async () => (await import('./serviceMocks')).retryModalModule());
+
+function OpenDrawerButton() {
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  return (
+    <button type="button" onClick={() => navigate(`/documents${search}&document=d2`)}>
+      open drawer
+    </button>
+  );
+}
 
 const grid = () => screen.getByRole('grid', { name: 'Documents' });
 const bodyRows = () => within(grid()).getAllByRole('row').slice(1);
@@ -15,6 +26,24 @@ const loaded = () => screen.findByRole('rowheader', { name: /invoice-march\.pdf/
 describe('Library', () => {
   beforeEach(() => {
     setupLibraryMocks();
+  });
+
+  describe('next to an open drawer', () => {
+    test('a ?document= change does not refetch the list', async () => {
+      const user = userEvent.setup();
+      renderLibrary('/documents?labels=l1', <OpenDrawerButton />);
+      await loaded();
+      const calls = documentService.listFiltered.mock.calls.length;
+      await user.click(screen.getByRole('button', { name: 'open drawer' }));
+      expect(currentUrl()).toBe('/documents?labels=l1&document=d2');
+      await act(async () => {});
+      expect(documentService.listFiltered.mock.calls.length).toBe(calls);
+    });
+
+    test('moving a search to /search keeps the open drawer', async () => {
+      renderLibrary('/documents?q=lease&document=d2');
+      await waitFor(() => expect(currentUrl()).toBe('/search?q=lease&document=d2'));
+    });
   });
 
   describe('page', () => {
