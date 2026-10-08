@@ -228,15 +228,16 @@ describe('document drawer: labels', () => {
     expect(within(group).queryByRole('button', { name: 'Remove Tax' })).not.toBeInTheDocument();
   });
 
-  it('lets an older failed save not undo a newer change', async () => {
+  it('lets an older failed save not undo a newer change, in the drawer or the list row', async () => {
     const user = userEvent.setup();
+    const onChanged = vi.fn();
     load();
     docLabels([tax, receipts]);
     let failFirst: (e: Error) => void = () => {};
     m.labelService.setDocumentLabels
       .mockImplementationOnce(() => new Promise((_, reject) => (failFirst = reject)))
       .mockResolvedValue({ data: {} });
-    renderDrawer();
+    renderDrawer({ list: { ids: ['doc-1'], onChanged } });
     await title();
     const group = screen.getByRole('group', { name: 'Labels' });
     await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
@@ -245,6 +246,29 @@ describe('document drawer: labels', () => {
     expect(await screen.findByText("Couldn't save the labels")).toBeInTheDocument();
     expect(within(group).queryByText('Tax')).not.toBeInTheDocument();
     expect(within(group).queryByText('Receipts')).not.toBeInTheDocument();
+    expect(onChanged).toHaveBeenLastCalledWith('doc-1', { labels: [] });
+  });
+
+  it('puts the list row back to the last saved labels when the newest save fails', async () => {
+    const user = userEvent.setup();
+    const onChanged = vi.fn();
+    load();
+    docLabels([tax, receipts]);
+    let failFirst: (e: Error) => void = () => {};
+    let failSecond: (e: Error) => void = () => {};
+    m.labelService.setDocumentLabels
+      .mockImplementationOnce(() => new Promise((_, reject) => (failFirst = reject)))
+      .mockImplementationOnce(() => new Promise((_, reject) => (failSecond = reject)));
+    renderDrawer({ list: { ids: ['doc-1'], onChanged } });
+    await title();
+    const group = screen.getByRole('group', { name: 'Labels' });
+    await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
+    await user.click(within(group).getByRole('button', { name: 'Remove Receipts' }));
+    failFirst(new Error('late'));
+    failSecond(new Error('also'));
+    // Neither save landed: the row goes back to what the server has, not to the half-way state.
+    await waitFor(() => expect(onChanged).toHaveBeenLastCalledWith('doc-1', { labels: [tax, receipts] }));
+    expect(await within(group).findByText('Tax')).toBeInTheDocument();
   });
 });
 

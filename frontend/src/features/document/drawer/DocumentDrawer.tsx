@@ -243,10 +243,10 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
   };
 
   const saveLabels = async (next: LabelData[]) => {
-    const before = labels.labels;
     list?.onChanged?.(doc.id, { labels: next });
-    if (await labels.save(next)) return;
-    list?.onChanged?.(doc.id, { labels: before });
+    const result = await labels.save(next);
+    if (result.ok) return;
+    if (result.restored) list?.onChanged?.(doc.id, { labels: result.restored });
     toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
   };
 

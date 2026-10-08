@@ -7,15 +7,22 @@ export type NewLabel = Omit<
   'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'
 >;
 
+export interface LabelSaveResult {
+  ok: boolean;
+  /** After a failure: the labels rolled back to, or null when a newer save kept its own. */
+  restored: LabelData[] | null;
+}
+
 export interface UseDocumentLabelsResult {
   labels: LabelData[];
   available: LabelData[];
   isLoading: boolean;
   /**
-   * Shows `next` at once and saves it. Resolves false when the save failed; the labels then roll
-   * back, unless a newer save has started since (an older failure must not undo a newer change).
+   * Shows `next` at once and saves it. A failed save rolls the labels back to the last ones the
+   * server accepted and resolves with those, unless a newer save has started since (an older
+   * failure must not undo a newer change); then nothing rolls back and `restored` is null.
    */
-  save: (next: LabelData[]) => Promise<boolean>;
+  save: (next: LabelData[]) => Promise<LabelSaveResult>;
   create: (label: NewLabel) => Promise<LabelData>;
 }
 
@@ -47,18 +54,19 @@ export function useDocumentLabels(documentId: string | undefined): UseDocumentLa
   }, [documentId]);
 
   const save = useCallback(
-    async (next: LabelData[]) => {
-      if (!documentId) return false;
+    async (next: LabelData[]): Promise<LabelSaveResult> => {
+      if (!documentId) return { ok: false, restored: null };
       const seq = ++latest.current;
       setLabels(next);
       try {
         await labelService.setDocumentLabels(documentId, next.map((l) => l.id));
         saved.current = next;
         notifyLabelsChanged();
-        return true;
+        return { ok: true, restored: null };
       } catch {
-        if (latest.current === seq) setLabels(saved.current);
-        return false;
+        if (latest.current !== seq) return { ok: false, restored: null };
+        setLabels(saved.current);
+        return { ok: false, restored: saved.current };
       }
     },
     [documentId],
