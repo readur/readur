@@ -4,9 +4,11 @@
   position: relative;
   min-width: 0;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
+  /* Rounded card edges without creating a scroll container (that would stop the sticky head). */
+  overflow: clip;
 }
 
 /*
@@ -54,7 +56,7 @@
 .column {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-local);
   height: 36px;
   padding: 0 var(--s-3);
   text-align: left;
@@ -66,8 +68,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
-  color: var(--fg-meta);
-  background: var(--surface-2);
+  color: var(--fg-2);
+  background: var(--surface-sunken);
   border-bottom: 1px solid var(--line);
   outline: none;
 }
@@ -148,13 +150,23 @@
   cursor: pointer;
 }
 
-.row[data-hovered] > .cell {
-  background: var(--surface-2);
+.body .row:nth-child(even) > .cell {
+  background: color-mix(in srgb, var(--surface-sunken) 45%, var(--surface));
+}
+
+.row[data-hovered] > .cell,
+.body .row[data-hovered]:nth-child(even) > .cell {
+  background: color-mix(in srgb, var(--surface-sunken) 80%, var(--surface));
 }
 
 .row[data-selected] > .cell,
-.row[data-selected][data-hovered] > .cell {
+.row[data-selected][data-hovered] > .cell,
+.body .row[data-selected]:nth-child(even) > .cell {
   background: var(--accent-soft);
+}
+
+.row[data-selected] > .cell:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .row[data-focus-visible] > .cell {

@@ -3,7 +3,7 @@ import { test, expect } from './fixtures/auth';
 /** `heading: null` means the page names itself (Home greets, Search shows the query). */
 const DESTINATIONS: { name: string; path: string; heading: string | null }[] = [
   { name: 'Home', path: '/home', heading: null },
-  { name: 'Search', path: '/search', heading: null },
+  { name: 'Advanced search', path: '/search', heading: null },
   { name: 'Library', path: '/documents', heading: 'Library' },
   { name: 'Intake', path: '/intake', heading: 'Intake' },
   { name: 'Settings', path: '/settings', heading: 'Settings' },
@@ -50,7 +50,7 @@ test.describe('Navigation', () => {
 
     const sources = page.getByRole('navigation', { name: 'Sources' });
     await sources.getByRole('link', { name: 'Watch folder' }).click();
-    await expect(page).toHaveURL(/\/intake\?section=watch/);
+    await expect(page).toHaveURL(/\/sources\?section=watch/);
     await expect(sources.getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page');
     await sources.getByRole('link', { name: 'Uploads' }).click();
     await expect(page).toHaveURL(/\/intake\?section=upload/);

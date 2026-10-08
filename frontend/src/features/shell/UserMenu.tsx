@@ -1,7 +1,7 @@
 import { Button as RACButton, Header, MenuSection, Separator, type Key } from 'react-aria-components';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { IconButton, Menu, MenuItem, MenuTrigger } from '../../ui';
+import { Avatar, IconButton, Menu, MenuItem, MenuTrigger } from '../../ui';
 import { AccountCircle, Api, Logout, Settings } from '../../ui/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import styles from './AppShell.module.css';
@@ -34,10 +34,11 @@ export function UserMenu({ variant = 'row' }: UserMenuProps) {
           className={styles.userRow}
           aria-label={t('shell.user.menuFor', { name: user.username, defaultValue: 'Account menu, {{name}}' })}
         >
-          <span className={styles.avatar} aria-hidden="true">
-            {user.username.slice(0, 1).toUpperCase()}
+          <Avatar name={user.username} size="sm" />
+          <span className={styles.userRowText}>
+            <span className={styles.userRowName}>{user.username}</span>
+            {user.role ? <span className={styles.userRowRole}>{t(`shell.user.role.${user.role}`, user.role)}</span> : null}
           </span>
-          <span className={styles.userRowName}>{user.username}</span>
         </RACButton>
       ) : (
         <IconButton label={t('shell.user.menu', 'Account menu')} icon={<AccountCircle fontSize="inherit" />} />

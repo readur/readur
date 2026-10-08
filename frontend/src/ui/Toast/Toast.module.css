@@ -32,8 +32,11 @@
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   color: var(--fg);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 0;
+  border-left: 4px solid var(--c, var(--accent));
   border-radius: var(--radius);
   box-shadow: var(--shadow-overlay);
   outline: none;
@@ -45,7 +48,9 @@
 }
 
 /* Tone shows in the icon (and the hidden prefix); danger also tints the whole toast. */
-.danger { border-color: transparent; background: var(--danger-soft); }
+.info { --c: var(--accent); }
+.success { --c: var(--ok); }
+.danger { --c: var(--danger); }
 
 .content {
   display: flex;
@@ -94,5 +99,33 @@
   margin-top: 1px;
 }
 
-.success .toneIcon { color: var(--ok); }
-.danger .toneIcon { color: var(--danger); }
+.toneIcon { color: var(--c); }
+
+.timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--c);
+  opacity: 0.5;
+  transform-origin: left;
+  animation: drain var(--toast-timeout) linear forwards;
+}
+
+@keyframes drain { to { transform: scaleX(0); } }
+
+/* The timers stop while a toast is hovered or focused; the bars stop with them. */
+.region[data-paused] .timer,
+.region[data-hovered] .timer,
+.region[data-focused] .timer { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .timer { display: none; animation: none; }
+}
+
+.progress {
+  display: flex;
+  width: 100%;
+  margin-top: var(--s-2);
+}

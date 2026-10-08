@@ -64,8 +64,8 @@ function serve() {
 const region = (name: string) => screen.getByRole('region', { name });
 const summary = () => screen.getByRole('group', { name: 'Summary' });
 const loc = () => screen.getByRole('status', { name: 'location', hidden: true }).textContent;
-const laneItem = (name: string) =>
-  within(screen.getByRole('list', { name: 'Coming in' }))
+const sourceRow = (name: string) =>
+  within(screen.getByRole('list', { name: 'Sources' }))
     .getAllByRole('listitem')
     .find((li) => within(li).queryByRole('link', { name }))!;
 
@@ -77,7 +77,7 @@ async function renderHome(role: UserRole = 'admin') {
     role,
   );
   await screen.findByText('d1.pdf');
-  await within(await screen.findByRole('region', { name: 'Coming in' })).findAllByText(/today|Nothing arrived|No sources/);
+  await within(await screen.findByRole('region', { name: 'Sources' })).findAllByText(/today|Nothing|No sources|Last arrival/);
   return view;
 }
 
@@ -97,21 +97,23 @@ describe('Home', () => {
     expect(HomePage).toBe(Home);
   });
 
-  it('greets the user, counts this week and shows every region', async () => {
+  it('greets the user, counts this week, offers Connect source and Upload, and shows every region', async () => {
     await renderHome();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Good (morning|afternoon|evening), ada$/);
-    // Last seven days: uploads 0+2+5+1+0+3+2+6 → 19 over the last 7 entries (2,5,1,0,3,2,6) = 19, scanner 1+2+2+1+2+3+0 = 11.
     expect(await within(summary()).findByText('30 arrived this week')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Add documents' })[0]).toHaveAttribute('href', '/intake?section=upload');
-    expect(region('Coming in')).toBeInTheDocument();
-    expect(region('Processing')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connect source' })).toHaveAttribute('href', '/sources?section=connections&new=1');
+    expect(screen.getAllByRole('link', { name: 'Upload' })[0]).toHaveAttribute('href', '/intake?section=upload');
+    expect(region('Processing pipeline')).toBeInTheDocument();
+    expect(region('Sources')).toBeInTheDocument();
     expect(region('Just arrived')).toBeInTheDocument();
   });
 
-  it('orders the page: summary, Just arrived, Coming in, then the processing detail', async () => {
+  it('reads pipeline, then needs attention and sources, then Just arrived (the side column drops inline when narrow)', async () => {
+    m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [], pagination: { total: 3 } } });
     await renderHome();
-    const order = [summary(), region('Just arrived'), region('Coming in'), region('Processing')];
+    await screen.findByRole('region', { name: 'Needs attention' });
+    const order = [summary(), region('Processing pipeline'), region('Needs attention'), region('Sources'), region('Just arrived')];
     for (let i = 1; i < order.length; i += 1) {
       expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
@@ -122,7 +124,6 @@ describe('Home', () => {
     await renderHome();
     expect(await within(summary()).findByText('4 processing · 12 pending')).toBeInTheDocument();
     expect(await within(summary()).findByText('3 failed')).toBeInTheDocument();
-    expect(within(summary()).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/intake?section=attention');
   });
 
   it('says "nothing waiting" when the queue is empty, and only pending when nothing runs', async () => {
@@ -171,37 +172,29 @@ describe('Home', () => {
     expect(screen.getAllByRole('status', { name: 'Loading' }).length).toBeGreaterThanOrEqual(3);
   });
 
-  describe('Coming in', () => {
-    it('shows one lane per source with its strip, today, last arrival and health', async () => {
+  describe('Sources', () => {
+    it('lists each way documents come in with its icon, kind, today or last arrival, and health', async () => {
       await renderHome();
-      const uploads = laneItem('Uploads');
+      const uploads = sourceRow('Uploads');
       expect(within(uploads).getByRole('link', { name: 'Uploads' })).toHaveAttribute('href', '/intake?section=upload');
-      expect(within(uploads).getByText('Web and API uploads')).toBeInTheDocument();
-      expect(within(uploads).getByText('6')).toBeInTheDocument();
-      expect(within(uploads).getByText(/Last arrival/)).toBeInTheDocument();
-      expect(within(uploads).getByRole('img', { name: /^29 in the last 14 days, most on .+ \(6\)$/ })).toBeInTheDocument();
+      expect(uploads.querySelector('[data-tile] svg')).not.toBeNull();
+      expect(within(uploads).getByText('Web and API uploads · 6 today')).toBeInTheDocument();
       expect(within(uploads).getByText('Healthy')).toBeInTheDocument();
 
-      const watch = laneItem('Watch folder');
-      expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/intake?section=watch');
-      expect(within(watch).getByText('Nothing yet')).toBeInTheDocument();
-      expect(within(watch).getByRole('img', { name: 'Nothing in the last 14 days' })).toBeInTheDocument();
+      const watch = sourceRow('Watch folder');
+      expect(within(watch).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('href', '/sources?section=watch');
       // A lane that never received anything is idle, not healthy; its kind is not repeated under its name.
+      expect(within(watch).getByText('Nothing yet')).toBeInTheDocument();
       expect(within(watch).getByText('Idle')).toBeInTheDocument();
-      expect(within(watch).getAllByText('Watch folder')).toHaveLength(1);
     });
 
     it('flags a lane that usually receives documents but has gone quiet', async () => {
       await renderHome();
-      const scanner = laneItem('Scanner inbox');
-      expect(within(scanner).getByRole('link', { name: 'Scanner inbox' })).toHaveAttribute(
-        'href',
-        '/intake?section=connections&source=s1',
-      );
-      expect(within(scanner).getByText('Local folder')).toBeInTheDocument();
+      const scanner = sourceRow('Scanner inbox');
+      expect(within(scanner).getByRole('link', { name: 'Scanner inbox' })).toHaveAttribute('href', '/sources?section=connections&source=s1');
+      expect(within(scanner).getByText(/^Local folder · Last arrival/)).toBeInTheDocument();
       expect(within(scanner).getByText('Quiet')).toBeInTheDocument();
-      // The watch folder never receives anything, so it is not quiet.
-      expect(within(laneItem('Watch folder')).queryByText('Quiet')).not.toBeInTheDocument();
+      expect(within(sourceRow('Watch folder')).queryByText('Quiet')).not.toBeInTheDocument();
     });
 
     it('shows error, syncing and off states', async () => {
@@ -214,34 +207,34 @@ describe('Home', () => {
       ];
       m.sourceService.list.mockResolvedValue({ data: [{ id: 'w1', validation_status: 'warning' }] });
       await renderHome();
-      expect(within(laneItem('Broken share')).getByText('Error')).toBeInTheDocument();
-      expect(within(laneItem('Busy share')).getByText('Syncing')).toBeInTheDocument();
-      expect(within(laneItem('Busy share')).getByText('S3')).toBeInTheDocument();
-      expect(within(laneItem('Old share')).getByText('Off')).toBeInTheDocument();
-      expect(within(laneItem('Broken share')).getByText('WebDAV')).toBeInTheDocument();
-      expect(within(laneItem('Checked share')).getByText(/^check$/i)).toBeInTheDocument();
+      expect(within(sourceRow('Broken share')).getByText('Error')).toBeInTheDocument();
+      expect(within(sourceRow('Busy share')).getByText('Syncing')).toBeInTheDocument();
+      expect(within(sourceRow('Busy share')).getByText(/^S3 · /)).toBeInTheDocument();
+      expect(within(sourceRow('Old share')).getByText('Off')).toBeInTheDocument();
+      expect(within(sourceRow('Checked share')).getByText(/^check$/i)).toBeInTheDocument();
     });
 
-    it('says when there are no sources', async () => {
+    it('offers to connect a source when there are none', async () => {
       serve();
       lanes = [];
       renderPage(<Home />);
-      expect(await within(await screen.findByRole('region', { name: 'Coming in' })).findByText('No sources yet')).toBeInTheDocument();
+      const card = await screen.findByRole('region', { name: 'Sources' });
+      expect(await within(card).findByText('No sources yet')).toBeInTheDocument();
     });
 
     it('shows an inline error with Retry that recovers', async () => {
       const user = userEvent.setup();
       lanes = new Error('boom');
       renderPage(<Home />);
-      const coming = await screen.findByRole('region', { name: 'Coming in' });
-      const alert = await within(coming).findByRole('alert');
+      const card = await screen.findByRole('region', { name: 'Sources' });
+      const alert = await within(card).findByRole('alert');
       expect(alert).toHaveTextContent('Arrivals could not be loaded.');
       lanes = LANES();
       await user.click(within(alert).getByRole('button', { name: 'Retry' }));
-      expect(await within(coming).findByRole('list', { name: 'Coming in' })).toBeInTheDocument();
+      expect(await within(card).findByRole('list', { name: 'Sources' })).toBeInTheDocument();
     });
 
-    it('shows the five most active lanes, problems first, and links to the rest in Intake', async () => {
+    it('shows the five most active, problems first, and links to the rest', async () => {
       serve();
       lanes = [
         ...Array.from({ length: 190 }, (_, i) => lane(`idle${i}`, [0, 0], { name: `Idle ${i}`, last_arrival_at: null })),
@@ -249,23 +242,18 @@ describe('Home', () => {
         lane('bad', [0, 0], { name: 'Broken share', status: 'error', last_arrival_at: null }),
       ];
       await renderHome();
-      const shown = within(screen.getByRole('list', { name: 'Coming in' })).getAllByRole('link');
-      // The five most active, in activity order; the broken source takes the least active slot.
+      const shown = within(screen.getByRole('list', { name: 'Sources' })).getAllByRole('link');
       expect(shown.map((a) => a.textContent)).toEqual(['Active 5', 'Active 4', 'Active 3', 'Active 2', 'Broken share']);
-      expect(within(region('Coming in')).getByRole('link', { name: /^192 more sources/ })).toHaveAttribute(
-        'href',
-        '/intake?section=connections',
-      );
-      expect(within(region('Coming in')).getByRole('link', { name: 'Manage sources' })).toBeInTheDocument();
-      expect(within(region('Coming in')).queryByText('Idle 0')).not.toBeInTheDocument();
+      expect(within(region('Sources')).getByRole('link', { name: /^192 more sources/ })).toHaveAttribute('href', '/sources');
+      expect(within(region('Sources')).getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/sources');
     });
 
     it('says so when none of many sources received anything', async () => {
       serve();
       lanes = Array.from({ length: 7 }, (_, i) => lane(`idle${i}`, [0], { name: `Idle ${i}`, last_arrival_at: null }));
       await renderHome();
-      expect(within(region('Coming in')).getByText('Nothing arrived from any source in the last 14 days.')).toBeInTheDocument();
-      expect(within(region('Coming in')).getByRole('link', { name: /^7 more sources/ })).toBeInTheDocument();
+      expect(within(region('Sources')).getByText('Nothing arrived from any source in the last 14 days.')).toBeInTheDocument();
+      expect(within(region('Sources')).getByRole('link', { name: /^7 more sources/ })).toBeInTheDocument();
     });
 
     it('asks the server for 14 days', async () => {
@@ -274,17 +262,22 @@ describe('Home', () => {
     });
   });
 
-  describe('Processing detail', () => {
-    it('adds the day\'s throughput and the oldest wait', async () => {
+  describe('Processing pipeline', () => {
+    it('splits the day into done, processing, failed and queued, with done out of the total', async () => {
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [], pagination: { total: 3 } } });
       await renderHome();
-      expect(await within(region('Processing')).findByText('41 done today')).toBeInTheDocument();
-      expect(within(region('Processing')).getByText('oldest waiting 2h 10m')).toBeInTheDocument();
+      const card = region('Processing pipeline');
+      expect(
+        await within(card).findByRole('img', { name: 'Processing pipeline: Done today 41, Processing 4, Failed 3, Queued 12' }),
+      ).toBeInTheDocument();
+      expect(within(card).getByText('41 / 60')).toBeInTheDocument();
+      expect(within(card).getByText('oldest waiting 2h 10m')).toBeInTheDocument();
     });
 
     it('lets an admin pause OCR', async () => {
       const user = userEvent.setup();
       await renderHome('admin');
-      await user.click(await within(region('Processing')).findByRole('button', { name: 'Pause OCR' }));
+      await user.click(await within(region('Processing pipeline')).findByRole('button', { name: 'Pause OCR' }));
       expect(m.queueService.pauseOcr).toHaveBeenCalled();
     });
 
@@ -292,8 +285,8 @@ describe('Home', () => {
       const user = userEvent.setup();
       m.queueService.getOcrStatus.mockResolvedValue({ data: { is_paused: true } });
       await renderHome('admin');
-      expect(await within(region('Processing')).findByText('OCR is paused')).toBeInTheDocument();
-      await user.click(within(region('Processing')).getByRole('button', { name: 'Resume OCR' }));
+      expect(await within(region('Processing pipeline')).findByText('OCR is paused')).toBeInTheDocument();
+      await user.click(within(region('Processing pipeline')).getByRole('button', { name: 'Resume OCR' }));
       expect(m.queueService.resumeOcr).toHaveBeenCalled();
     });
 
@@ -301,39 +294,48 @@ describe('Home', () => {
       const user = userEvent.setup();
       m.queueService.pauseOcr.mockRejectedValue(new Error('no'));
       await renderHome('admin');
-      await user.click(await within(region('Processing')).findByRole('button', { name: 'Pause OCR' }));
+      await user.click(await within(region('Processing pipeline')).findByRole('button', { name: 'Pause OCR' }));
       expect(await screen.findByText('Could not pause OCR')).toBeInTheDocument();
     });
 
     it('hides pause and resume from non-admins', async () => {
       await renderHome('user');
-      await within(region('Processing')).findByText('41 done today');
+      await within(region('Processing pipeline')).findByText('41 / 57');
       expect(screen.queryByRole('button', { name: 'Pause OCR' })).not.toBeInTheDocument();
     });
 
-    it('leaves the queue out, without an error, when it is admin-only; with no failures there is no detail', async () => {
+    it('leaves the card out when the queue is admin-only and nothing failed', async () => {
       m.queueService.getStats.mockRejectedValue({ response: { status: 403 } });
       await renderHome('user');
-      await waitFor(() => expect(screen.queryByRole('region', { name: 'Processing' })).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Processing pipeline' })).not.toBeInTheDocument());
       expect(within(summary()).queryByText(/pending|waiting/)).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('shows only the failures to a user who cannot see the queue', async () => {
+      m.queueService.getStats.mockRejectedValue({ response: { status: 403 } });
+      m.documentService.getFailedOcrDocuments.mockResolvedValue({ data: { documents: [], pagination: { total: 2 } } });
+      await renderHome('user');
+      expect(
+        await within(region('Processing pipeline')).findByRole('img', { name: 'Processing pipeline: Failed 2' }),
+      ).toBeInTheDocument();
     });
 
     it('shows an inline error with Retry when the queue cannot be loaded', async () => {
       const user = userEvent.setup();
       m.queueService.getStats.mockRejectedValue(new Error('boom'));
       await renderHome();
-      const alert = await within(region('Processing')).findByRole('alert');
+      const alert = await within(region('Processing pipeline')).findByRole('alert');
       expect(alert).toHaveTextContent('The OCR queue could not be loaded.');
       m.queueService.getStats.mockResolvedValue({ data: STATS });
       await user.click(within(alert).getByRole('button', { name: 'Retry' }));
-      expect(await within(region('Processing')).findByText('41 done today')).toBeInTheDocument();
+      expect(await within(region('Processing pipeline')).findByText('41 / 57')).toBeInTheDocument();
     });
 
     it('shows an error when the OCR state cannot be loaded', async () => {
       m.queueService.getOcrStatus.mockRejectedValue(new Error('boom'));
       await renderHome();
-      expect(await within(region('Processing')).findByText('The OCR state could not be loaded.')).toBeInTheDocument();
+      expect(await within(region('Processing pipeline')).findByText('The OCR state could not be loaded.')).toBeInTheDocument();
     });
 
     it('refreshes the queue every 15 seconds', async () => {
@@ -348,7 +350,7 @@ describe('Home', () => {
     });
   });
 
-  describe('Failures', () => {
+  describe('Needs attention', () => {
     const failures = () => ({
       data: {
         documents: [
@@ -361,46 +363,32 @@ describe('Home', () => {
       },
     });
 
-    it('names the main causes in plain words, with one Review link in the summary', async () => {
+    it('names the failures and their main causes in plain words, with one Review action', async () => {
       m.documentService.getFailedOcrDocuments.mockResolvedValue(failures());
       await renderHome();
-      const panel = region('Processing');
-      expect(await within(panel).findByText('190 failed')).toBeInTheDocument();
-      expect(within(summary()).getByText('190 failed')).toBeInTheDocument();
-      expect(within(panel).getByText("OCR failed · Can't read .doc files: install antiword or catdoc")).toBeInTheDocument();
+      const attention = await screen.findByRole('region', { name: /Needs attention/ });
+      expect(within(attention).getByText('190 documents failed OCR')).toBeInTheDocument();
+      expect(within(attention).getByText("OCR failed · Can't read .doc files: install antiword or catdoc")).toBeInTheDocument();
       expect(screen.getAllByRole('link', { name: 'Review' })).toHaveLength(1);
-      // The raw text is not on the page until asked for.
-      for (const raw of within(panel).getAllByText(/\/app\/uploads/)) expect(raw.closest('details:not([open])')).not.toBeNull();
+      expect(within(attention).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/intake?section=attention');
+      expect(screen.queryByText(/\/app\/uploads/)).not.toBeInTheDocument();
     });
 
-    it('lists the latest failures behind a disclosure, raw text behind another', async () => {
-      const user = userEvent.setup();
-      m.documentService.getFailedOcrDocuments.mockResolvedValue(failures());
+    it('is left out when nothing failed', async () => {
       await renderHome();
-      const panel = region('Processing');
-      await user.click(await within(panel).findByText('Show the latest failures'));
-      const item = within(panel).getByRole('link', { name: 'scan.pdf' }).closest('li') as HTMLElement;
-      expect(within(item).getByText('OCR failed')).toBeInTheDocument();
-      await user.click(within(item).getByText('Error text'));
-      expect(within(item).getByText(/\/app\/uploads\/documents\/abc\.pdf/)).toBeVisible();
-      expect(within(panel).getByRole('link', { name: 'odd.png' })).toHaveAttribute('href', '/documents/f4');
-      expect(within(panel).getByText('Quota reached')).toBeInTheDocument();
-    });
-
-    it('shows no failure line when nothing failed', async () => {
-      await renderHome();
-      await within(region('Processing')).findByText('41 done today');
-      expect(screen.queryByText(/failed$/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /Needs attention/ })).not.toBeInTheDocument();
     });
 
     it('shows an error with Retry when failed documents cannot be loaded', async () => {
       const user = userEvent.setup();
       m.documentService.getFailedOcrDocuments.mockRejectedValue(new Error('boom'));
       await renderHome();
-      const alert = await within(region('Processing')).findByText('Failed documents could not be loaded.');
+      const attention = await screen.findByRole('region', { name: /Needs attention/ });
+      const alert = await within(attention).findByRole('alert');
+      expect(alert).toHaveTextContent('Failed documents could not be loaded.');
       m.documentService.getFailedOcrDocuments.mockResolvedValue(failures());
-      await user.click(within(alert.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Retry' }));
-      expect(await within(region('Processing')).findByText('190 failed')).toBeInTheDocument();
+      await user.click(within(alert).getByRole('button', { name: 'Retry' }));
+      expect(await screen.findByText('190 documents failed OCR')).toBeInTheDocument();
     });
   });
 
@@ -408,13 +396,40 @@ describe('Home', () => {
     const cards = () => within(screen.getByRole('list', { name: 'Just arrived' })).getAllByRole('listitem');
     const card = (name: string) => cards().find((c) => within(c).queryByRole('link', { name: new RegExp(name) }))!;
 
-    it('shows the newest documents with their source and when they arrived', async () => {
+    it('shows the newest documents with type, size, age, OCR status and source', async () => {
       await renderHome();
       expect(within(card('d1.pdf')).getByText('Scanner inbox')).toBeInTheDocument();
       expect(within(card('d2.pdf')).getByText('Uploads')).toBeInTheDocument();
-      expect(within(card('d1.pdf')).getByText(/5 min|5m/)).toBeInTheDocument();
-      expect(within(card('d1.pdf')).getByRole('link')).toHaveAttribute('href', '/documents/d1');
+      expect(within(card('d1.pdf')).getByText(/^PDF · 2\.0 KB · .*(5 min|5m)/)).toBeInTheDocument();
+      expect(within(card('d1.pdf')).getByText('Indexed')).toBeInTheDocument();
+      expect(card('d1.pdf').querySelector('[data-tile] svg')).not.toBeNull();
+      expect(within(card('d1.pdf')).getByRole('link')).toHaveAttribute('href', '/home?document=d1');
       expect(m.documentService.listWithPagination).toHaveBeenCalledWith(12, 0);
+    });
+
+    it('shows OCR progress with a spinner and the first labels', async () => {
+      m.documentService.listWithPagination.mockResolvedValue({
+        data: {
+          documents: [
+            doc('d1', {
+              ocr_status: 'processing',
+              ocr_progress_current: 3,
+              ocr_progress_total: 14,
+              labels: [
+                { id: 'l1', name: 'Housing', color: '#4878B8' },
+                { id: 'l2', name: 'Taxes', color: '#C0841A' },
+                { id: 'l3', name: 'Misc', color: '#888888' },
+              ],
+            }),
+          ],
+          pagination: { total: 1 },
+        },
+      });
+      await renderHome();
+      expect(within(card('d1.pdf')).getByText('OCR 3/14')).toBeInTheDocument();
+      expect(card('d1.pdf').querySelector('[data-lead] svg')).not.toBeNull();
+      expect(within(card('d1.pdf')).getByText('Housing')).toBeInTheDocument();
+      expect(within(card('d1.pdf')).getByLabelText('1 more')).toHaveTextContent('+1');
     });
 
     it('names a source it cannot find, and dates older documents', async () => {
@@ -442,7 +457,7 @@ describe('Home', () => {
       expect(within(card('d1.pdf')).getByText('New')).toBeInTheDocument();
       expect(within(card('d2.pdf')).queryByText('New')).not.toBeInTheDocument();
       await user.click(within(card('d1.pdf')).getByRole('link'));
-      expect(loc()).toBe('/documents/d1');
+      expect(loc()).toBe('/home?document=d1');
       expect(isLit('document', 'd1')).toBe(false);
     });
 
@@ -491,7 +506,7 @@ describe('Home', () => {
       renderPage(<Home />);
       const recent = await screen.findByRole('region', { name: 'Just arrived' });
       expect(await within(recent).findByText('No documents yet')).toBeInTheDocument();
-      expect(within(recent).getByRole('link', { name: 'Add documents' })).toHaveAttribute('href', '/intake?section=upload');
+      expect(within(recent).getByRole('link', { name: 'Upload' })).toHaveAttribute('href', '/intake?section=upload');
     });
 
     it('shows an inline error with Retry that recovers, and keeps the rest of the page', async () => {

@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cx } from '../../ui/shared/FieldParts';
-import { DESTINATIONS, activeDestination } from './destinations';
+import { DESTINATIONS, activeDestination, type DestinationId } from './destinations';
 import styles from './Sidebar.module.css';
 import shellStyles from './AppShell.module.css';
 
@@ -9,11 +9,13 @@ export interface PrimaryNavProps {
   /** `side` is the sidebar list; `bottom` is the fixed phone tab bar (no Settings). */
   variant: 'side' | 'bottom';
   label: string;
+  /** Figures shown after a destination's label in the side variant. */
+  counts?: Partial<Record<DestinationId, number>>;
 }
 
 /** The destinations. The current one carries `aria-current="page"`. */
-export function PrimaryNav({ variant, label }: PrimaryNavProps) {
-  const { t } = useTranslation();
+export function PrimaryNav({ variant, label, counts }: PrimaryNavProps) {
+  const { t, i18n } = useTranslation();
   const { pathname } = useLocation();
   const active = activeDestination(pathname);
   const side = variant === 'side';
@@ -37,7 +39,12 @@ export function PrimaryNav({ variant, label }: PrimaryNavProps) {
                 <span className={side ? styles.navIcon : shellStyles.tabIcon} aria-hidden="true">
                   {d.icon}
                 </span>
-                <span className={side ? styles.navLabel : shellStyles.tabLabel}>{t(d.labelKey, d.fallback)}</span>
+                <span className={side ? styles.navLabel : shellStyles.tabLabel}>
+                  {!side && d.shortLabelKey ? t(d.shortLabelKey, d.shortFallback ?? d.fallback) : t(d.labelKey, d.fallback)}
+                </span>
+                {side && counts?.[d.id] !== undefined ? (
+                  <span className={styles.navCount}>{new Intl.NumberFormat(i18n.language).format(counts[d.id] as number)}</span>
+                ) : null}
               </Link>
             </li>
           );

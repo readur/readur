@@ -2,6 +2,9 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* Installed on a notched phone the page reaches the screen edges: keep clear of the notch. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--bg);
   color: var(--fg);
 }
@@ -98,13 +101,26 @@
   inset: 0;
   z-index: var(--z-overlay);
   display: flex;
+}
+
+/* The scrim darkens with the drawer as a finger drags it (--drawer-shown, 0 to 1). */
+.drawerOverlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background: var(--scrim);
+  opacity: var(--drawer-shown, 1);
+  transition: opacity var(--dur-2) var(--ease);
 }
 
 .drawer {
   position: relative;
+  box-sizing: border-box;
   width: min(320px, 86vw);
   height: 100%;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
   background: var(--surface);
   box-shadow: var(--shadow-overlay);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
@@ -117,6 +133,22 @@
 
 .drawer[data-exiting] {
   animation: drawer-in var(--dur-2) var(--ease) reverse;
+}
+
+/* Let go after a drag, the panel eases on from wherever the finger left it. */
+.drawer {
+  transition: translate var(--dur-2) var(--ease-out-expo);
+}
+
+/* While a finger holds it, the panel and scrim follow it exactly, with no animation of their own. */
+.drawerOverlay[data-dragging] .drawer,
+.drawerOverlay[data-dragging]::before {
+  transition: none;
+}
+
+.drawerOverlay[data-dragging] .drawer[data-entering],
+.drawerOverlay[data-swiped-shut] .drawer[data-exiting] {
+  animation: none;
 }
 
 @keyframes drawer-in {
@@ -257,12 +289,12 @@
   gap: var(--s-2);
   flex: 1;
   min-width: 0;
-  height: 40px;
+  height: 44px;
   padding: 0 var(--s-2);
   background: transparent;
   color: var(--fg);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -270,7 +302,7 @@
 }
 
 .userRow[data-hovered] {
-  background: var(--surface-2);
+  background: var(--hover);
 }
 
 .userRow[data-focus-visible] {
@@ -278,17 +310,12 @@
   outline-offset: 2px;
 }
 
-.avatar {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--fs-sm);
-  font-weight: 700;
+.userRowText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+  text-align: left;
 }
 
 .userRowName {
@@ -296,6 +323,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.userRowRole {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg-meta);
 }
 
 /* ── Main ────────────────────────────────────────────── */
@@ -355,10 +388,12 @@
   flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Icons share one row whatever the label; labels stay on one line under them. */
+  justify-content: flex-start;
   gap: 2px;
   min-height: 44px;
   margin: var(--s-1) 2px;
+  padding-top: var(--s-1);
   color: var(--fg-meta);
   text-decoration: none;
   font-size: var(--fs-xs);
@@ -383,6 +418,7 @@
 .tabIcon {
   display: inline-grid;
   place-items: center;
+  flex: none;
   width: 48px;
   height: 26px;
   font-size: var(--fs-xl);
@@ -395,7 +431,12 @@
 }
 
 .tabLabel {
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .withBottomBar .main {

@@ -1,9 +1,6 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { Button as RACButton } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
-import { Close } from '../../ui/icons';
-import { labelIcon, swatchStyle, type LabelData } from './labelData';
-import styles from './Labels.module.css';
+import { LabelChip } from '../../ui/Label';
+import { isHexColor, labelIcon, type LabelData } from './labelData';
 
 export type { LabelData, LabelDraft } from './labelData';
 
@@ -22,11 +19,9 @@ export interface LabelProps {
   className?: string;
 }
 
-const cx = (...parts: Array<string | false | undefined>) => parts.filter(Boolean).join(' ');
-
 /**
- * A label tag: a colour swatch plus the name. The name is always shown, so the colour is never
- * the only cue; text sits on the surface colour, never on the label's own colour.
+ * A label tag for a LabelData record: the ui LabelChip (colour dot plus name) with the label's
+ * colour, icon, count and remove action wired up. System labels are never removable.
  */
 function Label({
   label,
@@ -41,47 +36,22 @@ function Label({
 }: LabelProps) {
   const { t } = useTranslation();
   const Icon = labelIcon(label.icon);
-  const count = label.document_count ?? 0;
   const canDelete = deletable && !label.is_system;
-
-  const content: ReactNode = (
-    <>
-      <span className={styles.swatch} data-swatch="" aria-hidden="true" />
-      {Icon ? (
-        <span className={styles.tagIcon} aria-hidden="true">
-          <Icon fontSize="inherit" />
-        </span>
-      ) : null}
-      <span className={styles.tagName}>{label.name}</span>
-      {showCount && count > 0 ? <span className={styles.tagCount}>({count})</span> : null}
-    </>
-  );
-
   return (
-    <span
-      className={cx(styles.tag, styles[size], styles[variant], disabled && styles.disabled, className)}
-      style={swatchStyle(label.color) as CSSProperties}
-      data-label={label.id}
-      data-disabled={disabled || undefined}
-    >
-      {onClick ? (
-        <RACButton className={styles.tagButton} isDisabled={disabled} onPress={() => onClick(label.id)}>
-          {content}
-        </RACButton>
-      ) : (
-        <span className={styles.tagBody}>{content}</span>
-      )}
-      {canDelete ? (
-        <RACButton
-          className={styles.tagRemove}
-          isDisabled={disabled}
-          aria-label={t('labels.tag.remove', { name: label.name, defaultValue: 'Remove {{name}}' })}
-          onPress={() => onDelete?.(label.id)}
-        >
-          <Close fontSize="inherit" />
-        </RACButton>
-      ) : null}
-    </span>
+    <LabelChip
+      name={label.name}
+      color={label.color && isHexColor(label.color) ? label.color.trim() : undefined}
+      icon={Icon ? <Icon fontSize="inherit" /> : undefined}
+      count={showCount ? (label.document_count ?? 0) : undefined}
+      size={size}
+      variant={variant}
+      onPress={onClick ? () => onClick(label.id) : undefined}
+      onRemove={canDelete ? () => onDelete?.(label.id) : undefined}
+      removeLabel={t('labels.tag.remove', { name: label.name, defaultValue: 'Remove {{name}}' })}
+      isDisabled={disabled}
+      className={className}
+      dataId={label.id}
+    />
   );
 }
 

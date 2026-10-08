@@ -1,0 +1,3 @@
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: var(--radius-pill); color: var(--accent-fg); background: linear-gradient(135deg, var(--accent), var(--src-1)); font-family: var(--font-ui); font-weight: 700; }
+.sm { width: 26px; height: 26px; font-size: var(--fs-xs); }
+.md { width: 32px; height: 32px; font-size: var(--fs-sm); }

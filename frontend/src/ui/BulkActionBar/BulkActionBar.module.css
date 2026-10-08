@@ -17,7 +17,7 @@
   }
 }
 
-/* An inverse bar: ink on light pages, light on dark ones, so it reads above any content. */
+/* A raised surface bar floating above the content. */
 .bar {
   box-sizing: border-box;
   display: flex;
@@ -26,8 +26,9 @@
   gap: var(--s-3);
   max-width: 100%;
   padding: var(--s-2) var(--s-3);
-  color: var(--bg);
-  background: var(--fg);
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
   pointer-events: auto;
@@ -42,9 +43,14 @@
 }
 
 .number {
+  padding: 2px var(--s-2);
+  font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   font-weight: 700;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
 }
 
 .word {
@@ -64,17 +70,12 @@
 }
 
 .bar .clear {
-  color: var(--bg);
+  color: var(--fg-2);
   background: transparent;
   border-color: transparent;
 }
 
 .bar .clear[data-hovered] {
-  color: var(--bg);
-  background: color-mix(in srgb, var(--bg) 16%, transparent);
-}
-
-/* Rings on the inverse bar use the bar's text colour so they stay visible. */
-.dock .bar [data-focus-visible] {
-  outline-color: var(--bg);
+  color: var(--fg);
+  background: var(--hover);
 }

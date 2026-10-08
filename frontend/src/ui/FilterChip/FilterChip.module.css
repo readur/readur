@@ -2,11 +2,11 @@
   box-sizing: border-box;
   display: inline-flex;
   align-items: stretch;
-  height: 32px;
+  height: 30px;
   max-width: 100%;
   min-width: 0;
-  color: var(--fg);
-  background: var(--surface-2);
+  color: var(--fg-2);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   overflow: hidden;
@@ -15,7 +15,13 @@
 .active {
   color: var(--accent);
   background: var(--accent-soft);
-  border-color: transparent;
+  border-color: var(--accent);
+}
+
+.check {
+  display: inline-flex;
+  flex: none;
+  font-size: 14px;
 }
 
 .trigger {
@@ -33,7 +39,7 @@
 }
 
 .trigger[data-hovered] {
-  background: var(--surface-sunken);
+  background: var(--hover);
 }
 
 .active .trigger[data-hovered] {
@@ -48,8 +54,8 @@
 
 .label {
   flex: none;
-  font-size: var(--fs-md);
-  font-weight: 500;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--fg-2);
 }
 
@@ -63,7 +69,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  font-size: var(--fs-md);
+  font-family: var(--font-data);
+  font-weight: 500;
+  font-size: var(--fs-xs);
   font-weight: 600;
 }
 

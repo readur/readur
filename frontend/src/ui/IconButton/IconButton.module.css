@@ -1,7 +1,17 @@
-.iconButton {
+.iconButton.iconButton {
   padding: 0;
-  min-width: 32px;
+  min-width: 0;
+  background: var(--surface-sunken);
+  color: var(--fg-2);
+  border-color: transparent;
+  box-shadow: none;
 }
-.sm { width: 32px; height: 32px; }
-.md { width: 40px; height: 40px; }
+.iconButton.iconButton[data-hovered],
+.iconButton.iconButton[data-pressed] { background: var(--press); color: var(--fg); transform: none; }
+.iconButton.iconButton[class*='danger'] { color: var(--danger); }
+.iconButton.iconButton[data-muted] { color: var(--fg-meta); background: transparent; cursor: not-allowed; }
+.iconButton.iconButton[data-muted][data-hovered] { background: var(--hover); color: var(--fg-meta); }
+
+.sm { width: 28px; height: 28px; }
+.md { width: 34px; height: 34px; }
 .glyph { display: inline-flex; }

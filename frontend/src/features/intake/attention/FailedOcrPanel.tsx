@@ -23,6 +23,7 @@ import { useLoader } from '../shared/useLoader';
 import { FailedDocumentPanel } from './FailedDocumentPanel';
 import { attentionKeyOf, failedName, ocrFailureSummary } from './failureLabels';
 import { ImportFailuresPanel } from './ImportFailuresPanel';
+import { useRecordDrawer } from '../shared/useRecordDrawer';
 import { bulkDeleteResult, outcomeOf, toneOf } from './outcome';
 
 export const FAILED_PAGE_SIZE = 25;
@@ -38,7 +39,6 @@ export function FailedOcrPanel() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(FAILED_PAGE_SIZE);
   const [selected, setSelected] = useState<Selection>(new Set());
-  const [openId, setOpenId] = useState<string | null>(null);
   const [retryOpen, setRetryOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -51,7 +51,9 @@ export function FailedOcrPanel() {
   const total = failed.data?.pagination?.total ?? docs.length;
   const selectedDocs = selected === 'all' ? docs : docs.filter((d) => selected.has(d.id));
   const selectedIds = selectedDocs.map((d) => d.id);
-  const open = docs.find((d) => d.id === openId) ?? null;
+  // The open document's failure details live in `?failure=` (not `document`: that is the document drawer).
+  const failure = useRecordDrawer('failure', docs, Boolean(failed.data) && !failed.isLoading);
+  const open = failure.record;
 
   useEffect(() => {
     flagNewFailures(
@@ -151,7 +153,7 @@ export function FailedOcrPanel() {
           onRowAction={(id) => {
             const doc = docs.find((d) => d.id === id);
             if (doc) acknowledge('attention', attentionKeyOf(doc));
-            setOpenId(id);
+            failure.open(String(id));
           }}
                     isLoading={failed.isLoading}
           emptyState={
@@ -182,7 +184,7 @@ export function FailedOcrPanel() {
       <FailedDocumentPanel
         document={open}
         isOpen={Boolean(open)}
-        onOpenChange={(isOpen) => !isOpen && setOpenId(null)}
+        onOpenChange={(isOpen) => !isOpen && failure.close()}
         onChanged={() => void failed.reload()}
       />
       <BulkRetryModal open={retryOpen} onClose={() => setRetryOpen(false)} onSuccess={onRetried} selectedDocumentIds={selectedIds} />

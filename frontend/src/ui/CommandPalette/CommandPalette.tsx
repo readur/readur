@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   Autocomplete,
   Dialog as RACDialog,
@@ -11,8 +11,9 @@ import {
   Text,
 } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
+import { Kbd } from '../Kbd';
 import { SearchField } from '../SearchField';
-import type { CommandSource } from './types';
+import type { CommandItem, CommandSource } from './types';
 import { useSourceSearch } from './useSourceSearch';
 import styles from './CommandPalette.module.css';
 
@@ -32,10 +33,33 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const { results, isLoading } = useSourceSearch(sources, query, isOpen);
+  const [active, setActive] = useState<CommandItem | null>(null);
 
   useEffect(() => {
     if (!isOpen) setQuery('');
   }, [isOpen]);
+
+  const frameRef = useRef<HTMLDivElement>(null);
+  const itemsByKey = useMemo(() => {
+    const map = new Map<string, CommandItem>();
+    for (const { source, items } of results) for (const item of items) map.set(`${source.id}:${item.id}`, item);
+    return map;
+  }, [results]);
+
+  // The palette uses virtual focus (the caret stays in the field), so follow React Aria's
+  // data-focused marker on the result list to know which result to preview.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const sync = () => {
+      const key = frame.querySelector('[role="menuitem"][data-focused]')?.getAttribute('data-key');
+      setActive(key ? (itemsByKey.get(key) ?? null) : null);
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(frame, { subtree: true, attributes: true, attributeFilter: ['data-focused'], childList: true });
+    return () => observer.disconnect();
+  }, [itemsByKey, isOpen]);
 
   // Esc always closes, even when the field has text (the field would otherwise clear first).
   const onKeyDownCapture = (e: KeyboardEvent) => {
@@ -48,12 +72,13 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
 
   const label = t('ui.commandPalette.label', 'Command palette');
   const hasResults = results.length > 0;
+  const hasPreview = results.some(({ items }) => items.some((item) => item.preview));
 
   return (
     <ModalOverlay className={styles.overlay} isOpen={isOpen} onOpenChange={onOpenChange} isDismissable>
       <Modal className={styles.modal}>
         <RACDialog className={styles.dialog} aria-label={label}>
-          <div className={styles.frame} onKeyDownCapture={onKeyDownCapture}>
+          <div ref={frameRef} className={styles.frame} onKeyDownCapture={onKeyDownCapture} data-has-preview={hasPreview || undefined}>
             <Autocomplete inputValue={query} onInputChange={setQuery}>
               <SearchField
                 autoFocus
@@ -113,6 +138,19 @@ export function CommandPalette({ isOpen, onOpenChange, sources, placeholder }: C
                   : []}
               </Menu>
             </Autocomplete>
+            {hasPreview ? (
+              <aside className={styles.preview}>
+                {active?.preview ?? null}
+              </aside>
+            ) : null}
+            <div className={styles.footer} aria-hidden="true">
+              <span>
+                <Kbd>↑↓</Kbd> {t('ui.palette.navigate', 'navigate')}
+              </span>
+              <span>
+                <Kbd>↵</Kbd> {t('ui.palette.open', 'open')}
+              </span>
+            </div>
           </div>
         </RACDialog>
       </Modal>

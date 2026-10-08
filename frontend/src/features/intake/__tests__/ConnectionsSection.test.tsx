@@ -1,5 +1,6 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
@@ -26,6 +27,15 @@ const SOURCES = [
 
 function serveSources(list: unknown = SOURCES) {
   sourcesService.list.mockImplementation(() => (list instanceof Error ? Promise.reject(list) : ok(list)));
+}
+
+function BackButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      browser back
+    </button>
+  );
 }
 
 async function board() {
@@ -86,9 +96,9 @@ describe('Connections board', () => {
     renderIntake(<ConnectionsSection />);
     const grid = await board();
     const names = () => within(grid).getAllByRole('rowheader').map((c) => c.textContent);
-    expect(names()).toEqual(['Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.', 'Office cloud', 'Scanner share']);
+    expect(names()).toEqual(['Archive bucketChanged', 'Office cloud', 'Scanner share']);
     await user.click(within(grid).getByRole('columnheader', { name: /Name/ }));
-    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChangedThe server refused the sign-in. Check the username, password or keys.']);
+    expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChanged']);
   });
 
   it('shows the empty state with an add button', async () => {
@@ -116,6 +126,14 @@ describe('Connections board', () => {
     expect(screen.getByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
   });
 
+  it('opens the connection form from ?new=1 and drops the param', async () => {
+    renderIntake(<ConnectionsSection />, { path: '/sources?section=connections&new=1' });
+    expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/sources?section=connections'),
+    );
+  });
+
   it('offers Pause OCR to admins only, and pauses', async () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
@@ -140,6 +158,16 @@ describe('Connection details panel', () => {
     expect(panel).not.toHaveTextContent('secret');
     expect(within(panel).getByRole('group', { name: 'Schedule' })).toHaveTextContent('every 60 min');
     expect(within(panel).getByRole('group', { name: 'Counts' })).toHaveTextContent('2 KB');
+  });
+
+  it('lists every watched folder on its own line, whole', async () => {
+    const folders = ['/Documents/Scans/2024/Receipts/Household', '/Shared/Team/Accounting/Invoices'];
+    serveSources([source('s9', { name: 'Deep tree', source_type: 'local_folder', config: { watch_folders: folders } })]);
+    const user = userEvent.setup();
+    renderIntake(<ConnectionsSection />);
+    const panel = await openRow(user, 'Deep tree');
+    const list = within(panel).getByRole('list', { name: 'Folders' });
+    expect(within(list).getAllByRole('listitem').map((el) => el.textContent)).toEqual(folders);
   });
 
   it('lists recent errors with PascalCase types mapped to words and marks', async () => {
@@ -267,7 +295,8 @@ describe('Connection details panel', () => {
     await user.click(within(confirm).getByRole('button', { name: 'Delete connection' }));
     await waitFor(() => expect(sourcesService.remove).toHaveBeenCalledWith('s1'));
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Delete “Office cloud”?' })).not.toBeInTheDocument());
-    expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument();
+    // Closing goes back a history step (the drawer lives in ?source=), which settles a tick later.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument());
   });
 
   it('cancels a delete without calling the server', async () => {
@@ -440,12 +469,16 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
 });
 
 describe('Connections health and deep links', () => {
-  it("shows the failing connection's last error in plain words under its name", async () => {
+  it("keeps a failing connection's row on one line and gives its last error in plain words on its status", async () => {
+    const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const grid = await board();
     const row = within(grid).getByRole('row', { name: /Archive bucket/ });
-    expect(within(row).getByText(/server refused the sign-in/i)).toBeInTheDocument();
-    expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveTextContent(/refused the sign-in/i);
+    expect(row).not.toHaveTextContent(/refused the sign-in/i);
+    await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
+    await user.hover(row.querySelector('[data-reason]') as HTMLElement);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/server refused the sign-in/i);
+    expect(within(grid).getByRole('row', { name: /Office cloud/ }).querySelector('[data-reason]')).toBeNull();
   });
 
   it('lists a health warning under the name and its recommendation in the panel', async () => {
@@ -461,7 +494,11 @@ describe('Connections health and deep links', () => {
     ]);
     renderIntake(<ConnectionsSection />);
     const grid = await board();
-    expect(within(grid).getByText(/Can't reach the server/)).toBeInTheDocument();
+    const row = within(grid).getByRole('row', { name: /Office cloud/ });
+    await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
+    await user.hover(row.querySelector('[data-reason]') as HTMLElement);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Can't reach the server/);
+    await user.unhover(row.querySelector('[data-reason]') as HTMLElement);
     const panel = await openRow(user, 'Office cloud');
     expect(within(panel).getByRole('heading', { name: 'Health check' })).toBeInTheDocument();
     expect(within(panel).getByText('Check server URL and network')).toBeInTheDocument();
@@ -478,9 +515,51 @@ describe('Connections health and deep links', () => {
     );
   });
 
-  it('ignores a ?source= that matches no connection', async () => {
+  it('drops a ?source= that matches no connection', async () => {
     renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=nope' });
     await board();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/intake?section=connections'),
+    );
+  });
+
+  it('a row click puts the connection in the URL, and Back closes it', async () => {
+    const user = userEvent.setup();
+    renderIntake(
+      <>
+        <ConnectionsSection />
+        <BackButton />
+      </>,
+      { path: '/sources?section=connections' },
+    );
+    await openRow(user, 'Archive bucket');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent(
+      '/sources?section=connections&source=s2',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'browser back', hidden: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/sources?section=connections');
+  });
+});
+
+describe('closing the details panel', () => {
+  it('keeps the connection on screen while the panel slides out', async () => {
+    // Pretend the exit animation is still running, as it does in a browser.
+    const running = [{ finished: new Promise(() => {}) }] as unknown as Animation[];
+    const original = Element.prototype.getAnimations;
+    Element.prototype.getAnimations = function getAnimations(this: Element) {
+      return this.hasAttribute('data-exiting') ? running : [];
+    };
+    try {
+      const user = userEvent.setup();
+      renderIntake(<ConnectionsSection />);
+      const panel = await openRow(user, 'Archive bucket');
+      await user.click(within(panel).getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(document.querySelector('[data-exiting]')).not.toBeNull());
+      expect(within(document.querySelector('[data-exiting]') as HTMLElement).getByText('Archive bucket')).toBeInTheDocument();
+    } finally {
+      Element.prototype.getAnimations = original;
+    }
   });
 });

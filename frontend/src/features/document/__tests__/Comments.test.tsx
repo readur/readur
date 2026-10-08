@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiModule from '../../../services/api';
 import type { CommentThread } from '../../../services/api';
-import { CommentsPanel } from '../comments/CommentsPanel';
+import { act } from '@testing-library/react';
+import { COMMENTS_POLL_MS, CommentsPanel, useComments } from '../comments/CommentsPanel';
 import type { ApiMock } from './mockApi';
 import { Providers, testUser } from './testUtils';
 
@@ -27,10 +28,20 @@ const thread = (overrides: Partial<CommentThread> = {}): CommentThread => ({
   ...overrides,
 });
 
-function renderPanel(user: typeof testUser | null = testUser) {
+function Panel({ poll = true }: { poll?: boolean }) {
+  const comments = useComments('doc-1', { poll });
+  return (
+    <>
+      <output aria-label="comment count">{comments.count}</output>
+      <CommentsPanel documentId="doc-1" comments={comments} />
+    </>
+  );
+}
+
+function renderPanel(user: typeof testUser | null = testUser, poll = true) {
   return render(
     <Providers user={user}>
-      <CommentsPanel documentId="doc-1" />
+      <Panel poll={poll} />
     </Providers>,
   );
 }
@@ -175,5 +186,27 @@ describe('comments', () => {
     renderPanel(null);
     await list();
     expect(screen.queryByRole('textbox', { name: 'New comment' })).not.toBeInTheDocument();
+  });
+});
+
+describe('useComments', () => {
+  it('counts threads and their replies', async () => {
+    m.commentsService.list.mockResolvedValue({ data: [thread(), thread({ id: 'c-2', reply_count: 2 })] });
+    renderPanel();
+    await waitFor(() => expect(screen.getByRole('status', { name: 'comment count' })).toHaveTextContent('4'));
+  });
+
+  it('loads once and polls only while asked to', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPanel(testUser, false);
+      await waitFor(() => expect(m.commentsService.list).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        vi.advanceTimersByTime(COMMENTS_POLL_MS * 2);
+      });
+      expect(m.commentsService.list).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

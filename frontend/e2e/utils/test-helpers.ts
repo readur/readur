@@ -21,6 +21,13 @@ export interface WebdavSourceInput {
   enabled?: boolean;
 }
 
+/** The id of the document open in the drawer: `?document=` in the page's URL. */
+export function openDocumentId(page: Page): string {
+  const id = new URL(page.url()).searchParams.get('document');
+  if (!id) throw new Error(`No document drawer open at ${page.url()}`);
+  return id;
+}
+
 export class TestHelpers {
   constructor(private page: Page) {}
 
@@ -209,9 +216,13 @@ export class TestHelpers {
     await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
   }
 
+  /** Connections and the watch folder live on the Sources page; the rest in Intake. */
   async openIntake(section: IntakeSection) {
-    await this.page.goto(`/intake?section=${section}`);
-    await expect(this.page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible({ timeout: 15000 });
+    const onSources = section === 'connections' || section === 'watch';
+    await this.page.goto(`${onSources ? '/sources' : '/intake'}?section=${section}`);
+    await expect(this.page.getByRole('heading', { level: 1, name: onSources ? 'Sources' : 'Intake' })).toBeVisible({
+      timeout: 15000,
+    });
   }
 
   /**
@@ -257,14 +268,12 @@ export class TestHelpers {
     return panel;
   }
 
-  /**
-   * The OCR text on the document page. Wide screens show preview and text side by side;
-   * narrower ones put them behind "Preview" / "Text" tabs.
-   */
+  /** The OCR text in the open document drawer (its Text tab, the one it opens on). */
   async extractedText(): Promise<Locator> {
-    await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible();
-    const tab = this.page.getByRole('tab', { name: 'Text' });
-    if (await tab.isVisible()) await tab.click();
+    const drawer = this.page.getByRole('dialog');
+    await expect(drawer.getByRole('group', { name: 'Document summary' })).toBeVisible({ timeout: 15000 });
+    const tab = drawer.getByRole('tab', { name: 'Text' });
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
     const region = this.page.getByRole('region', { name: 'Extracted text' });
     await expect(region).toBeVisible();
     return region;

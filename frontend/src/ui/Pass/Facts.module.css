@@ -1,0 +1,44 @@
+.box {
+  min-width: 0;
+  padding: var(--s-1) var(--s-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.title {
+  margin: var(--s-3) 0 var(--s-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.list { margin: 0; }
+
+.fact {
+  display: grid;
+  grid-template-columns: minmax(110px, 35%) 1fr;
+  gap: var(--s-2);
+  align-items: center;
+  padding: var(--s-2) 0;
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--line);
+}
+
+.fact:last-child { border-bottom: 0; }
+
+.fact dt { font-size: var(--fs-xs); font-weight: 600; color: var(--fg-2); }
+
+.fact dd {
+  margin: 0;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.fact dd[data-mono] { font-family: var(--font-data); font-weight: 500; font-size: var(--fs-sm); }
+
+.yesNo { font-family: var(--font-ui); font-weight: 600; }
+.yesNo[data-value='yes'] > span { color: var(--ok); }

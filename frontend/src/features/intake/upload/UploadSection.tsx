@@ -1,6 +1,5 @@
 import { useId } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, EmptyState, StatusMark, type BoardColumn, type StatusState } from '../../../ui';
 import LabelSelector from '../../labels/LabelSelector';
@@ -11,6 +10,7 @@ import { NameCell, Notice, ProgressCell, sharedStyles } from '../shared/parts';
 import { ACCEPT, ACCEPTED_EXTENSIONS, MAX_FILE_SIZE, MAX_FILE_SIZE_MB } from './uploadConfig';
 import { useUploadOptions } from './useUploadOptions';
 import { useUploadQueue, type UploadItem, type UploadStatus } from './useUploadQueue';
+import { useDocumentDrawer } from '../../document/drawer/DocumentDrawerContext';
 import styles from './Upload.module.css';
 
 const STATE: Record<UploadStatus, StatusState> = {
@@ -24,7 +24,7 @@ const STATE: Record<UploadStatus, StatusState> = {
 /** Drop area, upload options and the board of files being added. */
 export function UploadSection() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const drawer = useDocumentDrawer();
   const optionsId = useId();
   const options = useUploadOptions();
   useLitCount('document');
@@ -166,7 +166,7 @@ export function UploadSection() {
         isRowLit={(i) => i.status === 'success' && Boolean(i.documentId) && isShownLit('document', i.documentId!)}
         onRowAction={(id) => {
           const item = queue.items.find((i) => i.id === id);
-          if (item?.status === 'success' && item.documentId) navigate(`/documents/${item.documentId}`);
+          if (item?.status === 'success' && item.documentId) drawer.open(item.documentId);
         }}
         renderRowDetail={(i) => (i.error ? <span className={sharedStyles.dangerText}>{i.error}</span> : null)}
         emptyState={

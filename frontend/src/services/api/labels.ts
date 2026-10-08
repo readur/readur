@@ -20,6 +20,11 @@ export const labelService = {
     return api.put<Label>(`/labels/${id}`, data)
   },
 
+  /** GET /labels/documents/:id — the labels on one document. */
+  getDocumentLabels: (documentId: string) => {
+    return api.get<Label[]>(`/labels/documents/${documentId}`)
+  },
+
   /** Replace a document's labels with exactly `labelIds`. */
   setDocumentLabels: (documentId: string, labelIds: string[]) => {
     return api.put(`/labels/documents/${documentId}`, { label_ids: labelIds })

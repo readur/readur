@@ -31,11 +31,6 @@ export function UserStatusCell({ user, isSelf, isDisabled = false, onChange }: U
       />
       {active ? null : <Tag>{t('settings.userManagement.statusPending', 'Disabled / pending approval')}</Tag>}
       {isAdminRole(user.role) ? <Tag>{t('settings.userManagement.roleAdmin', 'Admin')}</Tag> : null}
-      {isSelf ? (
-        <span className={shared.meta}>
-          {t('settings.userManagement.cannotDeactivateSelf', 'You cannot deactivate your own account')}
-        </span>
-      ) : null}
     </span>
   );
 }

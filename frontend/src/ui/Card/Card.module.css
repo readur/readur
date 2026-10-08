@@ -1,0 +1,5 @@
+.card { background: var(--surface); color: var(--fg); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); min-width: 0; }
+.card[data-padding='sm'] { padding: var(--s-3); }
+.card[data-padding='md'] { padding: var(--s-4); }
+.card[data-interactive] { transition: box-shadow var(--dur-1) var(--ease); cursor: pointer; }
+.card[data-interactive]:hover { box-shadow: var(--shadow-overlay); }

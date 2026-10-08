@@ -4,7 +4,7 @@ import { TIMEOUTS } from './utils/test-data';
 import { TestHelpers } from './utils/test-helpers';
 
 /**
- * Sources are now Intake → Connections (/intake?section=connections; /sources redirects).
+ * Sources have their own page: /sources?section=connections (old Intake links redirect).
  * A row opens the connection's detail panel with its actions. Every test signs in as a fresh
  * user, so the board only holds connections the test creates. WebDAV connections point at
  * an address nothing listens on, so no test depends on an external server.
@@ -21,7 +21,7 @@ test.describe('Source Management', () => {
 
   test('should display sources interface', async ({ dynamicUserPage: page }) => {
     await page.goto('/sources');
-    await expect(page).toHaveURL(/\/intake\?section=connections/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sources' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Connections', selected: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add connection' }).first()).toBeVisible();
     await expect(page.getByRole('grid', { name: 'Connections' })).toBeVisible();

@@ -14,10 +14,11 @@ export const adminUser = { id: 'u-admin', username: 'ada', email: 'ada@example.c
 export const plainUser = { id: 'u-user', username: 'bob', email: 'bob@example.com', role: 'user' as const };
 
 export function LocationProbe() {
-  const { pathname, hash } = useLocation();
+  const { pathname, search, hash } = useLocation();
   return (
     <output aria-label="location">
       {pathname}
+      {search}
       {hash}
     </output>
   );

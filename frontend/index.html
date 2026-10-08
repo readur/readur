@@ -3,9 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#161B22" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#171A28" media="(prefers-color-scheme: dark)" />
+
+    <!-- Installed app: opened from the home screen it runs full screen, without browser bars. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Readur" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Readur - Document Intelligence Platform</title>
     <script>
       // Set the theme before the first paint; ThemeProvider keeps this value.

@@ -7,6 +7,7 @@ import { HumanReason } from '../shared/HumanReason';
 import { sharedStyles } from '../shared/parts';
 import { FailedDocumentPreview } from './FailedDocumentPreview';
 import { confidenceText, failedName, failureSummary, reasonLabel, stageLabel } from './failureLabels';
+import { useLastDefined } from '../../../lib/useLastDefined';
 
 export interface ImportFailureDetailProps {
   record: FailedDocumentRow | null;
@@ -15,7 +16,8 @@ export interface ImportFailureDetailProps {
 }
 
 /** Read-only details of a failed import record. It is not a document, so there are no actions. */
-export function ImportFailureDetail({ record, isOpen, onOpenChange }: ImportFailureDetailProps) {
+export function ImportFailureDetail({ record: current, isOpen, onOpenChange }: ImportFailureDetailProps) {
+  const record = useLastDefined(current);
   const { t, i18n } = useTranslation();
   const ids = { error: useId(), preview: useId() };
   if (!record) return null;
@@ -23,7 +25,7 @@ export function ImportFailureDetail({ record, isOpen, onOpenChange }: ImportFail
   const name = failedName(record);
 
   return (
-    <SlideOver title={name} isOpen={isOpen} onOpenChange={onOpenChange}>
+    <SlideOver title={name} isOpen={isOpen} onOpenChange={onOpenChange} resizable storageKey="import-failure">
       <div className={sharedStyles.stack}>
         <StatusMark state="failed" />
         <p className={sharedStyles.meta}>

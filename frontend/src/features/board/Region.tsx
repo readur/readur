@@ -1,31 +1,49 @@
 import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, ChangeTag } from '../../ui';
+import { Button, Card, ChangeTag, Notice } from '../../ui';
 import { cx } from '../../ui/shared/FieldParts';
 import { litTagOf } from './litTag';
 import styles from './Home.module.css';
 
 export interface RegionProps {
   title: ReactNode;
+  /** A figure beside the title, e.g. how many items the region holds. */
+  count?: ReactNode;
   /** Right side of the header: a link or a control. */
   headerAction?: ReactNode;
+  /** `card` (default) puts the region on a Card; `plain` leaves the heading on the page background. */
+  surface?: 'card' | 'plain';
   className?: string;
   children: ReactNode;
 }
 
-/** A titled, raised panel on Home. */
-export function Region({ title, headerAction, className, children }: RegionProps) {
+/** A titled region on Home: on a Card, or a heading above loose content (cards, notices). */
+export function Region({ title, count, headerAction, surface = 'card', className, children }: RegionProps) {
   const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className={cx(styles.panel, className)}>
-      <header className={styles.panelHead}>
-        <h2 id={headingId} className={styles.panelTitle}>
+  const head = (
+    <header className={styles.regionHead}>
+      <span className={styles.regionTitleRow}>
+        <h2 id={headingId} className={styles.regionTitle}>
           {title}
         </h2>
-        {headerAction ? <div className={styles.panelAction}>{headerAction}</div> : null}
-      </header>
+        {count !== undefined ? <span className={styles.regionCount}>{count}</span> : null}
+      </span>
+      {headerAction ? <div className={styles.regionAction}>{headerAction}</div> : null}
+    </header>
+  );
+  if (surface === 'plain') {
+    return (
+      <section aria-labelledby={headingId} className={cx(styles.region, className)}>
+        {head}
+        {children}
+      </section>
+    );
+  }
+  return (
+    <Card as="section" aria-labelledby={headingId} className={cx(styles.region, className)}>
+      {head}
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -38,15 +56,15 @@ export interface RegionErrorProps {
 export function RegionError({ message, onRetry }: RegionErrorProps) {
   const { t } = useTranslation();
   return (
-    <div role="alert" className={styles.error}>
-      <span className={styles.errorMark} aria-hidden="true">
-        ▲
-      </span>
-      <span className={styles.errorText}>{message}</span>
-      <Button size="sm" variant="secondary" onPress={onRetry}>
-        {t('board.retry', 'Retry')}
-      </Button>
-    </div>
+    <Notice
+      tone="danger"
+      title={message}
+      action={
+        <Button size="sm" variant="ghost" onPress={onRetry}>
+          {t('board.retry', 'Retry')}
+        </Button>
+      }
+    />
   );
 }
 

@@ -1,0 +1,56 @@
+/* The slot picks the hue; everything else reads --src / --src-soft. */
+.badge[data-slot="1"] { --src: var(--src-1); --src-soft: var(--src-1-soft); }
+.badge[data-slot="2"] { --src: var(--src-2); --src-soft: var(--src-2-soft); }
+.badge[data-slot="3"] { --src: var(--src-3); --src-soft: var(--src-3-soft); }
+.badge[data-slot="4"] { --src: var(--src-4); --src-soft: var(--src-4-soft); }
+.badge[data-slot="5"] { --src: var(--src-5); --src-soft: var(--src-5-soft); }
+.badge[data-slot="6"] { --src: var(--src-6); --src-soft: var(--src-6-soft); }
+.badge[data-slot="7"] { --src: var(--src-7); --src-soft: var(--src-7-soft); }
+.badge[data-slot="8"] { --src: var(--src-8); --src-soft: var(--src-8-soft); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--src) 18%, var(--surface));
+  color: color-mix(in srgb, var(--src) 80%, var(--fg));
+}
+
+.chip {
+  padding: 2px var(--s-2) 2px 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.chip .tile {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+}
+
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.type {
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg-meta);
+}

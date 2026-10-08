@@ -1,26 +1,22 @@
 import { useLayoutEffect, useRef, type ComponentType } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Key } from 'react-aria-components';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui';
 import { PageHeader } from '../shell';
 import { AttentionSection } from './attention/AttentionSection';
-import { ConnectionsSection } from './connections/ConnectionsSection';
 import { IgnoredSection } from './ignored/IgnoredSection';
 import { sharedStyles } from './shared/parts';
 import { UploadSection } from './upload/UploadSection';
 import { useIntakeSummary } from './useIntakeSummary';
-import { WatchSection } from './watch/WatchSection';
 import styles from './Intake.module.css';
 
-export const INTAKE_SECTION_IDS = ['upload', 'connections', 'watch', 'attention', 'ignored'] as const;
+export const INTAKE_SECTION_IDS = ['upload', 'attention', 'ignored'] as const;
 export type IntakeSectionId = (typeof INTAKE_SECTION_IDS)[number];
 export const DEFAULT_INTAKE_SECTION: IntakeSectionId = 'upload';
 
 const PANELS: Record<IntakeSectionId, ComponentType> = {
   upload: UploadSection,
-  connections: ConnectionsSection,
-  watch: WatchSection,
   attention: AttentionSection,
   ignored: IgnoredSection,
 };
@@ -35,14 +31,24 @@ export function revealSelectedTab(scroller: HTMLElement | null) {
   else if (rect.right > box.right) scroller.scrollLeft += rect.right - box.right;
 }
 
-/**
- * The sidebar links every source as `?section=connections&source=<key>`. The watch folder and
- * the uploads have no connection panel, so their keys lead to their own section.
- */
+/** The uploads key in `?source=` leads to the upload section. */
 export function sectionForSource(source: string | null): IntakeSectionId | null {
-  if (source === 'watch') return 'watch';
   if (source === 'upload' || source === 'uploads') return 'upload';
   return null;
+}
+
+/**
+ * Connections and the watch folder moved to their own Sources page. An old Intake link to
+ * either (`?section=connections|watch`, or `?source=watch`) returns its new address.
+ */
+export function sourcesRedirect(params: URLSearchParams): string | null {
+  const section = params.get('section');
+  const source = params.get('source');
+  if (source === 'watch' || section === 'watch') return '/sources?section=watch';
+  if (section !== 'connections') return null;
+  const next = new URLSearchParams({ section: 'connections' });
+  if (source) next.set('source', source);
+  return `/sources?${next.toString()}`;
 }
 
 export function parseSection(value: string | null): IntakeSectionId {
@@ -51,6 +57,13 @@ export function parseSection(value: string | null): IntakeSectionId {
 
 /** Intake: add documents, check connections, and clear what needs attention. */
 export default function IntakePage() {
+  const [params] = useSearchParams();
+  const moved = sourcesRedirect(params);
+  if (moved) return <Navigate replace to={moved} />;
+  return <IntakeTabs />;
+}
+
+function IntakeTabs() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const section = sectionForSource(params.get('source')) ?? parseSection(params.get('section'));
@@ -71,8 +84,6 @@ export default function IntakePage() {
 
   const labels: Record<IntakeSectionId, string> = {
     upload: t('intake.sections.upload', 'Add documents'),
-    connections: t('intake.sections.connections', 'Connections'),
-    watch: t('intake.sections.watch', 'Watch folder'),
     attention: t('intake.sections.attention', 'Needs attention'),
     ignored: t('intake.sections.ignored', 'Ignored'),
   };

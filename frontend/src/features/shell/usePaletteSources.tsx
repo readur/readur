@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentDrawer } from '../document/drawer/DocumentDrawerContext';
 import { useTranslation } from 'react-i18next';
 import type { CommandItem, CommandSource } from '../../ui';
 import { Description, History, Search } from '../../ui/icons';
 import { documentService } from '../../services/api';
-import { DESTINATIONS, INTAKE_SECTIONS, SETTINGS_SECTIONS } from './destinations';
+import { DESTINATIONS, INTAKE_SECTIONS, SETTINGS_SECTIONS, SOURCES_SECTIONS } from './destinations';
 import { readRecentSearches, saveRecentSearch } from './recentSearches';
 
 export const DOCUMENT_RESULT_LIMIT = 8;
@@ -18,9 +19,14 @@ const searchPath = (q: string) => `/search?q=${encodeURIComponent(q)}`;
 export function usePaletteSources(): CommandSource[] {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  // Read at selection time: the drawer opens over whatever page is showing by then.
+  const openDrawer = useDocumentDrawer();
+  const drawer = useRef(openDrawer);
+  drawer.current = openDrawer;
 
   return useMemo<CommandSource[]>(() => {
     const intakeTitle = t('shell.nav.intake', 'Intake');
+    const sourcesTitle = t('shell.nav.sources', 'Sources');
     const settingsTitle = t('shell.nav.settings', 'Settings');
 
     const navItems: CommandItem[] = [
@@ -34,6 +40,12 @@ export function usePaletteSources(): CommandSource[] {
         id: `intake-${s.id}`,
         title: t(s.labelKey, s.fallback),
         subtitle: intakeTitle,
+        onSelect: () => navigate(s.path),
+      })),
+      ...SOURCES_SECTIONS.map((s) => ({
+        id: `sources-${s.id}`,
+        title: t(s.labelKey, s.fallback),
+        subtitle: sourcesTitle,
         onSelect: () => navigate(s.path),
       })),
       ...SETTINGS_SECTIONS.map((s) => ({
@@ -83,7 +95,7 @@ export function usePaletteSources(): CommandSource[] {
             icon: <Description fontSize="inherit" />,
             onSelect: () => {
               saveRecentSearch(query);
-              navigate(`/documents/${doc.id}`);
+              drawer.current.open(doc.id);
             },
           }));
         } catch {

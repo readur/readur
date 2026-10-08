@@ -17,6 +17,18 @@
   padding-right: 40px;
 }
 
+.input.input {
+  background: var(--surface-sunken);
+  border-color: transparent;
+}
+
+.input.input[data-focused],
+.input.input:focus-visible {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-halo);
+}
+
 /* Hide the native clear affordance; we render our own button. */
 .input::-webkit-search-cancel-button {
   display: none;

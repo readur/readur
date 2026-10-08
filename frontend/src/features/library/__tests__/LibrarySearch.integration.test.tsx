@@ -20,7 +20,7 @@ describe('Search (integration)', () => {
 
   test('renders the Search page with its field and filters', async () => {
     renderLibrary('/search');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Search' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Advanced search' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Search documents' })).toBeInTheDocument();
     const strip = screen.getByRole('search', { name: 'Search and filter' });
     for (const name of ['Type', 'Collection', 'Status', 'Source', 'Added']) {

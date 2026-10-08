@@ -36,4 +36,13 @@ describe('Select', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
+
+  it('marks the chosen option as selected when reopened', async () => {
+    const user = userEvent.setup();
+    renderSelect();
+    await user.click(screen.getByRole('button', { name: /Status/ }));
+    await user.click(await screen.findByRole('option', { name: 'Beta' }));
+    await user.click(screen.getByRole('button', { name: /Status/ }));
+    expect(await screen.findByRole('option', { name: 'Beta' })).toHaveAttribute('data-selected', 'true');
+  });
 });

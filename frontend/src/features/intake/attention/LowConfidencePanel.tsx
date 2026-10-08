@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Label, Slider, SliderOutput, SliderThumb, SliderTrack } from 'react-aria-components';
 import { BoardTable, Button, StatusMark, useToast, type BoardColumn } from '../../../ui';
 import { documentService } from '../../../services/api';
+import { ocrState } from '../../library/format';
 import { formatBytes, formatDate } from '../shared/format';
 import { ConfirmDialog, Notice, sharedStyles } from '../shared/parts';
 import { confidenceText } from './failureLabels';
@@ -66,7 +67,7 @@ export function LowConfidencePanel() {
       hideOnNarrow: true,
       label: t('intake.lowConfidence.col.status', 'Status'),
       width: 120,
-      render: (d) => <StatusMark state={d.ocr_status === 'failed' ? 'failed' : d.ocr_status === 'completed' ? 'completed' : 'pending'} size="sm" />,
+      render: (d) => <StatusMark state={ocrState(d.ocr_status)} size="sm" />,
     },
     { id: 'added', hideOnNarrow: true, label: t('intake.lowConfidence.col.added', 'Added'), mono: true, width: 130, render: (d) => formatDate(d.created_at, i18n.language) },
   ];

@@ -13,10 +13,19 @@ import {
   type LibrarySource,
   WATCH_SOURCE_TYPE,
 } from './data';
+import { ocrState } from './format';
 import { mimeTypesFor } from './mime';
 import { isSearch, type LibraryQuery } from './urlState';
 
 export type RowsStatus = 'loading' | 'ready' | 'error' | 'tooMany';
+
+/** How often the page re-reads its rows while one of them is still waiting for or in OCR. */
+export const LIBRARY_OCR_POLL_MS = 10_000;
+
+const inOcr = (row: Pick<LibraryRow, 'ocr_status'>) => {
+  const state = ocrState(row.ocr_status);
+  return state === 'pending' || state === 'processing';
+};
 
 /** Filter values: labels, connections and the MIME types present in the library. */
 export function useFacets() {
@@ -75,6 +84,9 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
   const [status, setStatus] = useState<RowsStatus>('loading');
   const [reloadTick, setReloadTick] = useState(0);
   const latest = useRef(0);
+  // Bumped by every load, poll and row patch: a poll's rows apply only if nothing happened since
+  // it was sent, so a slow poll cannot bring back older rows or undo a change made in the drawer.
+  const changes = useRef(0);
 
   const mimes = useMemo(() => mimeTypesFor(query.types, knownMimeTypes), [query.types, knownMimeTypes]);
   // Everything that changes the request, as one comparable key.
@@ -88,6 +100,7 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
   useEffect(() => {
     if (waiting) return;
     const id = ++latest.current;
+    changes.current += 1;
     setStatus('loading');
     fetchRows(query, mimes)
       .then((page) => {
@@ -105,8 +118,29 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
     // requestKey captures query and mimes.
   }, [requestKey, waiting, reloadTick]);
 
+  // While a row is pending or in OCR, re-read the same page in the background (no loading state)
+  // so its status and OCR n/m progress move without a manual refresh.
+  const polling = status === 'ready' && !waiting && rows.some(inOcr);
+  useEffect(() => {
+    if (!polling) return undefined;
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const id = ++changes.current;
+      fetchRows(query, mimes)
+        .then((page) => {
+          if (id !== changes.current) return;
+          setRows(page.rows);
+          setTotal(page.total);
+        })
+        .catch(() => undefined);
+    }, LIBRARY_OCR_POLL_MS);
+    return () => window.clearInterval(timer);
+    // requestKey captures query and mimes.
+  }, [polling, requestKey]);
+
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
   const patchRow = useCallback((id: string, patch: Partial<LibraryRow>) => {
+    changes.current += 1;
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
 

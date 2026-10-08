@@ -9,7 +9,7 @@ vi.mock('../attention/AttentionSection', () => ({ AttentionSection: () => <p>att
 vi.mock('../ignored/IgnoredSection', () => ({ IgnoredSection: () => <p>ignored section</p> }));
 vi.mock('../../../services/api', async () => (await import('./intakeMocks')).apiModule);
 
-import IntakePage, { parseSection, revealSelectedTab, sectionForSource } from '../IntakePage';
+import IntakePage, { parseSection, revealSelectedTab, sectionForSource, sourcesRedirect } from '../IntakePage';
 import { ocrDoc, ocrList, renderIntake, resetIntakeState, settle, source } from './intakeTestUtils';
 import { documentService, ok, queueService, serveDefaults, sourcesService } from './intakeMocks';
 
@@ -26,8 +26,6 @@ beforeEach(() => {
 describe('Intake page', () => {
   it.each([
     ['upload', 'upload section', 'Add documents'],
-    ['connections', 'connections section', 'Connections'],
-    ['watch', 'watch section', 'Watch folder'],
     ['attention', 'attention section', /Needs attention/],
     ['ignored', 'ignored section', 'Ignored'],
   ])('?section=%s shows its section and selects its tab', async (section, text, tab) => {
@@ -51,18 +49,18 @@ describe('Intake page', () => {
     await settle();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: 'Intake' })).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    expect(screen.getByText('connections section')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /Needs attention/ }));
+    expect(screen.getByText('attention section')).toBeInTheDocument();
     expect(screen.queryByText('upload section')).not.toBeInTheDocument();
-    expect(location()).toBe('/intake?section=connections');
+    expect(location()).toBe('/intake?section=attention');
     await settle();
   });
 
   it('switches tabs with the arrow keys and keeps the URL in step', async () => {
     const user = userEvent.setup();
-    renderIntake(<IntakePage />, { path: '/intake?section=watch' });
+    renderIntake(<IntakePage />, { path: '/intake?section=upload' });
     await settle();
-    screen.getByRole('tab', { name: 'Watch folder' }).focus();
+    screen.getByRole('tab', { name: 'Add documents' }).focus();
     await user.keyboard('{ArrowRight}');
     expect(location()).toBe('/intake?section=attention');
     expect(screen.getByText('attention section')).toBeInTheDocument();
@@ -73,8 +71,8 @@ describe('Intake page', () => {
     const user = userEvent.setup();
     renderIntake(<IntakePage />, { path: '/intake?section=ignored&sourceId=s1' });
     await settle();
-    await user.click(screen.getByRole('tab', { name: 'Watch folder' }));
-    expect(location()).toBe('/intake?section=watch');
+    await user.click(screen.getByRole('tab', { name: 'Add documents' }));
+    expect(location()).toBe('/intake?section=upload');
     await settle();
   });
 
@@ -130,13 +128,30 @@ describe('Intake page', () => {
   });
 
   it('parses unknown sections as upload', async () => {
-    expect(parseSection('connections')).toBe('connections');
+    expect(parseSection('attention')).toBe('attention');
+    expect(parseSection('connections')).toBe('upload');
     expect(parseSection(null)).toBe('upload');
     expect(parseSection('nope')).toBe('upload');
   });
 
-  it('sends the watch folder and uploads keys to their own section', () => {
-    expect(sectionForSource('watch')).toBe('watch');
+  it.each([
+    ['?section=connections&source=s1', '/sources?section=connections&source=s1'],
+    ['?section=watch', '/sources?section=watch'],
+    ['?source=watch', '/sources?section=watch'],
+    ['?section=connections', '/sources?section=connections'],
+  ])('old link %s moves to %s', async (query, target) => {
+    expect(sourcesRedirect(new URLSearchParams(query))).toBe(target);
+    renderIntake(<IntakePage />, { path: `/intake${query}` });
+    await settle();
+    expect(location()).toBe(target);
+  });
+
+  it('keeps upload and attention links in Intake', () => {
+    expect(sourcesRedirect(new URLSearchParams('?section=upload'))).toBeNull();
+    expect(sourcesRedirect(new URLSearchParams('?section=ignored&source=s1'))).toBeNull();
+  });
+
+  it('sends the uploads key to its own section', () => {
     expect(sectionForSource('upload')).toBe('upload');
     expect(sectionForSource('uploads')).toBe('upload');
     expect(sectionForSource('some-uuid')).toBeNull();

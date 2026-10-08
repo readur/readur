@@ -5,8 +5,8 @@
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   color: var(--fg);
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
 }

@@ -46,6 +46,13 @@ services:
       # To manage it yourself, set a random value of at least 32 bytes, e.g.
       # `openssl rand -hex 32`.
       JWT_SECRET: ${JWT_SECRET:-}
+
+      # Initial admin (only used when the admin user does not exist yet).
+      # Leave ADMIN_PASSWORD empty to generate one into
+      # <UPLOAD_PATH>/.readur/initial-admin-password.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       
       # File paths
       UPLOAD_PATH: /app/uploads

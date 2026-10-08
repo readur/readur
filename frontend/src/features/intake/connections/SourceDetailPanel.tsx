@@ -14,6 +14,7 @@ import { RecentErrors } from './RecentErrors';
 import { listOf, nextSyncAt, sourceAuth, sourceLocation, sourceState, syncIntervalMinutes, validationIssues } from './sourceModel';
 import type { useSourceActions } from './useSourceActions';
 import styles from './Connections.module.css';
+import { useLastDefined } from '../../../lib/useLastDefined';
 
 export interface SourceDetailPanelProps {
   source: SourceResponse | null;
@@ -24,7 +25,8 @@ export interface SourceDetailPanelProps {
 }
 
 /** Everything about one connection plus its actions, in a panel beside the board. */
-export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, actions }: SourceDetailPanelProps) {
+export function SourceDetailPanel({ source: current, isOpen, onOpenChange, onEdit, actions }: SourceDetailPanelProps) {
+  const source = useLastDefined(current);
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const errorsHeadingId = useId();
@@ -90,7 +92,7 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
 
   return (
     <>
-      <SlideOver title={source.name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer}>
+      <SlideOver title={source.name} isOpen={isOpen} onOpenChange={onOpenChange} footer={footer} resizable storageKey="source-detail">
         <div className={sharedStyles.stack}>
           <div className={styles.detailStatus}>
             <StatusMark state={sourceState(source)} />
@@ -131,10 +133,20 @@ export function SourceDetailPanel({ source, isOpen, onOpenChange, onEdit, action
               {formatBytes(source.total_size_bytes)}
             </PassCell>
           </Pass>
-          <Pass aria-label={t('intake.detail.scope', 'Scope')}>
-            <PassCell label={t('intake.detail.folders', 'Folders')} mono>
-              {folders.length > 0 ? folders.join(', ') : '—'}
+          <Pass aria-label={t('intake.detail.foldersGroup', 'Watched folders')}>
+            <PassCell label={t('intake.detail.folders', 'Folders')} mono wrap>
+              {folders.length > 0 ? (
+                <ul className={styles.folderList} aria-label={t('intake.detail.folders', 'Folders')}>
+                  {folders.map((folder) => (
+                    <li key={folder}>{folder}</li>
+                  ))}
+                </ul>
+              ) : (
+                '—'
+              )}
             </PassCell>
+          </Pass>
+          <Pass aria-label={t('intake.detail.scope', 'Scope')}>
             <PassCell label={t('intake.detail.extensions', 'File types')} mono>
               {extensions.length > 0 ? extensions.join(' ') : '—'}
             </PassCell>

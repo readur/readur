@@ -8,7 +8,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { isAdmin } from '../../../auth/roles';
 import { acknowledge, isLit, useLitCount } from '../../board/litStore';
 import { formatCount, formatRelative } from '../shared/format';
-import { HumanReason } from '../shared/HumanReason';
 import { ChangedTag, Notice, sharedStyles } from '../shared/parts';
 import { ConnectionDot } from './ConnectionDot';
 import { sourceTypeLabel } from '../shared/sourceTypes';
@@ -18,6 +17,8 @@ import { SourceDetailPanel } from './SourceDetailPanel';
 import { nextSyncAt, problemOf, sourceState } from './sourceModel';
 import { useSourceActions } from './useSourceActions';
 import { useSources } from './useSources';
+import { humanizeConnectionFailure } from './connectionFailure';
+import { useDrawerParam } from '../../../lib/useDrawerParam';
 
 type SortKey = 'name' | 'lastSync' | 'files';
 
@@ -25,6 +26,12 @@ function compare(a: SourceResponse, b: SourceResponse, key: SortKey): number {
   if (key === 'files') return a.total_files_synced - b.total_files_synced;
   if (key === 'lastSync') return (Date.parse(a.last_sync_at ?? '') || 0) - (Date.parse(b.last_sync_at ?? '') || 0);
   return a.name.localeCompare(b.name);
+}
+
+/** A connection's problem in plain words, for its status tooltip; undefined when healthy. */
+function problemSummary(s: SourceResponse): string | undefined {
+  const text = problemOf(s)?.text?.trim();
+  return text ? humanizeConnectionFailure(text).summary : undefined;
 }
 
 /** Every connection with its health; a row opens its details and actions. */
@@ -35,7 +42,9 @@ export function ConnectionsSection() {
   useLitCount('source'); // re-render when a row is acknowledged elsewhere
   const [sort, setSort] = useState<BoardSort>({ column: 'name', direction: 'ascending' });
   const [params, setParams] = useSearchParams();
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The open connection lives in `?source=` (the sidebar links there too): Back closes it.
+  const detail = useDrawerParam('source');
+  const openId = detail.id;
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SourceResponse | null>(null);
   const actions = useSourceActions(() => void sources.reload(), (id) => {
@@ -49,21 +58,25 @@ export function ConnectionsSection() {
   }, [sources.data, sort]);
   const open = rows.find((s) => s.id === openId) ?? null;
 
-  // `?source=<id>` (the sidebar's links) opens that connection's details.
-  const wanted = params.get('source');
+  // Opening a connection, from a row or a link, marks it seen; one that does not exist is dropped.
+  const { close: closeDrawer } = detail;
+  const loaded = sources.data;
   useEffect(() => {
-    if (!wanted || !sources.data?.some((s) => s.id === wanted)) return;
-    acknowledge('source', wanted);
-    setOpenId(wanted);
-  }, [wanted, sources.data]);
-  const closeDetail = () => {
-    setOpenId(null);
-    if (params.has('source')) {
-      const next = new URLSearchParams(params);
-      next.delete('source');
-      setParams(next, { replace: true });
-    }
-  };
+    if (!openId || !loaded) return;
+    if (loaded.some((s) => s.id === openId)) acknowledge('source', openId);
+    else closeDrawer();
+  }, [openId, loaded, closeDrawer]);
+  // `?new=1` (Home's "Connect source") opens the add-connection form once.
+  const wantsNew = params.get('new') === '1';
+  useEffect(() => {
+    if (!wantsNew) return;
+    setEditing(null);
+    setFormOpen(true);
+    const next = new URLSearchParams(params);
+    next.delete('new');
+    setParams(next, { replace: true });
+  }, [wantsNew, params, setParams]);
+  const closeDetail = closeDrawer;
   const lng = i18n.language;
 
   const columns: BoardColumn<SourceResponse>[] = [
@@ -78,16 +91,11 @@ export function ConnectionsSection() {
             <span className={sharedStyles.nameText}>{s.name}</span>
             {isLit('source', s.id) ? <ChangedTag reason="changed" /> : null}
           </span>
-          {problemOf(s) ? (
-            <span className={sharedStyles.nameSub} data-tone={problemOf(s)?.tone}>
-              <HumanReason kind="connection" raw={problemOf(s)?.text} summaryOnly />
-            </span>
-          ) : null}
         </span>
       ),
     },
     { id: 'type', hideOnNarrow: true, label: t('intake.connections.col.type', 'Type'), width: 120, render: (s) => sourceTypeLabel(t, s.source_type) },
-    { id: 'status', label: t('intake.connections.col.status', 'Status'), width: 130, render: (s) => <StatusMark state={sourceState(s)} size="sm" /> },
+    { id: 'status', label: t('intake.connections.col.status', 'Status'), width: 130, render: (s) => <StatusMark state={sourceState(s)} reason={problemSummary(s)} size="sm" /> },
     {
       id: 'lastSync',
       hideOnNarrow: true,
@@ -111,10 +119,7 @@ export function ConnectionsSection() {
     },
   ];
 
-  const openRow = (id: string) => {
-    acknowledge('source', id);
-    setOpenId(id);
-  };
+  const openRow = (id: string) => detail.open(id);
   const startCreate = () => {
     setEditing(null);
     setFormOpen(true);

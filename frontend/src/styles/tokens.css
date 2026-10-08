@@ -1,157 +1,171 @@
 /* Design tokens: the only source of colour, type, space, shape and motion.
-   Colour traces to the logo: steel blue (accent), coral (new), amber (warn).
-   Source hues (--src-1..8) stay at least 25° away from the accent's blue so a source badge
-   never reads as an action: teal, purple, green, olive, orange, rose, magenta, indigo. */
+   Colour: tinted neutral surfaces with an indigo accent and an amber "new" signal (Studio). Source hues (--src-1..8) stay
+   at least 25° from the accent so a source badge never reads as an action. */
 
 :root,
 [data-theme="light"] {
-  --bg: #F3F5F8;
+  --bg: #F0F1F7;
   --surface: #FFFFFF;
-  --surface-2: #F7F9FB;
-  --surface-sunken: #EBEEF2;
-  --line: #E0E5EB;
-  --line-strong: #7E8895;
-  --fg: #141A22;
-  --fg-2: #3F4854;
-  --fg-meta: #5A6472;
-  --accent: #2F62A6;
-  --accent-hover: #244F8A;
-  --accent-soft: #E4ECF7;
+  --surface-2: #FFFFFF;
+  --surface-sunken: #E4E6F0;
+  --line: #D8DBE8;
+  --line-strong: #737896;
+  --fg: #161A2E;
+  --fg-2: #474C66;
+  --fg-meta: #585D78;
+  --accent: #4338CA;
+  --accent-hover: #3730A3;
+  --accent-soft: #E2E3F9;
   --accent-fg: #FFFFFF;
-  --new: #B23F18;
-  --new-fill: #E8633C;
-  --new-soft: #FCE9E2;
+  --new: #8F5300;
+  --new-fill: #BF7A0A;
+  --new-soft: #FCEFD6;
   --new-fg: #FFFFFF;
-  --ok: #1D7337;
-  --ok-soft: #E2F2E6;
-  --warn: #8F5400;
-  --warn-fill: #F8A840;
-  --warn-soft: #FDF0D9;
-  --danger: #B42318;
-  --danger-soft: #FCE8E6;
+  --ok: #1C7247;
+  --ok-soft: #D8F0E2;
+  --warn: #A3440C;
+  --warn-fill: #E8782E;
+  --warn-soft: #FCE5D5;
+  --danger: #B4313A;
+  --danger-soft: #F8DDE0;
   --danger-fg: #FFFFFF;
-  --src-1: #107064;
+  --src-1: #1F6E9E;
   --src-2: #9636BC;
   --src-3: #22732C;
   --src-4: #5A6B13;
   --src-5: #9A5111;
   --src-6: #BA2859;
   --src-7: #A83198;
-  --src-8: #6151CC;
-  --src-1-soft: #E3F7F4;
+  --src-8: #12766A;
+  --src-1-soft: #DFEEF7;
   --src-2-soft: #F1E3F7;
   --src-3-soft: #E3F7E6;
   --src-4-soft: #F3F7E3;
   --src-5-soft: #F7ECE3;
   --src-6-soft: #F7E3EA;
   --src-7-soft: #F7E3F4;
-  --src-8-soft: #E6E3F7;
-  --selection: #C9DAF1;
-  --scrollbar: #C3CAD3;
-  --shadow-1: 0 1px 2px rgba(20, 26, 34, 0.05), 0 2px 8px rgba(20, 26, 34, 0.06);
-  --shadow-overlay: 0 12px 32px rgba(20, 26, 34, 0.16), 0 2px 6px rgba(20, 26, 34, 0.08);
-  --scrim: rgba(20, 26, 34, 0.28);
+  --src-8-soft: #DDF2EE;
+  --selection: #CDD0F7;
+  --scrollbar: #BDC1D6;
+  --shadow-1: 0 1px 2px rgba(22, 26, 46, 0.06), 0 4px 14px rgba(22, 26, 46, 0.06);
+  --shadow-overlay: 0 2px 6px rgba(22, 26, 46, 0.08), 0 16px 40px rgba(22, 26, 46, 0.14);
+  --scrim: rgba(16, 18, 40, 0.32);
+  --accent-soft-hover: #D3D5F5;
+  --focus-halo: rgba(67, 56, 202, 0.32);
+  --hover: rgba(22, 26, 46, 0.05);
+  --press: rgba(22, 26, 46, 0.09);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 [data-theme="dark"] {
-  --bg: #0F1318;
-  --surface: #161B22;
-  --surface-2: #1C232C;
-  --surface-sunken: #0B0E12;
-  --line: #29313C;
-  --line-strong: #627080;
-  --fg: #E7EBF0;
-  --fg-2: #BAC3CE;
-  --fg-meta: #96A1AE;
-  --accent: #8DB3EA;
-  --accent-hover: #A9C6F0;
-  --accent-soft: #1D2D44;
-  --accent-fg: #0F1318;
-  --new: #FF9A76;
-  --new-fill: #FF9A76;
-  --new-soft: #3A2119;
-  --new-fg: #1A0B05;
-  --ok: #5BD48A;
+  --bg: #10121C;
+  --surface: #171A28;
+  --surface-2: #1D2132;
+  --surface-sunken: #0B0D15;
+  --line: #272B3D;
+  --line-strong: #646A88;
+  --fg: #E7E9F5;
+  --fg-2: #B3B8CF;
+  --fg-meta: #959BB6;
+  --accent: #A5B4FC;
+  --accent-hover: #C0CBFD;
+  --accent-soft: #262B52;
+  --accent-fg: #12153A;
+  --new: #FBC15E;
+  --new-fill: #FBC15E;
+  --new-soft: #3A2C10;
+  --new-fg: #1F1400;
+  --ok: #6FD69F;
   --ok-soft: #15301F;
-  --warn: #F8B85A;
-  --warn-fill: #F8B85A;
-  --warn-soft: #33280F;
-  --danger: #F97066;
-  --danger-soft: #3A1A18;
-  --danger-fg: #0F1318;
-  --src-1: #36C0AD;
+  --warn: #FFA066;
+  --warn-fill: #FFA066;
+  --warn-soft: #3A2312;
+  --danger: #F28B93;
+  --danger-soft: #3A1A1E;
+  --danger-fg: #2A0A0E;
+  --src-1: #7CC0E8;
   --src-2: #C79ED7;
   --src-3: #66C072;
   --src-4: #9EB739;
   --src-5: #DBA16E;
   --src-6: #DC9AB0;
   --src-7: #D59ACD;
-  --src-8: #ADA7DA;
-  --src-1-soft: #173631;
+  --src-8: #6FCFBF;
+  --src-1-soft: #16303F;
   --src-2-soft: #2D1736;
   --src-3-soft: #17361B;
   --src-4-soft: #2F3617;
   --src-5-soft: #362517;
   --src-6-soft: #361721;
   --src-7-soft: #361731;
-  --src-8-soft: #1B1736;
-  --selection: #27406A;
-  --scrollbar: #3A4452;
-  --shadow-1: none;
-  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --scrim: rgba(5, 7, 10, 0.6);
+  --src-8-soft: #163330;
+  --selection: #2E3570;
+  --scrollbar: #383D55;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+  --shadow-overlay: 0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45);
+  --scrim: rgba(4, 5, 12, 0.6);
+  --accent-soft-hover: #2F3563;
+  --focus-halo: rgba(165, 180, 252, 0.35);
+  --hover: rgba(231, 233, 245, 0.06);
+  --press: rgba(231, 233, 245, 0.1);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Before the theme is known (no data-theme yet), follow the system setting so a
    dark system never paints a light page first. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0F1318;
-    --surface: #161B22;
-    --surface-2: #1C232C;
-    --surface-sunken: #0B0E12;
-    --line: #29313C;
-    --line-strong: #627080;
-    --fg: #E7EBF0;
-    --fg-2: #BAC3CE;
-    --fg-meta: #96A1AE;
-    --accent: #8DB3EA;
-    --accent-hover: #A9C6F0;
-    --accent-soft: #1D2D44;
-    --accent-fg: #0F1318;
-    --new: #FF9A76;
-    --new-fill: #FF9A76;
-    --new-soft: #3A2119;
-    --new-fg: #1A0B05;
-    --ok: #5BD48A;
+    --bg: #10121C;
+    --surface: #171A28;
+    --surface-2: #1D2132;
+    --surface-sunken: #0B0D15;
+    --line: #272B3D;
+    --line-strong: #646A88;
+    --fg: #E7E9F5;
+    --fg-2: #B3B8CF;
+    --fg-meta: #959BB6;
+    --accent: #A5B4FC;
+    --accent-hover: #C0CBFD;
+    --accent-soft: #262B52;
+    --accent-fg: #12153A;
+    --new: #FBC15E;
+    --new-fill: #FBC15E;
+    --new-soft: #3A2C10;
+    --new-fg: #1F1400;
+    --ok: #6FD69F;
     --ok-soft: #15301F;
-    --warn: #F8B85A;
-    --warn-fill: #F8B85A;
-    --warn-soft: #33280F;
-    --danger: #F97066;
-    --danger-soft: #3A1A18;
-    --danger-fg: #0F1318;
-    --src-1: #36C0AD;
+    --warn: #FFA066;
+    --warn-fill: #FFA066;
+    --warn-soft: #3A2312;
+    --danger: #F28B93;
+    --danger-soft: #3A1A1E;
+    --danger-fg: #2A0A0E;
+    --src-1: #7CC0E8;
     --src-2: #C79ED7;
     --src-3: #66C072;
     --src-4: #9EB739;
     --src-5: #DBA16E;
     --src-6: #DC9AB0;
     --src-7: #D59ACD;
-    --src-8: #ADA7DA;
-    --src-1-soft: #173631;
+    --src-8: #6FCFBF;
+    --src-1-soft: #16303F;
     --src-2-soft: #2D1736;
     --src-3-soft: #17361B;
     --src-4-soft: #2F3617;
     --src-5-soft: #362517;
     --src-6-soft: #361721;
     --src-7-soft: #361731;
-    --src-8-soft: #1B1736;
-    --selection: #27406A;
-    --scrollbar: #3A4452;
-    --shadow-1: none;
-    --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
-    --scrim: rgba(5, 7, 10, 0.6);
+    --src-8-soft: #163330;
+    --selection: #2E3570;
+    --scrollbar: #383D55;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+    --shadow-overlay: 0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45);
+    --scrim: rgba(4, 5, 12, 0.6);
+    --accent-soft-hover: #2F3563;
+    --focus-halo: rgba(165, 180, 252, 0.35);
+    --hover: rgba(231, 233, 245, 0.06);
+    --press: rgba(231, 233, 245, 0.1);
+    --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -168,6 +182,7 @@
 
 :root {
   /* Layers: the shell sits below every overlay; the palette is topmost. */
+  --z-local: 1; /* stacking inside one component (sticky headers) */
   --z-shell: 1100;
   --z-dock: 1150;
   --z-overlay: 1200;
@@ -176,18 +191,18 @@
   --z-skip: 1500;
 
   /* Type (family names as declared by the @fontsource-variable packages) */
-  --font-ui: "Archivo Variable", system-ui, sans-serif;
-  --font-label: "Archivo Variable", system-ui, sans-serif;
-  --font-data: "Martian Mono Variable", ui-monospace, monospace;
-  --font-label-stretch: 75%;
-  --tracking-label: 0.06em;
+  --font-ui: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --font-label: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --font-data: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-label-stretch: 100%;
+  --tracking-label: 0.07em;
 
   --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 14px;
   --fs-lg: 16px;
   --fs-xl: 20px;
-  --fs-title: 26px;
+  --fs-title: 24px;
   --fs-2xl: 28px;
   --fs-3xl: 40px;
   --lh-body: 1.45;
@@ -204,9 +219,10 @@
   --s-7: 48px;
 
   /* Shape: controls, panels and cards, overlays */
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   --radius-pill: 999px;
 
   /* Shell */

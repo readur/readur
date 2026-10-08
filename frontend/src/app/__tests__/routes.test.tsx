@@ -18,9 +18,12 @@ vi.mock('../../services/api', () => ({
 vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
 vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
 vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
-vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
+vi.mock('../../features/document/drawer/DocumentDrawer', () => ({
+  default: ({ id }: { id: string }) => <div role="dialog" aria-label={`Document ${id}`} />,
+}));
 vi.mock('../../features/document/SharedRoute', async () => ({ default: (await import('./routeProbe')).probe('shared') }));
 vi.mock('../../features/intake', async () => ({ default: (await import('./routeProbe')).probe('intake') }));
+vi.mock('../../features/sources', async () => ({ default: (await import('./routeProbe')).probe('sources') }));
 vi.mock('../../features/settings', async () => ({ default: (await import('./routeProbe')).probe('settings') }));
 vi.mock('../../features/auth/LoginRoute', async () => ({ default: (await import('./routeProbe')).probe('login') }));
 vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
@@ -56,13 +59,14 @@ beforeEach(() => {
 describe('legacy redirects', () => {
   it('covers every old URL', () => {
     expect(LEGACY_ROUTES.map((r) => r.from).sort()).toEqual(
-      ['/', '/board', '/dashboard', '/upload', '/sources', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
+      ['/', '/board', '/dashboard', '/upload', '/watch', '/documents/management', '/ignored-files', '/labels', '/debug', '/profile'].sort(),
     );
   });
 
   const expectedEntry: Record<string, string> = {
     '/home': 'home',
     '/intake': 'intake',
+    '/sources': 'sources',
     '/settings': 'settings',
     '/settings/labels': 'settings',
     '/settings/debug': 'settings',
@@ -106,7 +110,8 @@ describe('destinations', () => {
     ['/home', 'home'],
     ['/documents', 'library'],
     ['/search?q=tax', 'search'],
-    ['/intake?section=watch', 'intake'],
+    ['/intake?section=upload', 'intake'],
+    ['/sources?section=watch', 'sources'],
     ['/settings', 'settings'],
   ])('%s loads the %s entry inside the shell', async (path, name) => {
     renderAt(path);
@@ -115,10 +120,17 @@ describe('destinations', () => {
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: `${name} entry` }));
   });
 
-  it('passes the document id', async () => {
+  it('sends an old document link to the Library with the document drawer open', async () => {
     renderAt('/documents/abc-123');
-    expect(await entry('document')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'params' })).toHaveTextContent('"id":"abc-123"');
+    expect(await entry('library')).toBeInTheDocument();
+    expect(location().textContent).toBe('/documents?document=abc-123');
+    expect(await screen.findByRole('dialog', { name: 'Document abc-123' })).toBeInTheDocument();
+  });
+
+  it('sends an old document link with a search to the Search page, keeping both', async () => {
+    renderAt('/documents/abc-123?q=lease&mode=fuzzy');
+    expect(await entry('search')).toBeInTheDocument();
+    expect(location().textContent).toBe('/search?q=lease&mode=fuzzy&document=abc-123');
   });
 
   it('passes the settings section', async () => {

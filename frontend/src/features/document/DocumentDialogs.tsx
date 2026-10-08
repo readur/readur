@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { documentService } from '../../services/api';
 import { Button, Dialog, Skeleton } from '../../ui';
-import styles from './DocumentPage.module.css';
+import styles from './DocumentDialogs.module.css';
 
 export interface DeleteDocumentDialogProps {
   filename: string;

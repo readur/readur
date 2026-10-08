@@ -41,8 +41,8 @@ describe('contrast-check script', () => {
   });
 
   it('reports a source hue that sits on the accent', () => {
-    const blueSource = css.replace('--src-1: #107064;', '--src-1: #3767AD;');
-    expect(hueFailures(blueSource)).toEqual([expect.objectContaining({ theme: 'light', token: 'src-1' })]);
+    const accentSource = css.replace('--src-1: #1F6E9E;', '--src-1: #4A3FD0;');
+    expect(hueFailures(accentSource)).toEqual([expect.objectContaining({ theme: 'light', token: 'src-1' })]);
   });
 
   it('measures hue in degrees', () => {
@@ -53,7 +53,7 @@ describe('contrast-check script', () => {
   });
 
   it('reports a failing pair', () => {
-    const broken = css.replace('--fg-meta: #5A6472;', '--fg-meta: #C0C4C8;');
+    const broken = css.replace('--fg-meta: #585D78;', '--fg-meta: #C0C4C8;');
     const failures = check(broken) as { theme: string; fg: string }[];
     expect(failures.some((f) => f.theme === 'light' && f.fg === 'fg-meta')).toBe(true);
   });
@@ -85,9 +85,20 @@ describe('tokens before the theme is set', () => {
 });
 
 describe('shape scale', () => {
-  it('uses 6px controls, 8px panels and 12px overlays', () => {
-    expect(css).toMatch(/--radius-sm:\s*6px;/);
-    expect(css).toMatch(/--radius:\s*8px;/);
-    expect(css).toMatch(/--radius-lg:\s*12px;/);
+  it('uses 8px small controls, 10px controls, 14px cards and 20px overlays', () => {
+    expect(css).toMatch(/--radius-sm:\s*8px;/);
+    expect(css).toMatch(/--radius:\s*10px;/);
+    expect(css).toMatch(/--radius-lg:\s*14px;/);
+    expect(css).toMatch(/--radius-xl:\s*20px;/);
+  });
+});
+
+describe('studio tokens', () => {
+  it.each(['light', 'dark'] as const)('%s defines the interaction tokens', (name) => {
+    for (const k of ['accent-soft-hover', 'focus-halo', 'hover', 'press', 'bevel']) expect(themes[name][k], k).toBeDefined();
+  });
+  it('uses Plus Jakarta Sans and JetBrains Mono', () => {
+    expect(css).toMatch(/--font-ui:\s*"Plus Jakarta Sans Variable"/);
+    expect(css).toMatch(/--font-data:\s*"JetBrains Mono Variable"/);
   });
 });

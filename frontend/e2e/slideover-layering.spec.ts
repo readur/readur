@@ -23,7 +23,7 @@ for (const [label, size] of [
   ['desktop', { width: 1440, height: 900 }],
   ['phone', { width: 390, height: 844 }],
 ] as const) {
-  test(`slideout header and footer actions are visible and on top (${label})`, async ({ dynamicUserPage: page }) => {
+  test(`slideout close and action buttons are visible and on top (${label})`, async ({ dynamicUserPage: page }) => {
     await page.setViewportSize(size);
     const panel = await openSlideout(page);
 
@@ -32,10 +32,10 @@ for (const [label, size] of [
     // Poll: the panel is still sliding in for the first frames.
     await expect.poll(() => isOnTop(close), { message: 'close button is covered' }).toBe(true);
 
-    const open = panel.getByRole('button', { name: 'Open', exact: true });
-    await expect(open).toBeVisible();
-    await expect.poll(() => isOnTop(open), { message: 'footer Open action is covered' }).toBe(true);
-    const box = (await open.boundingBox())!;
+    const download = panel.getByRole('button', { name: 'Download', exact: true });
+    await expect(download).toBeVisible();
+    await expect.poll(() => isOnTop(download), { message: 'Download action is covered' }).toBe(true);
+    const box = (await download.boundingBox())!;
     expect(box.y + box.height).toBeLessThanOrEqual(size.height);
   });
 }

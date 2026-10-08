@@ -24,7 +24,13 @@ export const documentService = {
   bulkDelete: vi.fn(),
   enhancedSearch: vi.fn(),
   getById: vi.fn(),
+  view: vi.fn(),
+  download: vi.fn(),
+  getDocumentRetryHistory: vi.fn(),
+  getProcessedImage: vi.fn(),
 };
+export const commentsService = { list: vi.fn(), create: vi.fn() };
+export const sourcesService = { list: vi.fn() };
 export const searchService = { enhancedSearch: vi.fn(), getTimeline: vi.fn() };
 export const sharedLinksService = { listByDocument: vi.fn(), create: vi.fn(), revoke: vi.fn() };
 export const apiClient = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() };
@@ -33,12 +39,22 @@ export const labelService = {
   create: vi.fn(),
   update: vi.fn(),
   setDocumentLabels: vi.fn(),
+  getDocumentLabels: vi.fn(),
   bulkAssign: vi.fn(),
 };
 export const retryModal = vi.fn();
 
 export function apiModule() {
-  return { default: apiClient, api: apiClient, documentService, searchService, sharedLinksService };
+  return {
+    default: apiClient,
+    api: apiClient,
+    documentService,
+    searchService,
+    sharedLinksService,
+    labelService,
+    commentsService,
+    sourcesService,
+  };
 }
 
 export function labelsModule() {
@@ -197,6 +213,21 @@ export function setupLibraryMocks() {
   labelService.list.mockResolvedValue({ data: LABELS });
   labelService.create.mockImplementation((draft: { name: string }) => Promise.resolve({ data: label('l-new', draft.name) }));
   labelService.setDocumentLabels.mockResolvedValue({ data: {} });
+  // The document drawer: each document as the list has it, its labels, an empty history.
+  documentService.getById.mockImplementation((id: string) => {
+    const found = DOCS.find((d) => d.id === id);
+    return found ? Promise.resolve({ data: found }) : Promise.reject(Object.assign(new Error('404'), { response: { status: 404 } }));
+  });
+  labelService.getDocumentLabels.mockImplementation((id: string) =>
+    Promise.resolve({ data: DOCS.find((d) => d.id === id)?.labels ?? [] }),
+  );
+  documentService.view.mockResolvedValue({ data: new Blob(['%PDF']) });
+  documentService.download.mockResolvedValue({ data: new Blob(['%PDF']) });
+  documentService.getDocumentRetryHistory.mockResolvedValue({ data: { document_id: '', retry_history: [], total_retries: 0 } });
+  commentsService.list.mockResolvedValue({ data: [] });
+  sourcesService.list.mockResolvedValue({ data: [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] });
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:fake') });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() });
   labelService.bulkAssign.mockResolvedValue({ data: {} });
 }
 

@@ -105,3 +105,16 @@ html {
   white-space: nowrap;
   border: 0;
 }
+
+/*
+ * Touch screens: text fields at 16px or more. iOS zooms the whole page in when a field with
+ * smaller text is tapped, and leaves it zoomed, so the page then scrolls sideways. !important
+ * because each field primitive sets its own (desktop) size.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}

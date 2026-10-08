@@ -8,17 +8,35 @@
   background: var(--scrim);
 }
 
+.overlay[data-entering] {
+  animation: fade-in var(--dur-2) var(--ease);
+}
+
+.overlay[data-exiting] {
+  animation: fade-in var(--dur-2) var(--ease) reverse;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .panel {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: var(--s-3);
+  right: var(--s-3);
+  bottom: var(--s-3);
   width: var(--slideover-width, 440px);
-  max-width: 100vw;
-  height: 100%;
+  max-width: calc(100vw - 2 * var(--s-3));
   color: var(--fg);
-  background: var(--surface);
-  border-left: 1px solid var(--line);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-overlay);
+  overflow: hidden;
 }
 
 .panel[data-entering] {
@@ -34,21 +52,62 @@
   to { transform: translateX(0); }
 }
 
-@media (max-width: 719px) {
-  .panel {
-    width: 100vw;
-    border-left: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .overlay[data-entering],
+  .overlay[data-exiting],
   .panel[data-entering],
   .panel[data-exiting] {
     animation: none;
   }
 }
 
+/* Grab handle on the left edge: a pill centred top to bottom, wider hit area around it. */
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-local);
+  display: grid;
+  place-items: center;
+  width: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+/* The grab area reaches 10px further in than the strip that holds the grip (the panel clips outward). */
+.handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: -10px;
+}
+
+.grip {
+  width: 5px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: background-color var(--dur-1) var(--ease), height var(--dur-1) var(--ease);
+}
+
+.handle:hover .grip,
+.handle:active .grip {
+  height: 56px;
+  background: var(--accent);
+}
+
+.handle:focus-visible .grip {
+  background: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .dialog {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -91,6 +150,12 @@
   line-height: var(--lh-body);
 }
 
+.body[data-layout="fill"] {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
 .footer {
   position: sticky;
   bottom: 0;
@@ -100,4 +165,22 @@
   padding: var(--s-3) var(--s-5);
   background: var(--surface);
   border-top: 1px solid var(--line);
+}
+
+/* Phones: full screen, no resizing. Last, so it overrides the rules above. */
+@media (max-width: 719px) {
+  .handle {
+    display: none;
+  }
+
+  .panel {
+    inset: 0;
+    width: 100vw;
+    max-width: 100vw;
+    border: 0;
+    border-radius: 0;
+    /* Full screen on a phone: keep the close button and the actions clear of the notch and home indicator. */
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
+  }
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -42,4 +44,9 @@ describe('Tabs', () => {
     await user.click(screen.getByRole('tab', { name: 'Three' }));
     expect(screen.getByRole('tabpanel')).toHaveTextContent('Panel three');
   });
+});
+
+it('never scrolls the tab row vertically (the underline overlaps the hairline by 1px)', () => {
+  const css = readFileSync(resolve(__dirname, 'Tabs.module.css'), 'utf8');
+  expect(css).toMatch(/\.list\s*\{[^}]*overflow-y:\s*hidden/);
 });

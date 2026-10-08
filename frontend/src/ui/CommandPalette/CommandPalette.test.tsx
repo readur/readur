@@ -217,3 +217,29 @@ describe('useCommandPaletteShortcut', () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('CommandPalette preview', () => {
+  it('previews the focused result', async () => {
+    const user = userEvent.setup();
+    const sources: CommandSource[] = [
+      {
+        id: 'documents',
+        label: 'Documents',
+        search: async () => [
+          { id: 'a', title: 'Lease.pdf', preview: <p>the tenant agrees</p>, onSelect: () => {} },
+          { id: 'b', title: 'Lease renewal.pdf', preview: <p>renewal terms</p>, onSelect: () => {} },
+        ],
+      },
+    ];
+    render(<Harness sources={sources} />);
+    await openPalette(user);
+    await user.keyboard('lease');
+    await screen.findByRole('menuitem', { name: 'Lease.pdf' });
+    expect(await screen.findByText('the tenant agrees')).toBeInTheDocument();
+    // Supplementary: arrowing through results must not read the OCR snippet aloud each time.
+    expect(screen.getByText('the tenant agrees').closest('[aria-live]')).toBeNull();
+    await user.keyboard('{ArrowDown}');
+    expect(await screen.findByText('renewal terms')).toBeInTheDocument();
+    expect(screen.queryByText('the tenant agrees')).not.toBeInTheDocument();
+  });
+});

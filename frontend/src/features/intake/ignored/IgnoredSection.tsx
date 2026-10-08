@@ -144,7 +144,7 @@ export function IgnoredSection() {
       <nav aria-label={t('intake.ignored.breadcrumbs', 'Breadcrumbs')}>
         <ol className={styles.crumbs}>
           <li>
-            <Link to="/intake?section=connections">{t('intake.sections.connections', 'Connections')}</Link>
+            <Link to="/sources?section=connections">{t('intake.sections.connections', 'Connections')}</Link>
           </li>
           {filteredBySource ? (
             <li>

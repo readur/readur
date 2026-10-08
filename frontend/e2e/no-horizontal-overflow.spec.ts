@@ -85,10 +85,19 @@ test.describe('No horizontal overflow at 390px', () => {
     });
     expect(firstLineChars, 'characters on the first line of the name').toBeGreaterThanOrEqual(12);
 
-    await visit(page, `/documents/${readable}`);
+    // The document drawer (full width on a phone): wait for it, then measure the page.
+    await page.goto(`/documents?document=${readable}`);
+    await expect(page.getByRole('dialog').getByRole('group', { name: 'Document summary' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expectNoOverflow(page, 'document drawer');
 
-    for (const section of ['upload', 'connections', 'watch', 'attention', 'ignored'] as const) {
-      await visit(page, `/intake?section=${section}`, async (p) => {
+    for (const [page_, section] of [
+      ['intake', 'upload'],
+      ['sources', 'connections'],
+      ['sources', 'watch'],
+      ['intake', 'attention'],
+      ['intake', 'ignored'],
+    ] as const) {
+      await visit(page, `/${page_}?section=${section}`, async (p) => {
         // The selected tab is scrolled into view within the tab row.
         const tab = await p.getByRole('tab', { selected: true }).boundingBox();
         expect(tab!.x).toBeGreaterThanOrEqual(0);

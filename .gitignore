@@ -23,3 +23,6 @@ uploads/
 tmp/
 .claude/settings.local.json
 frontend/coverage/
+.superpowers/
+docs/superpowers/
+.playwright-mcp/

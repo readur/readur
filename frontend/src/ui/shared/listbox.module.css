@@ -3,10 +3,10 @@
   min-width: var(--trigger-width);
   max-height: 320px;
   overflow: auto;
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--fg);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
 }
 
@@ -19,19 +19,19 @@
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 var(--s-3);
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   color: var(--fg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   cursor: pointer;
   outline: none;
 }
 
 .option[data-hovered],
 .option[data-focused] {
-  background: var(--surface-2);
+  background: var(--hover);
 }
 
 .option[data-focus-visible] {
@@ -42,6 +42,17 @@
 .option[data-selected] {
   font-weight: 600;
   color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.option[data-selected]::after {
+  content: '';
+  flex: none;
+  margin-left: auto;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .option[data-disabled] {

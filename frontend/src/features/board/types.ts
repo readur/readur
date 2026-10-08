@@ -1,3 +1,5 @@
+import type { LabelData } from '../labels';
+
 /** The fields of a document Home reads. */
 export interface BoardDocument {
   id: string;
@@ -12,6 +14,7 @@ export interface BoardDocument {
   ocr_progress_total?: number;
   source_id?: string | null;
   source_type?: string | null;
+  labels?: LabelData[];
 }
 
 export interface FailedOcrDocument {

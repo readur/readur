@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, EmptyState, Pagination, Switch, type Selection } from '../../ui';
 import { Add, GridView, TableChart } from '../../ui/icons';
-import { acknowledge, useLitCount } from '../board/litStore';
+import { useLitCount } from '../board/litStore';
 import { MarkAllSeen } from '../board/MarkAllSeen';
 import { swatchStyle } from '../labels/labelData';
 import { PageHeader } from '../shell';
 import { BulkActions } from './BulkActions';
-import type { LibraryRow } from './data';
-import { DetailPanel } from './DetailPanel';
 import { FilterStrip, SortSelect } from './FilterStrip';
 import { formatCount } from './format';
 import { LibraryGrid } from './LibraryGrid';
@@ -18,8 +16,9 @@ import { SearchBox } from './SearchBox';
 import { Segmented } from './Segmented';
 import { useCompactRows } from './useCompactRows';
 import { useFacets, useRows, useSourceName } from './useLibraryData';
+import { useLibraryDrawer } from './useLibraryDrawer';
 import { useLibraryView, type LibraryView } from './useLibraryView';
-import { NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, parseQuery, toParams, useLibraryQuery, type LibraryQuery } from './urlState';
+import { NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, parseQuery, useLibraryQuery, withQuery, type LibraryQuery } from './urlState';
 import styles from './Library.module.css';
 
 const EMPTY_SELECTION: Selection = new Set();
@@ -33,7 +32,7 @@ export function Library() {
   const [params] = useSearchParams();
   const query = parseQuery(params);
   if (isSearch(query)) {
-    return <Navigate to={`/search?${toParams(query).toString()}`} replace state={{ focusSearch: true }} />;
+    return <Navigate to={`/search?${withQuery(params, query).toString()}`} replace state={{ focusSearch: true }} />;
   }
   return <LibraryBoard />;
 }
@@ -55,43 +54,10 @@ function LibraryBoard() {
   const viewKey = JSON.stringify(query) + view;
   useEffect(() => setSelection(EMPTY_SELECTION), [viewKey]);
 
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  // Keep the last row shown while the panel animates closed or the row leaves the page.
-  const lastRow = useRef<LibraryRow | null>(null);
-  const openRow = rows.find((r) => r.id === openId) ?? null;
-  if (openRow) lastRow.current = openRow;
-
-  const open = useCallback((id: string) => {
-    acknowledge('document', id);
-    setOpenId(id);
-    setPanelOpen(true);
-  }, []);
-
-  // A deleted document must not stay open (or reopen from the last-row fallback).
-  const closeIfDeleted = useCallback(
-    (ids: string[]) => {
-      if (openId && ids.includes(openId)) {
-        setPanelOpen(false);
-        setOpenId(null);
-        lastRow.current = null;
-      }
-    },
-    [openId],
-  );
-  // The same when the open document disappears from a fresh page of results.
-  useEffect(() => {
-    if (panelOpen && status === 'ready' && openId && !rows.some((r) => r.id === openId)) {
-      closeIfDeleted([openId]);
-    }
-  }, [panelOpen, status, openId, rows, closeIfDeleted]);
-
-  const navigateRows = (direction: 'previous' | 'next') => {
-    const index = rows.findIndex((r) => r.id === openId);
-    if (index === -1) return;
-    const next = rows[index + (direction === 'next' ? 1 : -1)];
-    if (next) open(next.id);
-  };
+  // Rows open in the document drawer (`?document=`), which walks this page's rows with ↑/↓.
+  const drawer = useLibraryDrawer(rows, patchRow, reload);
+  const open = drawer.open;
+  const closeIfDeleted = drawer.closeIfOpen;
 
   const selectedIds = useMemo(
     () => (selection === 'all' ? new Set(rows.map((r) => r.id)) : (selection as Set<string>)),
@@ -205,21 +171,6 @@ function LibraryBoard() {
           onChange={(page, size) => update(size !== query.size ? { page: 1, size } : { page })}
         />
       ) : null}
-      <DetailPanel
-        row={openRow ?? lastRow.current}
-        isOpen={panelOpen}
-        onOpenChange={setPanelOpen}
-        onNavigate={navigateRows}
-        query=""
-        sourceName={sourceName}
-        availableLabels={facets.labels}
-        onLabelCreated={facets.addLabel}
-        onRowChange={patchRow}
-        onDeleted={(id) => {
-          closeIfDeleted([id]);
-          reload();
-        }}
-      />
       <BulkActions
         selected={selectedRows}
         onClear={() => setSelection(EMPTY_SELECTION)}

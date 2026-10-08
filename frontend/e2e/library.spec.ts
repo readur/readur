@@ -120,13 +120,13 @@ test.describe('Library', () => {
     await expect(helpers.documentRows()).toHaveCount(3);
     const [first, second] = await rowNames(helpers, seeded);
 
-    // A row click opens the detail panel for that document
+    // A row click opens the document drawer for that document
     const firstRow = helpers.documentRows().filter({ hasText: first });
     await firstRow.getByRole('rowheader').click();
     const panel = page.getByRole('dialog', { name: new RegExp(escapeRegExp(first)) });
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole('group', { name: 'Document facts' })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Open', exact: true })).toBeVisible();
+    await expect(panel.getByRole('group', { name: 'Document summary' })).toBeVisible();
+    await expect(page).toHaveURL(/[?&]document=/);
 
     // ↓ moves to the next document on the page
     await page.keyboard.press('ArrowDown');
@@ -142,16 +142,20 @@ test.describe('Library', () => {
       .toContain(first);
   });
 
-  test('should open a document from the slideout', async ({ dynamicUserPage: page }) => {
+  test('should keep the open document in the URL, so Back closes it and a link reopens it', async ({ dynamicUserPage: page }) => {
     const helpers = new TestHelpers(page);
     const id = await helpers.uploadDocumentViaAPI(TEST_FILES.test1);
 
     await openLibrary(page);
     await helpers.documentRows().filter({ hasText: 'test1.png' }).getByRole('rowheader').click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`[?&]document=${id}`));
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible();
 
-    await expect(page).toHaveURL(new RegExp(`/documents/${id}`));
-    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).not.toHaveURL(/document=/);
+    await page.goForward();
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible();
   });
 
   test('should show thumbnails by month in the grid and remember the layout', async ({ dynamicUserPage: page }) => {

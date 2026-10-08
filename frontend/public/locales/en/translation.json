@@ -1030,7 +1030,8 @@
       "settingsLoadFailed": "Failed to load settings",
       "cannotDeactivateSelf": "You cannot deactivate your own account",
       "userDisabled": "{{username}} has been disabled and signed out",
-      "userEnabled": "{{username}} can now sign in"
+      "userEnabled": "{{username}} can now sign in",
+      "cannotChangeSelf": "You can’t deactivate or delete your own account"
     },
     "adminOnly": {
       "title": "Admins only",
@@ -1809,6 +1810,10 @@
     }
   },
   "ui": {
+    "palette": {
+      "navigate": "navigate",
+      "open": "open"
+    },
     "clear": "Clear",
     "close": "Close",
     "showOptions": "Show options",
@@ -1818,7 +1823,8 @@
       "range": "{{start}}–{{end}} of {{total}}",
       "pageSize": "Rows per page",
       "previous": "Previous page",
-      "next": "Next page"
+      "next": "Next page",
+      "page": "Page {{n}}"
     },
     "toast": {
       "info": "Info:",
@@ -1846,6 +1852,9 @@
     "board": {
       "loading": "Loading",
       "empty": "Nothing to show"
+    },
+    "slideOver": {
+      "resize": "Resize panel"
     }
   },
   "status": {
@@ -1872,7 +1881,9 @@
       "intake": "Intake",
       "settings": "Settings",
       "home": "Home",
-      "search": "Search"
+      "search": "Advanced search",
+      "sources": "Sources",
+      "searchShort": "Search"
     },
     "search": {
       "open": "Search documents",
@@ -1918,7 +1929,11 @@
       "settings": "Settings",
       "apiDocs": "API documentation",
       "logout": "Log out",
-      "menuFor": "Account menu, {{name}}"
+      "menuFor": "Account menu, {{name}}",
+      "role": {
+        "admin": "Admin",
+        "user": "User"
+      }
     },
     "intake": {
       "title": "Intake",
@@ -1956,6 +1971,10 @@
       "label": "Menu",
       "open": "Open menu",
       "close": "Close menu"
+    },
+    "sync": {
+      "title": "Syncing {{name}}",
+      "files": "{{processed}} of {{total}} files"
     }
   },
   "board": {
@@ -2034,13 +2053,10 @@
     }
   },
   "document": {
-    "breadcrumb": "Breadcrumb",
-    "library": "Library",
     "actions": {
       "retry": "Retry OCR",
       "download": "Download",
       "share": "Share",
-      "comments": "Comments",
       "more": "More actions",
       "processedImage": "View processed image",
       "delete": "Delete document"
@@ -2060,17 +2076,11 @@
       "caption": "This is the cleaned-up image the OCR engine read."
     },
     "loading": "Loading document",
-    "panel": {
-      "comments": "Comments",
-      "links": "Share links",
-      "label": "Side panel"
-    },
     "notFound": "Document not found",
     "loadFailed": "Couldn't load this document",
     "notFoundHint": "It may have been deleted, or the link is wrong.",
     "loadFailedHint": "Check your connection and try again.",
     "retry": "Try again",
-    "backToLibrary": "Back to Library",
     "toast": {
       "downloadFailed": "Couldn't download the file",
       "retryQueued": "OCR queued again",
@@ -2082,31 +2092,16 @@
     "labels": {
       "editor": "Edit labels",
       "placeholder": "Search or create labels…",
-      "cancel": "Cancel",
-      "save": "Save labels",
-      "add": "Add label"
-    },
-    "type": {
-      "image": "Image",
-      "text": "Text",
-      "other": "File"
+      "add": "Add label",
+      "done": "Done"
     },
     "pass": {
       "uploaded": "Upload",
       "sourceLocalFolder": "Local folder",
       "sourceBatch": "Batch import",
       "label": "Document summary",
-      "status": "Status",
       "progress": "OCR progress",
-      "type": "Type",
-      "pages": "Pages",
-      "size": "Size",
-      "source": "Source",
-      "added": "Added",
-      "language": "Language",
-      "confidence": "Confidence",
       "labels": "Labels",
-      "noLabels": "None",
       "editLabels": "Edit labels"
     },
     "share": {
@@ -2190,9 +2185,7 @@
       "activity": "Activity",
       "retryHistory_one": "Retry history ({{count}})",
       "retryHistory_other": "Retry history ({{count}})",
-      "title": "Details",
-      "hide": "Hide details",
-      "show": "Show details"
+      "title": "Details"
     },
     "activity": {
       "uploaded": "Added",
@@ -2269,8 +2262,6 @@
       "passwordHint": "This document is protected. Enter the password you were given.",
       "password": "Password",
       "submit": "Open document",
-      "file": "File",
-      "expires": "Expires",
       "preview": "Show preview",
       "previewHint": "Opening the preview counts as a view of this link.",
       "expiresOn": "Link expires {{date}}",
@@ -2280,13 +2271,14 @@
       "loading": "Loading preview",
       "error": "Couldn't load the preview.",
       "unsupported": "No preview for this file type",
-      "unsupportedHint": "{{type}} files can’t be shown in the browser. Download the file to open it."
+      "unsupportedHint": "{{type}} files can’t be shown in the browser. Download the file to open it.",
+      "openImage": "Open {{name}} in a new tab"
     },
     "tabs": {
-      "preview": "Preview",
-      "label": "Document views",
       "text": "Text",
-      "details": "Details"
+      "details": "Details",
+      "comments": "Comments",
+      "links": "Share links"
     },
     "meta": {
       "pages_one": "{{count}} page",
@@ -2295,10 +2287,15 @@
       "ocr": "OCR {{value}}%"
     },
     "view": {
-      "label": "View",
-      "document": "Document",
-      "split": "Side by side",
-      "text": "Text"
+      "document": "Document"
+    },
+    "drawer": {
+      "title": "Document",
+      "close": "Close",
+      "preview": "Preview",
+      "tabs": "About this document",
+      "actions": "Document actions",
+      "resizePreview": "Resize preview"
     }
   },
   "library": {
@@ -2351,36 +2348,6 @@
     "count": "{{formatted}} documents",
     "count_one": "{{formatted}} document",
     "counting": "Counting…",
-    "detail": {
-      "confidence": "Confidence",
-      "delete": "Delete",
-      "deleteBody": "“{{name}}” and its text will be removed. This cannot be undone.",
-      "deleteFailed": "Could not delete the document",
-      "deleteTitle": "Delete this document?",
-      "deleted": "Document deleted",
-      "download": "Download",
-      "downloadFailed": "Download failed",
-      "facts": "Document facts",
-      "labelsFailed": "Could not save labels",
-      "labelsSaved": "Labels saved",
-      "language": "Language",
-      "loadingText": "Loading text",
-      "noPreview": "No preview yet",
-      "noText": "No text has been read from this document yet.",
-      "open": "Open",
-      "pagesOcr": "Pages/OCR",
-      "retry": "Retry OCR",
-      "retryFailed": "Could not retry text recognition",
-      "retryQueued": "Text recognition queued again",
-      "share": "Share",
-      "text": "Text",
-      "textFailed": "The text could not be loaded.",
-      "title": "Document",
-      "pages_one": "1 page",
-      "pages_other": "{{count}} pages",
-      "added": "Added {{date}}",
-      "ocr": "OCR {{value}}%"
-    },
     "empty": {
       "clearFilters": "Clear filters",
       "error": "Documents could not be loaded",
@@ -2453,14 +2420,13 @@
       "newest": "Newest first",
       "noMatchesHint": "Check the spelling, try fewer words, or switch on “Similar spelling” in search help.",
       "order": "Order",
-      "preview": "Quick look at {{name}}",
       "results": "Results",
       "selectAll_one": "Select the 1 match",
       "selectAll_other": "Select all {{formatted}} matches",
       "selectPage": "Select all on this page",
       "startHint": "Readur searches file names and every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.",
       "startTitle": "Find anything in your documents",
-      "title": "Search"
+      "title": "Advanced search"
     },
     "sort": {
       "asc": "{{field}}, ascending",
@@ -2777,7 +2743,8 @@
       "syncStarted": "Sync started",
       "syncStopped": "Sync stopped",
       "toggleFailed": "Could not change the connection",
-      "healthFindings": "Health check"
+      "healthFindings": "Health check",
+      "foldersGroup": "Watched folders"
     },
     "duplicates": {
       "col": {
@@ -3313,7 +3280,9 @@
       "barsLabel": "{{total}} in the last {{days}} days, most on {{day}} ({{most}})",
       "barsEmpty": "Nothing in the last {{days}} days",
       "more": "{{formatted}} more sources",
-      "allSilent": "Nothing arrived from any source in the last {{days}} days."
+      "allSilent": "Nothing arrived from any source in the last {{days}} days.",
+      "todayCount_one": "{{formatted}} today",
+      "todayCount_other": "{{formatted}} today"
     },
     "pipeline": {
       "title": "Processing",
@@ -3324,16 +3293,45 @@
       "showRecent": "Show the latest failures",
       "rawError": "Error text",
       "doneToday": "{{done}} done today",
-      "oldest": "oldest waiting {{wait}}"
+      "oldest": "oldest waiting {{wait}}",
+      "cardTitle": "Processing pipeline",
+      "done": "Done today",
+      "processing": "Processing",
+      "failedSegment": "Failed",
+      "queued": "Queued"
     },
     "recent": {
-      "title": "Just arrived"
+      "title": "Just arrived",
+      "viewAll": "View all"
     },
     "status": {
       "label": "Summary",
       "idle": "nothing waiting",
       "busy": "{{processing}} processing · {{pending}} pending",
       "pending": "{{pending}} pending"
+    },
+    "connectSource": "Connect source",
+    "upload": "Upload",
+    "attention": {
+      "title": "Needs attention",
+      "failed_one": "{{formatted}} document failed OCR",
+      "failed_other": "{{formatted}} documents failed OCR"
+    },
+    "sources": {
+      "title": "Sources",
+      "manage": "Manage"
+    }
+  },
+  "sourcesPage": {
+    "title": "Sources",
+    "sections": {
+      "connections": "Connections",
+      "watch": "Watch folder",
+      "label": "Source sections"
+    },
+    "meta": {
+      "connections_one": "{{count}} connection",
+      "connections_other": "{{count}} connections"
     }
   }
 }

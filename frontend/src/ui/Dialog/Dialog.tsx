@@ -16,9 +16,13 @@ export interface DialogProps {
   isDismissable?: boolean;
   /** Use `alertdialog` semantics for destructive confirmations. */
   role?: 'dialog' | 'alertdialog';
+  /** Icon shown in an accent tile beside the title. */
+  icon?: ReactNode;
+  /** Link (or text) on the left of the footer, e.g. "What does this do?". */
+  helpLink?: ReactNode;
 }
 
-/** Modal dialog. Traps focus and restores it to the trigger on close. */
+/** Modal dialog, anchored near the top. Traps focus and restores it to the trigger on close. */
 export function Dialog({
   title,
   children,
@@ -29,6 +33,8 @@ export function Dialog({
   size = 'md',
   isDismissable = true,
   role = 'dialog',
+  icon,
+  helpLink,
 }: DialogProps) {
   return (
     <ModalOverlay
@@ -40,11 +46,23 @@ export function Dialog({
     >
       <Modal className={cx(styles.modal, styles[size])}>
         <RACDialog className={styles.dialog} role={role}>
-          <Heading slot="title" className={styles.title}>
-            {title}
-          </Heading>
+          <div className={styles.header}>
+            {icon ? (
+              <span className={styles.iconTile} data-icon-tile="" aria-hidden="true">
+                {icon}
+              </span>
+            ) : null}
+            <Heading slot="title" className={styles.title}>
+              {title}
+            </Heading>
+          </div>
           <div className={styles.body}>{children}</div>
-          {actions ? <div className={styles.actions}>{actions}</div> : null}
+          {actions || helpLink ? (
+            <div className={styles.actions}>
+              {helpLink ? <span className={styles.help}>{helpLink}</span> : null}
+              {actions}
+            </div>
+          ) : null}
         </RACDialog>
       </Modal>
     </ModalOverlay>

@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { ImagePreview } from './ImagePreview';
-import { useNavigate } from 'react-router-dom';
+import { useDocumentDrawer } from '../../document/drawer/DocumentDrawerContext';
 import { useTranslation } from 'react-i18next';
 import { Button, TextField } from '../../../ui';
 import { BugReport, CloudUpload, Refresh, Search, Visibility } from '../../../ui/icons';
@@ -14,7 +14,7 @@ const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tiff,.bmp,.txt';
 /** Upload a file and follow it through OCR. */
 export function UploadPanel({ session: s, onShowResults }: { session: DebugSession; onShowResults: () => void }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const drawer = useDocumentDrawer();
   const inputRef = useRef<HTMLInputElement>(null);
   const failed = s.processingStatus.toLowerCase().includes('failed');
 
@@ -85,7 +85,7 @@ export function UploadPanel({ session: s, onShowResults }: { session: DebugSessi
             <Button
               size="sm"
               icon={<Visibility fontSize="inherit" />}
-              onPress={() => navigate(`/documents/${s.uploadedDocumentId}`)}
+              onPress={() => drawer.open(s.uploadedDocumentId as string)}
             >
               {t('debug.actions.viewDocument')}
             </Button>

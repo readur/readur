@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AppShell, HOME_PATH, PageFallback } from '../features/shell';
 import { safeRedirect } from '../features/auth/authErrors';
+import { DocumentRedirect } from './DocumentRedirect';
 import { LegacyRedirect } from './LegacyRedirect';
 import { LEGACY_ROUTES, searchAliasTarget } from './legacyRoutes';
 
@@ -23,13 +24,15 @@ const Search = lazy(async (): Promise<{ default: ComponentType }> => {
   if (page) return { default: page };
   return import('../features/library/SearchRoute');
 });
-const Document = lazy(() => import('../features/document'));
 const Shared = lazy(() => import('../features/document/SharedRoute'));
 const Intake = lazy(() => import('../features/intake'));
+const Sources = lazy(() => import('../features/sources'));
 const Settings = lazy(() => import('../features/settings'));
 const Login = lazy(() => import('../features/auth/LoginRoute'));
 const Callback = lazy(() => import('../features/auth/CallbackRoute'));
 const Register = lazy(() => import('../features/auth/RegisterRoute'));
+// Primitive gallery for visual checks; only built into development bundles.
+const Gallery = import.meta.env.DEV ? lazy(() => import('../features/dev/Gallery')) : null;
 
 export { HOME_PATH };
 
@@ -82,13 +85,15 @@ export function AppRoutes() {
       />
       <Route path="/auth/callback" element={<Public><Callback /></Public>} />
       <Route path="/shared/:token" element={<Public><Shared /></Public>} />
+      {Gallery ? <Route path="/dev/ui" element={<Public><Gallery /></Public>} /> : null}
 
       <Route element={<RequireUser />}>
         <Route path={HOME_PATH} element={<Home />} />
         <Route path="/documents" element={<Library />} />
-        <Route path="/documents/:id" element={<Document />} />
+        <Route path="/documents/:id" element={<DocumentRedirect />} />
         <Route path="/search" element={<SearchEntry />} />
         <Route path="/intake" element={<Intake />} />
+        <Route path="/sources" element={<Sources />} />
         <Route path="/settings/:section?" element={<Settings />} />
         {LEGACY_ROUTES.map(({ from, to }) => (
           <Route key={from} path={from} element={<LegacyRedirect to={to} />} />

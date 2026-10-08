@@ -1,9 +1,6 @@
-import { render, renderHook, screen } from '@testing-library/react';
-import { useRef } from 'react';
 import type { TFunction } from 'i18next';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { formatKeyName } from '../details/MetadataDisplay';
-import { MIN_READING_HEIGHT, useFillHeight } from '../hooks/useFillHeight';
 import { queryTerms, splitMatches, toParagraphs } from '../reading/highlight';
 import { formatAdded, metaParts, pageCount } from '../meta';
 import { makeDocument, makeOcr } from './testUtils';
@@ -99,47 +96,5 @@ describe('formatKeyName', () => {
     expect(formatKeyName('pdf_creation_date')).toBe('PDF creation date');
     expect(formatKeyName('cameraModel')).toBe('Camera model');
     expect(formatKeyName('source-id')).toBe('Source ID');
-  });
-});
-
-describe('useFillHeight', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  function Probe({ top, width }: { top: number; width: number }) {
-    const ref = useRef<HTMLOutputElement>(null);
-    const watch = useRef<HTMLDivElement>(null);
-    const fill = useFillHeight(ref, watch, 'k');
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top } as DOMRect);
-    return (
-      <main style={{ paddingBottom: 48 }}>
-        <div ref={watch} />
-        <output ref={ref} aria-label="fill">{`${fill.height ?? 'none'}/${fill.pullUp ?? 'none'}`}</output>
-      </main>
-    );
-  }
-
-  it('reaches the bottom of the window and uses most of the shell padding on desktop', () => {
-    render(<Probe top={200} width={1440} />);
-    // 900 - 200 - 48 padding + 32 pulled back (48 minus a 16px gap).
-    expect(screen.getByRole('status', { name: 'fill' })).toHaveTextContent('684/32');
-  });
-
-  it('keeps the shell padding clear on a phone, where a tab bar sits there', () => {
-    render(<Probe top={200} width={390} />);
-    expect(screen.getByRole('status', { name: 'fill' })).toHaveTextContent('652/0');
-  });
-
-  it('never goes below the minimum height', () => {
-    render(<Probe top={800} width={1440} />);
-    expect(screen.getByRole('status', { name: 'fill' })).toHaveTextContent(`${MIN_READING_HEIGHT}/32`);
-  });
-
-  it('does nothing until the element exists', () => {
-    const { result } = renderHook(() => useFillHeight({ current: null }, { current: null }, null));
-    expect(result.current).toEqual({});
   });
 });

@@ -1,0 +1,40 @@
+.group { display: flex; flex-direction: column; gap: var(--s-2); }
+.groupLabel { font-size: var(--fs-sm); font-weight: 600; color: var(--fg); }
+.groupDescription { font-size: var(--fs-sm); color: var(--fg-meta); }
+.tiles { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.tile {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.tile[data-hovered] { border-color: var(--line-strong); }
+.tile[data-selected] { border-color: var(--accent); background: var(--accent-soft); }
+.tile[data-focus-visible] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile[data-disabled] { opacity: 0.55; cursor: not-allowed; }
+
+.box {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: var(--surface);
+  color: var(--accent-fg);
+}
+.box svg { width: 12px; height: 12px; opacity: 0; }
+.tile[data-selected] .box { background: var(--accent); border-color: var(--accent); }
+.tile[data-selected] .box svg { opacity: 1; }
+
+.text { display: flex; flex-direction: column; gap: 2px; }
+.label { font-size: var(--fs-md); font-weight: 600; color: var(--fg); }
+.description { font-size: var(--fs-sm); color: var(--fg-2); }

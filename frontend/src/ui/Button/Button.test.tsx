@@ -51,4 +51,10 @@ describe('Button', () => {
     await user.click(screen.getByRole('button', { name: 'Nope' }));
     expect(onPress).not.toHaveBeenCalled();
   });
+
+  it('shows the shared Spinner while pending', () => {
+    render(<Button isPending>Save</Button>);
+    const btn = screen.getByRole('button', { name: /save/i });
+    expect(btn.querySelector('svg')).not.toBeNull();
+  });
 });

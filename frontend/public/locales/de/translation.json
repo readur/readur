@@ -1030,7 +1030,8 @@
       "settingsLoadFailed": "Einstellungen konnten nicht geladen werden",
       "cannotDeactivateSelf": "Sie können Ihr eigenes Konto nicht deaktivieren",
       "userDisabled": "{{username}} wurde deaktiviert und abgemeldet",
-      "userEnabled": "{{username}} kann sich jetzt anmelden"
+      "userEnabled": "{{username}} kann sich jetzt anmelden",
+      "cannotChangeSelf": "Ihr eigenes Konto können Sie weder deaktivieren noch löschen"
     },
     "adminOnly": {
       "title": "Nur für Administratoren",
@@ -1809,6 +1810,10 @@
     }
   },
   "ui": {
+    "palette": {
+      "navigate": "navigieren",
+      "open": "öffnen"
+    },
     "clear": "Löschen",
     "close": "Schließen",
     "showOptions": "Optionen anzeigen",
@@ -1818,7 +1823,8 @@
       "range": "{{start}}–{{end}} von {{total}}",
       "pageSize": "Zeilen pro Seite",
       "previous": "Vorherige Seite",
-      "next": "Nächste Seite"
+      "next": "Nächste Seite",
+      "page": "Seite {{n}}"
     },
     "toast": {
       "info": "Info:",
@@ -1846,6 +1852,9 @@
     "board": {
       "loading": "Wird geladen",
       "empty": "Nichts anzuzeigen"
+    },
+    "slideOver": {
+      "resize": "Panelbreite ändern"
     }
   },
   "status": {
@@ -1872,7 +1881,9 @@
       "intake": "Eingang",
       "settings": "Einstellungen",
       "home": "Start",
-      "search": "Suche"
+      "search": "Erweiterte Suche",
+      "sources": "Quellen",
+      "searchShort": "Suche"
     },
     "search": {
       "open": "Dokumente durchsuchen",
@@ -1918,7 +1929,11 @@
       "settings": "Einstellungen",
       "apiDocs": "API-Dokumentation",
       "logout": "Abmelden",
-      "menuFor": "Kontomenü, {{name}}"
+      "menuFor": "Kontomenü, {{name}}",
+      "role": {
+        "admin": "Admin",
+        "user": "Benutzer"
+      }
     },
     "intake": {
       "title": "Eingang",
@@ -1956,6 +1971,10 @@
       "label": "Menü",
       "open": "Menü öffnen",
       "close": "Menü schließen"
+    },
+    "sync": {
+      "title": "{{name}} wird synchronisiert",
+      "files": "{{processed}} von {{total}} Dateien"
     }
   },
   "board": {
@@ -2034,13 +2053,10 @@
     }
   },
   "document": {
-    "breadcrumb": "Navigationspfad",
-    "library": "Bibliothek",
     "actions": {
       "retry": "OCR wiederholen",
       "download": "Herunterladen",
       "share": "Teilen",
-      "comments": "Kommentare",
       "more": "Weitere Aktionen",
       "processedImage": "Verarbeitetes Bild anzeigen",
       "delete": "Dokument löschen"
@@ -2060,17 +2076,11 @@
       "caption": "Dieses bereinigte Bild hat die OCR-Engine gelesen."
     },
     "loading": "Dokument wird geladen",
-    "panel": {
-      "comments": "Kommentare",
-      "links": "Freigabelinks",
-      "label": "Seitenleiste"
-    },
     "notFound": "Dokument nicht gefunden",
     "loadFailed": "Dokument konnte nicht geladen werden",
     "notFoundHint": "Es wurde möglicherweise gelöscht oder der Link ist falsch.",
     "loadFailedHint": "Prüfe deine Verbindung und versuche es erneut.",
     "retry": "Erneut versuchen",
-    "backToLibrary": "Zurück zur Bibliothek",
     "toast": {
       "downloadFailed": "Datei konnte nicht heruntergeladen werden",
       "retryQueued": "OCR erneut eingereiht",
@@ -2082,31 +2092,16 @@
     "labels": {
       "editor": "Labels bearbeiten",
       "placeholder": "Labels suchen oder erstellen…",
-      "cancel": "Abbrechen",
-      "save": "Labels speichern",
-      "add": "Label hinzufügen"
-    },
-    "type": {
-      "image": "Bild",
-      "text": "Text",
-      "other": "Datei"
+      "add": "Label hinzufügen",
+      "done": "Fertig"
     },
     "pass": {
       "uploaded": "Upload",
       "sourceLocalFolder": "Lokaler Ordner",
       "sourceBatch": "Stapelimport",
       "label": "Dokumentübersicht",
-      "status": "Status",
       "progress": "OCR-Fortschritt",
-      "type": "Typ",
-      "pages": "Seiten",
-      "size": "Größe",
-      "source": "Quelle",
-      "added": "Hinzugefügt",
-      "language": "Sprache",
-      "confidence": "Konfidenz",
       "labels": "Labels",
-      "noLabels": "Keine",
       "editLabels": "Labels bearbeiten"
     },
     "share": {
@@ -2190,9 +2185,7 @@
       "activity": "Aktivität",
       "retryHistory_one": "Wiederholungsverlauf ({{count}})",
       "retryHistory_other": "Wiederholungsverlauf ({{count}})",
-      "title": "Details",
-      "hide": "Details ausblenden",
-      "show": "Details anzeigen"
+      "title": "Details"
     },
     "activity": {
       "uploaded": "Hinzugefügt",
@@ -2269,8 +2262,6 @@
       "passwordHint": "Dieses Dokument ist geschützt. Gib das Passwort ein, das du erhalten hast.",
       "password": "Passwort",
       "submit": "Dokument öffnen",
-      "file": "Datei",
-      "expires": "Läuft ab",
       "preview": "Vorschau anzeigen",
       "previewHint": "Das Öffnen der Vorschau zählt als Aufruf dieses Links.",
       "expiresOn": "Link läuft ab am {{date}}",
@@ -2280,13 +2271,14 @@
       "loading": "Vorschau wird geladen",
       "error": "Vorschau konnte nicht geladen werden.",
       "unsupported": "Keine Vorschau für diesen Dateityp",
-      "unsupportedHint": "{{type}}-Dateien können nicht im Browser angezeigt werden. Lade die Datei herunter, um sie zu öffnen."
+      "unsupportedHint": "{{type}}-Dateien können nicht im Browser angezeigt werden. Lade die Datei herunter, um sie zu öffnen.",
+      "openImage": "{{name}} in neuem Tab öffnen"
     },
     "tabs": {
-      "preview": "Vorschau",
-      "label": "Dokumentansichten",
       "text": "Text",
-      "details": "Details"
+      "details": "Details",
+      "comments": "Kommentare",
+      "links": "Freigabelinks"
     },
     "meta": {
       "pages_one": "{{count}} Seite",
@@ -2295,10 +2287,15 @@
       "ocr": "OCR {{value}} %"
     },
     "view": {
-      "label": "Ansicht",
-      "document": "Dokument",
-      "split": "Nebeneinander",
-      "text": "Text"
+      "document": "Dokument"
+    },
+    "drawer": {
+      "title": "Dokument",
+      "close": "Schließen",
+      "preview": "Vorschau",
+      "tabs": "Zu diesem Dokument",
+      "actions": "Dokumentaktionen",
+      "resizePreview": "Vorschaugröße ändern"
     }
   },
   "library": {
@@ -2351,36 +2348,6 @@
     "count": "{{formatted}} Dokumente",
     "count_one": "{{formatted}} Dokument",
     "counting": "Wird gezählt…",
-    "detail": {
-      "confidence": "Konfidenz",
-      "delete": "Löschen",
-      "deleteBody": "„{{name}}“ und sein Text werden entfernt. Das lässt sich nicht rückgängig machen.",
-      "deleteFailed": "Das Dokument konnte nicht gelöscht werden",
-      "deleteTitle": "Dieses Dokument löschen?",
-      "deleted": "Dokument gelöscht",
-      "download": "Herunterladen",
-      "downloadFailed": "Download fehlgeschlagen",
-      "facts": "Dokumentangaben",
-      "labelsFailed": "Labels konnten nicht gespeichert werden",
-      "labelsSaved": "Labels gespeichert",
-      "language": "Sprache",
-      "loadingText": "Text wird geladen",
-      "noPreview": "Noch keine Vorschau",
-      "noText": "Aus diesem Dokument wurde noch kein Text gelesen.",
-      "open": "Öffnen",
-      "pagesOcr": "Seiten/OCR",
-      "retry": "OCR wiederholen",
-      "retryFailed": "Die Texterkennung konnte nicht wiederholt werden",
-      "retryQueued": "Texterkennung erneut eingereiht",
-      "share": "Teilen",
-      "text": "Text",
-      "textFailed": "Der Text konnte nicht geladen werden.",
-      "title": "Dokument",
-      "pages_one": "1 Seite",
-      "pages_other": "{{count}} Seiten",
-      "added": "Hinzugefügt {{date}}",
-      "ocr": "OCR {{value}} %"
-    },
     "empty": {
       "clearFilters": "Filter zurücksetzen",
       "error": "Dokumente konnten nicht geladen werden",
@@ -2453,14 +2420,13 @@
       "newest": "Neueste zuerst",
       "noMatchesHint": "Prüfen Sie die Schreibweise, versuchen Sie weniger Wörter oder schalten Sie in der Suchhilfe „Ähnliche Schreibweise“ ein.",
       "order": "Reihenfolge",
-      "preview": "Kurzansicht von {{name}}",
       "results": "Ergebnisse",
       "selectAll_one": "Den 1 Treffer auswählen",
       "selectAll_other": "Alle {{formatted}} Treffer auswählen",
       "selectPage": "Alle auf dieser Seite auswählen",
       "startHint": "Readur durchsucht Dateinamen und jedes Wort, das aus Ihren Scans und PDFs gelesen wurde. Versuchen Sie einen Namen, einen Ort oder ein Thema, etwa „Schulter“ oder „Rechnung 2024“.",
       "startTitle": "Finden Sie alles in Ihren Dokumenten",
-      "title": "Suche"
+      "title": "Erweiterte Suche"
     },
     "sort": {
       "asc": "{{field}}, aufsteigend",
@@ -2777,7 +2743,8 @@
       "syncStarted": "Synchronisierung gestartet",
       "syncStopped": "Synchronisierung beendet",
       "toggleFailed": "Die Verbindung konnte nicht geändert werden",
-      "healthFindings": "Gesundheitsprüfung"
+      "healthFindings": "Gesundheitsprüfung",
+      "foldersGroup": "Überwachte Ordner"
     },
     "duplicates": {
       "col": {
@@ -3313,7 +3280,9 @@
       "barsLabel": "{{total}} in den letzten {{days}} Tagen, die meisten am {{day}} ({{most}})",
       "barsEmpty": "Nichts in den letzten {{days}} Tagen",
       "more": "{{formatted}} weitere Quellen",
-      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen."
+      "allSilent": "In den letzten {{days}} Tagen ist aus keiner Quelle etwas eingegangen.",
+      "todayCount_one": "{{formatted}} heute",
+      "todayCount_other": "{{formatted}} heute"
     },
     "pipeline": {
       "title": "Verarbeitung",
@@ -3324,16 +3293,45 @@
       "showRecent": "Letzte Fehler anzeigen",
       "rawError": "Fehlertext",
       "doneToday": "{{done}} heute erledigt",
-      "oldest": "älteste wartet seit {{wait}}"
+      "oldest": "älteste wartet seit {{wait}}",
+      "cardTitle": "Verarbeitung",
+      "done": "Heute fertig",
+      "processing": "In Arbeit",
+      "failedSegment": "Fehlgeschlagen",
+      "queued": "Wartend"
     },
     "recent": {
-      "title": "Gerade eingegangen"
+      "title": "Gerade eingegangen",
+      "viewAll": "Alle anzeigen"
     },
     "status": {
       "label": "Überblick",
       "idle": "nichts in der Warteschlange",
       "busy": "{{processing}} in Verarbeitung · {{pending}} wartend",
       "pending": "{{pending}} wartend"
+    },
+    "connectSource": "Quelle verbinden",
+    "upload": "Hochladen",
+    "attention": {
+      "title": "Braucht Aufmerksamkeit",
+      "failed_one": "{{formatted}} Dokument: OCR fehlgeschlagen",
+      "failed_other": "{{formatted}} Dokumente: OCR fehlgeschlagen"
+    },
+    "sources": {
+      "title": "Quellen",
+      "manage": "Verwalten"
+    }
+  },
+  "sourcesPage": {
+    "title": "Quellen",
+    "sections": {
+      "connections": "Verbindungen",
+      "watch": "Überwachter Ordner",
+      "label": "Quellbereiche"
+    },
+    "meta": {
+      "connections_one": "{{count}} Verbindung",
+      "connections_other": "{{count}} Verbindungen"
     }
   }
 }

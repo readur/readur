@@ -17,14 +17,15 @@
   font-size: 24px;
   color: var(--accent);
   background: var(--accent-soft);
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
 .title {
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--fs-lg);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
@@ -38,4 +39,54 @@
 
 .action {
   margin-top: var(--s-3);
+}
+
+/* First-run illustration: three pages in token colours with an accent "add" badge. */
+.art {
+  position: relative;
+  display: block;
+  width: 120px;
+  height: 86px;
+  margin-bottom: var(--s-2);
+}
+
+.p1,
+.p2,
+.p3 {
+  position: absolute;
+  width: 58px;
+  height: 74px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+}
+
+.p1 { left: 8px; top: 10px; background: var(--accent-soft); transform: rotate(-10deg); }
+.p2 { left: 54px; top: 8px; background: var(--surface-sunken); transform: rotate(8deg); }
+
+.p3 {
+  left: 31px;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px;
+  box-sizing: border-box;
+  background: var(--surface);
+}
+
+.p3 i { display: block; height: 3px; border-radius: var(--radius-pill); background: var(--line); }
+.p3 i:first-child { width: 60%; background: var(--accent); }
+
+.badge {
+  position: absolute;
+  right: 20px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-1);
 }

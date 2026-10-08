@@ -37,6 +37,15 @@ pub fn admin_email(admin_username: &str) -> String {
         .unwrap_or_else(|| format!("{}@localhost", admin_username))
 }
 
+/// `ADMIN_PASSWORD`, treating an empty or blank value as unset (compose
+/// passes `${ADMIN_PASSWORD:-}` through as an empty string).
+pub fn configured_admin_password(value: Option<String>) -> Result<Option<String>> {
+    match value.filter(|p| !p.trim().is_empty()) {
+        Some(pwd) if pwd.len() < 8 => anyhow::bail!("ADMIN_PASSWORD must be at least 8 characters long"),
+        other => Ok(other),
+    }
+}
+
 /// Write a new secret file with mode 0600. An existing file (or a symlink
 /// at the path) is never overwritten: `create_new` opens with
 /// `O_CREAT | O_EXCL`, which fails if anything already exists at the path,
@@ -96,6 +105,12 @@ pub fn restrict_password_file_permissions(path: &Path, restrict_parent: bool) {
         targets.push((dir, 0o700));
     }
     for (target, mode) in targets {
+        // Skip targets already at the right mode: a no-op chmod still emits a
+        // metadata-change event, which restarts file watchers such as cargo-watch.
+        let current = std::fs::metadata(target).map(|m| m.permissions().mode() & 0o777).ok();
+        if current == Some(mode) {
+            continue;
+        }
         if let Err(e) = std::fs::set_permissions(target, std::fs::Permissions::from_mode(mode)) {
             warn!("Failed to restrict permissions of {}: {}", target.display(), e);
         }
@@ -134,14 +149,9 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
         }
     }
 
-    let (admin_password, password_file) = match env::var("ADMIN_PASSWORD") {
-        Ok(pwd) => {
-            if pwd.len() < 8 {
-                anyhow::bail!("ADMIN_PASSWORD must be at least 8 characters long");
-            }
-            (pwd, None)
-        }
-        Err(_) => {
+    let (admin_password, password_file) = match configured_admin_password(env::var("ADMIN_PASSWORD").ok())? {
+        Some(pwd) => (pwd, None),
+        None => {
             let pwd = generate_secure_password(24);
             let path = password_path;
             // Persist before creating the account so a failure here never
@@ -200,6 +210,22 @@ mod tests {
 
     fn mode(path: &Path) -> u32 {
         std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn blank_admin_password_counts_as_unset() {
+        assert_eq!(configured_admin_password(None).unwrap(), None);
+        assert_eq!(configured_admin_password(Some(String::new())).unwrap(), None);
+        assert_eq!(configured_admin_password(Some("   ".into())).unwrap(), None);
+    }
+
+    #[test]
+    fn admin_password_must_be_eight_characters() {
+        assert!(configured_admin_password(Some("short".into())).is_err());
+        assert_eq!(
+            configured_admin_password(Some("longenough".into())).unwrap(),
+            Some("longenough".to_string())
+        );
     }
 
     #[test]

@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { FailedOcrPage, QueueFigures } from './data';
 import { formatCount } from './format';
@@ -14,7 +13,7 @@ export interface StatusLineProps {
 
 /**
  * The page's answer to "is it flowing?" in one row: what arrived this week, what is being
- * processed, and what failed. Parts that are not known yet (or not visible to this user) are left out.
+ * processed, and what failed (the Needs attention notice carries the Review action). Parts that are not known yet (or not visible to this user) are left out.
  */
 export function StatusLine({ week, queue, failed }: StatusLineProps) {
   const { t, i18n } = useTranslation();
@@ -44,13 +43,7 @@ export function StatusLine({ week, queue, failed }: StatusLineProps) {
       ) : null}
       {failed && failed.total > 0 ? (
         <span className={styles.statusPart}>
-          <span className={styles.statusFailed}>
-            <span aria-hidden="true">▲</span>{' '}
-            <span>{t('home.pipeline.failed', '{{formatted}} failed', { count: failed.total, formatted: n(failed.total) })}</span>
-          </span>
-          <Link className={styles.statusLink} to="/intake?section=attention">
-            {t('home.pipeline.review', 'Review')}
-          </Link>
+          {t('home.pipeline.failed', '{{formatted}} failed', { count: failed.total, formatted: n(failed.total) })}
         </span>
       ) : null}
     </p>

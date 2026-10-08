@@ -101,7 +101,20 @@
 }
 
 .navLabel {
+  flex: 1;
   min-width: 0;
+}
+
+.navCount {
+  flex: none;
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.navLinkActive .navCount {
+  color: var(--accent);
 }
 
 /* ── Collections and sources ─────────────────────────── */
@@ -237,14 +250,15 @@
 .foot {
   display: flex;
   align-items: center;
-  gap: var(--s-1);
-  padding: var(--s-2) var(--s-3);
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
   border-top: 1px solid var(--line);
 }
 
 .tools {
   display: flex;
   align-items: center;
+  gap: var(--s-1);
   flex: none;
   font-size: 18px;
 }

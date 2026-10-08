@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/auth';
 import type { Page } from '@playwright/test';
 import { TIMEOUTS, TEST_FILES } from './utils/test-data';
-import { TestHelpers } from './utils/test-helpers';
+import { TestHelpers, openDocumentId } from './utils/test-helpers';
 
 const EXPECTED_CONTENT = {
   english: {
@@ -115,8 +115,8 @@ test.describe('OCR Multiple Languages', () => {
 
     // The document is read with Spanish: its text carries Spanish words
     await row.click();
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/);
-    const docId = page.url().split('/').pop()!.split('?')[0];
+    await expect(page).toHaveURL(/[?&]document=[0-9a-f-]{36}/);
+    const docId = openDocumentId(page);
     expect((await helpers.waitForOCRComplete(docId)).ocr_status).toBe('completed');
     await page.reload();
     const text = ((await (await helpers.extractedText()).textContent()) ?? '').toLowerCase();
@@ -146,7 +146,7 @@ test.describe('OCR Multiple Languages', () => {
     const doc = await helpers.waitForOCRComplete(docId);
     expect(doc.ocr_status).toBe('completed');
 
-    await page.goto(`/documents/${docId}`);
+    await page.goto(`/documents?document=${docId}`);
     const content = (await (await helpers.extractedText()).textContent()) ?? '';
     expect(EXPECTED_CONTENT.english.keywords.some((k) => content.toLowerCase().includes(k.toLowerCase()))).toBe(true);
   });
@@ -164,8 +164,8 @@ test.describe('OCR Multiple Languages', () => {
     const doc = await helpers.waitForOCRComplete(docId);
     expect(['completed', 'failed']).toContain(doc.ocr_status);
 
-    await page.goto(`/documents/${docId}`);
-    await expect(page.getByRole('heading', { level: 1, name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await page.goto(`/documents?document=${docId}`);
+    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
 
     if (doc.ocr_status === 'completed') {
       const content = ((await (await helpers.extractedText()).textContent()) ?? '').toLowerCase();
@@ -246,8 +246,8 @@ test.describe('OCR Multiple Languages', () => {
     const doc = await helpers.waitForOCRComplete(docId);
     expect(['completed', 'failed']).toContain(doc.ocr_status);
 
-    await page.goto(`/documents/${docId}`);
-    await expect(page.getByRole('heading', { level: 1, name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await page.goto(`/documents?document=${docId}`);
+    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
   });
 
   test('should retry failed OCR with multiple languages', async ({ dynamicUserPage: page }) => {

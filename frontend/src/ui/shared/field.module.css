@@ -10,9 +10,9 @@
 
 .label {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--fg-2);
+  color: var(--fg);
 }
 
 .field[data-required] .label::after {
@@ -28,7 +28,7 @@
   color: var(--fg);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
 
@@ -47,24 +47,22 @@ textarea.control {
 }
 
 .control:focus-visible,
-.control[data-focus-visible] {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
+.control[data-focus-visible],
 .control[data-focused] {
+  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-halo);
 }
 
 .control[data-invalid] {
   border-color: var(--danger);
-  box-shadow: 0 0 0 1px var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
 .control[data-disabled],
 .control:disabled {
   color: var(--fg-meta);
-  background: var(--surface-2);
+  background: var(--surface-sunken);
   border-color: var(--line);
   cursor: not-allowed;
 }

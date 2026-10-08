@@ -6,8 +6,8 @@ const LEGACY: { from: string; to: RegExp; heading: string | null }[] = [
   { from: '/board', to: /\/home$/, heading: null },
   { from: '/dashboard', to: /\/home$/, heading: null },
   { from: '/upload', to: /\/intake\?section=upload$/, heading: 'Intake' },
-  { from: '/sources', to: /\/intake\?section=connections$/, heading: 'Intake' },
-  { from: '/watch', to: /\/intake\?section=watch$/, heading: 'Intake' },
+  { from: '/watch', to: /\/sources\?section=watch$/, heading: 'Sources' },
+  { from: '/intake?section=connections', to: /\/sources\?section=connections$/, heading: 'Sources' },
   { from: '/documents/management', to: /\/intake\?section=attention$/, heading: 'Intake' },
   { from: '/ignored-files', to: /\/intake\?section=ignored$/, heading: 'Intake' },
   { from: '/labels', to: /\/settings\/labels$/, heading: 'Settings' },
@@ -25,10 +25,10 @@ test.describe('Legacy redirects', () => {
     }
   });
 
-  test('the Intake section the redirect picks is selected', async ({ dynamicAdminPage: page }) => {
+  test('the section the redirect picks is selected', async ({ dynamicAdminPage: page }) => {
     const tabs: [string, RegExp][] = [
       ['/upload', /^Add documents/],
-      ['/sources', /^Connections/],
+      ['/intake?section=connections', /^Connections/],
       ['/watch', /^Watch folder/],
       ['/documents/management', /^Needs attention/],
       ['/ignored-files', /^Ignored/],
@@ -39,11 +39,21 @@ test.describe('Legacy redirects', () => {
     }
   });
 
+  test('an old document page link opens the document drawer instead', async ({ dynamicAdminPage: page }) => {
+    // An unknown id is enough: the redirect does not depend on the document existing.
+    const id = '00000000-0000-4000-8000-000000000000';
+    await page.goto(`/documents/${id}`);
+    await expect(page).toHaveURL(new RegExp(`/documents\\?document=${id}$`));
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Document not found' })).toBeVisible();
+    await page.goto(`/documents/${id}?q=lease`);
+    await expect(page).toHaveURL(new RegExp(`/search\\?q=lease&document=${id}$`));
+  });
+
   test('extra query parameters and the hash are kept', async ({ dynamicAdminPage: page }) => {
-    await page.goto('/sources?foo=bar#top');
-    await expect(page).toHaveURL(/\/intake\?/);
+    await page.goto('/watch?foo=bar#top');
+    await expect(page).toHaveURL(/\/sources\?/);
     const url = new URL(page.url());
-    expect(url.searchParams.get('section')).toBe('connections');
+    expect(url.searchParams.get('section')).toBe('watch');
     expect(url.searchParams.get('foo')).toBe('bar');
     expect(url.hash).toBe('#top');
   });
@@ -57,7 +67,7 @@ test.describe('Legacy redirects', () => {
   test('/search is its own page and the old ?query= spelling becomes ?q=', async ({ dynamicAdminPage: page }) => {
     await page.goto('/search?query=receipt');
     await expect(page).toHaveURL(/\/search\?q=receipt$/);
-    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Search' })).toHaveAttribute(
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Advanced search' })).toHaveAttribute(
       'aria-current',
       'page',
     );

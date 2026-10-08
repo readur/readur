@@ -96,6 +96,7 @@ describe('Needs attention: low confidence', () => {
               documents: [
                 { id: 'd1', filename: 'a.pdf', file_size: 1024, ocr_confidence: 12.34, ocr_status: 'completed', created_at: '2026-01-01T00:00:00Z' },
                 { id: 'd2', filename: 'b.pdf', file_size: 0, ocr_confidence: null, ocr_status: 'failed', created_at: '2026-01-01T00:00:00Z' },
+                { id: 'd3', filename: 'c.pdf', file_size: 0, ocr_confidence: 20, ocr_status: 'processing', created_at: '2026-01-01T00:00:00Z' },
               ],
             }
           : { message: 'Deleted 2 documents', matched_count: 2, deleted_count: 2 },
@@ -111,6 +112,7 @@ describe('Needs attention: low confidence', () => {
     const results = await screen.findByRole('grid', { name: 'Preview results' });
     expect(within(results).getByRole('row', { name: /a\.pdf/ })).toHaveTextContent('12.3%');
     expect(within(results).getByRole('row', { name: /b\.pdf/ })).toHaveTextContent('n/a');
+    expect(within(results).getByRole('row', { name: /c\.pdf/ })).toHaveTextContent('OCR');
     await user.click(screen.getByRole('button', { name: 'Delete matches' }));
     const confirm = screen.getByRole('alertdialog', { name: 'Delete 2 documents below 45%?' });
     await user.click(within(confirm).getByRole('button', { name: 'Delete documents' }));
@@ -161,11 +163,11 @@ describe('Needs attention: duplicates', () => {
     expect(screen.getByText(/^1 groups? of identical files$/)).toBeInTheDocument();
     await user.click(within(copy).getByRole('button', { name: 'Download invoice (1).pdf' }));
     expect(documentService.downloadFile).toHaveBeenCalledWith('d2', 'invoice-copy.pdf');
-    // View opens the document page (a bare /api URL would carry no sign-in and fail).
+    // View opens the document drawer over this page (a bare /api URL would carry no sign-in and fail).
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     await user.click(within(copy).getByRole('button', { name: 'View invoice (1).pdf' }));
     expect(open).not.toHaveBeenCalled();
-    expect(location()).toBe('/documents/d2');
+    expect(location()).toMatch(/^\/intake\?.*view=duplicates.*&document=d2$/);
     open.mockRestore();
   });
 

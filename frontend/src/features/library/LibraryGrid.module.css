@@ -37,171 +37,22 @@
 
 .empty {
   padding: var(--s-6) var(--s-4);
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-1);
 }
 
-.card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-1);
-}
-
-.card:hover {
-  border-color: var(--line-strong);
-}
-
-.card[data-selected] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-
-.open {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  width: 100%;
-  min-width: 0;
-  padding: var(--s-2) var(--s-2) var(--s-3);
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  background: none;
-  border: 0;
-  border-radius: var(--radius);
-  cursor: pointer;
-}
-
-.open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.thumb {
-  display: flex;
-  min-width: 0;
-}
-
-/* The preview reads as a page on a sunken tray, not a boxed tile. */
-.thumb > * {
-  background: var(--surface-sunken);
-  border-color: transparent;
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 0;
-  padding: 0 var(--s-1);
-}
-
-.name {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  font-size: var(--fs-md);
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--fg);
-}
-
-.meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-2);
-  min-width: 0;
-  font-size: var(--fs-sm);
-}
-
-.date {
-  flex: none;
-  font-size: var(--fs-sm);
-  color: var(--fg-meta);
-  font-variant-numeric: tabular-nums;
-}
-
-/* New marker and status sit on the preview's top-right corner. */
-.flags {
-  position: absolute;
-  top: var(--s-3);
-  right: var(--s-3);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--s-1);
-  pointer-events: none;
-}
-
-.check {
-  position: absolute;
-  top: var(--s-2);
-  left: var(--s-2);
-  display: inline-flex;
-  padding: 2px;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  opacity: 0;
-}
-
-.card:hover .check,
-.card:focus-within .check,
-.card[data-selected] .check,
-.groups:has([data-selected]) .check {
+/* Once anything is selected, every card shows its checkbox so more can be added. */
+.groups:has([data-selected]) [data-card-check] {
   opacity: 1;
-}
-
-@media (hover: none) {
-  .check {
-    opacity: 1;
-  }
 }
 
 .skeletonCard {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  padding: var(--s-2);
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-1);
-}
-
-.skeletonThumb {
-  display: block;
-  aspect-ratio: 4 / 3;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
 }
 
 @media (max-width: 719px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--s-3);
-  }
-
-  .meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .card {
-    transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
-  }
-
-  .check {
-    transition: opacity var(--dur-1) var(--ease);
   }
 }

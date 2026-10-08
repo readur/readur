@@ -3,26 +3,43 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { StatusMark, type StatusState } from './StatusMark';
 
-const WORDS: Array<[StatusState, string, string]> = [
-  ['pending', '○', 'Pending'],
-  ['processing', '◐', 'OCR'],
-  ['completed', '■', 'Indexed'],
-  ['failed', '▲', 'Failed'],
-  ['healthy', '■', 'Healthy'],
-  ['syncing', '◐', 'Syncing'],
-  ['warning', '◆', 'Check'],
-  ['error', '▲', 'Error'],
-  ['disabled', '—', 'Off'],
+const WORDS: Array<[StatusState, string]> = [
+  ['pending', 'Pending'],
+  ['processing', 'OCR'],
+  ['completed', 'Indexed'],
+  ['failed', 'Failed'],
+  ['healthy', 'Healthy'],
+  ['syncing', 'Syncing'],
+  ['warning', 'Check'],
+  ['error', 'Error'],
+  ['disabled', 'Off'],
 ];
 
 describe('StatusMark', () => {
-  it.each(WORDS)('renders %s with its glyph and word', (state, glyph, word) => {
+  it.each(WORDS)('renders %s with a decorative lead mark and its word', (state, word) => {
     const { container } = render(<StatusMark state={state} />);
     expect(screen.getByText(word)).toBeInTheDocument();
-    const mark = screen.getByText(glyph);
-    expect(mark).toHaveAttribute('aria-hidden', 'true');
-    // The accessible text is the word only.
-    expect(container.textContent).toBe(`${glyph}${word}`);
+    const lead = container.querySelector('[data-lead]');
+    expect(lead).toHaveAttribute('aria-hidden', 'true');
+    // The text is the word only.
+    expect(container.textContent).toBe(word);
+  });
+
+  it('spins for in-progress states and shows a bar with progress', () => {
+    const { container } = render(<StatusMark state="processing" progress={{ current: 3, total: 12 }} />);
+    expect(container.querySelector('[data-lead] svg')).not.toBeNull();
+    expect(container.querySelector('[data-bar]')).not.toBeNull();
+    expect(container).toHaveTextContent('OCR 3/12');
+  });
+
+  it('spins while syncing', () => {
+    const { container } = render(<StatusMark state="syncing" />);
+    expect(container.querySelector('[data-lead] svg')).not.toBeNull();
+  });
+
+  it('uses a dot for settled states', () => {
+    const { container } = render(<StatusMark state="completed" />);
+    expect(container.querySelector('[data-lead] svg')).toBeNull();
   });
 
   it.each([
@@ -67,5 +84,27 @@ describe('StatusMark', () => {
       </button>,
     );
     expect(screen.getByRole('button', { name: 'Failed' })).toBeInTheDocument();
+  });
+});
+
+it('can say a more specific word in the same tone', () => {
+  const { container } = render(<StatusMark state="healthy" label="Idle" />);
+  expect(container).toHaveTextContent('Idle');
+  expect(container.firstElementChild).toHaveAttribute('data-tone', 'ok');
+});
+
+describe('StatusMark with a reason', () => {
+  it('stays one line and explains itself in a tooltip on focus', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = render(<StatusMark state="error" reason="Can't reach the server." />);
+    expect(container).toHaveTextContent(/^Error$/);
+    await user.tab();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent("Can't reach the server.");
+    expect(document.activeElement).toHaveAccessibleDescription("Can't reach the server.");
+  });
+
+  it('is not focusable without a reason', () => {
+    const { container } = render(<StatusMark state="error" />);
+    expect(container.querySelector('[tabindex]')).toBeNull();
   });
 });

@@ -33,14 +33,14 @@ test.describe('Theme', () => {
       sidebar: await sidebar.evaluate((el) => getComputedStyle(el).backgroundColor),
     });
     const light = await colours();
-    expect(light.body).toBe('rgb(243, 245, 248)');
+    expect(light.body).toBe('rgb(240, 241, 247)');
     expect(light.sidebar).toBe('rgb(255, 255, 255)');
 
     await page.getByRole('button', { name: 'Switch to dark mode' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     const dark = await colours();
-    expect(dark.body).toBe('rgb(15, 19, 24)');
-    expect(dark.sidebar).toBe('rgb(22, 27, 34)');
+    expect(dark.body).toBe('rgb(16, 18, 28)');
+    expect(dark.sidebar).toBe('rgb(23, 26, 40)');
   });
 
   test('Settings → Appearance sets the theme', async ({ dynamicUserPage: page }) => {

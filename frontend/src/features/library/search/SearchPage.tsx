@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { BulkActionBar, Button, Checkbox, EmptyState, Pagination } from '../../../ui';
 import { BookmarkBorder, Schedule, Sort } from '../../../ui/icons';
-import { acknowledge } from '../../board/litStore';
 import { PageHeader } from '../../shell';
 import { BulkActions } from '../BulkActions';
-import { fetchAllMatchIds, type LibraryRow } from '../data';
-import { DetailPanel } from '../DetailPanel';
+import { fetchAllMatchIds } from '../data';
 import { FilterStrip } from '../FilterStrip';
 import { formatCount } from '../format';
 import { monthLabel, monthRange } from '../months';
@@ -16,7 +14,8 @@ import { SearchHelp } from '../SearchHelp';
 import { Segmented } from '../Segmented';
 import { useFacets, useRows, useSourceName } from '../useLibraryData';
 import { MIN_QUERY, NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, useLibraryQuery } from '../urlState';
-import { documentHref, ResultList } from './ResultList';
+import { ResultList } from './ResultList';
+import { useLibraryDrawer } from '../useLibraryDrawer';
 import { SaveCollectionDialog } from './SaveCollectionDialog';
 import { Timeline } from './Timeline';
 import { useTimeline } from './useTimeline';
@@ -71,22 +70,8 @@ export function SearchPage() {
     [allMatches, query, mimes, total, selectedRows],
   );
 
-  // Quick look: the same panel as the Library, walking the results with the arrow keys.
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const lastRow = useRef<LibraryRow | null>(null);
-  const openRow = rows.find((r) => r.id === openId) ?? null;
-  if (openRow) lastRow.current = openRow;
-  const preview = useCallback((id: string) => {
-    acknowledge('document', id);
-    setOpenId(id);
-    setPanelOpen(true);
-  }, []);
-  const walk = (direction: 'previous' | 'next') => {
-    const index = rows.findIndex((r) => r.id === openId);
-    const next = index === -1 ? undefined : rows[index + (direction === 'next' ? 1 : -1)];
-    if (next) preview(next.id);
-  };
+  // Results open in the document drawer over this page; ↑/↓ walks the results.
+  const drawer = useLibraryDrawer(rows, patchRow, reload);
 
   const pickMonths = (range: { start: string; end: string } | null) => {
     if (!range) {
@@ -102,7 +87,7 @@ export function SearchPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title={t('library.search.title', 'Search')} />
+      <PageHeader title={t('library.search.title', 'Advanced search')} />
       <div className={styles.searchRow}>
         <SearchBox
           value={query.q}
@@ -194,11 +179,11 @@ export function SearchPage() {
 
           <ResultList
             rows={status === 'ready' || status === 'loading' ? rows : []}
-            query={query.q}
             byMonth={byMonth}
             selected={selected}
             onToggle={toggle}
-            onPreview={preview}
+            href={drawer.href}
+            linkState={drawer.linkState}
             sourceName={sourceName}
             isLoading={status === 'loading'}
             emptyState={<SearchEmpty status={status} filtered={hasFilters(query)} onRetry={reload} onClear={() => update(NO_FILTERS)} />}
@@ -215,22 +200,6 @@ export function SearchPage() {
         </>
       )}
 
-      <DetailPanel
-        row={openRow ?? lastRow.current}
-        isOpen={panelOpen}
-        onOpenChange={setPanelOpen}
-        onNavigate={walk}
-        query={query.q}
-        openHref={(row) => documentHref(row.id, query.q)}
-        sourceName={sourceName}
-        availableLabels={facets.labels}
-        onLabelCreated={facets.addLabel}
-        onRowChange={patchRow}
-        onDeleted={() => {
-          setPanelOpen(false);
-          reload();
-        }}
-      />
       {allMatches ? (
         <BulkActionBar
           count={total}

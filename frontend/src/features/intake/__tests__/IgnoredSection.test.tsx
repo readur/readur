@@ -91,7 +91,7 @@ describe('Ignored section (ported from IgnoredFilesPage)', () => {
   it('shows the source name, including special characters, in the breadcrumbs', async () => {
     renderIntake(<IgnoredSection />, { path: '/intake?section=ignored&sourceName=My%20Server%20%26%20More!&sourceId=s1' });
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumbs' });
-    expect(within(crumbs).getByRole('link', { name: 'Connections' })).toHaveAttribute('href', '/intake?section=connections');
+    expect(within(crumbs).getByRole('link', { name: 'Connections' })).toHaveAttribute('href', '/sources?section=connections');
     expect(within(crumbs).getByText('My Server & More!')).toBeInTheDocument();
     expect(within(crumbs).getByText('Ignored files')).toHaveAttribute('aria-current', 'page');
   });

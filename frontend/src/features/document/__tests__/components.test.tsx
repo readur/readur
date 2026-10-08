@@ -26,6 +26,21 @@ describe('DocumentViewer', () => {
     expect(m.documentService.view).toHaveBeenCalledWith('d1');
   });
 
+  it('with openImageInNewTab, an image links to itself in a new tab; a PDF does not', async () => {
+    m.documentService.view.mockResolvedValue({ data: new Blob(['png']) });
+    const { unmount } = render(<DocumentViewer documentId="d1" filename="scan.png" mimeType="image/png" openImageInNewTab />);
+    const link = await screen.findByRole('link', { name: 'Open scan.png in a new tab' });
+    expect(link).toHaveAttribute('href', 'blob:fake');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    expect(link).toContainElement(screen.getByRole('img', { name: 'scan.png' }));
+    unmount();
+    m.documentService.view.mockResolvedValue({ data: new Blob(['%PDF']) });
+    render(<DocumentViewer documentId="d1" filename="a.pdf" mimeType="application/pdf" openImageInNewTab />);
+    await screen.findByTitle('a.pdf');
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
   it('shows an image with the filename as its name', async () => {
     m.documentService.view.mockResolvedValue({ data: new Blob(['png']) });
     render(<DocumentViewer documentId="d1" filename="scan.png" mimeType="image/png" />);

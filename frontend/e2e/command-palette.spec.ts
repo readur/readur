@@ -18,7 +18,7 @@ test.describe('Command palette', () => {
 
     // With nothing typed it offers the destinations
     const goTo = palette(page).getByRole('group', { name: 'Go to' });
-    for (const d of ['Home', 'Search', 'Library', 'Intake', 'Settings']) {
+    for (const d of ['Home', 'Advanced search', 'Library', 'Intake', 'Sources', 'Settings']) {
       await expect(goTo.getByRole('menuitem', { name: d, exact: true })).toBeVisible();
     }
 
@@ -51,9 +51,11 @@ test.describe('Command palette', () => {
     await expect(hit).toContainText('This is some text from text 1');
     await expect(documents.getByRole('menuitem', { name: /Show all results for “some text from text”/ })).toBeVisible();
 
+    // The document opens in the drawer over the page the palette was opened on.
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`/documents/${id}`));
-    await expect(page.getByRole('heading', { level: 1, name: 'test1.png' })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`[?&]document=${id}`));
+    await expect(page.getByRole('dialog', { name: 'test1.png' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     // The search is remembered as a recent search
     await page.keyboard.press('ControlOrMeta+k');
@@ -69,7 +71,7 @@ test.describe('Command palette', () => {
     const item = palette(page).getByRole('group', { name: 'Go to' }).getByRole('menuitem', { name: 'Connections' });
     await expect(item).toBeVisible();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/intake\?section=connections/);
+    await expect(page).toHaveURL(/\/sources\?section=connections/);
     await expect(palette(page)).toBeHidden();
   });
 

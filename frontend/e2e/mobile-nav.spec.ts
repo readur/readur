@@ -98,7 +98,7 @@ test.describe('Mobile navigation', () => {
 
   // Populated pages are covered in no-horizontal-overflow.spec.ts.
   test('the page does not scroll sideways', async ({ dynamicUserPage: page }) => {
-    for (const path of ['/home', '/search', '/documents', '/intake?section=upload', '/settings']) {
+    for (const path of ['/home', '/search', '/documents', '/intake?section=upload', '/sources', '/settings']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

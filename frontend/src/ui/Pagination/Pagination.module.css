@@ -41,3 +41,33 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--fs-md);
 }
+
+.pages {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.page {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--s-2);
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.page[data-hovered] { background: var(--hover); color: var(--fg); }
+.page[data-focus-visible] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.page[aria-current='page'] { background: var(--accent-soft); color: var(--accent); }
+
+.gap { padding: 0 var(--s-1); color: var(--fg-meta); }
+
+@media (max-width: 719px) {
+  .pages { display: none; }
+}

@@ -48,7 +48,7 @@ test.describe('Per-User Watch Directory Feature Flag', () => {
     });
   });
 
-  test.describe('Intake → Watch folder (Feature Disabled)', () => {
+  test.describe('Sources → Watch folder (Feature Disabled)', () => {
     test.beforeEach(async ({ dynamicAdminPage }) => {
       helpers = new TestHelpers(dynamicAdminPage);
       const config = await (await dynamicAdminPage.request.get('/api/auth/config')).json();
@@ -56,9 +56,9 @@ test.describe('Per-User Watch Directory Feature Flag', () => {
     });
 
     test('should hide Personal Watch Directory card when feature is disabled', async ({ dynamicAdminPage: page }) => {
-      // The legacy /watch URL lands on Intake → Watch folder
+      // The legacy /watch URL lands on Sources → Watch folder
       await page.goto('/watch');
-      await expect(page).toHaveURL(/\/intake\?section=watch/);
+      await expect(page).toHaveURL(/\/sources\?section=watch/);
 
       const folders = page.getByRole('grid', { name: 'Watched folders' });
       await expect(folders).toBeVisible({ timeout: TIMEOUTS.medium });

@@ -26,4 +26,9 @@ describe('Switch', () => {
     await user.click(screen.getByRole('switch', { name: 'Auto OCR' }));
     expect(screen.getByRole('switch', { name: 'Auto OCR' })).not.toBeChecked();
   });
+
+  it('draws a check in the thumb', () => {
+    const { container } = render(<Switch label="Watch folder" defaultSelected />);
+    expect(container.querySelector('[data-thumb-check]')).not.toBeNull();
+  });
 });

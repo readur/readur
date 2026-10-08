@@ -138,19 +138,19 @@ describe('sources', () => {
       'Scanner inboxCheck',
     ]);
     expect(links[0]).toHaveAttribute('href', '/intake?section=upload');
-    expect(links[1]).toHaveAttribute('href', '/intake?section=watch');
-    expect(links[3]).toHaveAttribute('href', '/intake?section=connections&source=s1');
+    expect(links[1]).toHaveAttribute('href', '/sources?section=watch');
+    expect(links[3]).toHaveAttribute('href', '/sources?section=connections&source=s1');
   });
 
   it('marks the open source and section', async () => {
     mockedGet.mockResolvedValue({ data: [source('s1', 'Nextcloud')] } as never);
-    renderShell({ path: '/intake?section=connections&source=s1' });
+    renderShell({ path: '/sources?section=connections&source=s1' });
     expect(await within(sources()).findByRole('link', { name: /Nextcloud/ })).toHaveAttribute('aria-current', 'page');
     expect(within(sources()).getByRole('link', { name: 'Uploads' })).not.toHaveAttribute('aria-current');
   });
 
   it('marks the watch folder when that section is open', async () => {
-    renderShell({ path: '/intake?section=watch' });
+    renderShell({ path: '/sources?section=watch' });
     await waitFor(() =>
       expect(within(sources()).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page'),
     );
@@ -158,7 +158,7 @@ describe('sources', () => {
 
   it('reloads when a screen announces a source change', async () => {
     renderShell();
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockedGet.mock.calls.filter(([url]) => url === '/sources')).toHaveLength(1));
     mockedGet.mockResolvedValue({ data: [source('s9', 'New share')] } as never);
     await act(async () => {
       window.dispatchEvent(new CustomEvent(SOURCES_CHANGED_EVENT));
@@ -208,5 +208,58 @@ describe('phone drawer', () => {
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await user.click(await screen.findByRole('button', { name: 'Close menu' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument());
+  });
+});
+
+describe('library count and source icons', () => {
+  it('shows the library total beside Library in the main navigation', async () => {
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/documents'
+          ? { data: { documents: [], pagination: { total: 1284, limit: 1, offset: 0, has_more: true } } }
+          : { data: [] },
+      ) as never,
+    );
+    renderShell();
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    await waitFor(() => expect(within(nav).getByRole('link', { name: /^Library/ })).toHaveTextContent('1,284'));
+  });
+
+  it('shows no count until the total has loaded', () => {
+    mockedGet.mockReturnValue(new Promise(() => {}) as never);
+    renderShell();
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: /^Library/ })).toHaveTextContent(/^Library$/);
+  });
+
+  it('marks uploads, the watch folder and each source with a type icon tile', async () => {
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve(url === '/sources' ? { data: [source('s1', 'Nextcloud')] } : { data: [] }) as never,
+    );
+    renderShell();
+    const link = await within(sources()).findByRole('link', { name: /Nextcloud/ });
+    expect(link.querySelector('[data-tile] svg')).not.toBeNull();
+    expect(within(sources()).getByRole('link', { name: /Uploads/ }).querySelector('[data-tile] svg')).not.toBeNull();
+    expect(within(sources()).getByRole('link', { name: /Watch folder/ }).querySelector('[data-tile] svg')).not.toBeNull();
+  });
+});
+
+describe('sources polling while a sync runs', () => {
+  it('checks every 10 seconds while a source is syncing, so the sync toast starts and ends promptly', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedGet.mockImplementation((url: string) =>
+        Promise.resolve(url === '/sources' ? { data: [source('s1', 'Nextcloud', { status: 'syncing' })] } : { data: [] }) as never,
+      );
+      renderShell();
+      const calls = () => mockedGet.mock.calls.filter(([url]) => url === '/sources').length;
+      await waitFor(() => expect(calls()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_500);
+      });
+      expect(calls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

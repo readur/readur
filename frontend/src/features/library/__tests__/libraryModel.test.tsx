@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { HighlightedText, SnippetLine, bestSnippet, byteRangesToUtf16, matchRanges } from '../Highlight';
 import { shortType } from '../../../lib/fileType';
 import { NO_MIME_MATCH, groupOf, mimeTypesFor } from '../mime';
-import { DEFAULT_SIZE, parseQuery, toParams, type LibraryQuery } from '../urlState';
+import { DEFAULT_SIZE, parseQuery, toParams, withQuery, type LibraryQuery } from '../urlState';
 import { formatBytes, formatRelative } from '../format';
 
 const parse = (qs: string) => parseQuery(new URLSearchParams(qs));
@@ -56,6 +56,15 @@ describe('URL state', () => {
     expect(toParams(parse(qs)).toString()).toBe(qs);
     expect(toParams(parse('')).toString()).toBe('');
     expect(toParams({ ...parse(''), mode: 'simple' } as LibraryQuery).toString()).toBe('');
+  });
+});
+
+describe('URL state next to other params', () => {
+  test('withQuery replaces only the Library keys and keeps the rest, such as an open drawer', () => {
+    const prev = new URLSearchParams('labels=a&document=x7&page=2&label=c');
+    expect(withQuery(prev, parse('labels=b&sort=filename&order=asc')).toString()).toBe(
+      'sort=filename&order=asc&labels=b&document=x7',
+    );
   });
 });
 
