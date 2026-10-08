@@ -84,6 +84,9 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
   const [status, setStatus] = useState<RowsStatus>('loading');
   const [reloadTick, setReloadTick] = useState(0);
   const latest = useRef(0);
+  // Bumped by every load, poll and row patch: a poll's rows apply only if nothing happened since
+  // it was sent, so a slow poll cannot bring back older rows or undo a change made in the drawer.
+  const changes = useRef(0);
 
   const mimes = useMemo(() => mimeTypesFor(query.types, knownMimeTypes), [query.types, knownMimeTypes]);
   // Everything that changes the request, as one comparable key.
@@ -97,6 +100,7 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
   useEffect(() => {
     if (waiting) return;
     const id = ++latest.current;
+    changes.current += 1;
     setStatus('loading');
     fetchRows(query, mimes)
       .then((page) => {
@@ -121,10 +125,10 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
     if (!polling) return undefined;
     const timer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      const id = latest.current;
+      const id = ++changes.current;
       fetchRows(query, mimes)
         .then((page) => {
-          if (id !== latest.current) return;
+          if (id !== changes.current) return;
           setRows(page.rows);
           setTotal(page.total);
         })
@@ -136,6 +140,7 @@ export function useRows(query: LibraryQuery, knownMimeTypes: string[] | null, mi
 
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
   const patchRow = useCallback((id: string, patch: Partial<LibraryRow>) => {
+    changes.current += 1;
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
 
