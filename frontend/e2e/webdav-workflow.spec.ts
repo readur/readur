@@ -47,7 +47,7 @@ test.describe('WebDAV Workflow', () => {
     expect(body.config.file_extensions).toContain('docx');
 
     const panel = await helpers.openConnection(name);
-    await expect(panel.getByRole('group', { name: 'Scope' })).toContainText('/Scans');
+    await expect(panel.getByRole('group', { name: 'Watched folders' })).toContainText('/Scans');
     await expect(panel.getByRole('group', { name: 'Connection' })).toContainText('webdav_user');
   });
 
