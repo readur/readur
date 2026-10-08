@@ -1,8 +1,8 @@
-[data-tone='accent'] { --c: var(--accent); }
-[data-tone='ok'] { --c: var(--ok); }
-[data-tone='warn'] { --c: var(--warn); }
-[data-tone='danger'] { --c: var(--danger); }
-[data-tone='neutral'] { --c: var(--line); }
+:is(.progress, .segments > span, .legend li)[data-tone='accent'] { --c: var(--accent); }
+:is(.progress, .segments > span, .legend li)[data-tone='ok'] { --c: var(--ok); }
+:is(.progress, .segments > span, .legend li)[data-tone='warn'] { --c: var(--warn); }
+:is(.progress, .segments > span, .legend li)[data-tone='danger'] { --c: var(--danger); }
+:is(.progress, .segments > span, .legend li)[data-tone='neutral'] { --c: var(--line); }
 
 .progress {
   display: inline-flex;

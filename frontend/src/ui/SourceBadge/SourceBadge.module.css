@@ -1,12 +1,12 @@
 /* The slot picks the hue; everything else reads --src / --src-soft. */
-[data-slot="1"] { --src: var(--src-1); --src-soft: var(--src-1-soft); }
-[data-slot="2"] { --src: var(--src-2); --src-soft: var(--src-2-soft); }
-[data-slot="3"] { --src: var(--src-3); --src-soft: var(--src-3-soft); }
-[data-slot="4"] { --src: var(--src-4); --src-soft: var(--src-4-soft); }
-[data-slot="5"] { --src: var(--src-5); --src-soft: var(--src-5-soft); }
-[data-slot="6"] { --src: var(--src-6); --src-soft: var(--src-6-soft); }
-[data-slot="7"] { --src: var(--src-7); --src-soft: var(--src-7-soft); }
-[data-slot="8"] { --src: var(--src-8); --src-soft: var(--src-8-soft); }
+.badge[data-slot="1"] { --src: var(--src-1); --src-soft: var(--src-1-soft); }
+.badge[data-slot="2"] { --src: var(--src-2); --src-soft: var(--src-2-soft); }
+.badge[data-slot="3"] { --src: var(--src-3); --src-soft: var(--src-3-soft); }
+.badge[data-slot="4"] { --src: var(--src-4); --src-soft: var(--src-4-soft); }
+.badge[data-slot="5"] { --src: var(--src-5); --src-soft: var(--src-5-soft); }
+.badge[data-slot="6"] { --src: var(--src-6); --src-soft: var(--src-6-soft); }
+.badge[data-slot="7"] { --src: var(--src-7); --src-soft: var(--src-7-soft); }
+.badge[data-slot="8"] { --src: var(--src-8); --src-soft: var(--src-8-soft); }
 
 .badge {
   display: inline-flex;
