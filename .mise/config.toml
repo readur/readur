@@ -39,7 +39,7 @@ rust = { version = "1.99.0", components = "rustfmt,clippy" }
 node = "24.21.0"
 # Formatter for everything that is not Rust: TS/JS, JSON, Markdown, YAML, TOML.
 # Config in .oxfmtrc.json, ignores in .prettierignore.
-oxfmt = "0.71.0"
+oxfmt = "0.72.0"
 # Git hooks; definitions live in .lefthook.toml. Installed by [hooks] below.
 lefthook = "2.1.17"
 shellcheck = "0.11.0"
