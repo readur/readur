@@ -1,5 +1,8 @@
 /* An 8px bar between two stacked parts; the three dots say "drag me". */
 .handle {
+  position: relative;
+  /* Its invisible grab area overlaps the parts on either side; it has to be on top of them. */
+  z-index: var(--z-local);
   display: flex;
   flex: none;
   align-items: center;
@@ -9,6 +12,20 @@
   touch-action: none;
   background: var(--surface);
   outline: none;
+}
+
+/* A grab area bigger than the bar: easy to catch with a pointer, and finger-sized on touch. */
+.handle::before {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+
+/* Finger-sized (44px), reaching mostly up into the part above so the controls below keep their taps. */
+@media (pointer: coarse) {
+  .handle::before {
+    inset: -26px 0 -10px;
+  }
 }
 
 .grip {

@@ -203,6 +203,12 @@ describe('SlideOver resizing', () => {
     expect(phone).toBeGreaterThan(base);
   });
 
+  it('widens the grab area of the resize handle inwards while the grip looks the same', () => {
+    const css = readFileSync(resolve(__dirname, 'SlideOver.module.css'), 'utf8');
+    expect(css).toMatch(/^\.handle \{[^}]*width: 14px/m);
+    expect(css).toMatch(/\.handle::before \{[^}]*content: "";[^}]*position: absolute;[^}]*right: -10px/);
+  });
+
   it('has no handle unless asked for one', () => {
     render(<Panel resizable={false} />);
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();

@@ -76,6 +76,16 @@
   outline: none;
 }
 
+/* The grab area reaches 10px further in than the strip that holds the grip (the panel clips outward). */
+.handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: -10px;
+}
+
 .grip {
   width: 5px;
   height: 40px;

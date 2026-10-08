@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -55,5 +57,17 @@ describe('SplitHandle', () => {
     expect(handle).toHaveAttribute('aria-valuenow', '500');
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit).toHaveBeenCalledWith(500);
+  });
+});
+
+describe('SplitHandle grab area', () => {
+  const css = readFileSync(resolve(__dirname, 'SplitHandle.module.css'), 'utf8');
+  it('stays an 8px bar to look at', () => {
+    expect(css).toMatch(/\.handle \{[^}]*height: 8px/);
+  });
+  it('catches a pointer well above and below the bar, and more for a finger', () => {
+    expect(css).toMatch(/\.handle \{[^}]*position: relative/);
+    expect(css).toMatch(/\.handle::before \{[^}]*content: "";[^}]*position: absolute;[^}]*inset: -8px 0/);
+    expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.handle::before \{\s*inset: -26px 0 -10px;/);
   });
 });
