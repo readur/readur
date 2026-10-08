@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 
 /** `location.state.drawers[key]` marks a history entry that `open()` pushed for that drawer. */
@@ -45,6 +45,9 @@ export function useDrawerParam(key: string): DrawerParam {
   const id = new URLSearchParams(location.search).get(key);
   const state = stateOf(location);
   const opened = state[DRAWER_STATE]?.[key] === true;
+  // The history entry already closed: a second close() before the URL changes (a delete handler
+  // and a "that record is gone" effect both closing) must not go back a further entry.
+  const closedEntry = useRef<string | null>(null);
 
   const linkState = useMemo<LocationState>(
     () => ({ ...state, [DRAWER_STATE]: { ...state[DRAWER_STATE], [key]: true } }),
@@ -65,7 +68,8 @@ export function useDrawerParam(key: string): DrawerParam {
   );
 
   const close = useCallback(() => {
-    if (id === null) return;
+    if (id === null || closedEntry.current === location.key) return;
+    closedEntry.current = location.key;
     if (opened) {
       navigate(-1);
       return;

@@ -14,6 +14,15 @@ function Harness({ paramKey = 'document' }: { paramKey?: string }) {
       <button type="button" onClick={() => drawer.open('b2')}>open {paramKey} b2</button>
       <button type="button" onClick={() => drawer.step('c3')}>step {paramKey} c3</button>
       <button type="button" onClick={() => drawer.close()}>close {paramKey}</button>
+      <button
+        type="button"
+        onClick={() => {
+          drawer.close();
+          drawer.close();
+        }}
+      >
+        close {paramKey} twice
+      </button>
     </div>
   );
 }
@@ -70,6 +79,13 @@ describe('useDrawerParam', () => {
     expect(url()).toBe('/documents?labels=work');
     await user.click(screen.getByRole('button', { name: 'back' }));
     expect(url()).toBe('/home');
+  });
+
+  it('goes back only once when closed twice before the URL changes (a delete that also drops the id)', async () => {
+    const { user, url } = setup(['/home', '/sources']);
+    await user.click(screen.getByRole('button', { name: 'open document a1' }));
+    await user.click(screen.getByRole('button', { name: 'close document twice' }));
+    expect(url()).toBe('/sources');
   });
 
   it('closes a deep-linked drawer by replacing the URL without its param', async () => {
