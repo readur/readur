@@ -15,19 +15,25 @@ export interface IconButtonProps extends Omit<ButtonProps, 'icon' | 'children' |
   disabledReason?: string;
 }
 
-export function IconButton({ label, icon, variant = 'ghost', size = 'md', className, disabledReason, onPress, ...rest }: IconButtonProps) {
-  const ref = useRef<HTMLButtonElement>(null);
+export function IconButton({ label, icon, variant = 'ghost', size = 'md', className, disabledReason, onPress, ref, ...rest }: IconButtonProps) {
+  const innerRef = useRef<HTMLButtonElement | null>(null);
   const muted = Boolean(disabledReason);
   // RAC does not forward aria-disabled, so set it directly.
   useLayoutEffect(() => {
-    if (muted) ref.current?.setAttribute('aria-disabled', 'true');
-    else ref.current?.removeAttribute('aria-disabled');
+    if (muted) innerRef.current?.setAttribute('aria-disabled', 'true');
+    else innerRef.current?.removeAttribute('aria-disabled');
   }, [muted]);
+  // The caller may want the node too (SearchTrigger sets aria-keyshortcuts on it).
+  const setRef = (el: HTMLButtonElement | null) => {
+    innerRef.current = el;
+    if (typeof ref === 'function') ref(el);
+    else if (ref) (ref as { current: HTMLButtonElement | null }).current = el;
+  };
   return (
     <TooltipTrigger>
       <Button
         {...rest}
-        ref={ref}
+        ref={setRef}
         onPress={muted ? undefined : onPress}
         data-muted={muted || undefined}
         variant={variant}

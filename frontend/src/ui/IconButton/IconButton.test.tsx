@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -5,6 +6,22 @@ import { Add } from '../icons';
 import { IconButton } from './IconButton';
 
 describe('IconButton', () => {
+  it("hands the caller's ref the button, as an object or a callback", () => {
+    const objectRef = createRef<HTMLButtonElement>();
+    const callbackRef = vi.fn();
+    render(
+      <>
+        <IconButton label="One" icon={<Add />} ref={objectRef} />
+        <IconButton label="Two" icon={<Add />} ref={callbackRef} disabledReason="Not now" />
+      </>,
+    );
+    expect(objectRef.current).toBe(screen.getByRole('button', { name: 'One' }));
+    const two = screen.getByRole('button', { name: 'Two' });
+    expect(callbackRef).toHaveBeenCalledWith(two);
+    // Its own use of the node still works alongside the caller's.
+    expect(two).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('uses the label as its accessible name', () => {
     render(<IconButton label="Add tag" icon={<Add />} />);
     expect(screen.getByRole('button', { name: 'Add tag' })).toBeInTheDocument();
