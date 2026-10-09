@@ -127,7 +127,7 @@ jobs:
           pip3 install --no-cache-dir 'ocrmypdf==17.13.0'
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
       - name: Build readur binary
         run: cargo build --release
