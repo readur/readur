@@ -4,7 +4,7 @@ import { notifyLabelsChanged, type LabelData } from '../../labels';
 
 export type NewLabel = Omit<
   LabelData,
-  'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'
+  'id' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'
 >;
 
 export interface LabelSaveResult {
@@ -39,15 +39,18 @@ export function useDocumentLabels(documentId: string | undefined): UseDocumentLa
     if (!documentId) return undefined;
     let cancelled = false;
     setLoading(true);
-    Promise.allSettled([labelService.getDocumentLabels(documentId), labelService.list(false)]).then(([mine, all]) => {
-      if (cancelled) return;
-      if (mine.status === 'fulfilled' && Array.isArray(mine.value?.data)) {
-        setLabels(mine.value.data as LabelData[]);
-        saved.current = mine.value.data as LabelData[];
-      }
-      if (all.status === 'fulfilled' && Array.isArray(all.value?.data)) setAvailable(all.value.data as LabelData[]);
-      setLoading(false);
-    });
+    Promise.allSettled([labelService.getDocumentLabels(documentId), labelService.list(false)]).then(
+      ([mine, all]) => {
+        if (cancelled) return;
+        if (mine.status === 'fulfilled' && Array.isArray(mine.value?.data)) {
+          setLabels(mine.value.data as LabelData[]);
+          saved.current = mine.value.data as LabelData[];
+        }
+        if (all.status === 'fulfilled' && Array.isArray(all.value?.data))
+          setAvailable(all.value.data as LabelData[]);
+        setLoading(false);
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -59,7 +62,10 @@ export function useDocumentLabels(documentId: string | undefined): UseDocumentLa
       const seq = ++latest.current;
       setLabels(next);
       try {
-        await labelService.setDocumentLabels(documentId, next.map((l) => l.id));
+        await labelService.setDocumentLabels(
+          documentId,
+          next.map((l) => l.id),
+        );
         saved.current = next;
         notifyLabelsChanged();
         return { ok: true, restored: null };

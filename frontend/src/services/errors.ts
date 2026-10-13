@@ -1,16 +1,16 @@
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError } from 'axios';
 
 // Error Response Interfaces
 export interface ApiErrorResponse {
-  error: string
-  code: string
-  status: number
+  error: string;
+  code: string;
+  status: number;
 }
 
 export interface AxiosErrorWithCode extends AxiosError {
   response?: AxiosError['response'] & {
-    data: ApiErrorResponse
-  }
+    data: ApiErrorResponse;
+  };
 }
 
 // Error Code Constants
@@ -55,7 +55,6 @@ export const ErrorCodes = {
   LABEL_DUPLICATE_NAME: 'LABEL_DUPLICATE_NAME',
   LABEL_INVALID_NAME: 'LABEL_INVALID_NAME',
   LABEL_INVALID_COLOR: 'LABEL_INVALID_COLOR',
-  LABEL_SYSTEM_MODIFICATION: 'LABEL_SYSTEM_MODIFICATION',
   LABEL_IN_USE: 'LABEL_IN_USE',
   LABEL_MAX_LABELS_REACHED: 'LABEL_MAX_LABELS_REACHED',
 
@@ -94,9 +93,9 @@ export const ErrorCodes = {
   OCR_NO_HW_ACCEL: 'OCR_NO_HW_ACCEL',
   OCR_IO_ERROR: 'OCR_IO_ERROR',
   OCR_UNKNOWN_ERROR: 'OCR_UNKNOWN_ERROR',
-} as const
+} as const;
 
-export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes]
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
 
 // Error Helper Functions
 export const ErrorHelper = {
@@ -105,23 +104,23 @@ export const ErrorHelper = {
    */
   getErrorInfo: (error: unknown): { message: string; code?: string; status?: number } => {
     if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosErrorWithCode
-      
+      const axiosError = error as AxiosErrorWithCode;
+
       // Check if it's our new structured error format
       if (axiosError.response?.data?.error && axiosError.response?.data?.code) {
         return {
           message: axiosError.response.data.error,
           code: axiosError.response.data.code,
           status: axiosError.response.data.status || axiosError.response.status,
-        }
+        };
       }
-      
+
       // Fallback to legacy error handling
       if (axiosError.response?.data && 'message' in axiosError.response.data) {
         return {
           message: (axiosError.response.data as any).message,
           status: axiosError.response.status,
-        }
+        };
       }
 
       // Plain `{ "error": "..." }` bodies (no error code)
@@ -129,99 +128,99 @@ export const ErrorHelper = {
         return {
           message: (axiosError.response!.data as any).error,
           status: axiosError.response!.status,
-        }
+        };
       }
 
       // Default axios error handling
       return {
         message: axiosError.message || 'An error occurred',
         status: axiosError.response?.status,
-      }
+      };
     }
-    
+
     // Handle non-axios errors
     if (error instanceof Error) {
-      return { message: error.message }
+      return { message: error.message };
     }
-    
-    return { message: 'An unknown error occurred' }
+
+    return { message: 'An unknown error occurred' };
   },
 
   /**
    * Check if error is a specific error code
    */
   isErrorCode: (error: unknown, code: ErrorCode): boolean => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    return errorInfo.code === code
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+    return errorInfo.code === code;
   },
 
   /**
    * Get user-friendly error message with fallback
    */
   getUserMessage: (error: unknown, fallback?: string): string => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
+    const errorInfo = ErrorHelper.getErrorInfo(error);
     if (errorInfo.message === 'An unknown error occurred' && fallback) {
-      return fallback
+      return fallback;
     }
-    return errorInfo.message || fallback || 'An error occurred'
+    return errorInfo.message || fallback || 'An error occurred';
   },
 
   /**
    * Get suggested action based on error code
    */
   getSuggestedAction: (error: unknown): string | null => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+
     switch (errorInfo.code) {
       case ErrorCodes.USER_DUPLICATE_USERNAME:
-        return 'Please choose a different username'
+        return 'Please choose a different username';
       case ErrorCodes.USER_DUPLICATE_EMAIL:
-        return 'Please use a different email address'
+        return 'Please use a different email address';
       case ErrorCodes.USER_INVALID_PASSWORD:
-        return 'Password must be at least 8 characters with uppercase, lowercase, and numbers'
+        return 'Password must be at least 8 characters with uppercase, lowercase, and numbers';
       case ErrorCodes.USER_INVALID_CREDENTIALS:
-        return 'Please check your username and password'
+        return 'Please check your username and password';
       case ErrorCodes.USER_SESSION_EXPIRED:
       case ErrorCodes.USER_TOKEN_EXPIRED:
-        return 'Please login again'
+        return 'Please login again';
       case ErrorCodes.USER_ACCOUNT_DISABLED:
-        return 'Please contact an administrator'
+        return 'Please contact an administrator';
       case ErrorCodes.SOURCE_CONNECTION_FAILED:
-        return 'Check your network connection and server settings'
+        return 'Check your network connection and server settings';
       case ErrorCodes.SOURCE_AUTH_FAILED:
-        return 'Verify your credentials and try again'
+        return 'Verify your credentials and try again';
       case ErrorCodes.SOURCE_CONFIG_INVALID:
-        return 'Check your source configuration settings'
+        return 'Check your source configuration settings';
       case ErrorCodes.LABEL_DUPLICATE_NAME:
-        return 'Please choose a different label name'
+        return 'Please choose a different label name';
       case ErrorCodes.LABEL_INVALID_COLOR:
-        return 'Use a valid hex color format like #0969da'
+        return 'Use a valid hex color format like #0969da';
       case ErrorCodes.SEARCH_QUERY_TOO_SHORT:
-        return 'Please enter at least 2 characters'
+        return 'Please enter at least 2 characters';
       case ErrorCodes.DOCUMENT_TOO_LARGE:
-        return 'Please select a smaller file'
+        return 'Please select a smaller file';
       case ErrorCodes.SETTINGS_INVALID_LANGUAGE:
-        return 'Please select a valid language from the available options'
+        return 'Please select a valid language from the available options';
       case ErrorCodes.SETTINGS_VALUE_OUT_OF_RANGE:
-        return 'Please enter a value within the allowed range'
+        return 'Please enter a value within the allowed range';
       case ErrorCodes.SETTINGS_INVALID_OCR_CONFIG:
-        return 'Please check your OCR configuration settings'
+        return 'Please check your OCR configuration settings';
       case ErrorCodes.SETTINGS_CONFLICTING_SETTINGS:
-        return 'Please resolve conflicting settings before saving'
+        return 'Please resolve conflicting settings before saving';
       case ErrorCodes.OCR_NOT_INSTALLED:
-        return 'Please install Tesseract OCR on the server'
+        return 'Please install Tesseract OCR on the server';
       case ErrorCodes.OCR_LANG_MISSING:
-        return 'Install the required language pack for OCR'
+        return 'Install the required language pack for OCR';
       case ErrorCodes.OCR_TIMEOUT:
-        return 'Try reducing image size or quality'
+        return 'Try reducing image size or quality';
       case ErrorCodes.OCR_IMAGE_TOO_LARGE:
-        return 'Please resize the image to smaller dimensions'
+        return 'Please resize the image to smaller dimensions';
       case ErrorCodes.OCR_OUT_OF_MEMORY:
-        return 'Free up memory and try again'
+        return 'Free up memory and try again';
       case ErrorCodes.OCR_LOW_CONFIDENCE:
-        return 'Try improving image quality or clarity'
+        return 'Try improving image quality or clarity';
       default:
-        return null
+        return null;
     }
   },
 
@@ -229,8 +228,8 @@ export const ErrorHelper = {
    * Check if error should show retry option
    */
   shouldShowRetry: (error: unknown): boolean => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+
     const retryableCodes: ErrorCode[] = [
       ErrorCodes.SOURCE_CONNECTION_FAILED,
       ErrorCodes.SOURCE_NETWORK_TIMEOUT,
@@ -241,71 +240,88 @@ export const ErrorHelper = {
       ErrorCodes.OCR_TIMEOUT,
       ErrorCodes.OCR_OUT_OF_MEMORY,
       ErrorCodes.OCR_LOW_CONFIDENCE,
-    ]
-    
-    return (errorInfo.code && retryableCodes.includes(errorInfo.code as ErrorCode)) || 
-           (errorInfo.status !== undefined && errorInfo.status >= 500)
+    ];
+
+    return (
+      (errorInfo.code && retryableCodes.includes(errorInfo.code as ErrorCode)) ||
+      (errorInfo.status !== undefined && errorInfo.status >= 500)
+    );
   },
 
   /**
    * Get error category for styling/icons
    */
   getErrorCategory: (error: unknown): 'auth' | 'validation' | 'network' | 'server' | 'unknown' => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+
     if (errorInfo.code?.startsWith('USER_')) {
-      if (['USER_INVALID_CREDENTIALS', 'USER_TOKEN_EXPIRED', 'USER_SESSION_EXPIRED'].includes(errorInfo.code)) {
-        return 'auth'
+      if (
+        ['USER_INVALID_CREDENTIALS', 'USER_TOKEN_EXPIRED', 'USER_SESSION_EXPIRED'].includes(
+          errorInfo.code,
+        )
+      ) {
+        return 'auth';
       }
-      if (['USER_INVALID_PASSWORD', 'USER_INVALID_EMAIL', 'USER_INVALID_USERNAME', 'USER_DUPLICATE_USERNAME', 'USER_DUPLICATE_EMAIL'].includes(errorInfo.code)) {
-        return 'validation'
+      if (
+        [
+          'USER_INVALID_PASSWORD',
+          'USER_INVALID_EMAIL',
+          'USER_INVALID_USERNAME',
+          'USER_DUPLICATE_USERNAME',
+          'USER_DUPLICATE_EMAIL',
+        ].includes(errorInfo.code)
+      ) {
+        return 'validation';
       }
     }
-    
-    if (errorInfo.code?.includes('CONNECTION_FAILED') || errorInfo.code?.includes('NETWORK_TIMEOUT')) {
-      return 'network'
+
+    if (
+      errorInfo.code?.includes('CONNECTION_FAILED') ||
+      errorInfo.code?.includes('NETWORK_TIMEOUT')
+    ) {
+      return 'network';
     }
-    
+
     if (errorInfo.code?.includes('INVALID') || errorInfo.code?.includes('OUT_OF_RANGE')) {
-      return 'validation'
+      return 'validation';
     }
-    
+
     if (errorInfo.status === 503) {
-      return 'network'
+      return 'network';
     }
-    
+
     if (errorInfo.status && errorInfo.status >= 500) {
-      return 'server'
+      return 'server';
     }
-    
+
     if (errorInfo.status === 401 || errorInfo.status === 403) {
-      return 'auth'
+      return 'auth';
     }
-    
+
     if (errorInfo.status === 400 || errorInfo.status === 422) {
-      return 'validation'
+      return 'validation';
     }
-    
-    return 'unknown'
+
+    return 'unknown';
   },
 
   /**
    * Get appropriate error icon based on category
    */
   getErrorIcon: (error: unknown): string => {
-    const category = ErrorHelper.getErrorCategory(error)
-    
+    const category = ErrorHelper.getErrorCategory(error);
+
     switch (category) {
       case 'auth':
-        return '🔒'
+        return '🔒';
       case 'validation':
-        return '⚠️'
+        return '⚠️';
       case 'network':
-        return '🌐'
+        return '🌐';
       case 'server':
-        return '🔧'
+        return '🔧';
       default:
-        return '❌'
+        return '❌';
     }
   },
 
@@ -313,11 +329,11 @@ export const ErrorHelper = {
    * Format error for display in UI components
    */
   formatErrorForDisplay: (error: unknown, includeActions?: boolean) => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    const suggestedAction = ErrorHelper.getSuggestedAction(error)
-    const shouldRetry = ErrorHelper.shouldShowRetry(error)
-    const category = ErrorHelper.getErrorCategory(error)
-    const icon = ErrorHelper.getErrorIcon(error)
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+    const suggestedAction = ErrorHelper.getSuggestedAction(error);
+    const shouldRetry = ErrorHelper.shouldShowRetry(error);
+    const category = ErrorHelper.getErrorCategory(error);
+    const icon = ErrorHelper.getErrorIcon(error);
 
     return {
       message: errorInfo.message,
@@ -327,36 +343,35 @@ export const ErrorHelper = {
       shouldShowRetry: includeActions ? shouldRetry : false,
       category,
       icon,
-      severity: category === 'validation' ? 'warning' : 
-                category === 'auth' ? 'info' : 'error'
-    }
+      severity: category === 'validation' ? 'warning' : category === 'auth' ? 'info' : 'error',
+    };
   },
 
   /**
    * Handle specific error codes with custom logic
    */
   handleSpecificError: (error: unknown, onRetry?: () => void, onLogin?: () => void) => {
-    const errorInfo = ErrorHelper.getErrorInfo(error)
-    
+    const errorInfo = ErrorHelper.getErrorInfo(error);
+
     switch (errorInfo.code) {
       case ErrorCodes.USER_SESSION_EXPIRED:
       case ErrorCodes.USER_TOKEN_EXPIRED:
         if (onLogin) {
-          onLogin()
-          return true // Handled
+          onLogin();
+          return true; // Handled
         }
-        break
-      
+        break;
+
       case ErrorCodes.SOURCE_CONNECTION_FAILED:
       case ErrorCodes.SOURCE_NETWORK_TIMEOUT:
         if (onRetry && ErrorHelper.shouldShowRetry(error)) {
           // Could automatically retry after a delay
-          setTimeout(onRetry, 2000)
-          return true // Handled
+          setTimeout(onRetry, 2000);
+          return true; // Handled
         }
-        break
+        break;
     }
-    
-    return false // Not handled
-  }
-}
+
+    return false; // Not handled
+  },
+};

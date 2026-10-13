@@ -1011,7 +1011,8 @@
       "intro": "Las etiquetas organizan documentos y fuentes. Los recuentos indican cuántas veces se usa cada una.",
       "invalidData": "Se recibió un formato de datos no válido del servidor",
       "unexpectedStatus": "El servidor devolvió una respuesta inesperada ({{status}})",
-      "updateFailed": "No se pudo actualizar la etiqueta"
+      "updateFailed": "No se pudo actualizar la etiqueta",
+      "list": "Etiquetas"
     },
     "languageSelector": {
       "addMore_one": "Añadir más idiomas (queda {{count}})",
@@ -1116,16 +1117,6 @@
     "search": {
       "placeholder": "Buscar etiquetas..."
     },
-    "filters": {
-      "systemLabels": "Etiquetas del Sistema"
-    },
-    "sections": {
-      "systemLabels": "Etiquetas del Sistema",
-      "myLabels": "Mis Etiquetas"
-    },
-    "badge": {
-      "system": "Sistema"
-    },
     "stats": {
       "documents": "Documentos: {{count}}",
       "sources": "Fuentes: {{count}}"
@@ -1154,8 +1145,6 @@
     },
     "selector": {
       "placeholder": "Buscar o crear etiquetas...",
-      "systemLabels": "Etiquetas del Sistema",
-      "myLabels": "Mis Etiquetas",
       "createLabel": "Crear etiqueta \"{{name}}\"",
       "noLabelsFound": "No se encontraron etiquetas",
       "noLabelsMatch": "No hay etiquetas que coincidan con \"{{query}}\"",
@@ -1184,10 +1173,8 @@
       "loadFailed": "Falló la carga de etiquetas. Por favor verifica tu conexión.",
       "notFound": "Etiqueta no encontrada. Puede haber sido eliminada por otro usuario.",
       "duplicateName": "Ya existe una etiqueta con este nombre. Por favor elige un nombre diferente.",
-      "systemModification": "Las etiquetas del sistema no se pueden modificar. Solo se pueden editar las etiquetas creadas por el usuario.",
       "alreadyDeleted": "Etiqueta no encontrada. Puede haber sido eliminada ya.",
       "inUse": "No se puede eliminar la etiqueta porque está actualmente asignada a documentos. Por favor elimina la etiqueta de todos los documentos primero.",
-      "systemDelete": "Las etiquetas del sistema no se pueden eliminar. Solo se pueden eliminar las etiquetas creadas por el usuario.",
       "invalidName": "El nombre de la etiqueta contiene caracteres inválidos. Por favor usa solo letras, números y puntuación básica.",
       "invalidColor": "Formato de color inválido. Por favor usa un color hexadecimal válido como #0969da.",
       "maxLabelsReached": "Se alcanzó el número máximo de etiquetas. Por favor elimina algunas etiquetas antes de crear nuevas.",

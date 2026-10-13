@@ -8,7 +8,8 @@ import { makeDocument, makeOcr, renderDrawer, stubClipboard, stubObjectUrls } fr
 vi.mock('../../../services/api', async () => (await import('./mockApi')).createApiMock());
 vi.mock('../../board/litStore', () => ({ acknowledge: vi.fn() }));
 vi.mock('../../../components/RetryHistoryModal', () => ({
-  RetryHistoryModal: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Retry history" /> : null),
+  RetryHistoryModal: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Retry history" /> : null,
 }));
 vi.mock('../../labels/LabelSelector', () => ({
   default: ({
@@ -28,8 +29,8 @@ vi.mock('../../labels/LabelSelector', () => ({
 
 const m = apiModule as unknown as ApiMock;
 
-const tax = { id: 'l-1', name: 'Tax', color: '#000000', is_system: false, created_at: '', updated_at: '' };
-const receipts = { id: 'l-2', name: 'Receipts', color: '#000000', is_system: false, created_at: '', updated_at: '' };
+const tax = { id: 'l-1', name: 'Tax', color: '#000000', created_at: '', updated_at: '' };
+const receipts = { id: 'l-2', name: 'Receipts', color: '#000000', created_at: '', updated_at: '' };
 
 function load(doc = makeDocument(), ocr = makeOcr()) {
   m.documentService.getById.mockResolvedValue({ data: doc });
@@ -51,7 +52,14 @@ describe('document drawer: facts line', () => {
     renderDrawer();
     await title();
     await waitFor(() => expect(facts()).toContain('2 pages'));
-    expect(facts()).toEqual(['PDF', '2 pages', '2.0 MB', 'Upload', expect.stringMatching(/^Added .*2025/), 'OCR 96%']);
+    expect(facts()).toEqual([
+      'PDF',
+      '2 pages',
+      '2.0 MB',
+      'Upload',
+      expect.stringMatching(/^Added .*2025/),
+      'OCR 96%',
+    ]);
     expect(within(summary()).getByText('Indexed')).toBeInTheDocument();
   });
 
@@ -84,10 +92,11 @@ describe('document drawer: facts line', () => {
   });
 
   it('shows the pages and language the OCR endpoint reports, and the sync source', async () => {
-    load(
-      makeDocument({ source_type: 'web_dav' }),
-      { ...makeOcr(), pages_processed: 12, detected_language: 'deu' } as ReturnType<typeof makeOcr>,
-    );
+    load(makeDocument({ source_type: 'web_dav' }), {
+      ...makeOcr(),
+      pages_processed: 12,
+      detected_language: 'deu',
+    } as ReturnType<typeof makeOcr>);
     renderDrawer();
     await title();
     await waitFor(() => expect(facts()).toContain('12 pages'));
@@ -114,14 +123,24 @@ describe('document drawer: facts line', () => {
   });
 
   it('derives the type from the MIME type like the Library does, e.g. DOCX, never a generic "File"', async () => {
-    load(makeDocument({ mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+    load(
+      makeDocument({
+        mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    );
     renderDrawer();
     await title();
     expect(facts()[0]).toBe('DOCX');
   });
 
   it('falls back to the file extension when the MIME type is generic', async () => {
-    load(makeDocument({ mime_type: 'application/octet-stream', filename: 'minutes.odt', original_filename: 'minutes.odt' }));
+    load(
+      makeDocument({
+        mime_type: 'application/octet-stream',
+        filename: 'minutes.odt',
+        original_filename: 'minutes.odt',
+      }),
+    );
     renderDrawer();
     await screen.findByRole('dialog', { name: 'minutes.odt' });
     expect(facts()[0]).toBe('ODT');
@@ -142,11 +161,21 @@ describe('document drawer: facts line', () => {
   });
 
   it('shows page progress while processing', async () => {
-    load(makeDocument({ ocr_status: 'processing', has_ocr_text: false, ocr_progress_current: 3, ocr_progress_total: 10 }));
+    load(
+      makeDocument({
+        ocr_status: 'processing',
+        has_ocr_text: false,
+        ocr_progress_current: 3,
+        ocr_progress_total: 10,
+      }),
+    );
     renderDrawer();
     await title();
     expect(summary()).toHaveTextContent('OCR 3/10');
-    expect(within(summary()).getByRole('progressbar', { name: 'OCR progress' })).toHaveAttribute('aria-valuenow', '30');
+    expect(within(summary()).getByRole('progressbar', { name: 'OCR progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '30',
+    );
     expect(facts()).toContain('10 pages');
   });
 });
@@ -181,8 +210,12 @@ describe('document drawer: labels', () => {
     expect(add).toHaveAttribute('aria-expanded', 'true');
     const editor = screen.getByRole('region', { name: 'Edit labels' });
     await user.click(within(editor).getByRole('button', { name: 'Add first label' }));
-    await waitFor(() => expect(m.labelService.setDocumentLabels).toHaveBeenCalledWith('doc-1', ['l-2']));
-    expect(await within(screen.getByRole('group', { name: 'Labels' })).findByText('Receipts')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(m.labelService.setDocumentLabels).toHaveBeenCalledWith('doc-1', ['l-2']),
+    );
+    expect(
+      await within(screen.getByRole('group', { name: 'Labels' })).findByText('Receipts'),
+    ).toBeInTheDocument();
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     // Done closes the editor; nothing is left to save.
     await user.click(screen.getByRole('button', { name: 'Done' }));
@@ -199,7 +232,9 @@ describe('document drawer: labels', () => {
     await title();
     const group = screen.getByRole('group', { name: 'Labels' });
     await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
-    await waitFor(() => expect(m.labelService.setDocumentLabels).toHaveBeenCalledWith('doc-1', ['l-2']));
+    await waitFor(() =>
+      expect(m.labelService.setDocumentLabels).toHaveBeenCalledWith('doc-1', ['l-2']),
+    );
     await waitFor(() => expect(within(group).queryByText('Tax')).not.toBeInTheDocument());
     expect(within(group).getByText('Receipts')).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalledWith('doc-1', { labels: [receipts] });
@@ -216,16 +251,6 @@ describe('document drawer: labels', () => {
     await user.click(await within(group).findByRole('button', { name: 'Remove Tax' }));
     expect(await screen.findByText("Couldn't save the labels")).toBeInTheDocument();
     expect(within(group).getByText('Tax')).toBeInTheDocument();
-  });
-
-  it('cannot remove a system label from its chip', async () => {
-    load();
-    docLabels([{ ...tax, is_system: true }], [tax]);
-    renderDrawer();
-    await title();
-    const group = screen.getByRole('group', { name: 'Labels' });
-    await within(group).findByText('Tax');
-    expect(within(group).queryByRole('button', { name: 'Remove Tax' })).not.toBeInTheDocument();
   });
 
   it('lets an older failed save not undo a newer change, in the drawer or the list row', async () => {
@@ -267,7 +292,9 @@ describe('document drawer: labels', () => {
     failFirst(new Error('late'));
     failSecond(new Error('also'));
     // Neither save landed: the row goes back to what the server has, not to the half-way state.
-    await waitFor(() => expect(onChanged).toHaveBeenLastCalledWith('doc-1', { labels: [tax, receipts] }));
+    await waitFor(() =>
+      expect(onChanged).toHaveBeenLastCalledWith('doc-1', { labels: [tax, receipts] }),
+    );
     expect(await within(group).findByText('Tax')).toBeInTheDocument();
   });
 });
@@ -280,9 +307,18 @@ describe('document drawer: preview and tabs', () => {
     const preview = within(dialog).getByRole('region', { name: 'Preview' });
     const tabs = within(dialog).getByRole('tablist', { name: 'About this document' });
     expect(preview.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(tabs).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Text', 'Details', 'Comments', 'Share links']);
-    expect(within(tabs).getByRole('tab', { name: 'Text' })).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findByRole('region', { name: 'Extracted text' })).toHaveTextContent('Invoice 42');
+    expect(
+      within(tabs)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Text', 'Details', 'Comments', 'Share links']);
+    expect(within(tabs).getByRole('tab', { name: 'Text' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(await screen.findByRole('region', { name: 'Extracted text' })).toHaveTextContent(
+      'Invoice 42',
+    );
   });
 
   it('keeps the document actions in a bar at the bottom, after the tabs', async () => {
@@ -290,12 +326,11 @@ describe('document drawer: preview and tabs', () => {
     renderDrawer();
     const dialog = await title();
     const bar = within(dialog).getByRole('toolbar', { name: 'Document actions' });
-    expect(within(bar).getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual([
-      'Download',
-      'Share',
-      'Retry OCR',
-      'More actions',
-    ]);
+    expect(
+      within(bar)
+        .getAllByRole('button')
+        .map((b) => b.textContent || b.getAttribute('aria-label')),
+    ).toEqual(['Download', 'Share', 'Retry OCR', 'More actions']);
     const tabs = within(dialog).getByRole('tablist', { name: 'About this document' });
     expect(tabs.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -331,7 +366,9 @@ describe('document drawer: preview and tabs', () => {
     load(makeDocument({ mime_type: 'application/msword' }));
     renderDrawer();
     const dialog = await title();
-    expect(within(dialog).queryByRole('separator', { name: 'Resize preview' })).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('separator', { name: 'Resize preview' }),
+    ).not.toBeInTheDocument();
   });
 
   it('opens the PDF with the thumbnail sidebar closed and the page fitted to the width', async () => {
@@ -346,7 +383,9 @@ describe('document drawer: preview and tabs', () => {
     load();
     renderDrawer();
     await title();
-    expect(await screen.findByRole('region', { name: 'Extracted text' })).toHaveAttribute('data-own-arrows');
+    expect(await screen.findByRole('region', { name: 'Extracted text' })).toHaveAttribute(
+      'data-own-arrows',
+    );
   });
 });
 
@@ -354,7 +393,12 @@ describe('document drawer: details', () => {
   it('shows in the Details tab file, processing and activity', async () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();
-    load(makeDocument({ file_hash: 'a'.repeat(64), source_metadata: { camera_model: 'X100', pdf_version: '1.4' } }));
+    load(
+      makeDocument({
+        file_hash: 'a'.repeat(64),
+        source_metadata: { camera_model: 'X100', pdf_version: '1.4' },
+      }),
+    );
     renderDrawer();
     await title();
     expect(screen.queryByText('SHA-256')).not.toBeInTheDocument();
@@ -364,7 +408,9 @@ describe('document drawer: details', () => {
     expect(within(details).getByRole('heading', { name: 'Processing' })).toBeInTheDocument();
     expect(within(details).getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
     // Activity older than a week shows the date, with the full time on hover.
-    const added = within(details).getAllByText(/Jun 2025|Jun 15, 2025/).find((el) => el.tagName === 'TIME');
+    const added = within(details)
+      .getAllByText(/Jun 2025|Jun 15, 2025/)
+      .find((el) => el.tagName === 'TIME');
     expect(added).toHaveAttribute('dateTime', '2025-06-15T10:00:00Z');
     expect(within(details).getByText('Camera model')).toBeInTheDocument();
     expect(within(details).getByText('PDF version')).toBeInTheDocument();
@@ -411,8 +457,20 @@ describe('document drawer: details', () => {
         document_id: 'doc-1',
         total_retries: 2,
         retry_history: [
-          { id: 'r1', retry_reason: 'manual', priority: 10, created_at: '2025-06-15T11:00:00Z', previous_error: 'old error' },
-          { id: 'r2', retry_reason: 'manual', priority: 10, created_at: '2025-06-16T11:00:00Z', previous_error: 'Tesseract timed out' },
+          {
+            id: 'r1',
+            retry_reason: 'manual',
+            priority: 10,
+            created_at: '2025-06-15T11:00:00Z',
+            previous_error: 'old error',
+          },
+          {
+            id: 'r2',
+            retry_reason: 'manual',
+            priority: 10,
+            created_at: '2025-06-16T11:00:00Z',
+            previous_error: 'Tesseract timed out',
+          },
         ],
       },
     });

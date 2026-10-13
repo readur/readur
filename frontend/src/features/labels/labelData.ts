@@ -27,7 +27,6 @@ export interface LabelData {
   color: string;
   background_color?: string;
   icon?: string;
-  is_system: boolean;
   created_at: string;
   updated_at: string;
   document_count?: number;
@@ -35,7 +34,10 @@ export interface LabelData {
 }
 
 /** Fields a create/edit form hands back. */
-export type LabelDraft = Omit<LabelData, 'id' | 'is_system' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'>;
+export type LabelDraft = Omit<
+  LabelData,
+  'id' | 'created_at' | 'updated_at' | 'document_count' | 'source_count'
+>;
 
 /** The API sends `null` for unset optional fields; the components take `undefined`. */
 export function toLabelData(label: LabelResponse | LabelData): LabelData {
@@ -46,7 +48,6 @@ export function toLabelData(label: LabelResponse | LabelData): LabelData {
     color: label.color,
     background_color: label.background_color ?? undefined,
     icon: label.icon ?? undefined,
-    is_system: label.is_system,
     created_at: label.created_at,
     updated_at: label.updated_at,
     document_count: label.document_count ?? undefined,
@@ -57,12 +58,22 @@ export function toLabelData(label: LabelResponse | LabelData): LabelData {
 type IconComponent = ComponentType<{ fontSize?: 'inherit' | 'small' }>;
 
 /** Icons a label may carry. `key` is what the API stores; `nameKey` names it for people. */
-export const LABEL_ICONS: { key: string; icon: IconComponent; nameKey: string; fallback: string }[] = [
+export const LABEL_ICONS: {
+  key: string;
+  icon: IconComponent;
+  nameKey: string;
+  fallback: string;
+}[] = [
   { key: 'star', icon: Star, nameKey: 'labels.icons.star', fallback: 'Star' },
   { key: 'archive', icon: Archive, nameKey: 'labels.icons.archive', fallback: 'Archive' },
   { key: 'person', icon: Person, nameKey: 'labels.icons.person', fallback: 'Person' },
   { key: 'work', icon: Work, nameKey: 'labels.icons.work', fallback: 'Work' },
-  { key: 'briefcase', icon: BusinessCenter, nameKey: 'labels.icons.briefcase', fallback: 'Briefcase' },
+  {
+    key: 'briefcase',
+    icon: BusinessCenter,
+    nameKey: 'labels.icons.briefcase',
+    fallback: 'Briefcase',
+  },
   { key: 'receipt', icon: Receipt, nameKey: 'labels.icons.receipt', fallback: 'Receipt' },
   { key: 'scale', icon: Scale, nameKey: 'labels.icons.scale', fallback: 'Legal' },
   { key: 'medical', icon: LocalHospital, nameKey: 'labels.icons.medical', fallback: 'Medical' },
@@ -72,16 +83,23 @@ export const LABEL_ICONS: { key: string; icon: IconComponent; nameKey: string; f
   { key: 'bug', icon: BugReport, nameKey: 'labels.icons.bug', fallback: 'Bug' },
   { key: 'build', icon: Build, nameKey: 'labels.icons.build', fallback: 'Build' },
   { key: 'folder', icon: Folder, nameKey: 'labels.icons.folder', fallback: 'Folder' },
-  { key: 'assignment', icon: Assignment, nameKey: 'labels.icons.assignment', fallback: 'Assignment' },
+  {
+    key: 'assignment',
+    icon: Assignment,
+    nameKey: 'labels.icons.assignment',
+    fallback: 'Assignment',
+  },
   { key: 'schedule', icon: Schedule, nameKey: 'labels.icons.schedule', fallback: 'Schedule' },
 ];
 
-const ICON_BY_KEY: Record<string, IconComponent> = Object.fromEntries(LABEL_ICONS.map((i) => [i.key, i.icon]));
+const ICON_BY_KEY: Record<string, IconComponent> = Object.fromEntries(
+  LABEL_ICONS.map((i) => [i.key, i.icon]),
+);
 // Older labels stored `user` for the person icon.
 ICON_BY_KEY.user = Person;
 
 export function labelIcon(key: string | undefined): IconComponent | null {
-  return key ? ICON_BY_KEY[key] ?? null : null;
+  return key ? (ICON_BY_KEY[key] ?? null) : null;
 }
 
 /**

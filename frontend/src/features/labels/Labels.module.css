@@ -104,19 +104,10 @@
   outline: none;
 }
 
-.section + .section,
-.section + .option {
+.option + .createOption {
   margin-top: var(--s-1);
   padding-top: var(--s-1);
   border-top: 1px solid var(--line);
-}
-
-.sectionHeader {
-  padding: var(--s-1) var(--s-3);
-  font-family: var(--font-ui);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--fg-meta);
 }
 
 .option {

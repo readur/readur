@@ -5,17 +5,52 @@ import LabelsSection from '../labels/LabelsSection';
 import { createMockLabel } from '../../../test/label-test-utils';
 import { apiMock, httpError, ok, renderSettings } from './settingsTestUtils';
 
-vi.mock('../../../services/api', async (importOriginal) => (await import('./apiMock')).mockApiModule(importOriginal));
+vi.mock('../../../services/api', async (importOriginal) =>
+  (await import('./apiMock')).mockApiModule(importOriginal),
+);
 
 const mockLabels = [
-  createMockLabel({ id: 'label-1', name: 'Important', description: 'High priority items', color: '#d73a49', icon: 'star', is_system: true, document_count: 10, source_count: 2 }),
-  createMockLabel({ id: 'label-2', name: 'Work', description: 'Work-related documents', color: '#0969da', icon: 'work', is_system: true, document_count: 5, source_count: 1 }),
-  createMockLabel({ id: 'label-3', name: 'Personal Project', description: 'My personal project files', color: '#28a745', icon: 'folder', is_system: false, document_count: 3, source_count: 0 }),
-  createMockLabel({ id: 'label-4', name: 'Archive', description: 'Archived items', color: '#6e7781', icon: 'archive', is_system: true, document_count: 0, source_count: 0 }),
+  createMockLabel({
+    id: 'label-1',
+    name: 'Important',
+    description: 'High priority items',
+    color: '#d73a49',
+    icon: 'star',
+    document_count: 10,
+    source_count: 2,
+  }),
+  createMockLabel({
+    id: 'label-2',
+    name: 'Work',
+    description: 'Work-related documents',
+    color: '#0969da',
+    icon: 'work',
+    document_count: 5,
+    source_count: 1,
+  }),
+  createMockLabel({
+    id: 'label-3',
+    name: 'Personal Project',
+    description: 'My personal project files',
+    color: '#28a745',
+    icon: 'folder',
+    document_count: 3,
+    source_count: 0,
+  }),
+  createMockLabel({
+    id: 'label-4',
+    name: 'Archive',
+    description: 'Archived items',
+    color: '#6e7781',
+    icon: 'archive',
+    document_count: 0,
+    source_count: 0,
+  }),
 ];
 
 const render = () => renderSettings(<LabelsSection />, { path: '/settings/labels' });
-const card = (name: string) => screen.getByText(name, { selector: '*' }).closest('li') as HTMLElement;
+const card = (name: string) =>
+  screen.getByText(name, { selector: '*' }).closest('li') as HTMLElement;
 
 beforeEach(() => {
   apiMock.get.mockResolvedValue(ok(mockLabels));
@@ -66,19 +101,31 @@ describe('LabelsSection: error handling', () => {
   });
 
   it('handles 401 errors', async () => {
-    apiMock.get.mockRejectedValue({ response: { status: 401 }, message: 'Unauthorized', isAxiosError: true });
+    apiMock.get.mockRejectedValue({
+      response: { status: 401 },
+      message: 'Unauthorized',
+      isAxiosError: true,
+    });
     render();
     expect(await screen.findByText('Unauthorized')).toBeInTheDocument();
   });
 
   it('handles 403 errors', async () => {
-    apiMock.get.mockRejectedValue({ response: { status: 403 }, message: 'Forbidden', isAxiosError: true });
+    apiMock.get.mockRejectedValue({
+      response: { status: 403 },
+      message: 'Forbidden',
+      isAxiosError: true,
+    });
     render();
     expect(await screen.findByText('Forbidden')).toBeInTheDocument();
   });
 
   it('handles 500 errors with a server message', async () => {
-    apiMock.get.mockRejectedValue({ response: { status: 500 }, message: 'Internal Server Error', isAxiosError: true });
+    apiMock.get.mockRejectedValue({
+      response: { status: 500 },
+      message: 'Internal Server Error',
+      isAxiosError: true,
+    });
     render();
     expect(await screen.findByText('Server error. Please try again later.')).toBeInTheDocument();
   });
@@ -93,7 +140,9 @@ describe('LabelsSection: error handling', () => {
   it('handles an unexpected status with a valid array', async () => {
     apiMock.get.mockResolvedValue(ok(mockLabels, 202));
     render();
-    expect(await screen.findByText('Server returned unexpected response (202)')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Server returned unexpected response (202)'),
+    ).toBeInTheDocument();
   });
 
   it('keeps the list an array when data is null', async () => {
@@ -134,38 +183,16 @@ describe('LabelsSection: search and filtering', () => {
     expect(screen.getByText('Important')).toBeInTheDocument();
     expect(screen.queryByText('Work')).not.toBeInTheDocument();
   });
-
-  it('toggles system labels', async () => {
-    const user = userEvent.setup();
-    render();
-    await screen.findByText('Important');
-    const toggle = screen.getByRole('switch', { name: 'System Labels' });
-    expect(toggle).toBeChecked();
-    await user.click(toggle);
-    expect(screen.queryByText('Important')).not.toBeInTheDocument();
-    expect(screen.getByText('Personal Project')).toBeInTheDocument();
-  });
 });
 
-describe('LabelsSection: grouping', () => {
-  it('shows the system labels section', async () => {
+describe('LabelsSection: one list', () => {
+  it('lists every label together, with no system switch or groups', async () => {
     render();
-    expect(await screen.findByRole('heading', { name: 'System Labels' })).toBeInTheDocument();
-  });
-
-  it('shows the user labels section', async () => {
-    render();
-    expect(await screen.findByRole('heading', { name: 'My Labels' })).toBeInTheDocument();
-  });
-
-  it('puts each label in the right group', async () => {
-    render();
-    const system = (await screen.findByRole('heading', { name: 'System Labels' })).closest('section') as HTMLElement;
-    const mine = screen.getByRole('heading', { name: 'My Labels' }).closest('section') as HTMLElement;
-    expect(within(system).getByText('Important')).toBeInTheDocument();
-    expect(within(system).getByText('Archive')).toBeInTheDocument();
-    expect(within(mine).getByText('Personal Project')).toBeInTheDocument();
-    expect(within(mine).queryByText('Work')).not.toBeInTheDocument();
+    await screen.findByText('Important');
+    expect(screen.queryByRole('switch', { name: 'System Labels' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'System Labels' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My Labels' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(mockLabels.length);
   });
 });
 
@@ -183,15 +210,22 @@ describe('LabelsSection: cards', () => {
     render();
     await screen.findByText('Personal Project');
     expect(screen.getByRole('button', { name: 'Edit label Personal Project' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Delete label Personal Project' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Delete label Personal Project' }),
+    ).toBeInTheDocument();
   });
 
-  it('marks system labels and gives them no edit or delete buttons', async () => {
+  it('lets the starter labels be edited and deleted like any other', async () => {
     render();
     await screen.findByText('Important');
     const important = card('Important');
-    expect(within(important).getByText('System')).toBeInTheDocument();
-    expect(within(important).queryByRole('button', { name: /Edit label|Delete label/ })).not.toBeInTheDocument();
+    expect(within(important).queryByText('System')).not.toBeInTheDocument();
+    expect(
+      within(important).getByRole('button', { name: 'Edit label Important' }),
+    ).toBeInTheDocument();
+    expect(
+      within(important).getByRole('button', { name: 'Delete label Important' }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -210,7 +244,12 @@ describe('LabelsSection: create', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Create a label' });
     await user.type(within(dialog).getByRole('textbox', { name: /^Name/ }), 'New Label');
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
-    await waitFor(() => expect(apiMock.post).toHaveBeenCalledWith('/labels', expect.objectContaining({ name: 'New Label' })));
+    await waitFor(() =>
+      expect(apiMock.post).toHaveBeenCalledWith(
+        '/labels',
+        expect.objectContaining({ name: 'New Label' }),
+      ),
+    );
   });
 
   it('shows a duplicate-name error in the dialog', async () => {
@@ -243,7 +282,10 @@ describe('LabelsSection: edit', () => {
     await user.type(name, 'Updated Label');
     await user.click(within(dialog).getByRole('button', { name: 'Update' }));
     await waitFor(() =>
-      expect(apiMock.put).toHaveBeenCalledWith('/labels/label-3', expect.objectContaining({ name: 'Updated Label' })),
+      expect(apiMock.put).toHaveBeenCalledWith(
+        '/labels/label-3',
+        expect.objectContaining({ name: 'Updated Label' }),
+      ),
     );
   });
 });
@@ -254,7 +296,9 @@ describe('LabelsSection: delete', () => {
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Delete Label' });
-    expect(within(dialog).getByText(/are you sure you want to delete the label/i)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/are you sure you want to delete the label/i),
+    ).toBeInTheDocument();
     expect(apiMock.delete).not.toHaveBeenCalled();
   });
 
@@ -263,23 +307,43 @@ describe('LabelsSection: delete', () => {
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Delete Label' });
-    expect(within(dialog).getByText(/This label is currently used by 3 document\(s\)/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/This label is currently used by 3 document\(s\)/),
+    ).toBeInTheDocument();
   });
 
   it('deletes on confirm', async () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
     await waitFor(() => expect(apiMock.delete).toHaveBeenCalledWith('/labels/label-3'));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('deletes a starter label too, and tells the sidebar the labels changed', async () => {
+    const changed = vi.fn();
+    window.addEventListener('readur:labels-changed', changed);
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByRole('button', { name: 'Delete label Important' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
+    await waitFor(() => expect(apiMock.delete).toHaveBeenCalledWith('/labels/label-1'));
+    await waitFor(() => expect(changed).toHaveBeenCalled());
+    window.removeEventListener('readur:labels-changed', changed);
   });
 
   it('cancels without deleting', async () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+    );
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(apiMock.delete).not.toHaveBeenCalled();
   });
@@ -311,7 +375,9 @@ describe('LabelsSection: empty states', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search labels...' }), 'nonexistent');
     expect(screen.getByText('No labels found')).toBeInTheDocument();
     expect(screen.getByText('No labels match "nonexistent"')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create Your First Label' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Create Your First Label' }),
+    ).not.toBeInTheDocument();
   });
 
   it('opens the create dialog from the empty state', async () => {
@@ -339,7 +405,9 @@ describe('LabelsSection: refresh', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
     await waitFor(() => expect(apiMock.get).toHaveBeenCalledTimes(2));
   });
 });
@@ -350,7 +418,9 @@ describe('LabelsSection: operation errors', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
     expect(await screen.findByText('Delete failed')).toBeInTheDocument();
   });
 
@@ -359,9 +429,13 @@ describe('LabelsSection: operation errors', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Delete label Personal Project' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
-    expect(await screen.findByText('Label not found. It may have already been deleted.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Label not found. It may have already been deleted.'),
+    ).toBeInTheDocument();
     expect(apiMock.get).toHaveBeenCalledTimes(2);
   });
 });

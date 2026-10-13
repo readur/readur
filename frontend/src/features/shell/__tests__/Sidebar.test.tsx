@@ -23,11 +23,10 @@ const label = (id: string, name: string, document_count: number, color = '#4878B
   name,
   color,
   document_count,
-  user_id: null,
+  user_id: 'u1',
   description: null,
   background_color: null,
   icon: null,
-  is_system: false,
   created_at: '',
   updated_at: '',
   source_count: 0,
@@ -81,10 +80,17 @@ describe('collections', () => {
   });
 
   it('marks the collection being viewed', async () => {
-    mockedLabels.mockResolvedValue({ data: [label('a', 'Receipts', 3), label('b', 'Medical', 1)] } as never);
+    mockedLabels.mockResolvedValue({
+      data: [label('a', 'Receipts', 3), label('b', 'Medical', 1)],
+    } as never);
     renderShell({ path: '/documents?label=b' });
-    expect(await within(collections()).findByRole('link', { name: /Medical/ })).toHaveAttribute('aria-current', 'page');
-    expect(within(collections()).getByRole('link', { name: /Receipts/ })).not.toHaveAttribute('aria-current');
+    expect(await within(collections()).findByRole('link', { name: /Medical/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(collections()).getByRole('link', { name: /Receipts/ })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('reloads when a screen announces a label change', async () => {
@@ -94,7 +100,9 @@ describe('collections', () => {
     await act(async () => {
       window.dispatchEvent(new CustomEvent(LABELS_CHANGED_EVENT));
     });
-    expect(await within(collections()).findByRole('link', { name: /Shoulder injury/ })).toBeInTheDocument();
+    expect(
+      await within(collections()).findByRole('link', { name: /Shoulder injury/ }),
+    ).toBeInTheDocument();
     expect(mockedLabels).toHaveBeenCalledTimes(2);
   });
 
@@ -122,7 +130,10 @@ describe('sources', () => {
   it('lists uploads, the watch folder and each source by name with a health word', async () => {
     mockedGet.mockResolvedValue({
       data: [
-        source('s2', 'Scanner inbox', { source_type: 'local_folder', validation_status: 'warning' }),
+        source('s2', 'Scanner inbox', {
+          source_type: 'local_folder',
+          validation_status: 'warning',
+        }),
         source('s1', 'Nextcloud', { status: 'error' }),
         source('s3', 'Archive bucket', { source_type: 's3', enabled: false }),
       ],
@@ -145,20 +156,30 @@ describe('sources', () => {
   it('marks the open source and section', async () => {
     mockedGet.mockResolvedValue({ data: [source('s1', 'Nextcloud')] } as never);
     renderShell({ path: '/sources?section=connections&source=s1' });
-    expect(await within(sources()).findByRole('link', { name: /Nextcloud/ })).toHaveAttribute('aria-current', 'page');
-    expect(within(sources()).getByRole('link', { name: 'Uploads' })).not.toHaveAttribute('aria-current');
+    expect(await within(sources()).findByRole('link', { name: /Nextcloud/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(sources()).getByRole('link', { name: 'Uploads' })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('marks the watch folder when that section is open', async () => {
     renderShell({ path: '/sources?section=watch' });
     await waitFor(() =>
-      expect(within(sources()).getByRole('link', { name: 'Watch folder' })).toHaveAttribute('aria-current', 'page'),
+      expect(within(sources()).getByRole('link', { name: 'Watch folder' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
     );
   });
 
   it('reloads when a screen announces a source change', async () => {
     renderShell();
-    await waitFor(() => expect(mockedGet.mock.calls.filter(([url]) => url === '/sources')).toHaveLength(1));
+    await waitFor(() =>
+      expect(mockedGet.mock.calls.filter(([url]) => url === '/sources')).toHaveLength(1),
+    );
     mockedGet.mockResolvedValue({ data: [source('s9', 'New share')] } as never);
     await act(async () => {
       window.dispatchEvent(new CustomEvent(SOURCES_CHANGED_EVENT));
@@ -171,9 +192,15 @@ describe('sources', () => {
     expect(sourceHealth({ enabled: true, status: 'syncing' })).toBe('syncing');
     expect(sourceHealth({ enabled: true, status: 'error' })).toBe('error');
     expect(sourceHealth({ enabled: false, status: 'error' })).toBe('off');
-    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'warning' })).toBe('check');
-    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'critical' })).toBe('error');
-    expect(sourceHealth({ enabled: true, status: 'syncing', validation_status: 'critical' })).toBe('syncing');
+    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'warning' })).toBe(
+      'check',
+    );
+    expect(sourceHealth({ enabled: true, status: 'idle', validation_status: 'critical' })).toBe(
+      'error',
+    );
+    expect(sourceHealth({ enabled: true, status: 'syncing', validation_status: 'critical' })).toBe(
+      'syncing',
+    );
   });
 });
 
@@ -185,7 +212,9 @@ describe('phone drawer', () => {
     renderShell();
     expect(screen.queryByRole('navigation', { name: 'Collections' })).not.toBeInTheDocument();
     const open = screen.getByRole('button', { name: 'Open menu' });
-    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Readur home' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Readur home' }),
+    ).toBeInTheDocument();
     await user.click(open);
     const drawer = await screen.findByRole('dialog', { name: 'Menu' });
     expect(within(drawer).getByRole('navigation', { name: 'Collections' })).toBeInTheDocument();
@@ -199,7 +228,9 @@ describe('phone drawer', () => {
     const drawer = await screen.findByRole('dialog', { name: 'Menu' });
     await user.click(within(drawer).getByRole('link', { name: 'Settings' }));
     expect(location()).toHaveTextContent('/settings');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument(),
+    );
   });
 
   it('closes with the close button', async () => {
@@ -207,22 +238,32 @@ describe('phone drawer', () => {
     renderShell();
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await user.click(await screen.findByRole('button', { name: 'Close menu' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument(),
+    );
   });
 });
 
 describe('library count and source icons', () => {
   it('shows the library total beside Library in the main navigation', async () => {
-    mockedGet.mockImplementation((url: string) =>
-      Promise.resolve(
-        url === '/documents'
-          ? { data: { documents: [], pagination: { total: 1284, limit: 1, offset: 0, has_more: true } } }
-          : { data: [] },
-      ) as never,
+    mockedGet.mockImplementation(
+      (url: string) =>
+        Promise.resolve(
+          url === '/documents'
+            ? {
+                data: {
+                  documents: [],
+                  pagination: { total: 1284, limit: 1, offset: 0, has_more: true },
+                },
+              }
+            : { data: [] },
+        ) as never,
     );
     renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    await waitFor(() => expect(within(nav).getByRole('link', { name: /^Library/ })).toHaveTextContent('1,284'));
+    await waitFor(() =>
+      expect(within(nav).getByRole('link', { name: /^Library/ })).toHaveTextContent('1,284'),
+    );
   });
 
   it('shows no count until the total has loaded', () => {
@@ -233,14 +274,25 @@ describe('library count and source icons', () => {
   });
 
   it('marks uploads, the watch folder and each source with a type icon tile', async () => {
-    mockedGet.mockImplementation((url: string) =>
-      Promise.resolve(url === '/sources' ? { data: [source('s1', 'Nextcloud')] } : { data: [] }) as never,
+    mockedGet.mockImplementation(
+      (url: string) =>
+        Promise.resolve(
+          url === '/sources' ? { data: [source('s1', 'Nextcloud')] } : { data: [] },
+        ) as never,
     );
     renderShell();
     const link = await within(sources()).findByRole('link', { name: /Nextcloud/ });
     expect(link.querySelector('[data-tile] svg')).not.toBeNull();
-    expect(within(sources()).getByRole('link', { name: /Uploads/ }).querySelector('[data-tile] svg')).not.toBeNull();
-    expect(within(sources()).getByRole('link', { name: /Watch folder/ }).querySelector('[data-tile] svg')).not.toBeNull();
+    expect(
+      within(sources())
+        .getByRole('link', { name: /Uploads/ })
+        .querySelector('[data-tile] svg'),
+    ).not.toBeNull();
+    expect(
+      within(sources())
+        .getByRole('link', { name: /Watch folder/ })
+        .querySelector('[data-tile] svg'),
+    ).not.toBeNull();
   });
 });
 
@@ -248,8 +300,13 @@ describe('sources polling while a sync runs', () => {
   it('checks every 10 seconds while a source is syncing, so the sync toast starts and ends promptly', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      mockedGet.mockImplementation((url: string) =>
-        Promise.resolve(url === '/sources' ? { data: [source('s1', 'Nextcloud', { status: 'syncing' })] } : { data: [] }) as never,
+      mockedGet.mockImplementation(
+        (url: string) =>
+          Promise.resolve(
+            url === '/sources'
+              ? { data: [source('s1', 'Nextcloud', { status: 'syncing' })] }
+              : { data: [] },
+          ) as never,
       );
       renderShell();
       const calls = () => mockedGet.mock.calls.filter(([url]) => url === '/sources').length;

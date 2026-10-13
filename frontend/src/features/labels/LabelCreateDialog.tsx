@@ -44,7 +44,13 @@ function initialState(editing: LabelData | undefined, prefilledName: string): Fo
       icon: editing.icon ?? '',
     };
   }
-  return { name: prefilledName, description: '', color: DEFAULT_LABEL_COLOR, background_color: '', icon: '' };
+  return {
+    name: prefilledName,
+    description: '',
+    color: DEFAULT_LABEL_COLOR,
+    background_color: '',
+    icon: '',
+  };
 }
 
 function errorText(error: unknown): string | null {
@@ -57,7 +63,13 @@ function errorText(error: unknown): string | null {
 }
 
 /** Create or edit a label: name, description, colour and an optional icon, with a live preview. */
-function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editingLabel }: LabelCreateDialogProps) {
+function LabelCreateDialog({
+  open,
+  onClose,
+  onSubmit,
+  prefilledName = '',
+  editingLabel,
+}: LabelCreateDialogProps) {
   const { t } = useTranslation();
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -97,7 +109,9 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
       onClose();
     } catch (error) {
       console.error('Failed to save label:', error);
-      setNameError(errorText(error) ?? t('labels.errors.serverError', 'Server error. Please try again later.'));
+      setNameError(
+        errorText(error) ?? t('labels.errors.serverError', 'Server error. Please try again later.'),
+      );
     } finally {
       setSaving(false);
     }
@@ -122,7 +136,6 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
     description: form.description,
     color: colorValid ? form.color : DEFAULT_LABEL_COLOR,
     icon: form.icon || undefined,
-    is_system: false,
     created_at: '',
     updated_at: '',
   };
@@ -141,7 +154,11 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
         if (!next) close();
       }}
       isDismissable={!saving}
-      title={isEditing ? t('labels.create.editTitle', 'Edit Label') : t('labels.create.title', 'Create New Label')}
+      title={
+        isEditing
+          ? t('labels.create.editTitle', 'Edit Label')
+          : t('labels.create.title', 'Create New Label')
+      }
       actions={
         <>
           <Button variant="ghost" onPress={close} isDisabled={saving}>
@@ -159,7 +176,14 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
         </>
       }
     >
-      <form ref={formRef} id={formId} className={styles.form} onSubmit={handleSubmit} onKeyDown={submitOnEnter} noValidate>
+      <form
+        ref={formRef}
+        id={formId}
+        className={styles.form}
+        onSubmit={handleSubmit}
+        onKeyDown={submitOnEnter}
+        noValidate
+      >
         <TextField
           label={t('labels.create.nameLabel', 'Label Name')}
           value={form.name}
@@ -195,7 +219,10 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
           isDisabled={saving}
           validationBehavior="aria"
           isInvalid={!colorValid}
-          errorMessage={t('labels.errors.invalidColor', 'Invalid color format. Please use a valid hex color like #0969da.')}
+          errorMessage={t(
+            'labels.errors.invalidColor',
+            'Invalid color format. Please use a valid hex color like #0969da.',
+          )}
         />
         <RadioGroup
           className={styles.choiceGroup}
@@ -203,19 +230,30 @@ function LabelCreateDialog({ open, onClose, onSubmit, prefilledName = '', editin
           onChange={(icon) => update({ icon: icon === NO_ICON ? '' : icon })}
           isDisabled={saving}
         >
-          <RACLabel className={styles.fieldLabel}>{t('labels.create.iconLabel', 'Icon (optional)')}</RACLabel>
+          <RACLabel className={styles.fieldLabel}>
+            {t('labels.create.iconLabel', 'Icon (optional)')}
+          </RACLabel>
           <div className={styles.choices}>
             <Radio value={NO_ICON} className={styles.iconChoice}>
               {t('labels.create.iconNone', 'None')}
             </Radio>
             {LABEL_ICONS.map(({ key, icon: Icon, nameKey, fallback }) => (
-              <Radio key={key} value={key} className={styles.iconChoice} aria-label={t(nameKey, fallback)}>
+              <Radio
+                key={key}
+                value={key}
+                className={styles.iconChoice}
+                aria-label={t(nameKey, fallback)}
+              >
                 <Icon fontSize="small" />
               </Radio>
             ))}
           </div>
         </RadioGroup>
-        <div className={styles.preview} role="group" aria-label={t('labels.create.previewLabel', 'Preview')}>
+        <div
+          className={styles.preview}
+          role="group"
+          aria-label={t('labels.create.previewLabel', 'Preview')}
+        >
           <span className={styles.fieldLabel} aria-hidden="true">
             {t('labels.create.previewLabel', 'Preview')}
           </span>
