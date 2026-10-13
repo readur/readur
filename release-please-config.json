@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "rust",
+  "pull-request-title-pattern": "chore(release):${component} ${version}",
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "package-name": "readur",
+      "include-component-in-tag": false,
+      "always-update": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        }
+      ]
+    }
+  },
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance Improvements" },
+    { "type": "refactor", "section": "Code Refactoring" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "style", "section": "Styles" },
+    { "type": "test", "section": "Tests" },
+    { "type": "build", "section": "Build System" },
+    { "type": "ci", "section": "Continuous Integration" },
+    { "type": "chore", "section": "Miscellaneous Chores" },
+    { "type": "deps", "section": "Dependencies" }
+  ]
+}
