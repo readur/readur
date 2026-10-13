@@ -16,6 +16,11 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust-unit-tests:
     name: Rust unit tests

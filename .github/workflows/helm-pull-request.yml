@@ -6,6 +6,11 @@ on:
       - main
       - feature/pr-action
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build_lint_validate_diff:
     name: lint, validate and diff from main

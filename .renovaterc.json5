@@ -16,6 +16,9 @@
   ],
   dependencyDashboardTitle: "Renovate Dashboard 🤖",
   minimumReleaseAgeBehaviour: "timestamp-optional",
+  // Rebase only on conflict. The default (auto) rebases every automerge PR whenever
+  // main moves, which reruns the full CI suite on all of them at once.
+  rebaseWhen: "conflicted",
   labels: ["dependencies", "renovate"],
   lockFileMaintenance: {
     enabled: true,
@@ -35,12 +38,12 @@
       automerge: true,
       minimumReleaseAge: "3 days",
     },
-    // Keep below the automerge rule so this one wins for 0.x minors.
     {
-      description: "zer0ver: 0.x minors can break at any time, don't automerge them",
-      matchUpdateTypes: ["minor"],
+      description: "zer0ver: Renovate counts a 0.x minor bump as major; auto-merge it like any other update once every CI check passes",
+      matchUpdateTypes: ["major"],
       matchCurrentVersion: "/^v?0\\./",
-      automerge: false,
+      automerge: true,
+      minimumReleaseAge: "3 days",
     },
   ],
   customManagers: [
