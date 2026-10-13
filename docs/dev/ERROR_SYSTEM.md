@@ -43,7 +43,7 @@ The following table provides a comprehensive overview of all error types, when t
 | **ApiError** | `errors::mod` | Generic API errors when specific types don't apply | Rate limiting, payload validation, generic server errors | `BAD_REQUEST`, `NOT_FOUND`, `UNAUTHORIZED`, `INTERNAL_SERVER_ERROR` | 400, 401, 404, 500 |
 | **UserError** | `errors::user` | User management and authentication operations | Registration, login, profile updates, permissions | `USER_NOT_FOUND`, `USER_DUPLICATE_USERNAME`, `USER_PERMISSION_DENIED` | 400, 401, 403, 404, 409 |
 | **SourceError** | `errors::source` | File source operations (WebDAV, S3, Local Folder) | Source configuration, sync operations, connection issues | `SOURCE_CONNECTION_FAILED`, `SOURCE_AUTH_FAILED`, `SOURCE_SYNC_IN_PROGRESS` | 400, 401, 404, 409, 503 |
-| **LabelError** | `errors::label` | Document labeling and label management | Creating/editing labels, label assignment, system labels | `LABEL_DUPLICATE_NAME`, `LABEL_IN_USE`, `LABEL_SYSTEM_MODIFICATION` | 400, 403, 404, 409 |
+| **LabelError** | `errors::label` | Document labeling and label management | Creating/editing labels, label assignment | `LABEL_DUPLICATE_NAME`, `LABEL_IN_USE` | 400, 403, 404, 409 |
 | **SettingsError** | `errors::settings` | Application and user settings validation | OCR configuration, preferences, validation | `SETTINGS_INVALID_LANGUAGE`, `SETTINGS_VALUE_OUT_OF_RANGE`, `SETTINGS_READ_ONLY` | 400, 403, 404 |
 | **SearchError** | `errors::search` | Document search and indexing operations | Search queries, index operations, result processing | `SEARCH_QUERY_TOO_SHORT`, `SEARCH_INDEX_UNAVAILABLE`, `SEARCH_TOO_MANY_RESULTS` | 400, 503, 429 |
 | **OcrError** | `ocr::error` | OCR processing operations | Tesseract operations, image processing, language detection | `OCR_NOT_INSTALLED`, `OCR_LANG_MISSING`, `OCR_TIMEOUT` | 400, 500, 503 |
@@ -72,8 +72,8 @@ The following table provides a comprehensive overview of all error types, when t
 #### **LabelError** - Label Management
 - **Use when**: Operations involve document labels or label management
 - **Best for**: Label CRUD operations, label assignment to documents
-- **Covers**: Label validation, system label protection, usage tracking
-- **Example**: Duplicate label names, modifying system labels, deleting used labels
+- **Covers**: Label validation, usage tracking
+- **Example**: Duplicate label names, deleting used labels
 
 #### **SettingsError** - Configuration & Settings
 - **Use when**: Operations involve application or user settings
@@ -199,13 +199,12 @@ Handles label management:
 ```rust
 // Examples
 LabelError::DuplicateName { name: "Important" }
-LabelError::SystemLabelModification { name: "system-label" }
 LabelError::InvalidColor { color: "#gggggg" }
 LabelError::LabelInUse { document_count: 42 }
 LabelError::MaxLabelsReached { max_labels: 100 }
 ```
 
-**Error Codes**: `LABEL_DUPLICATE_NAME`, `LABEL_SYSTEM_MODIFICATION`, `LABEL_IN_USE`, etc.
+**Error Codes**: `LABEL_DUPLICATE_NAME`, `LABEL_IN_USE`, etc.
 
 ### SettingsError
 
@@ -462,7 +461,7 @@ All error types follow consistent naming conventions for error codes:
 | **ApiError** | None | `BAD_REQUEST`, `NOT_FOUND`, `UNAUTHORIZED` |
 | **UserError** | `USER_` | `USER_NOT_FOUND`, `USER_DUPLICATE_USERNAME`, `USER_PERMISSION_DENIED` |
 | **SourceError** | `SOURCE_` | `SOURCE_CONNECTION_FAILED`, `SOURCE_AUTH_FAILED`, `SOURCE_CONFIG_INVALID` |
-| **LabelError** | `LABEL_` | `LABEL_DUPLICATE_NAME`, `LABEL_IN_USE`, `LABEL_SYSTEM_MODIFICATION` |
+| **LabelError** | `LABEL_` | `LABEL_DUPLICATE_NAME`, `LABEL_IN_USE` |
 | **SettingsError** | `SETTINGS_` | `SETTINGS_INVALID_LANGUAGE`, `SETTINGS_VALUE_OUT_OF_RANGE` |
 | **SearchError** | `SEARCH_` | `SEARCH_QUERY_TOO_SHORT`, `SEARCH_INDEX_UNAVAILABLE` |
 | **OcrError** | `OCR_` | `OCR_NOT_INSTALLED`, `OCR_LANG_MISSING`, `OCR_TIMEOUT` |
