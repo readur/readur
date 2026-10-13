@@ -34,15 +34,29 @@ impl TestClient {
         }
     }
 
-    async fn register_user(&mut self, username: &str, email: &str, password: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn register_user(
+        &mut self,
+        username: &str,
+        email: &str,
+        password: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Create the account in the server's database
-        readur::test_utils::create_live_server_user(username, email, password, readur::models::UserRole::User)
-            .await
-            .map_err(|e| format!("Registration failed: {}", e))?;
+        readur::test_utils::create_live_server_user(
+            username,
+            email,
+            password,
+            readur::models::UserRole::User,
+        )
+        .await
+        .map_err(|e| format!("Registration failed: {}", e))?;
         Ok(())
     }
 
-    async fn login(&mut self, username: &str, password: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn login(
+        &mut self,
+        username: &str,
+        password: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let response = self
             .client
             .post(&format!("{}/api/auth/login", self.base_url))
@@ -75,7 +89,13 @@ impl TestClient {
         headers
     }
 
-    async fn create_label(&self, name: &str, description: Option<&str>, color: &str, icon: Option<&str>) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn create_label(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        color: &str,
+        icon: Option<&str>,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
         let mut payload = json!({
             "name": name,
             "color": color
@@ -109,7 +129,10 @@ impl TestClient {
         }
     }
 
-    async fn get_labels(&self, include_counts: bool) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    async fn get_labels(
+        &self,
+        include_counts: bool,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         let url = if include_counts {
             format!("{}/api/labels?include_counts=true", self.base_url)
         } else {
@@ -133,7 +156,11 @@ impl TestClient {
         }
     }
 
-    async fn update_label(&self, label_id: &str, updates: Value) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn update_label(
+        &self,
+        label_id: &str,
+        updates: Value,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
         let mut request = self
             .client
             .put(&format!("{}/api/labels/{}", self.base_url, label_id))
@@ -173,11 +200,17 @@ impl TestClient {
         }
     }
 
-    async fn upload_document(&self, content: &[u8], filename: &str) -> Result<Value, Box<dyn std::error::Error>> {
-        let form = reqwest::multipart::Form::new()
-            .part("file", reqwest::multipart::Part::bytes(content.to_vec())
+    async fn upload_document(
+        &self,
+        content: &[u8],
+        filename: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(content.to_vec())
                 .file_name(filename.to_string())
-                .mime_str("text/plain")?);
+                .mime_str("text/plain")?,
+        );
 
         let mut request = self
             .client
@@ -199,10 +232,15 @@ impl TestClient {
         }
     }
 
-    async fn assign_label_to_document(&self, document_id: &str, label_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let mut request = self
-            .client
-            .post(&format!("{}/api/labels/documents/{}/labels/{}", self.base_url, document_id, label_id));
+    async fn assign_label_to_document(
+        &self,
+        document_id: &str,
+        label_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut request = self.client.post(&format!(
+            "{}/api/labels/documents/{}/labels/{}",
+            self.base_url, document_id, label_id
+        ));
 
         for (key, value) in self.get_auth_headers() {
             request = request.header(&key, &value);
@@ -218,10 +256,14 @@ impl TestClient {
         }
     }
 
-    async fn get_document_labels(&self, document_id: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
-        let mut request = self
-            .client
-            .get(&format!("{}/api/labels/documents/{}", self.base_url, document_id));
+    async fn get_document_labels(
+        &self,
+        document_id: &str,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+        let mut request = self.client.get(&format!(
+            "{}/api/labels/documents/{}",
+            self.base_url, document_id
+        ));
 
         for (key, value) in self.get_auth_headers() {
             request = request.header(&key, &value);
@@ -238,14 +280,21 @@ impl TestClient {
         }
     }
 
-    async fn update_document_labels(&self, document_id: &str, label_ids: Vec<&str>) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    async fn update_document_labels(
+        &self,
+        document_id: &str,
+        label_ids: Vec<&str>,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         let payload = json!({
             "label_ids": label_ids
         });
 
         let mut request = self
             .client
-            .put(&format!("{}/api/labels/documents/{}", self.base_url, document_id))
+            .put(&format!(
+                "{}/api/labels/documents/{}",
+                self.base_url, document_id
+            ))
             .json(&payload);
 
         for (key, value) in self.get_auth_headers() {
@@ -263,10 +312,15 @@ impl TestClient {
         }
     }
 
-    async fn remove_label_from_document(&self, document_id: &str, label_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let mut request = self
-            .client
-            .delete(&format!("{}/api/labels/documents/{}/labels/{}", self.base_url, document_id, label_id));
+    async fn remove_label_from_document(
+        &self,
+        document_id: &str,
+        label_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut request = self.client.delete(&format!(
+            "{}/api/labels/documents/{}/labels/{}",
+            self.base_url, document_id, label_id
+        ));
 
         for (key, value) in self.get_auth_headers() {
             request = request.header(&key, &value);
@@ -286,7 +340,7 @@ impl TestClient {
 #[tokio::test]
 async fn test_label_crud_operations() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TestClient::new();
-    
+
     // Check server health
     client.check_server_health().await?;
 
@@ -294,23 +348,26 @@ async fn test_label_crud_operations() -> Result<(), Box<dyn std::error::Error>> 
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     let username = format!("label_test_user_{}", timestamp);
     let email = format!("label_test_{}@example.com", timestamp);
-    
-    client.register_user(&username, &email, "test_password").await?;
+
+    client
+        .register_user(&username, &email, "test_password")
+        .await?;
     client.login(&username, "test_password").await?;
 
     // Test: Create label
     println!("Testing label creation...");
-    let created_label = client.create_label(
-        "Test Label",
-        Some("A test label for integration testing"),
-        "#ff0000",
-        Some("star")
-    ).await?;
+    let created_label = client
+        .create_label(
+            "Test Label",
+            Some("A test label for integration testing"),
+            "#ff0000",
+            Some("star"),
+        )
+        .await?;
 
     assert_eq!(created_label["name"], "Test Label");
     assert_eq!(created_label["color"], "#ff0000");
     assert_eq!(created_label["icon"], "star");
-    assert_eq!(created_label["is_system"], false);
 
     let label_id = created_label["id"].as_str().unwrap();
 
@@ -318,14 +375,14 @@ async fn test_label_crud_operations() -> Result<(), Box<dyn std::error::Error>> 
     println!("Testing label retrieval...");
     let labels = client.get_labels(false).await?;
     assert!(labels.len() >= 1);
-    
+
     let found_label = labels.iter().find(|l| l["id"] == label_id);
     assert!(found_label.is_some());
 
     // Test: Get labels with counts
     let labels_with_counts = client.get_labels(true).await?;
     assert!(labels_with_counts.len() >= 1);
-    
+
     let found_label_with_count = labels_with_counts.iter().find(|l| l["id"] == label_id);
     assert!(found_label_with_count.is_some());
     assert_eq!(found_label_with_count.unwrap()["document_count"], 0);
@@ -359,7 +416,7 @@ async fn test_label_crud_operations() -> Result<(), Box<dyn std::error::Error>> 
 #[tokio::test]
 async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TestClient::new();
-    
+
     // Check server health
     client.check_server_health().await?;
 
@@ -367,15 +424,38 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     let username = format!("doc_label_test_user_{}", timestamp);
     let email = format!("doc_label_test_{}@example.com", timestamp);
-    
-    client.register_user(&username, &email, "test_password").await?;
+
+    client
+        .register_user(&username, &email, "test_password")
+        .await?;
     client.login(&username, "test_password").await?;
 
     // Create labels
     println!("Creating test labels...");
-    let label1 = client.create_label("Important", Some("High priority items"), "#ff0000", Some("star")).await?;
-    let label2 = client.create_label("Work", Some("Work-related documents"), "#0000ff", Some("work")).await?;
-    let label3 = client.create_label("Personal", Some("Personal documents"), "#00ff00", Some("person")).await?;
+    let label1 = client
+        .create_label(
+            "Urgent",
+            Some("High priority items"),
+            "#ff0000",
+            Some("star"),
+        )
+        .await?;
+    let label2 = client
+        .create_label(
+            "Projects",
+            Some("Work-related documents"),
+            "#0000ff",
+            Some("work"),
+        )
+        .await?;
+    let label3 = client
+        .create_label(
+            "Family",
+            Some("Personal documents"),
+            "#00ff00",
+            Some("person"),
+        )
+        .await?;
 
     let label1_id = label1["id"].as_str().unwrap();
     let label2_id = label2["id"].as_str().unwrap();
@@ -384,12 +464,16 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
     // Upload a test document
     println!("Uploading test document...");
     let document_content = b"This is a test document for label assignment testing.";
-    let document = client.upload_document(document_content, "test_document.txt").await?;
+    let document = client
+        .upload_document(document_content, "test_document.txt")
+        .await?;
     let document_id = document["id"].as_str().unwrap();
 
     // Test: Assign single label
     println!("Testing single label assignment...");
-    client.assign_label_to_document(document_id, label1_id).await?;
+    client
+        .assign_label_to_document(document_id, label1_id)
+        .await?;
 
     let document_labels = client.get_document_labels(document_id).await?;
     assert_eq!(document_labels.len(), 1);
@@ -397,17 +481,22 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
 
     // Test: Assign additional label
     println!("Testing additional label assignment...");
-    client.assign_label_to_document(document_id, label2_id).await?;
+    client
+        .assign_label_to_document(document_id, label2_id)
+        .await?;
 
     let document_labels = client.get_document_labels(document_id).await?;
     assert_eq!(document_labels.len(), 2);
 
     // Test: Update document labels (replace)
     println!("Testing label replacement...");
-    let new_labels = client.update_document_labels(document_id, vec![label2_id, label3_id]).await?;
+    let new_labels = client
+        .update_document_labels(document_id, vec![label2_id, label3_id])
+        .await?;
     assert_eq!(new_labels.len(), 2);
-    
-    let label_ids: Vec<&str> = new_labels.iter()
+
+    let label_ids: Vec<&str> = new_labels
+        .iter()
         .map(|l| l["id"].as_str().unwrap())
         .collect();
     assert!(label_ids.contains(&label2_id));
@@ -416,7 +505,9 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
 
     // Test: Remove single label
     println!("Testing single label removal...");
-    client.remove_label_from_document(document_id, label2_id).await?;
+    client
+        .remove_label_from_document(document_id, label2_id)
+        .await?;
 
     let document_labels = client.get_document_labels(document_id).await?;
     assert_eq!(document_labels.len(), 1);
@@ -432,7 +523,7 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
     // Test: Verify label usage counts
     println!("Testing label usage counts...");
     let labels_with_counts = client.get_labels(true).await?;
-    
+
     for label in labels_with_counts {
         let label_id = label["id"].as_str().unwrap();
         if label_id == label1_id || label_id == label2_id || label_id == label3_id {
@@ -445,68 +536,63 @@ async fn test_document_label_assignment() -> Result<(), Box<dyn std::error::Erro
 }
 
 #[tokio::test]
-async fn test_system_labels_access() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_default_labels_access() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TestClient::new();
-    
+
     // Check server health
     client.check_server_health().await?;
 
     // Create unique user
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-    let username = format!("system_label_test_user_{}", timestamp);
-    let email = format!("system_label_test_{}@example.com", timestamp);
-    
-    client.register_user(&username, &email, "test_password").await?;
+    let username = format!("default_label_test_user_{}", timestamp);
+    let email = format!("default_label_test_{}@example.com", timestamp);
+
+    client
+        .register_user(&username, &email, "test_password")
+        .await?;
     client.login(&username, "test_password").await?;
 
-    // Test: Get labels (should include system labels)
-    println!("Testing system labels access...");
+    // A new account starts with the five default labels, as its own
+    println!("Testing default labels...");
     let labels = client.get_labels(false).await?;
-    
-    // Should have system labels
-    let system_labels: Vec<&Value> = labels.iter()
-        .filter(|l| l["is_system"].as_bool().unwrap_or(false))
-        .collect();
-    
-    assert!(system_labels.len() > 0, "Should have system labels");
+    let mut names: Vec<&str> = labels.iter().map(|l| l["name"].as_str().unwrap()).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        vec!["Archive", "Important", "Personal", "To Review", "Work"]
+    );
+    let owner = labels[0]["user_id"].clone();
+    assert!(
+        labels.iter().all(|l| l["user_id"] == owner),
+        "every default belongs to the new user"
+    );
 
-    // Check for some expected system labels
-    let system_label_names: Vec<&str> = system_labels.iter()
-        .map(|l| l["name"].as_str().unwrap())
-        .collect();
-
-    let expected_system_labels = vec!["Important", "Archive", "Personal", "Work"];
-    for expected in expected_system_labels {
-        assert!(
-            system_label_names.contains(&expected),
-            "Expected system label '{}' not found. Available: {:?}",
-            expected,
-            system_label_names
-        );
-    }
-
-    // Test: Upload document and assign system label
-    println!("Testing system label assignment...");
-    let document_content = b"This is a test document for system label assignment.";
-    let document = client.upload_document(document_content, "system_label_test.txt").await?;
+    // A default label can go on a document and come off again
+    println!("Testing default label assignment and removal...");
+    let document_content = b"This is a test document for default label assignment.";
+    let document = client
+        .upload_document(document_content, "default_label_test.txt")
+        .await?;
     let document_id = document["id"].as_str().unwrap();
-
-    // Find a system label to assign
-    let important_label = system_labels.iter()
+    let important_label_id = labels
+        .iter()
         .find(|l| l["name"] == "Important")
-        .expect("Important system label not found");
-    
-    let important_label_id = important_label["id"].as_str().unwrap();
+        .and_then(|l| l["id"].as_str())
+        .expect("Important label not found");
 
-    // Assign system label to document
-    client.assign_label_to_document(document_id, important_label_id).await?;
-
+    client
+        .assign_label_to_document(document_id, important_label_id)
+        .await?;
     let document_labels = client.get_document_labels(document_id).await?;
     assert_eq!(document_labels.len(), 1);
     assert_eq!(document_labels[0]["id"], important_label_id);
-    assert_eq!(document_labels[0]["is_system"], true);
 
-    println!("System labels access test completed successfully!");
+    client
+        .remove_label_from_document(document_id, important_label_id)
+        .await?;
+    assert!(client.get_document_labels(document_id).await?.is_empty());
+
+    println!("Default labels access test completed successfully!");
     Ok(())
 }
 
@@ -514,7 +600,7 @@ async fn test_system_labels_access() -> Result<(), Box<dyn std::error::Error>> {
 #[ignore = "Requires server restart to pick up validation changes"]
 async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TestClient::new();
-    
+
     // Check server health
     client.check_server_health().await?;
 
@@ -522,15 +608,21 @@ async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     let username = format!("validation_test_user_{}", timestamp);
     let email = format!("validation_test_{}@example.com", timestamp);
-    
-    client.register_user(&username, &email, "test_password").await?;
+
+    client
+        .register_user(&username, &email, "test_password")
+        .await?;
     client.login(&username, "test_password").await?;
 
     // Test: Invalid color format should fail
     println!("Testing invalid color validation...");
-    let response = client.client
+    let response = client
+        .client
         .post(&format!("{}/api/labels", client.base_url))
-        .header("Authorization", format!("Bearer {}", client.auth_token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!("Bearer {}", client.auth_token.as_ref().unwrap()),
+        )
         .json(&json!({
             "name": "Invalid Color",
             "color": "invalid_color"
@@ -538,13 +630,20 @@ async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
         .send()
         .await?;
 
-    assert!(!response.status().is_success(), "Should reject invalid color format");
+    assert!(
+        !response.status().is_success(),
+        "Should reject invalid color format"
+    );
 
     // Test: Empty name should fail
     println!("Testing empty name validation...");
-    let response = client.client
+    let response = client
+        .client
         .post(&format!("{}/api/labels", client.base_url))
-        .header("Authorization", format!("Bearer {}", client.auth_token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!("Bearer {}", client.auth_token.as_ref().unwrap()),
+        )
         .json(&json!({
             "name": "",
             "color": "#ff0000"
@@ -557,14 +656,20 @@ async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
     // Test: Duplicate name should fail
     println!("Testing duplicate name validation...");
     let label_name = "Duplicate Test";
-    
+
     // Create first label
-    client.create_label(label_name, None, "#ff0000", None).await?;
-    
+    client
+        .create_label(label_name, None, "#ff0000", None)
+        .await?;
+
     // Try to create duplicate
-    let response = client.client
+    let response = client
+        .client
         .post(&format!("{}/api/labels", client.base_url))
-        .header("Authorization", format!("Bearer {}", client.auth_token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!("Bearer {}", client.auth_token.as_ref().unwrap()),
+        )
         .json(&json!({
             "name": label_name,
             "color": "#00ff00"
@@ -572,7 +677,10 @@ async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
         .send()
         .await?;
 
-    assert!(!response.status().is_success(), "Should reject duplicate name");
+    assert!(
+        !response.status().is_success(),
+        "Should reject duplicate name"
+    );
 
     println!("Label validation test completed successfully!");
     Ok(())
@@ -582,30 +690,36 @@ async fn test_label_validation() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_label_permissions() -> Result<(), Box<dyn std::error::Error>> {
     let mut client1 = TestClient::new();
     let mut client2 = TestClient::new();
-    
+
     // Check server health
     client1.check_server_health().await?;
 
     // Create two unique users
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-    
+
     let username1 = format!("perm_test_user1_{}", timestamp);
     let email1 = format!("perm_test1_{}@example.com", timestamp);
-    
+
     let username2 = format!("perm_test_user2_{}", timestamp);
     let email2 = format!("perm_test2_{}@example.com", timestamp);
-    
-    client1.register_user(&username1, &email1, "test_password").await?;
+
+    client1
+        .register_user(&username1, &email1, "test_password")
+        .await?;
     client1.login(&username1, "test_password").await?;
-    
+
     sleep(Duration::from_millis(100)).await; // Small delay to ensure unique timestamps
-    
-    client2.register_user(&username2, &email2, "test_password").await?;
+
+    client2
+        .register_user(&username2, &email2, "test_password")
+        .await?;
     client2.login(&username2, "test_password").await?;
 
     // User 1 creates a label
     println!("Testing cross-user label access permissions...");
-    let user1_label = client1.create_label("User 1 Label", None, "#ff0000", None).await?;
+    let user1_label = client1
+        .create_label("User 1 Label", None, "#ff0000", None)
+        .await?;
     let user1_label_id = user1_label["id"].as_str().unwrap();
 
     // User 2 should not be able to update User 1's label
@@ -615,24 +729,44 @@ async fn test_label_permissions() -> Result<(), Box<dyn std::error::Error>> {
         "color": "#000000"
     });
 
-    let response = client2.client
-        .put(&format!("{}/api/labels/{}", client2.base_url, user1_label_id))
-        .header("Authorization", format!("Bearer {}", client2.auth_token.as_ref().unwrap()))
+    let response = client2
+        .client
+        .put(&format!(
+            "{}/api/labels/{}",
+            client2.base_url, user1_label_id
+        ))
+        .header(
+            "Authorization",
+            format!("Bearer {}", client2.auth_token.as_ref().unwrap()),
+        )
         .json(&updates)
         .send()
         .await?;
 
-    assert!(!response.status().is_success(), "User 2 should not be able to update User 1's label");
+    assert!(
+        !response.status().is_success(),
+        "User 2 should not be able to update User 1's label"
+    );
 
     // User 2 should not be able to delete User 1's label
     println!("Testing unauthorized label deletion...");
-    let response = client2.client
-        .delete(&format!("{}/api/labels/{}", client2.base_url, user1_label_id))
-        .header("Authorization", format!("Bearer {}", client2.auth_token.as_ref().unwrap()))
+    let response = client2
+        .client
+        .delete(&format!(
+            "{}/api/labels/{}",
+            client2.base_url, user1_label_id
+        ))
+        .header(
+            "Authorization",
+            format!("Bearer {}", client2.auth_token.as_ref().unwrap()),
+        )
         .send()
         .await?;
 
-    assert!(!response.status().is_success(), "User 2 should not be able to delete User 1's label");
+    assert!(
+        !response.status().is_success(),
+        "User 2 should not be able to delete User 1's label"
+    );
 
     // User 1's label should still exist and be unchanged
     println!("Verifying label integrity...");

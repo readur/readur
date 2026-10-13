@@ -3,8 +3,9 @@ use chrono::Utc;
 use sqlx::{postgres::PgRow, Row};
 use uuid::Uuid;
 
-use crate::models::{AuthProvider, CreateUser, User, UserRole};
+use super::labels::seed_default_labels;
 use super::Database;
+use crate::models::{AuthProvider, CreateUser, User, UserRole};
 
 /// bcrypt work factor used for all stored password hashes.
 pub const BCRYPT_COST: u32 = 12;
@@ -19,7 +20,10 @@ fn user_from_row(row: &PgRow) -> User {
         username: row.get("username"),
         email: row.get("email"),
         password_hash: row.get("password_hash"),
-        role: row.get::<String, _>("role").try_into().unwrap_or(UserRole::User),
+        role: row
+            .get::<String, _>("role")
+            .try_into()
+            .unwrap_or(UserRole::User),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         oidc_subject: row.get("oidc_subject"),
@@ -44,6 +48,7 @@ impl Database {
     pub async fn create_user_with_status(&self, user: CreateUser, is_active: bool) -> Result<User> {
         let password_hash = bcrypt::hash(&user.password, BCRYPT_COST)?;
         let now = Utc::now();
+        let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query(&format!(
             "INSERT INTO users (username, email, password_hash, role, created_at, updated_at, auth_provider, is_active)
@@ -58,17 +63,22 @@ impl Database {
         .bind(now)
         .bind(AuthProvider::Local.to_string())
         .bind(is_active)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+        let created = user_from_row(&row);
+        seed_default_labels(&mut tx, created.id).await?;
+        tx.commit().await?;
 
-        Ok(user_from_row(&row))
+        Ok(created)
     }
 
     pub async fn get_user_by_username(&self, username: &str) -> Result<Option<User>> {
-        let row = sqlx::query(&format!("SELECT {USER_COLUMNS} FROM users WHERE username = $1"))
-            .bind(username)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(&format!(
+            "SELECT {USER_COLUMNS} FROM users WHERE username = $1"
+        ))
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.as_ref().map(user_from_row))
     }
 
@@ -81,9 +91,11 @@ impl Database {
     }
 
     pub async fn get_all_users(&self) -> Result<Vec<User>> {
-        let rows = sqlx::query(&format!("SELECT {USER_COLUMNS} FROM users ORDER BY created_at DESC"))
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(&format!(
+            "SELECT {USER_COLUMNS} FROM users ORDER BY created_at DESC"
+        ))
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows.iter().map(user_from_row).collect())
     }
 
@@ -97,7 +109,10 @@ impl Database {
         password: Option<String>,
         is_active: Option<bool>,
     ) -> Result<User> {
-        let user = self.get_user_by_id(id).await?.ok_or_else(|| anyhow::anyhow!("User not found"))?;
+        let user = self
+            .get_user_by_id(id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("User not found"))?;
 
         let username = username.unwrap_or(user.username);
         let email = email.unwrap_or(user.email);
@@ -148,10 +163,12 @@ impl Database {
 
     /// Invalidate every session token issued to the user so far.
     pub async fn revoke_user_sessions(&self, id: Uuid) -> Result<()> {
-        sqlx::query("UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -164,7 +181,11 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_user_by_oidc_subject(&self, subject: &str, issuer: &str) -> Result<Option<User>> {
+    pub async fn get_user_by_oidc_subject(
+        &self,
+        subject: &str,
+        issuer: &str,
+    ) -> Result<Option<User>> {
         let row = sqlx::query(&format!(
             "SELECT {USER_COLUMNS} FROM users WHERE oidc_subject = $1 AND oidc_issuer = $2"
         ))
@@ -197,6 +218,7 @@ impl Database {
         oidc_email: &str,
     ) -> Result<User> {
         let now = Utc::now();
+        let mut tx = self.pool.begin().await?;
 
         let row = sqlx::query(&format!(
             "INSERT INTO users (username, email, role, created_at, updated_at,
@@ -213,17 +235,22 @@ impl Database {
         .bind(oidc_issuer)
         .bind(oidc_email)
         .bind(AuthProvider::Oidc.to_string())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+        let created = user_from_row(&row);
+        seed_default_labels(&mut tx, created.id).await?;
+        tx.commit().await?;
 
-        Ok(user_from_row(&row))
+        Ok(created)
     }
 
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
-        let row = sqlx::query(&format!("SELECT {USER_COLUMNS} FROM users WHERE email = $1"))
-            .bind(email)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(&format!(
+            "SELECT {USER_COLUMNS} FROM users WHERE email = $1"
+        ))
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.as_ref().map(user_from_row))
     }
 

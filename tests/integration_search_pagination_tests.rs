@@ -6,12 +6,12 @@
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use readur::test_utils::TestContext;
-    use readur::models::{CreateUser, Document, SearchRequest, UserRole};
     use chrono::Utc;
-    use uuid::Uuid;
-    use std::collections::HashSet;
+    use readur::models::{CreateUser, Document, SearchRequest, UserRole};
+    use readur::test_utils::TestContext;
     use sqlx;
+    use std::collections::HashSet;
+    use uuid::Uuid;
 
     /// Creates unique test user data with a given suffix for test isolation
     fn create_test_user_data(suffix: &str) -> CreateUser {
@@ -56,7 +56,10 @@ mod tests {
             file_path: format!("/path/to/test_{}.txt", index),
             file_size: 1024,
             mime_type: mime_type.to_string(),
-            content: Some(format!("Document {} with searchable content for pagination testing", index)),
+            content: Some(format!(
+                "Document {} with searchable content for pagination testing",
+                index
+            )),
             ocr_text: Some(format!("OCR text {} searchable pagination", index)),
             ocr_confidence: Some(95.0),
             ocr_word_count: Some(10),
@@ -94,7 +97,8 @@ mod tests {
 
             // Create 15 documents with searchable content
             for i in 0..15 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             // Search with limit=5
@@ -110,15 +114,21 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
+            let count = db
+                .count_search_documents(user.id, UserRole::User, &request)
+                .await?;
             let results = db.search_documents(user.id, &request).await?;
 
             // Total should be 15, not 5
-            assert_eq!(count, 15, "Count should be total matching docs (15), not limit (5)");
+            assert_eq!(
+                count, 15,
+                "Count should be total matching docs (15), not limit (5)"
+            );
             assert_eq!(results.len(), 5, "Results should respect the limit of 5");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -138,7 +148,8 @@ mod tests {
 
             // Create 20 documents
             for i in 0..20 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             // Check total is same across all pages
@@ -154,12 +165,19 @@ mod tests {
                     search_mode: None,
                     ..Default::default()
                 };
-                let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
-                assert_eq!(count, 20, "Total should be consistent (20) at offset {}", offset);
+                let count = db
+                    .count_search_documents(user.id, UserRole::User, &request)
+                    .await?;
+                assert_eq!(
+                    count, 20,
+                    "Total should be consistent (20) at offset {}",
+                    offset
+                );
             }
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -179,7 +197,8 @@ mod tests {
 
             // Create 17 documents (not evenly divisible by page size)
             for i in 0..17 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             let mut all_ids: HashSet<Uuid> = HashSet::new();
@@ -206,10 +225,15 @@ mod tests {
                 }
             }
 
-            assert_eq!(all_ids.len(), 17, "Should have fetched all 17 documents exactly once");
+            assert_eq!(
+                all_ids.len(),
+                17,
+                "Should have fetched all 17 documents exactly once"
+            );
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -229,12 +253,14 @@ mod tests {
 
             // Create 10 text/plain documents
             for i in 0..10 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             // Create 5 application/pdf documents
             for i in 10..15 {
-                db.create_document(create_searchable_document(user.id, i, "application/pdf")).await?;
+                db.create_document(create_searchable_document(user.id, i, "application/pdf"))
+                    .await?;
             }
 
             // Filter by text/plain only
@@ -250,8 +276,13 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
-            assert_eq!(count, 10, "Count should be 10 (only text/plain), not 15 (all docs)");
+            let count = db
+                .count_search_documents(user.id, UserRole::User, &request)
+                .await?;
+            assert_eq!(
+                count, 10,
+                "Count should be 10 (only text/plain), not 15 (all docs)"
+            );
 
             // Filter by PDF only
             let request_pdf = SearchRequest {
@@ -266,11 +297,14 @@ mod tests {
                 ..Default::default()
             };
 
-            let count_pdf = db.count_search_documents(user.id, UserRole::User, &request_pdf).await?;
+            let count_pdf = db
+                .count_search_documents(user.id, UserRole::User, &request_pdf)
+                .await?;
             assert_eq!(count_pdf, 5, "Count should be 5 (only PDFs)");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -309,14 +343,17 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
+            let count = db
+                .count_search_documents(user.id, UserRole::User, &request)
+                .await?;
             let results = db.search_documents(user.id, &request).await?;
 
             assert_eq!(count, 0, "Count should be 0 when no matches");
             assert_eq!(results.len(), 0, "Results should be empty when no matches");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -336,7 +373,8 @@ mod tests {
 
             // Create 13 documents (13 % 5 = 3 on last page)
             for i in 0..13 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             // Request last page (offset 10, should return 3 docs)
@@ -352,14 +390,21 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
+            let count = db
+                .count_search_documents(user.id, UserRole::User, &request)
+                .await?;
             let results = db.search_documents(user.id, &request).await?;
 
             assert_eq!(count, 13, "Total count should still be 13");
-            assert_eq!(results.len(), 3, "Last page should have 3 remaining documents");
+            assert_eq!(
+                results.len(),
+                3,
+                "Last page should have 3 remaining documents"
+            );
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -379,16 +424,17 @@ mod tests {
 
             // Create 25 documents
             for i in 0..25 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
 
             // Test with various limit/offset combinations
             let test_cases = vec![
-                (1, 0),    // Tiny limit
-                (100, 0),  // Large limit
-                (5, 0),    // First page
-                (5, 20),   // Near last page
-                (5, 100),  // Past end
+                (1, 0),   // Tiny limit
+                (100, 0), // Large limit
+                (5, 0),   // First page
+                (5, 20),  // Near last page
+                (5, 100), // Past end
             ];
 
             for (limit, offset) in test_cases {
@@ -404,12 +450,19 @@ mod tests {
                     ..Default::default()
                 };
 
-                let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
-                assert_eq!(count, 25, "Count should always be 25 regardless of limit={}, offset={}", limit, offset);
+                let count = db
+                    .count_search_documents(user.id, UserRole::User, &request)
+                    .await?;
+                assert_eq!(
+                    count, 25,
+                    "Count should always be 25 regardless of limit={}, offset={}",
+                    limit, offset
+                );
             }
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -433,12 +486,14 @@ mod tests {
 
             // Create 10 documents for user A
             for i in 0..10 {
-                db.create_document(create_searchable_document(user_a.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user_a.id, i, "text/plain"))
+                    .await?;
             }
 
             // Create 5 documents for user B
             for i in 10..15 {
-                db.create_document(create_searchable_document(user_b.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user_b.id, i, "text/plain"))
+                    .await?;
             }
 
             let request = SearchRequest {
@@ -454,19 +509,26 @@ mod tests {
             };
 
             // User A should see only their 10 documents
-            let count_a = db.count_search_documents(user_a.id, UserRole::User, &request).await?;
+            let count_a = db
+                .count_search_documents(user_a.id, UserRole::User, &request)
+                .await?;
             assert_eq!(count_a, 10, "User A should see only their 10 documents");
 
             // User B should see only their 5 documents
-            let count_b = db.count_search_documents(user_b.id, UserRole::User, &request).await?;
+            let count_b = db
+                .count_search_documents(user_b.id, UserRole::User, &request)
+                .await?;
             assert_eq!(count_b, 5, "User B should see only their 5 documents");
 
             // Admin should see all 15 documents
-            let count_admin = db.count_search_documents(admin.id, UserRole::Admin, &request).await?;
+            let count_admin = db
+                .count_search_documents(admin.id, UserRole::Admin, &request)
+                .await?;
             assert_eq!(count_admin, 15, "Admin should see all 15 documents");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -508,7 +570,9 @@ mod tests {
                 ..Default::default()
             };
 
-            let count_apple = db.count_search_documents(user.id, UserRole::User, &request_apple).await?;
+            let count_apple = db
+                .count_search_documents(user.id, UserRole::User, &request_apple)
+                .await?;
             let results_apple = db.search_documents(user.id, &request_apple).await?;
 
             assert_eq!(count_apple, 6, "Should find 6 documents with 'apple'");
@@ -527,11 +591,14 @@ mod tests {
                 ..Default::default()
             };
 
-            let count_orange = db.count_search_documents(user.id, UserRole::User, &request_orange).await?;
+            let count_orange = db
+                .count_search_documents(user.id, UserRole::User, &request_orange)
+                .await?;
             assert_eq!(count_orange, 4, "Should find 4 documents with 'orange'");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
@@ -553,8 +620,8 @@ mod tests {
             let label_id = Uuid::new_v4();
             sqlx::query(
                 r#"
-                INSERT INTO labels (id, user_id, name, description, color, is_system)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO labels (id, user_id, name, description, color)
+                VALUES ($1, $2, $3, $4, $5)
                 "#
             )
             .bind(label_id)
@@ -562,7 +629,6 @@ mod tests {
             .bind("important")
             .bind("Important documents")
             .bind("#ff0000")
-            .bind(false)
             .execute(db.get_pool())
             .await?;
 
@@ -638,10 +704,12 @@ mod tests {
 
             // Create mixed documents
             for i in 0..8 {
-                db.create_document(create_searchable_document(user.id, i, "text/plain")).await?;
+                db.create_document(create_searchable_document(user.id, i, "text/plain"))
+                    .await?;
             }
             for i in 8..12 {
-                db.create_document(create_searchable_document(user.id, i, "image/png")).await?;
+                db.create_document(create_searchable_document(user.id, i, "image/png"))
+                    .await?;
             }
 
             // Filter by MIME type only (no text query)
@@ -657,11 +725,14 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
+            let count = db
+                .count_search_documents(user.id, UserRole::User, &request)
+                .await?;
             assert_eq!(count, 4, "Should count 4 PNG images with empty query");
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
