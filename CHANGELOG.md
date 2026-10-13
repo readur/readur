@@ -1,0 +1,158 @@
+# Changelog
+
+## [3.1.0](https://github.com/readur/readur/compare/v3.0.0...v3.1.0) (2026-10-13)
+
+
+### Features
+
+* **container:** update image rust (1.98 → 1.99) ([#923](https://github.com/readur/readur/issues/923)) ([eb29c1f](https://github.com/readur/readur/commit/eb29c1f9c1c7836956b2568a0c069deee2f963a6))
+* **dev:** primitive gallery at /dev/ui; fix SourceBadge tile class collision ([78d6af0](https://github.com/readur/readur/commit/78d6af0955a33de7f689b7fff1332d41f12b38fd))
+* **document:** clicking an image in the drawer opens it full size in a new tab ([32eebad](https://github.com/readur/readur/commit/32eebad91df2c85815aa94880f7c0fdf50fadbdd))
+* **document:** document drawer — head, labels saved at once, preview on top, Text/Details/Comments/Share tabs ([7bc02ca](https://github.com/readur/readur/commit/7bc02ca1968923e5ff69948d21a28a39bdbc1c2e))
+* **document:** drag the dotted handle between the file and the tabs to resize them (remembered) ([9a1a275](https://github.com/readur/readur/commit/9a1a275976ec5f8f0b06b329b1241bfcd89da5c2))
+* **document:** drawer context — list registration, ?document= opener, change event ([ccca3c5](https://github.com/readur/readur/commit/ccca3c553dc508da1a83692fe12c50ff2ace1c57))
+* **document:** remove a label straight from its chip ([5d2699c](https://github.com/readur/readur/commit/5d2699cba1380496484a14a6ac9837ec77568132))
+* **document:** the drawer's actions sit in a bar along its bottom ([9fcf152](https://github.com/readur/readur/commit/9fcf15290deeb1ae2e175a2455d058d65df50409))
+* every document link opens the drawer over the current page ([75a73a9](https://github.com/readur/readur/commit/75a73a9aebef8716960e289562e735a058d8f39e))
+* **home:** mockup layout — pipeline, needs attention, sources, just arrived ([220fb08](https://github.com/readur/readur/commit/220fb08df3aca2faa26a6b721288515dc73e74cf))
+* **intake:** failed-OCR and import-failure details follow ?failure= and ?import= ([8f527a5](https://github.com/readur/readur/commit/8f527a5ee8ad0d7c78f1ecaf0c4172d97e5b5338))
+* **labels:** every account owns its default labels; no more system labels ([86ba225](https://github.com/readur/readur/commit/86ba225e017d68394a3987cdd9adbd920dd48435))
+* **labels:** one kind of label in the UI; every label can be edited, deleted and detached ([f18c97a](https://github.com/readur/readur/commit/f18c97a5550fd68de3a836b5eb1eab33a84cd826))
+* **library:** clicking the preview in the detail drawer opens the document ([4a9cc78](https://github.com/readur/readur/commit/4a9cc78b4020271bd3c4fb112bb4255031cd219f))
+* **library:** Library and Search open documents in the global drawer ([d3d35a6](https://github.com/readur/readur/commit/d3d35a6414c5d2b79fc89bc530459e1f219dea58))
+* **library:** thumbnail-first document cards with metadata, live OCR status ([120755d](https://github.com/readur/readur/commit/120755daa0be0f18914f7eb521066b5a9fe5eccd))
+* **lib:** useDrawerParam keeps an open drawer in the URL ([6286457](https://github.com/readur/readur/commit/62864578fcf8f640088cb89dc1bffadaf2b48a90))
+* **npm:** update dependency @playwright/test (1.63.0 → 1.64.0) ([#949](https://github.com/readur/readur/issues/949)) ([70f15bc](https://github.com/readur/readur/commit/70f15bcc9567057f79864ed30422f5c399c33945))
+* **npm:** update dependency lucide-react (1.48.0 → 1.49.0) ([#925](https://github.com/readur/readur/issues/925)) ([dca6c9d](https://github.com/readur/readur/commit/dca6c9def36b669fad625d7d71445550d2dcbb4e))
+* **npm:** update dependency lucide-react (1.49.0 → 1.48.0) ([#918](https://github.com/readur/readur/issues/918)) ([6cb8e68](https://github.com/readur/readur/commit/6cb8e68039c50dff9121511c6f7c5762ccac10c2))
+* **npm:** update dependency lucide-react (1.49.0 → 1.50.0) ([#932](https://github.com/readur/readur/issues/932)) ([645ae6f](https://github.com/readur/readur/commit/645ae6fee9f2a0747112113e95f4bdc158e6c236))
+* **npm:** update dependency lucide-react (1.50.0 → 1.51.0) ([#935](https://github.com/readur/readur/issues/935)) ([e4fea08](https://github.com/readur/readur/commit/e4fea08f21380cd4e804e55511cea601b18d776b))
+* **npm:** update dependency lucide-react (1.51.0 → 1.52.0) ([#939](https://github.com/readur/readur/issues/939)) ([8570ff3](https://github.com/readur/readur/commit/8570ff340935283f801691c24d6ed5d5c23f1d5a))
+* **npm:** update dependency lucide-react (1.52.0 → 1.53.0) ([#951](https://github.com/readur/readur/issues/951)) ([75e3556](https://github.com/readur/readur/commit/75e35560ba5c31dd8707ac67790b83b4d34e9fe2))
+* **npm:** update dependency lucide-react (1.53.0 → 1.54.0) ([#954](https://github.com/readur/readur/issues/954)) ([1a9d26b](https://github.com/readur/readur/commit/1a9d26bcf1eec213882f9ae5fa8caf0d40d25620))
+* **npm:** update dependency lucide-react (1.54.0 → 1.55.0) ([#957](https://github.com/readur/readur/issues/957)) ([df56160](https://github.com/readur/readur/commit/df56160cbf2b5a24ac15517ce6e02b60d4ca3f04))
+* **pwa:** installable app — manifest, iOS home-screen tags, square icons, safe areas ([d5e9d3e](https://github.com/readur/readur/commit/d5e9d3e5fb38ed07e6d7a63603cc5f95442393b3))
+* **routes:** /documents/:id redirects to the drawer; remove the document page ([dd08ae1](https://github.com/readur/readur/commit/dd08ae14064e600d0a337e5f7cebcaf5d43c4a63))
+* **rust:** update aws-sdk-rust monorepo ([#926](https://github.com/readur/readur/issues/926)) ([7d5b7ec](https://github.com/readur/readur/commit/7d5b7ecc6343023fd101a08bc89de2d389711283))
+* **rust:** update crate aws-sdk-s3 (1.151.0 → 1.152.0) ([#930](https://github.com/readur/readur/issues/930)) ([7b06b0b](https://github.com/readur/readur/commit/7b06b0bbdb412a7d15cfb112f18f1da6376d466e))
+* **rust:** update crate dav-server (0.10.0 → 0.11.0) ([#849](https://github.com/readur/readur/issues/849)) ([14603af](https://github.com/readur/readur/commit/14603af56de173cb814367973a75aa1d6dab728a))
+* **rust:** update crate hyper (1.11.1 → 1.12.0) ([#947](https://github.com/readur/readur/issues/947)) ([7f49c23](https://github.com/readur/readur/commit/7f49c23ca2321a8c2a3ac2e56e97cfe7e8e51504))
+* **rust:** update crate infer (0.19.0 → 0.22.0) ([#851](https://github.com/readur/readur/issues/851)) ([f9ab240](https://github.com/readur/readur/commit/f9ab2408a1ea10c1bda51a2201450ddbdcf527a5))
+* **rust:** update crate rust_xlsxwriter (0.94.1 → 0.99.1) ([#855](https://github.com/readur/readur/issues/855)) ([5682e4e](https://github.com/readur/readur/commit/5682e4e8604f29f9971d80378de9f6f4f5bd029a))
+* **rust:** update crate uuid (1.26.1 → 1.27.0) ([#934](https://github.com/readur/readur/issues/934)) ([cad3f73](https://github.com/readur/readur/commit/cad3f731c0bd0321ebae091e2f9e98fd527e421f))
+* **rust:** update crate uuid (1.27.0 → 1.28.0) ([#956](https://github.com/readur/readur/issues/956)) ([e2dd3a5](https://github.com/readur/readur/commit/e2dd3a5d4ccc14922e3baab43862d3e2d45ca18a))
+* **shell:** a progress toast follows every running sync ([4ea59aa](https://github.com/readur/readur/commit/4ea59aa0b412f1136f7f3762b1f185d4b67e282c))
+* **shell:** document drawer opens over any page from ?document= ([4f99862](https://github.com/readur/readur/commit/4f99862529eaacb097a6ea3ffdfc94644ed6eef1))
+* **shell:** drag the phone menu open with a sideways swipe anywhere; it follows the finger ([ecfb7d6](https://github.com/readur/readur/commit/ecfb7d6c0b2a952070f6724620d9038786db886e))
+* **shell:** library count in the nav, source icon tiles, roomier user row ([2435487](https://github.com/readur/readur/commit/243548765976cc886272e47bb5acda942373418f))
+* **shell:** the Search destination is now "Advanced search" (nav and page title) ([e022561](https://github.com/readur/readur/commit/e022561c9eb8921ea57083a483855c4db842cfae))
+* **sources:** connection details follow ?source= — rows write it, Back closes, unknown ids drop ([65a83eb](https://github.com/readur/readur/commit/65a83eb3c04a53831fc32ef34062b7b0b318ae7b))
+* **sources:** give connections and the watch folder their own Sources page ([5811a7b](https://github.com/readur/readur/commit/5811a7b9f526f32f83819f2d58dd5a449e26659d))
+* **theme:** Indigo & Amber scheme; warning moves to orange, src-1/src-8 clear the new accent ([c81f7f3](https://github.com/readur/readur/commit/c81f7f3c902104d71aca90e730acb6ad414e478a))
+* **ui:** bigger grab areas for the drawer's resize handles, same look ([f974bee](https://github.com/readur/readur/commit/f974beed5c9d9ff9c6bf42bf560da025c55742cc))
+* **ui:** ChoiceTile/ChoiceGroup, M3 switch, Studio checkbox ([918496e](https://github.com/readur/readur/commit/918496ef914c9ad51cc4345731f7656e45de5d92))
+* **ui:** complete rebuild ([aba6a41](https://github.com/readur/readur/commit/aba6a41e6fd22cfe93326caabce8f83bc1269268))
+* **ui:** contained BoardTable with zebra and accent selection edge ([502f1fb](https://github.com/readur/readur/commit/502f1fbffa51a3ef71d7f4dbef8d0c90f3f2dd40))
+* **ui:** DocumentCard primitive (thumbnail-first) ([d6fdc83](https://github.com/readur/readur/commit/d6fdc8363a828ef40682db0e71b5ef1fc5548d92))
+* **ui:** dot/spinner StatusMark, quiet ChangeTag and Kbd ([ac6b709](https://github.com/readur/readur/commit/ac6b709d98269e36430e714a391df1090af4bbe2))
+* **ui:** floating slide-over, spotlight palette with preview, surface bulk bar ([69273f7](https://github.com/readur/readur/commit/69273f7c969ab3f606b55a5b67bdd50fba1ea148))
+* **ui:** illustrated empty state, shimmer skeleton, numbered pagination ([aee7616](https://github.com/readur/readur/commit/aee7616fd309943b029408ac614985f324f33f18))
+* **ui:** one Notice primitive (stripe card); striped toasts with timer ([d270be2](https://github.com/readur/readur/commit/d270be2fcca8709de9c09fcd18091342ae6e1c8a))
+* **ui:** outlined Studio fields and tinted-selection listbox ([225a37d](https://github.com/readur/readur/commit/225a37d1109ef71d7133f4cd1939eb821b4de749))
+* **ui:** ProgressBar and OutcomeBar primitives ([eaa6f97](https://github.com/readur/readur/commit/eaa6f97a91d522ef3734aacbb47582daa7293b7e))
+* **ui:** promote Facts into ui as definition-list card; restyle Pass ([e2aea6d](https://github.com/readur/readur/commit/e2aea6d8f8649d4edf7a10c8b9ea40efcea3f6d7))
+* **ui:** promote label chip to ui as dot pill; Studio filter chips ([7b72301](https://github.com/readur/readur/commit/7b723012c2e5cd487154b4d2b6a5032f8383eb9a))
+* **ui:** promote Segmented to ui; underline tabs ([8dac50a](https://github.com/readur/readur/commit/8dac50aba33d4554910f17ac0a5b707994e4b898))
+* **ui:** promote SourceBadge to ui as hue icon tile ([e550d0a](https://github.com/readur/readur/commit/e550d0a89a6378847b1969b5736c0be63994d2ab))
+* **ui:** React Aria links carry router state ([67f2d0f](https://github.com/readur/readur/commit/67f2d0f6c2a8a83f5ca6b0c409c875478eaf6e63))
+* **ui:** resizable drawers open at half the window and grow to 85% ([f1fd2a0](https://github.com/readur/readur/commit/f1fd2a083c58ad223e8dec8f4df301b788305d8a))
+* **ui:** resizable slide-over with a grab handle; panels animate out ([e39300e](https://github.com/readur/readur/commit/e39300e811b071fbac40012dbffe7e9391ce3d1b))
+* **ui:** row errors live in a status tooltip, rows stay one line ([1d2dbb0](https://github.com/readur/readur/commit/1d2dbb0b600ec061a522e281e99b4e336d98cd18))
+* **ui:** SlideOver fill layout, opening share, arrow-key opt-out ([3c91d07](https://github.com/readur/readur/commit/3c91d075faf423b61fd4028a1bb50b10fdfa4be2))
+* **ui:** Spinner, Card and Avatar primitives ([b7eceae](https://github.com/readur/readur/commit/b7eceae7ee76dda388eee49b1e58db9ea2844a61))
+* **ui:** Studio buttons, soft-square icon buttons, tooltip arrow ([5ff4d1e](https://github.com/readur/readur/commit/5ff4d1e22852a00063b697ee76957809070015a1))
+* **ui:** Studio tokens, teal accent, Plus Jakarta Sans + JetBrains Mono ([c817985](https://github.com/readur/readur/commit/c817985f23e2396da9ef4aa84517a1656d33f291))
+* **ui:** top-anchored dialog with icon tile, grouped menus ([05ab51a](https://github.com/readur/readur/commit/05ab51adb6a33736ecd1084614701a917ad3be75))
+
+
+### Bug Fixes
+
+* **deps:** resolve the font packages from the public npm registry ([18600bb](https://github.com/readur/readur/commit/18600bb6d202adb6456852f557c01df0f4fcb671))
+* **dev:** stop cargo-watch restart loop in dev compose ([fda8c33](https://github.com/readur/readur/commit/fda8c3302c4d2641069a3867fda8c7b4cb92ecde))
+* **document:** an older failed label save no longer restores labels on the list row ([bd5c74d](https://github.com/readur/readur/commit/bd5c74d27c6a6d2da51e1ccdb13bd70559bc42b5))
+* **drawers:** a second close() before the URL changes no longer goes back twice ([3274f28](https://github.com/readur/readur/commit/3274f28d905932f4cc02a25a28dceb74bc710b3d))
+* **library:** a slow OCR poll can't bring back older rows or undo a drawer change ([8a814e4](https://github.com/readur/readur/commit/8a814e45b10ef64ab1df81f73b86a5693f587d52))
+* **library:** URL updates keep params that are not the Library's ([5f55b41](https://github.com/readur/readur/commit/5f55b41799e54d8577251bcc56559ea898960397))
+* **mobile:** 16px text fields on touch screens so iOS stops zooming the page in ([be45f9c](https://github.com/readur/readur/commit/be45f9cd65be5f2139981057c90044fdd8ca02b5))
+* **npm:** update dependency @types/node (22.20.4 → 22.20.5) ([#931](https://github.com/readur/readur/issues/931)) ([bc6500a](https://github.com/readur/readur/commit/bc6500a5435abbc58583df56ce7d53462fb525cf))
+* **npm:** update dependency vite (7.3.6 → 7.3.7) ([#945](https://github.com/readur/readur/issues/945)) ([ca258e7](https://github.com/readur/readur/commit/ca258e752e36821687883454d5ee9e1a35cb0d1f))
+* **rust:** update crate serde_json (1.0.151 → 1.0.152) ([#958](https://github.com/readur/readur/issues/958)) ([af2509f](https://github.com/readur/readur/commit/af2509fb162c8366d4655fb053dc0f40f4d931b4))
+* **rust:** update crate tokio (1.53.1 → 1.53.2) ([#936](https://github.com/readur/readur/issues/936)) ([7c22d5e](https://github.com/readur/readur/commit/7c22d5e116162ce47265e2026feb4e6358f72259))
+* **rust:** update crate tokio-util (0.7.19 → 0.7.20) ([#955](https://github.com/readur/readur/issues/955)) ([c7ceda8](https://github.com/readur/readur/commit/c7ceda846eb4568586cea9983e99cb51a946befc))
+* **seed:** forward ADMIN_* through compose and treat a blank ADMIN_PASSWORD as unset ([27226c0](https://github.com/readur/readur/commit/27226c00010b3187d89b35aa808d2a173584a076))
+* **shell:** phone tab bar says "Search", icons line up and labels stay on one line ([6f65163](https://github.com/readur/readur/commit/6f65163c448bea7c68ce3cd6cf5e225a25f4edfd))
+* **sources:** watched folders wrap one per line in the details panel; PassCell wrap ([177da53](https://github.com/readur/readur/commit/177da53471e776536479ce803f46cc0411acd4f2))
+* **ui:** drawer preview leaves room for the tabs at 900px; SlideOver grab handle hidden on phones ([4ea9622](https://github.com/readur/readur/commit/4ea962251e75131a4c0a573336633a20023537d9))
+* **ui:** IconButton passes the button to the caller's ref as well as its own ([5309760](https://github.com/readur/readur/commit/530976027a9150b0c949984077b4e5dd16e368c2))
+* **ui:** New/Changed tag sits in the card's status row; the ring outlines the card ([3cfb9a6](https://github.com/readur/readur/commit/3cfb9a6c29a300ef9cdef91ed21eccab349d2bf8))
+* **ui:** previews fill the card well, status words keep descenders, 4-up Just arrived ([5dd57e7](https://github.com/readur/readur/commit/5dd57e76fec6dbb34307f28a09f9b460a6e3b933))
+* **ui:** review fixes — backend source types, dialog fits viewport, invalid label colours, quiet palette preview ([02a4592](https://github.com/readur/readur/commit/02a4592a8f47e36a4f7d954456804b70a9b2d045))
+* **ui:** scope Progress tones and source slots to their own components ([871a24f](https://github.com/readur/readur/commit/871a24f75f12b1079f618abcf38ea4635ca23325))
+* **ui:** system label detachment and deletion ([2e0d187](https://github.com/readur/readur/commit/2e0d187c225bdf77149a810311463ce2fa0d1564))
+* **ui:** tab rows no longer show a stray vertical scrollbar; hairline is an inset line ([9adf79f](https://github.com/readur/readur/commit/9adf79ffac608aca68c26a95ee36eba255f134e9))
+* **ui:** toasts pause while hovered, drain bar included ([208e0c9](https://github.com/readur/readur/commit/208e0c9cd4ad5afaaa3f1da3084b738f5223e034))
+
+
+### Code Refactoring
+
+* **document:** lift comment loading into useComments (count, polling only when shown) ([bb1948e](https://github.com/readur/readur/commit/bb1948eb4cca0c9d7bce2f05f767409ad33af7f8))
+
+
+### Documentation
+
+* add Studio design system v3 spec ([eea3db5](https://github.com/readur/readur/commit/eea3db5f4dd9f7f3d828bb1229d2be9009603c8e))
+* labels are per account; describe the five default labels ([09dfb43](https://github.com/readur/readur/commit/09dfb43dca6c17181a8a68f9eff25c0f2cbbc936))
+* new screenshots of the redesigned UI and a gallery that matches them ([6b59fd0](https://github.com/readur/readur/commit/6b59fd09767688877d4bdb91d9b103b3d627a1bc))
+* readur-design-system skill and Studio DESIGN.md ([579656a](https://github.com/readur/readur/commit/579656a4e529876e840c120795a4379e8387763c))
+* retake the phone screenshots with the aligned tab bar ([310421e](https://github.com/readur/readur/commit/310421e41e15df065fe806664874fc68d7f8b2d8))
+* **skill:** ButtonLink, SourceTile, StatusMark label, resizable SlideOver ([af3ecd9](https://github.com/readur/readur/commit/af3ecd94565054905ae82f03ddcc1ee512a5db5b))
+* **skill:** drawers live in the URL; the document drawer; SlideOver fill/share/own-arrows ([5eb4a1b](https://github.com/readur/readur/commit/5eb4a1bf7e63a2f562ef07d12c108c6bec01b85f))
+* **skill:** row errors via StatusMark reason, disabledReason, progress toasts ([cb0f78d](https://github.com/readur/readur/commit/cb0f78d0cc5f60cd8770fd3453cd506edf4d48c2))
+
+
+### Tests
+
+* **e2e:** the document drawer replaces the document page ([c19a0e7](https://github.com/readur/readur/commit/c19a0e7b800e0ef62d379bda1e12e40daec987a4))
+* **e2e:** theme colours from the current palette; folders live under Watched folders ([ce2425f](https://github.com/readur/readur/commit/ce2425f541870e2bdefc8f33d0489a841200a878))
+* **intake:** wait for the connection drawer to close after a delete (history step) ([022a1a1](https://github.com/readur/readur/commit/022a1a13d352621e4e5acc7f7ad18b77565e5735))
+* **ui:** enforce tokens-only primitive stylesheets ([3aeccfa](https://github.com/readur/readur/commit/3aeccfac7f0d220442804bd65a2c86b4a45db36d))
+
+
+### Continuous Integration
+
+* auto-merge 0.x Renovate updates once CI passes ([16a3271](https://github.com/readur/readur/commit/16a32718fac62eeb070b40d2fe105b7632f4f54f))
+* keep major Renovate updates as open PRs ([b1bd8b1](https://github.com/readur/readur/commit/b1bd8b19a05a475c52ecc6d47408c85cee6ac2bf))
+* manage versions and releases with release-please ([1356622](https://github.com/readur/readur/commit/13566226e17638d875a9c500f87ed0a12b254d4c))
+* manage versions and releases with release-please ([9207179](https://github.com/readur/readur/commit/920717997ebdfa9103dc8440fc6db4c39a9f9be8))
+* pass the tag to the version check through an env var ([7927fd8](https://github.com/readur/readur/commit/7927fd87653876fa03c10d60aee1f0ae725d0920))
+* stop Renovate rebases and superseded runs from flooding the queue ([04c982d](https://github.com/readur/readur/commit/04c982d55df4014c2238c0deb4876d8d7efce332))
+* stop Renovate rebases and superseded runs from flooding the queue ([a509a23](https://github.com/readur/readur/commit/a509a2370cb4e88c6902f4bf0cfaac281e1ef716))
+
+
+### Miscellaneous Chores
+
+* **github-action:** update action dtolnay/rust-toolchain (6bed076 → 89b1218) ([#922](https://github.com/readur/readur/issues/922)) ([e548430](https://github.com/readur/readur/commit/e5484301b9700bcb73e3e34b90ce66a891d410ed))
+* **github-action:** update action dtolnay/rust-toolchain (89b1218 → 686976e) ([#944](https://github.com/readur/readur/issues/944)) ([a13cde4](https://github.com/readur/readur/commit/a13cde4f69a0605cee9852fdc5dcf10aa6fc972d))
+* **github-action:** update action github/codeql-action (v4.38.2 → v4.38.3) ([#953](https://github.com/readur/readur/issues/953)) ([1021062](https://github.com/readur/readur/commit/1021062db7183b08d2b43bc90054857360351d02))
+* **github-action:** update action int128/diff-action (v2.40.0 → v2.41.0) ([#933](https://github.com/readur/readur/issues/933)) ([0492bd6](https://github.com/readur/readur/commit/0492bd62c295db52b186bd1660ab7235791eba93))
+* **github-action:** update action jdx/mise-action (v5.0.0 → v5.0.1) ([#927](https://github.com/readur/readur/issues/927)) ([195fe64](https://github.com/readur/readur/commit/195fe649ffd7fc55324878b699d375d45025d3c5))
+* **github-action:** update action jdx/mise-action (v5.0.1 → v5.1.0) ([#937](https://github.com/readur/readur/issues/937)) ([e488366](https://github.com/readur/readur/commit/e4883663a0ef4940cdca2f1c9fc578c039834ca4))
+* **github-action:** update action jdx/mise-action (v5.1.0 → v5.1.1) ([#938](https://github.com/readur/readur/issues/938)) ([a4e619a](https://github.com/readur/readur/commit/a4e619a9cad271f973c4d9d00ed6b85f6cbda55b))
+* ignore Superpowers planning docs (docs/superpowers/) ([b6b5871](https://github.com/readur/readur/commit/b6b58711e0159399017b8bc678d8ec42a6baddd9))
+* **mise:** update tool lefthook (2.1.14 → 2.1.15) ([#924](https://github.com/readur/readur/issues/924)) ([f33f2fb](https://github.com/readur/readur/commit/f33f2fbb728587d5cb53ae5c5348f435df9ebd28))
+* **mise:** update tool lefthook (2.1.15 → 2.1.16) ([#929](https://github.com/readur/readur/issues/929)) ([48caac0](https://github.com/readur/readur/commit/48caac06c14bdda052cc8ef062e8ea86f7227c53))
+* **mise:** update tool lefthook (2.1.16 → 2.1.17) ([#942](https://github.com/readur/readur/issues/942)) ([2983477](https://github.com/readur/readur/commit/2983477864da5740e037909e1419b9f3d09defa8))
+* **mise:** update tool lefthook (2.1.17 → 2.2.0) ([#948](https://github.com/readur/readur/issues/948)) ([e234882](https://github.com/readur/readur/commit/e2348821926b6d745af9f69bc5bdf23fa4e0393d))
+* **mise:** update tool lefthook (2.2.0 → 2.2.1) ([#952](https://github.com/readur/readur/issues/952)) ([8a27786](https://github.com/readur/readur/commit/8a27786976c9b02422d97ad021e4d9642d329747))
+* **mise:** update tool oxfmt (0.71.0 → 0.72.0) ([#943](https://github.com/readur/readur/issues/943)) ([661fad8](https://github.com/readur/readur/commit/661fad8af761494ec4e9a9b2a9a2857e6f189048))
+* **mise:** update tool rust (1.98.1 → 1.99.0) ([#928](https://github.com/readur/readur/issues/928)) ([c54a49c](https://github.com/readur/readur/commit/c54a49c47110def0ff888651b137b46ede16d97d))
