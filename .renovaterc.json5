@@ -40,16 +40,10 @@
     },
     // Keep below the automerge rule so this one wins for 0.x minors.
     {
-      description: "zer0ver: 0.x minors can break at any time; treat them like majors",
+      description: "zer0ver: 0.x minors can break at any time, don't automerge them",
       matchUpdateTypes: ["minor"],
       matchCurrentVersion: "/^v?0\\./",
       automerge: false,
-      dependencyDashboardApproval: true,
-    },
-    {
-      description: "Majors wait for approval on the dashboard instead of sitting open and re-running CI on every rebase",
-      matchUpdateTypes: ["major"],
-      dependencyDashboardApproval: true,
     },
   ],
   customManagers: [
