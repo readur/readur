@@ -18,6 +18,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check tag matches the app version
+        run: .github/scripts/check-release-version.sh "${{ github.ref_name }}"
+
       - name: Generate changelog
         id: changelog
         run: |
