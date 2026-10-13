@@ -48,6 +48,11 @@ env:
   RUST_BACKTRACE: full
   DATABASE_URL: postgresql://readur_test:readur_test@localhost:5433/readur_test
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   webdav-stress-tests:
     name: WebDAV Stress Testing

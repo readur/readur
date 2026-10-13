@@ -17,6 +17,11 @@ env:
   E2E_ADMIN_USERNAME: admin
   E2E_ADMIN_PASSWORD: e2e-ci-admin-password
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-tests:
     name: E2E Tests

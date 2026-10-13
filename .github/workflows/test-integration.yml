@@ -18,6 +18,11 @@ env:
   # verify on the server.
   CI_ADMIN_PASSWORD: integration-ci-admin-password
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   integration-tests:
     name: Integration Tests
