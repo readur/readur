@@ -34,7 +34,9 @@ jobs:
 
       - name: Check tag matches the app version
         if: startsWith(github.ref, 'refs/tags/v')
-        run: .github/scripts/check-release-version.sh "${{ github.ref_name }}"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: .github/scripts/check-release-version.sh "$RELEASE_TAG"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
