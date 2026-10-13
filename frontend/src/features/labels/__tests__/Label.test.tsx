@@ -3,10 +3,14 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Label from '../Label';
 import { renderWithProviders } from '../../../test/test-utils';
-import { createMockLabel, createMockSystemLabel } from '../../../test/label-test-utils';
+import { createMockLabel } from '../../../test/label-test-utils';
 
-const mockLabel = createMockLabel({ name: 'Test Label', color: '#ff0000', document_count: 5, source_count: 2 });
-const systemLabel = createMockSystemLabel({ name: 'Important', color: '#d73a49' });
+const mockLabel = createMockLabel({
+  name: 'Test Label',
+  color: '#ff0000',
+  document_count: 5,
+  source_count: 2,
+});
 
 const renderLabel = (props: Partial<React.ComponentProps<typeof Label>> = {}) =>
   renderWithProviders(<Label label={mockLabel} {...props} />);
@@ -186,18 +190,6 @@ describe('Label', () => {
       expect(screen.getByRole('button', { name: 'Remove Test Label' })).toHaveFocus();
       await user.keyboard('{Enter}');
       expect(onDelete).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('system labels', () => {
-    test('renders a system label', () => {
-      renderLabel({ label: systemLabel });
-      expect(screen.getByText('Important')).toBeInTheDocument();
-    });
-
-    test('never offers to remove a system label', () => {
-      renderLabel({ label: systemLabel, deletable: true, onDelete: vi.fn() });
-      expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     });
   });
 

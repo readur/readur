@@ -2,12 +2,10 @@ import { useId, useMemo, useState, type Key } from 'react';
 import {
   Button as RACButton,
   ComboBox as RACComboBox,
-  Header,
   Input,
   Label as RACLabel,
   ListBox,
   ListBoxItem,
-  ListBoxSection,
   Popover,
 } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
@@ -71,8 +69,6 @@ function LabelSelector({
     () => availableLabels.filter((l) => !selectedIds.has(l.id) && matchesQuery(l, inputValue)),
     [availableLabels, selectedIds, inputValue],
   );
-  const systemOptions = options.filter((l) => l.is_system);
-  const userOptions = options.filter((l) => !l.is_system);
 
   const trimmed = inputValue.trim();
   const canCreate =
@@ -117,10 +113,16 @@ function LabelSelector({
     }
   };
 
-  const createText = t('labels.selector.createLabel', { name: trimmed, defaultValue: 'Create label "{{name}}"' });
+  const createText = t('labels.selector.createLabel', {
+    name: trimmed,
+    defaultValue: 'Create label "{{name}}"',
+  });
   const fieldName = label ?? t('labels.selector.label', 'Labels');
   const emptyText = trimmed
-    ? t('labels.selector.noLabelsMatch', { query: trimmed, defaultValue: 'No labels match "{{query}}"' })
+    ? t('labels.selector.noLabelsMatch', {
+        query: trimmed,
+        defaultValue: 'No labels match "{{query}}"',
+      })
     : t('labels.selector.noLabelsAvailable', 'No labels available');
 
   const renderOption = (l: LabelData) => (
@@ -133,7 +135,11 @@ function LabelSelector({
   return (
     <div className={styles.selector} data-size={size}>
       {selectedLabels.length > 0 ? (
-        <ul className={styles.selectedTags} id={tagsId} aria-label={t('labels.selector.selected', 'Selected labels')}>
+        <ul
+          className={styles.selectedTags}
+          id={tagsId}
+          aria-label={t('labels.selector.selected', 'Selected labels')}
+        >
           {selectedLabels.map((l) => (
             <li key={l.id}>
               <Label
@@ -164,30 +170,29 @@ function LabelSelector({
             className={styles.comboInput}
             placeholder={
               selectedLabels.length === 0
-                ? placeholder ?? t('labels.selector.placeholder', 'Search or create labels...')
+                ? (placeholder ?? t('labels.selector.placeholder', 'Search or create labels...'))
                 : undefined
             }
           />
-          <RACButton className={styles.comboButton} aria-label={t('ui.showOptions', 'Show options')}>
+          <RACButton
+            className={styles.comboButton}
+            aria-label={t('ui.showOptions', 'Show options')}
+          >
             <ExpandMore fontSize="small" />
           </RACButton>
         </div>
         <Popover className={styles.popover} placement="bottom start">
-          <ListBox className={styles.listbox} renderEmptyState={() => <p className={styles.emptyOptions}>{emptyText}</p>}>
-            {systemOptions.length > 0 ? (
-              <ListBoxSection className={styles.section}>
-                <Header className={styles.sectionHeader}>{t('labels.selector.systemLabels', 'System Labels')}</Header>
-                {systemOptions.map(renderOption)}
-              </ListBoxSection>
-            ) : null}
-            {userOptions.length > 0 ? (
-              <ListBoxSection className={styles.section}>
-                <Header className={styles.sectionHeader}>{t('labels.selector.myLabels', 'My Labels')}</Header>
-                {userOptions.map(renderOption)}
-              </ListBoxSection>
-            ) : null}
+          <ListBox
+            className={styles.listbox}
+            renderEmptyState={() => <p className={styles.emptyOptions}>{emptyText}</p>}
+          >
+            {options.map(renderOption)}
             {canCreate ? (
-              <ListBoxItem id={CREATE_KEY} textValue={createText} className={`${styles.option} ${styles.createOption}`}>
+              <ListBoxItem
+                id={CREATE_KEY}
+                textValue={createText}
+                className={`${styles.option} ${styles.createOption}`}
+              >
                 <span className={styles.tagIcon} aria-hidden="true">
                   <Add fontSize="inherit" />
                 </span>

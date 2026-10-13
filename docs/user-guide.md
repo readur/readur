@@ -149,7 +149,7 @@ Labels are your primary tool for organizing documents in Readur. Unlike traditio
 
 ### Understanding Label Types
 
-Readur uses two main types of labels. User labels are the ones you create and manage - these reflect your personal or organizational categorization needs. System labels are automatically generated based on document properties like file type, OCR status, or upload source. You can use both types in searches and filters, but only user labels can be customized.
+Every label belongs to your account. You start with five (Important, To Review, Archive, Work and Personal), and you can rename, recolour or delete them like any label you create. Use labels in searches and filters to narrow down your documents.
 
 You can assign colors to your labels for visual organization. This becomes particularly helpful when you're scanning through document lists - important documents with red labels stand out immediately, while routine items might use neutral colors. The system also supports hierarchical labels where you can create categories and subcategories for complex organizational schemes.
 

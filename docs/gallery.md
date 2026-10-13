@@ -24,7 +24,7 @@ The Library shows every document as a thumbnail grouped by month, or as a dense 
 
 ![Labels](images/gallery/image_3.png)
 
-Labels group documents into collections across folders and sources. Give each one a colour, apply several to a document, and find them in the sidebar with their counts. Readur ships with a few system labels such as Important and To Review.
+Labels group documents into collections across folders and sources. Give each one a colour, apply several to a document, and find them in the sidebar with their counts. Every account starts with a few labels, such as Important and To Review, which you can rename or delete like any other.
 
 ## Sources
 

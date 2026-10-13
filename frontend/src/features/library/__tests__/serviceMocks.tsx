@@ -82,7 +82,6 @@ export const label = (id: string, name: string, extra: Partial<Label> = {}): Lab
   color: '#0969da',
   background_color: null,
   icon: null,
-  is_system: false,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   document_count: 0,
@@ -92,7 +91,11 @@ export const label = (id: string, name: string, extra: Partial<Label> = {}): Lab
 
 export const LABELS = [label('l-tax', 'Tax'), label('l-home', 'Home'), label('l-work', 'Work')];
 
-export const doc = (id: string, name: string, extra: Partial<DocumentResponse> = {}): DocumentResponse => ({
+export const doc = (
+  id: string,
+  name: string,
+  extra: Partial<DocumentResponse> = {},
+): DocumentResponse => ({
   id,
   filename: name,
   original_filename: name,
@@ -112,7 +115,11 @@ export const doc = (id: string, name: string, extra: Partial<DocumentResponse> =
   ...extra,
 });
 
-export const hit = (d: DocumentResponse, snippet: string, ranges: [number, number][]): EnhancedDocumentResponse => ({
+export const hit = (
+  d: DocumentResponse,
+  snippet: string,
+  ranges: [number, number][],
+): EnhancedDocumentResponse => ({
   id: d.id,
   filename: d.filename,
   original_filename: d.original_filename,
@@ -131,21 +138,34 @@ export const hit = (d: DocumentResponse, snippet: string, ranges: [number, numbe
   ocr_status: d.ocr_status,
   search_rank: 0.9,
   snippets: [
-    { text: snippet, start_offset: 0, end_offset: snippet.length, highlight_ranges: ranges.map(([start, end]) => ({ start, end })) },
+    {
+      text: snippet,
+      start_offset: 0,
+      end_offset: snippet.length,
+      highlight_ranges: ranges.map(([start, end]) => ({ start, end })),
+    },
   ],
 });
 
 export const DOCS = [
   doc('d1', 'invoice-march.pdf', { labels: [LABELS[0], LABELS[1], LABELS[2]] }),
   doc('d2', 'lease.pdf', { source_id: 's1', source_type: 'webdav', ocr_status: 'failed' }),
-  doc('d3', 'photo.png', { mime_type: 'image/png', ocr_status: 'processing', ocr_progress_current: 3, ocr_progress_total: 12 }),
+  doc('d3', 'photo.png', {
+    mime_type: 'image/png',
+    ocr_status: 'processing',
+    ocr_progress_current: 3,
+    ocr_progress_total: 12,
+  }),
 ];
 
 export const listResponse = (documents: DocumentResponse[], total = documents.length) => ({
   data: { documents, pagination: { total, limit: 50, offset: 0, has_more: false } },
 });
 
-export const searchResponse = (documents: EnhancedDocumentResponse[], total = documents.length) => ({
+export const searchResponse = (
+  documents: EnhancedDocumentResponse[],
+  total = documents.length,
+) => ({
   data: { documents, total, query_time_ms: 5, suggestions: [] },
 });
 
@@ -173,7 +193,11 @@ class MemoryStorage implements Storage {
 
 /** Default happy-path responses; tests override what they need. */
 export function setupLibraryMocks() {
-  Object.defineProperty(window, 'localStorage', { value: new MemoryStorage(), configurable: true, writable: true });
+  Object.defineProperty(window, 'localStorage', {
+    value: new MemoryStorage(),
+    configurable: true,
+    writable: true,
+  });
   // Most Library tests read the table; the grid tests switch the layout themselves.
   window.localStorage.setItem('readur.library.view', 'table');
   acknowledgeAll();
@@ -181,7 +205,13 @@ export function setupLibraryMocks() {
   resetThumbnailLoader();
   documentService.listFiltered.mockResolvedValue(listResponse(DOCS, 3));
   documentService.getFacets.mockResolvedValue({
-    data: { mime_types: [{ value: 'application/pdf', count: 2 }, { value: 'image/png', count: 1 }], tags: [] },
+    data: {
+      mime_types: [
+        { value: 'application/pdf', count: 2 },
+        { value: 'image/png', count: 1 },
+      ],
+      tags: [],
+    },
   });
   documentService.getOcrText.mockResolvedValue({
     data: {
@@ -208,26 +238,43 @@ export function setupLibraryMocks() {
   searchService.getTimeline.mockResolvedValue({ data: [] });
   sharedLinksService.listByDocument.mockResolvedValue({ data: [] });
   apiClient.get.mockImplementation((url: string) =>
-    Promise.resolve({ data: url === '/sources' ? [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] : [] }),
+    Promise.resolve({
+      data: url === '/sources' ? [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] : [],
+    }),
   );
   labelService.list.mockResolvedValue({ data: LABELS });
-  labelService.create.mockImplementation((draft: { name: string }) => Promise.resolve({ data: label('l-new', draft.name) }));
+  labelService.create.mockImplementation((draft: { name: string }) =>
+    Promise.resolve({ data: label('l-new', draft.name) }),
+  );
   labelService.setDocumentLabels.mockResolvedValue({ data: {} });
   // The document drawer: each document as the list has it, its labels, an empty history.
   documentService.getById.mockImplementation((id: string) => {
     const found = DOCS.find((d) => d.id === id);
-    return found ? Promise.resolve({ data: found }) : Promise.reject(Object.assign(new Error('404'), { response: { status: 404 } }));
+    return found
+      ? Promise.resolve({ data: found })
+      : Promise.reject(Object.assign(new Error('404'), { response: { status: 404 } }));
   });
   labelService.getDocumentLabels.mockImplementation((id: string) =>
     Promise.resolve({ data: DOCS.find((d) => d.id === id)?.labels ?? [] }),
   );
   documentService.view.mockResolvedValue({ data: new Blob(['%PDF']) });
   documentService.download.mockResolvedValue({ data: new Blob(['%PDF']) });
-  documentService.getDocumentRetryHistory.mockResolvedValue({ data: { document_id: '', retry_history: [], total_retries: 0 } });
+  documentService.getDocumentRetryHistory.mockResolvedValue({
+    data: { document_id: '', retry_history: [], total_retries: 0 },
+  });
   commentsService.list.mockResolvedValue({ data: [] });
-  sourcesService.list.mockResolvedValue({ data: [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }] });
-  Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:fake') });
-  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() });
+  sourcesService.list.mockResolvedValue({
+    data: [{ id: 's1', name: 'Office NAS', source_type: 'webdav' }],
+  });
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => 'blob:fake'),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
   labelService.bulkAssign.mockResolvedValue({ data: {} });
 }
-

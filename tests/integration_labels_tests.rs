@@ -1,22 +1,21 @@
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use super::*;
-    use readur::models::UserRole;
-    use readur::routes::labels::{CreateLabel, UpdateLabel, LabelAssignment, Label};
-    use readur::test_utils::{TestContext, TestAuthHelper};
+    use anyhow::Result;
     use axum::http::StatusCode;
     use chrono::Utc;
+    use readur::models::UserRole;
+    use readur::routes::labels::{CreateLabel, Label, LabelAssignment, UpdateLabel};
+    use readur::test_utils::{TestAuthHelper, TestContext};
     use serde_json::json;
     use sqlx::Row;
     use std::collections::HashMap;
     use uuid::Uuid;
 
-
     #[tokio::test]
     async fn test_create_label_success() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -50,7 +49,7 @@ mod tests {
 
             // Verify label was created
             let created_label = sqlx::query_as::<_, Label>(
-                "SELECT id, user_id, name, description, color, background_color, icon, is_system, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count FROM labels WHERE id = $1"
+                "SELECT id, user_id, name, description, color, background_color, icon, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count FROM labels WHERE id = $1"
             )
             .bind(label_id)
             .fetch_one(&ctx.state.db.pool)
@@ -61,24 +60,23 @@ mod tests {
             assert_eq!(created_label.description.as_ref().unwrap(), "A test label");
             assert_eq!(created_label.color, "#ff0000");
             assert_eq!(created_label.icon.as_ref().unwrap(), "star");
-            assert_eq!(created_label.user_id, Some(user.user_response.id));
-            assert!(!created_label.is_system);
-            
+            assert_eq!(created_label.user_id, user.user_response.id);
+
             Ok(())
         }.await;
-        
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_create_label_duplicate_name_fails() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -113,22 +111,23 @@ mod tests {
 
             assert!(result.is_err());
             assert!(result.unwrap_err().to_string().contains("duplicate key"));
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_update_label_success() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -160,15 +159,15 @@ mod tests {
 
             let result = sqlx::query_as::<_, Label>(
                 r#"
-                UPDATE labels 
-                SET 
+                UPDATE labels
+                SET
                     name = COALESCE($2, name),
                     description = COALESCE($3, description),
                     color = COALESCE($4, color),
                     icon = COALESCE($5, icon),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = $1 AND user_id = $6
-                RETURNING id, user_id, name, description, color, background_color, icon, is_system, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
+                RETURNING id, user_id, name, description, color, background_color, icon, created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
                 "#,
             )
             .bind(label_id)
@@ -187,22 +186,22 @@ mod tests {
             assert_eq!(updated_label.description.as_ref().unwrap(), "Updated description");
             assert_eq!(updated_label.color, "#00ff00");
             assert_eq!(updated_label.icon.as_ref().unwrap(), "edit");
-            
+
             Ok(())
         }.await;
-        
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_delete_label_success() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -224,109 +223,41 @@ mod tests {
             .unwrap();
 
             // Delete label
-            let result = sqlx::query(
-                "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
-            )
-            .bind(label_id)
-            .bind(user.user_response.id)
-            .execute(&ctx.state.db.pool)
-            .await;
+            let result = sqlx::query("DELETE FROM labels WHERE id = $1 AND user_id = $2")
+                .bind(label_id)
+                .bind(user.user_response.id)
+                .execute(&ctx.state.db.pool)
+                .await;
 
             assert!(result.is_ok());
             assert_eq!(result.unwrap().rows_affected(), 1);
 
             // Verify deletion
-            let deleted_label = sqlx::query_scalar::<_, uuid::Uuid>(
-                "SELECT id FROM labels WHERE id = $1"
-            )
-            .bind(label_id)
-            .fetch_optional(&ctx.state.db.pool)
-            .await
-            .expect("Query failed");
+            let deleted_label =
+                sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM labels WHERE id = $1")
+                    .bind(label_id)
+                    .fetch_optional(&ctx.state.db.pool)
+                    .await
+                    .expect("Query failed");
 
             assert!(deleted_label.is_none());
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
-        result.unwrap();
-    }
 
-    #[tokio::test]
-    async fn test_cannot_delete_system_label() {
-        let ctx = TestContext::new().await;
-        
-        // Ensure cleanup happens even if test fails
-        let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
-            let user = auth_helper.create_test_user().await;
-
-            // Create system label with unique name
-            let unique_label_name = format!("System Label {}", uuid::Uuid::new_v4());
-            let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
-                r#"
-                INSERT INTO labels (user_id, name, color, is_system)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id
-                "#,
-            )
-            .bind(None::<Uuid>) // System labels have NULL user_id
-            .bind(&unique_label_name)
-            .bind("#ff0000")
-            .bind(true)
-            .fetch_one(&ctx.state.db.pool)
-            .await
-            .unwrap();
-
-            // Try to delete system label
-            let result = sqlx::query(
-                "DELETE FROM labels WHERE id = $1 AND user_id = $2 AND is_system = FALSE"
-            )
-            .bind(label_id)
-            .bind(user.user_response.id)
-            .execute(&ctx.state.db.pool)
-            .await;
-
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap().rows_affected(), 0); // No rows affected
-
-            // Verify system label still exists
-            let system_label = sqlx::query_scalar::<_, uuid::Uuid>(
-                "SELECT id FROM labels WHERE id = $1"
-            )
-            .bind(label_id)
-            .fetch_one(&ctx.state.db.pool)
-            .await;
-
-            assert!(system_label.is_ok());
-
-            // Cleanup: Remove the test system label
-            sqlx::query("DELETE FROM labels WHERE id = $1")
-                .bind(label_id)
-                .execute(&ctx.state.db.pool)
-                .await
-                .expect("Failed to cleanup test system label");
-            
-            Ok(())
-        }.await;
-        
-        // Always cleanup database connections and test data
-        if let Err(e) = ctx.cleanup_and_close().await {
-            eprintln!("Warning: Test cleanup failed: {}", e);
-        }
-        
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_document_label_assignment() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -337,7 +268,7 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO documents (
-                    id, user_id, filename, original_filename, file_path, 
+                    id, user_id, filename, original_filename, file_path,
                     file_size, mime_type, created_at, updated_at
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -404,22 +335,22 @@ mod tests {
             let assigned_by: Option<uuid::Uuid> = assignment.get("assigned_by");
             assert_eq!(label_name, "Document Label");
             assert_eq!(assigned_by.unwrap(), user.user_response.id);
-            
+
             Ok(())
         }.await;
-        
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_document_label_removal() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -430,7 +361,7 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO documents (
-                    id, user_id, filename, original_filename, file_path, 
+                    id, user_id, filename, original_filename, file_path,
                     file_size, mime_type, created_at, updated_at
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -476,20 +407,19 @@ mod tests {
             .expect("Failed to assign label");
 
             // Remove label
-            let result = sqlx::query(
-                "DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2"
-            )
-            .bind(document_id)
-            .bind(label_id)
-            .execute(&ctx.state.db.pool)
-            .await;
+            let result =
+                sqlx::query("DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2")
+                    .bind(document_id)
+                    .bind(label_id)
+                    .execute(&ctx.state.db.pool)
+                    .await;
 
             assert!(result.is_ok());
             assert_eq!(result.unwrap().rows_affected(), 1);
 
             // Verify removal
             let assignment = sqlx::query(
-                "SELECT document_id FROM document_labels WHERE document_id = $1 AND label_id = $2"
+                "SELECT document_id FROM document_labels WHERE document_id = $1 AND label_id = $2",
             )
             .bind(document_id)
             .bind(label_id)
@@ -498,22 +428,23 @@ mod tests {
             .expect("Query failed");
 
             assert!(assignment.is_none());
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_get_document_labels() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -524,7 +455,7 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO documents (
-                    id, user_id, filename, original_filename, file_path, 
+                    id, user_id, filename, original_filename, file_path,
                     file_size, mime_type, created_at, updated_at
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -579,7 +510,7 @@ mod tests {
             // Get document labels
             let document_labels = sqlx::query(
                 r#"
-                SELECT l.id, l.name, l.color, l.icon, l.description, l.is_system
+                SELECT l.id, l.name, l.color, l.icon, l.description
                 FROM labels l
                 INNER JOIN document_labels dl ON l.id = dl.label_id
                 WHERE dl.document_id = $1
@@ -598,22 +529,23 @@ mod tests {
             assert_eq!(name1, "Label 1");
             assert_eq!(name2, "Label 2");
             assert_eq!(name3, "Label 3");
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_label_usage_counts() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -639,7 +571,7 @@ mod tests {
                 sqlx::query(
                     r#"
                     INSERT INTO documents (
-                        id, user_id, filename, original_filename, file_path, 
+                        id, user_id, filename, original_filename, file_path,
                         file_size, mime_type, created_at, updated_at
                     )
                     VALUES ($1, $2, $3, $3, $4, 1024, 'text/plain', NOW(), NOW())
@@ -674,7 +606,7 @@ mod tests {
             // Get usage count
             let usage_count = sqlx::query(
                 r#"
-                SELECT 
+                SELECT
                     l.id,
                     l.name,
                     COUNT(DISTINCT dl.document_id) as document_count
@@ -691,22 +623,23 @@ mod tests {
 
             let document_count: i64 = usage_count.get("document_count");
             assert_eq!(document_count, 3);
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
+
         result.unwrap();
     }
 
     #[tokio::test]
     async fn test_label_color_validation() {
         let ctx = TestContext::new().await;
-        
+
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
             let auth_helper = TestAuthHelper::new(ctx.app.clone());
@@ -728,59 +661,16 @@ mod tests {
 
             // Note: Database-level color validation would need to be added as a constraint
             // For now, we rely on application-level validation
-            
+
             Ok(())
-        }.await;
-        
+        }
+        .await;
+
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {
             eprintln!("Warning: Test cleanup failed: {}", e);
         }
-        
-        result.unwrap();
-    }
 
-    #[tokio::test]
-    async fn test_system_labels_migration() {
-        let ctx = TestContext::new().await;
-        
-        // Ensure cleanup happens even if test fails
-        let result: Result<()> = async {
-
-            // Check that system labels were created by migration
-            let system_labels = sqlx::query(
-                "SELECT name FROM labels WHERE is_system = TRUE ORDER BY name"
-            )
-            .fetch_all(&ctx.state.db.pool)
-            .await
-            .expect("Failed to fetch system labels");
-
-            // Verify expected system labels exist
-            let expected_labels = vec![
-                "Important", "To Review", "Archive", "Work", "Personal"
-            ];
-
-            assert!(system_labels.len() >= expected_labels.len());
-
-            for expected_label in expected_labels {
-                assert!(
-                    system_labels.iter().any(|label| {
-                        let name: String = label.get("name");
-                        name == expected_label
-                    }),
-                    "System label '{}' not found",
-                    expected_label
-                );
-            }
-            
-            Ok(())
-        }.await;
-        
-        // Always cleanup database connections and test data
-        if let Err(e) = ctx.cleanup_and_close().await {
-            eprintln!("Warning: Test cleanup failed: {}", e);
-        }
-        
         result.unwrap();
     }
 
@@ -798,7 +688,7 @@ mod tests {
             sqlx::query(
                 r#"
                 INSERT INTO documents (
-                    id, user_id, filename, original_filename, file_path, 
+                    id, user_id, filename, original_filename, file_path,
                     file_size, mime_type, created_at, updated_at
                 )
                 VALUES ($1, $2, 'test.txt', 'test.txt', '/test/test.txt', 1024, 'text/plain', NOW(), NOW())
@@ -938,7 +828,11 @@ mod tests {
             .expect("Failed to assign label");
 
             // Test the fixed get_document_labels query - this should retrieve ALL fields
-            let labels = ctx.state.db.get_document_labels(document_id).await
+            let labels = ctx
+                .state
+                .db
+                .get_document_labels(document_id)
+                .await
                 .expect("Failed to get document labels");
 
             // Verify we got the label
@@ -946,21 +840,24 @@ mod tests {
             let label = &labels[0];
 
             // Verify ALL fields are correctly retrieved (this was the bug fix - previously description,
-            // background_color, icon, and is_system were missing from the SELECT clause)
+            // background_color and icon were missing from the SELECT clause)
             assert_eq!(label.name, "Complete Label");
-            assert_eq!(label.description.as_ref().unwrap(), "This label has all fields populated");
+            assert_eq!(
+                label.description.as_ref().unwrap(),
+                "This label has all fields populated"
+            );
             assert_eq!(label.color, "#FF5733");
             assert_eq!(label.background_color.as_ref().unwrap(), "#FFA500");
             assert_eq!(label.icon.as_ref().unwrap(), "star");
-            assert_eq!(label.user_id, Some(user.user_response.id));
-            assert!(!label.is_system);
+            assert_eq!(label.user_id, user.user_response.id);
 
             // Verify the counts are also returned (as 0 since this query doesn't join for counts)
             assert_eq!(label.document_count, 0);
             assert_eq!(label.source_count, 0);
 
             Ok(())
-        }.await;
+        }
+        .await;
 
         // Always cleanup database connections and test data
         if let Err(e) = ctx.cleanup_and_close().await {

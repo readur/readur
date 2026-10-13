@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Dialog, EmptyState, SearchField, Switch } from '../../../ui';
+import { Button, Dialog, EmptyState, SearchField } from '../../../ui';
 import { Add } from '../../../ui/icons';
 import LabelCreateDialog from '../../labels/LabelCreateDialog';
 import type { LabelData } from '../../labels/Label';
@@ -10,12 +10,11 @@ import { LabelCard } from './LabelCard';
 import styles from './Labels.module.css';
 import { useLabels } from './useLabels';
 
-/** Label management: search, system-label filter, grouped cards with usage counts, create/edit/delete. */
+/** Label management: search, cards with usage counts, create/edit/delete. */
 export default function LabelsSection() {
   const { t } = useTranslation();
   const { labels, isLoading, error, setError, createLabel, updateLabel, deleteLabel } = useLabels();
   const [search, setSearch] = useState('');
-  const [showSystem, setShowSystem] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<LabelData | null>(null);
   const [toDelete, setToDelete] = useState<LabelData | null>(null);
@@ -23,12 +22,8 @@ export default function LabelsSection() {
 
   const q = search.toLowerCase();
   const filtered = labels.filter(
-    (l) =>
-      (l.name.toLowerCase().includes(q) || (l.description || '').toLowerCase().includes(q)) &&
-      (showSystem || !l.is_system),
+    (l) => l.name.toLowerCase().includes(q) || (l.description || '').toLowerCase().includes(q),
   );
-  const systemLabels = filtered.filter((l) => l.is_system);
-  const userLabels = filtered.filter((l) => !l.is_system);
 
   const confirmDelete = async () => {
     if (!toDelete) return;
@@ -56,7 +51,10 @@ export default function LabelsSection() {
     <div className={shared.stack}>
       <div className={shared.sectionHead}>
         <p className={shared.sectionIntro}>
-          {t('settings.labels.intro', 'Labels organise documents and sources. Counts show how often each label is used.')}
+          {t(
+            'settings.labels.intro',
+            'Labels organise documents and sources. Counts show how often each label is used.',
+          )}
         </p>
         {createButton}
       </div>
@@ -75,43 +73,30 @@ export default function LabelsSection() {
           onChange={setSearch}
           className={styles.search}
         />
-        <Switch label={t('labels.filters.systemLabels')} isSelected={showSystem} onChange={setShowSystem} />
       </div>
 
-      {systemLabels.length > 0 ? (
-        <section aria-labelledby="labels-system">
-          <h3 id="labels-system" className={shared.subheading}>
-            {t('labels.sections.systemLabels')}
-          </h3>
-          <ul className={styles.grid}>
-            {systemLabels.map((label) => (
-              <LabelCard key={label.id} label={label} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {userLabels.length > 0 ? (
-        <section aria-labelledby="labels-mine">
-          <h3 id="labels-mine" className={shared.subheading}>
-            {t('labels.sections.myLabels')}
-          </h3>
-          <ul className={styles.grid}>
-            {userLabels.map((label) => (
-              <LabelCard key={label.id} label={label} onEdit={setEditing} onDelete={setToDelete} />
-            ))}
-          </ul>
-        </section>
+      {filtered.length > 0 ? (
+        <ul className={styles.grid} aria-label={t('settings.labels.list', 'Labels')}>
+          {filtered.map((label) => (
+            <LabelCard key={label.id} label={label} onEdit={setEditing} onDelete={setToDelete} />
+          ))}
+        </ul>
       ) : null}
 
       {filtered.length === 0 ? (
         <EmptyState
           headingAs="h3"
           title={t('labels.empty.title')}
-          description={search ? t('labels.empty.noMatch', { query: search }) : t('labels.empty.noLabels')}
+          description={
+            search ? t('labels.empty.noMatch', { query: search }) : t('labels.empty.noLabels')
+          }
           action={
             search ? undefined : (
-              <Button variant="primary" icon={<Add fontSize="inherit" />} onPress={() => setCreateOpen(true)}>
+              <Button
+                variant="primary"
+                icon={<Add fontSize="inherit" />}
+                onPress={() => setCreateOpen(true)}
+              >
                 {t('labels.empty.createFirst')}
               </Button>
             )

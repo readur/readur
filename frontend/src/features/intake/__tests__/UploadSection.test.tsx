@@ -40,8 +40,21 @@ describe('Add documents: drop area (ported from UploadZone)', () => {
     renderIntake(<UploadSection />);
     await settle();
     const types = screen.getByText(/PDF · PNG/);
-    for (const ext of ['PDF', 'PNG', 'JPG', 'TIFF', 'TXT', 'DOCX']) expect(types).toHaveTextContent(ext);
-    expect(ACCEPTED_EXTENSIONS).toEqual(['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'TIFF', 'TXT', 'RTF', 'DOC', 'DOCX']);
+    for (const ext of ['PDF', 'PNG', 'JPG', 'TIFF', 'TXT', 'DOCX'])
+      expect(types).toHaveTextContent(ext);
+    expect(ACCEPTED_EXTENSIONS).toEqual([
+      'PDF',
+      'PNG',
+      'JPG',
+      'JPEG',
+      'GIF',
+      'BMP',
+      'TIFF',
+      'TXT',
+      'RTF',
+      'DOC',
+      'DOCX',
+    ]);
   });
 
   it('shows the 50 MB size limit', async () => {
@@ -80,12 +93,16 @@ describe('Add documents: upload board', () => {
     renderIntake(<UploadSection />);
     await settle();
     const grid = await addFiles(user, [pdf('a.pdf'), pdf('b.pdf', 1024 * 1024)]);
-    const heads = within(grid).getAllByRole('columnheader').map((h) => h.textContent);
+    const heads = within(grid)
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent);
     expect(heads.slice(0, 4)).toEqual(['Name', 'Size', 'Progress', 'Status']);
     const row = within(grid).getByRole('row', { name: /b\.pdf/ });
     expect(row).toHaveTextContent('1 MB');
     expect(row).toHaveTextContent(/pending/i);
-    expect(within(row).getByRole('progressbar', { name: 'Upload progress for b.pdf' })).toHaveAttribute('aria-valuenow', '0');
+    expect(
+      within(row).getByRole('progressbar', { name: 'Upload progress for b.pdf' }),
+    ).toHaveAttribute('aria-valuenow', '0');
     expect(screen.getByRole('button', { name: 'Upload all (2)' })).toBeEnabled();
   });
 
@@ -106,10 +123,16 @@ describe('Add documents: upload board', () => {
   });
 
   it('uploads with labels and OCR languages, then marks the new document', async () => {
-    api.post.mockImplementation((_url: string, _form: FormData, config: { onUploadProgress?: (e: { loaded: number; total: number }) => void }) => {
-      config.onUploadProgress?.({ loaded: 50, total: 100 });
-      return ok({ id: 'doc-42' });
-    });
+    api.post.mockImplementation(
+      (
+        _url: string,
+        _form: FormData,
+        config: { onUploadProgress?: (e: { loaded: number; total: number }) => void },
+      ) => {
+        config.onUploadProgress?.({ loaded: 50, total: 100 });
+        return ok({ id: 'doc-42' });
+      },
+    );
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
     await settle();
@@ -127,8 +150,18 @@ describe('Add documents: upload board', () => {
   });
 
   it('adds the chosen labels to each uploaded document', async () => {
-    const finance = { id: 'lbl-1', name: 'Finance', color: '#0969da', is_system: false, created_at: '', updated_at: '', document_count: 0, source_count: 0 };
-    api.get.mockImplementation((url: string) => (url.startsWith('/labels') ? ok([finance]) : ok({})));
+    const finance = {
+      id: 'lbl-1',
+      name: 'Finance',
+      color: '#0969da',
+      created_at: '',
+      updated_at: '',
+      document_count: 0,
+      source_count: 0,
+    };
+    api.get.mockImplementation((url: string) =>
+      url.startsWith('/labels') ? ok([finance]) : ok({}),
+    );
     api.post.mockImplementation(() => ok({ id: 'doc-l' }));
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
@@ -137,13 +170,27 @@ describe('Add documents: upload board', () => {
     await user.click(await screen.findByRole('option', { name: /Finance/ }));
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
-    await waitFor(() => expect(labelService.bulkAssign).toHaveBeenCalledWith(['doc-l'], ['lbl-1'], 'add'));
-    expect(within(grid).getByRole('row', { name: /a\.pdf/ })).not.toHaveTextContent('labels could not be added');
+    await waitFor(() =>
+      expect(labelService.bulkAssign).toHaveBeenCalledWith(['doc-l'], ['lbl-1'], 'add'),
+    );
+    expect(within(grid).getByRole('row', { name: /a\.pdf/ })).not.toHaveTextContent(
+      'labels could not be added',
+    );
   });
 
   it('says so when the upload worked but its labels could not be added', async () => {
-    const finance = { id: 'lbl-1', name: 'Finance', color: '#0969da', is_system: false, created_at: '', updated_at: '', document_count: 0, source_count: 0 };
-    api.get.mockImplementation((url: string) => (url.startsWith('/labels') ? ok([finance]) : ok({})));
+    const finance = {
+      id: 'lbl-1',
+      name: 'Finance',
+      color: '#0969da',
+      created_at: '',
+      updated_at: '',
+      document_count: 0,
+      source_count: 0,
+    };
+    api.get.mockImplementation((url: string) =>
+      url.startsWith('/labels') ? ok([finance]) : ok({}),
+    );
     api.post.mockImplementation(() => ok({ id: 'doc-l' }));
     labelService.bulkAssign.mockImplementation(() => Promise.reject(apiError(500)));
     const user = userEvent.setup();
@@ -154,7 +201,9 @@ describe('Add documents: upload board', () => {
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
     const row = within(grid).getByRole('row', { name: /a\.pdf/ });
-    await waitFor(() => expect(row).toHaveTextContent('Uploaded, but the labels could not be added.'));
+    await waitFor(() =>
+      expect(row).toHaveTextContent('Uploaded, but the labels could not be added.'),
+    );
     expect(isLit('document', 'doc-l')).toBe(true);
   });
 
@@ -169,7 +218,9 @@ describe('Add documents: upload board', () => {
   });
 
   it('shows a per-row error with Retry, and retrying succeeds', async () => {
-    api.post.mockImplementationOnce(() => Promise.reject(apiError(413, 'DOCUMENT_TOO_LARGE', 'too big')));
+    api.post.mockImplementationOnce(() =>
+      Promise.reject(apiError(413, 'DOCUMENT_TOO_LARGE', 'too big')),
+    );
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
     await settle();
@@ -184,19 +235,27 @@ describe('Add documents: upload board', () => {
   });
 
   it('falls back to the server message for errors without a known code', async () => {
-    api.post.mockImplementationOnce(() => Promise.reject(apiError(400, undefined, 'Filename contains invalid characters')));
+    api.post.mockImplementationOnce(() =>
+      Promise.reject(apiError(400, undefined, 'Filename contains invalid characters')),
+    );
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
     await settle();
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
-    await waitFor(() => expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveTextContent('Filename contains invalid characters'));
+    await waitFor(() =>
+      expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveTextContent(
+        'Filename contains invalid characters',
+      ),
+    );
   });
 
   it('says why labels are missing when they cannot be loaded', async () => {
     api.get.mockImplementation(() => Promise.reject(apiError(500)));
     renderIntake(<UploadSection />);
-    expect(await screen.findByText('Labels could not be loaded. You can still upload without them.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Labels could not be loaded. You can still upload without them.'),
+    ).toBeInTheDocument();
   });
 
   it('does not upload twice or count a failure when a row is retried during "Upload all"', async () => {
@@ -213,7 +272,10 @@ describe('Add documents: upload board', () => {
 
     // Second batch: the first three hang, so d.pdf waits in the queue.
     api.post.mockImplementation(
-      () => new Promise((resolve) => releases.push(() => resolve({ data: { id: `doc-${releases.length}` } }))),
+      () =>
+        new Promise((resolve) =>
+          releases.push(() => resolve({ data: { id: `doc-${releases.length}` } })),
+        ),
     );
     await user.click(screen.getByRole('button', { name: 'Upload all (4)' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(7));
@@ -222,7 +284,9 @@ describe('Add documents: upload board', () => {
     await user.click(within(rowD).getByRole('button', { name: 'Retry d.pdf' }));
     await waitFor(() => expect(isLit('document', 'doc-d')).toBe(true));
     releases.forEach((r) => r());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload all (0)' })).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Upload all (0)' })).toBeDisabled(),
+    );
     await settle();
     expect(api.post).toHaveBeenCalledTimes(8);
     expect(rowD).not.toHaveTextContent(/failed/i);
@@ -236,7 +300,9 @@ describe('Add documents: upload board', () => {
     await user.click(within(grid).getByRole('button', { name: 'Remove a.pdf' }));
     expect(within(grid).queryByRole('row', { name: /a\.pdf/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear finished' })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Clear finished' })).toBeEnabled(),
+    );
     await user.click(screen.getByRole('button', { name: 'Clear finished' }));
     expect(screen.getByRole('heading', { name: 'No files yet' })).toBeInTheDocument();
   });
@@ -248,9 +314,16 @@ describe('Add documents: upload board', () => {
     await settle();
     const grid = await addFiles(user, [pdf('a.pdf')]);
     await user.click(screen.getByRole('button', { name: 'Upload all (1)' }));
-    await waitFor(() => expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveAttribute('data-changed', 'true'));
+    await waitFor(() =>
+      expect(within(grid).getByRole('row', { name: /a\.pdf/ })).toHaveAttribute(
+        'data-changed',
+        'true',
+      ),
+    );
     await user.click(within(grid).getByRole('rowheader', { name: /a\.pdf/ }));
-    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/intake?document=doc-9');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent(
+      '/intake?document=doc-9',
+    );
   });
 
   it('offers the OCR language and label pickers', async () => {

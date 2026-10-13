@@ -1,11 +1,11 @@
 use anyhow::Result;
-use sqlx::{QueryBuilder, Postgres, Row};
+use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
-use crate::models::{Document, DocumentFilters, UserRole, FacetItem};
-use crate::routes::labels::Label;
-use super::helpers::{map_row_to_document, apply_role_based_filter};
+use super::helpers::{apply_role_based_filter, map_row_to_document};
 use crate::db::Database;
+use crate::models::{Document, DocumentFilters, FacetItem, UserRole};
+use crate::routes::labels::Label;
 
 impl Database {
     /// Gets labels for a specific document
@@ -14,13 +14,13 @@ impl Database {
             r#"
             SELECT
                 l.id, l.user_id, l.name, l.description, l.color,
-                l.background_color, l.icon, l.is_system, l.created_at, l.updated_at,
+                l.background_color, l.icon, l.created_at, l.updated_at,
                 0::bigint as document_count, 0::bigint as source_count
             FROM labels l
             JOIN document_labels dl ON l.id = dl.label_id
             WHERE dl.document_id = $1
             ORDER BY l.name
-            "#
+            "#,
         )
         .bind(document_id)
         .fetch_all(&self.pool)
@@ -30,7 +30,10 @@ impl Database {
     }
 
     /// Gets labels for multiple documents in batch
-    pub async fn get_labels_for_documents(&self, document_ids: &[Uuid]) -> Result<Vec<(Uuid, Vec<Label>)>> {
+    pub async fn get_labels_for_documents(
+        &self,
+        document_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, Vec<Label>)>> {
         if document_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -62,7 +65,6 @@ impl Database {
                 color: row.get("color"),
                 background_color: None,
                 icon: None,
-                is_system: false,
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 document_count: 0,
@@ -87,14 +89,20 @@ impl Database {
     }
 
     /// Finds duplicate documents by file hash for a user
-    pub async fn get_user_duplicates(&self, user_id: Uuid, user_role: UserRole, limit: i64, offset: i64) -> Result<Vec<Vec<Document>>> {
+    pub async fn get_user_duplicates(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Vec<Document>>> {
         let mut query = QueryBuilder::<Postgres>::new(
             r#"
             WITH duplicate_hashes AS (
                 SELECT file_hash, COUNT(*) as count
                 FROM documents 
                 WHERE file_hash IS NOT NULL
-            "#
+            "#,
         );
 
         if user_role != UserRole::Admin {
@@ -111,7 +119,7 @@ impl Database {
             FROM documents d
             JOIN duplicate_hashes dh ON d.file_hash = dh.file_hash
             WHERE d.file_hash IS NOT NULL
-            "#
+            "#,
         );
 
         if user_role != UserRole::Admin {
@@ -146,13 +154,21 @@ impl Database {
         // Apply pagination to groups
         let start = offset as usize;
         let end = (offset + limit) as usize;
-        Ok(duplicate_groups.into_iter().skip(start).take(end - start).collect())
+        Ok(duplicate_groups
+            .into_iter()
+            .skip(start)
+            .take(end - start)
+            .collect())
     }
 
     /// Gets MIME type facets (aggregated counts by MIME type)
-    pub async fn get_mime_type_facets(&self, user_id: Uuid, user_role: UserRole) -> Result<Vec<FacetItem>> {
+    pub async fn get_mime_type_facets(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+    ) -> Result<Vec<FacetItem>> {
         let mut query = QueryBuilder::<Postgres>::new(
-            "SELECT mime_type as value, COUNT(*) as count FROM documents WHERE 1=1"
+            "SELECT mime_type as value, COUNT(*) as count FROM documents WHERE 1=1",
         );
 
         apply_role_based_filter(&mut query, user_id, user_role);
@@ -160,36 +176,47 @@ impl Database {
 
         let rows = query.build().fetch_all(&self.pool).await?;
 
-        Ok(rows.into_iter().map(|row| FacetItem {
-            value: row.get("value"),
-            count: row.get("count"),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| FacetItem {
+                value: row.get("value"),
+                count: row.get("count"),
+            })
+            .collect())
     }
 
     /// Gets tag facets (aggregated counts by label)
-    pub async fn get_tag_facets(&self, user_id: Uuid, _user_role: UserRole) -> Result<Vec<FacetItem>> {
+    pub async fn get_tag_facets(
+        &self,
+        user_id: Uuid,
+        _user_role: UserRole,
+    ) -> Result<Vec<FacetItem>> {
         let query = sqlx::query_as::<_, (String, i64)>(
             r#"
             SELECT l.name as value, COUNT(DISTINCT dl.document_id) as count
             FROM labels l
             LEFT JOIN document_labels dl ON l.id = dl.label_id
-            WHERE (l.user_id = $1 OR l.is_system = true)
+            WHERE l.user_id = $1
             GROUP BY l.id, l.name
             ORDER BY count DESC, l.name
-            "#
+            "#,
         )
         .bind(user_id);
 
         let rows = query.fetch_all(&self.pool).await?;
 
-        Ok(rows.into_iter().map(|(value, count)| FacetItem {
-            value,
-            count,
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|(value, count)| FacetItem { value, count })
+            .collect())
     }
 
     /// Counts documents for a specific source
-    pub async fn count_documents_for_source(&self, user_id: Uuid, source_id: Uuid) -> Result<(i64, i64)> {
+    pub async fn count_documents_for_source(
+        &self,
+        user_id: Uuid,
+        source_id: Uuid,
+    ) -> Result<(i64, i64)> {
         let row = sqlx::query(
             r#"
             SELECT 
@@ -197,7 +224,7 @@ impl Database {
                 COUNT(CASE WHEN ocr_text IS NOT NULL THEN 1 END) as total_documents_ocr
             FROM documents 
             WHERE user_id = $1 AND source_id = $2
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(source_id)
@@ -208,12 +235,15 @@ impl Database {
     }
 
     /// Counts documents for multiple sources in batch
-    pub async fn count_documents_for_sources(&self, user_id: Uuid, source_ids: &[Uuid]) -> Result<Vec<(Uuid, i64, i64)>> {
+    pub async fn count_documents_for_sources(
+        &self,
+        user_id: Uuid,
+        source_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, i64, i64)>> {
         if source_ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        
         let rows = sqlx::query(
             r#"
             SELECT 
@@ -223,19 +253,22 @@ impl Database {
             FROM documents 
             WHERE user_id = $1 AND source_id = ANY($2)
             GROUP BY source_id
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(source_ids)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|row| {
-            let source_id: Uuid = row.get("source_id");
-            let total_documents: i64 = row.get("total_documents");
-            let total_documents_ocr: i64 = row.get("total_documents_ocr");
-            (source_id, total_documents, total_documents_ocr)
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let source_id: Uuid = row.get("source_id");
+                let total_documents: i64 = row.get("total_documents");
+                let total_documents_ocr: i64 = row.get("total_documents_ocr");
+                (source_id, total_documents, total_documents_ocr)
+            })
+            .collect())
     }
 
     /// Gets documents by user with role-based access and OCR status filtering
@@ -245,9 +278,12 @@ impl Database {
         user_role: UserRole,
         ocr_status: Option<&str>,
         limit: i64,
-        offset: i64
+        offset: i64,
     ) -> Result<Vec<Document>> {
-        let filters = DocumentFilters { ocr_status: ocr_status.map(str::to_string), ..Default::default() };
+        let filters = DocumentFilters {
+            ocr_status: ocr_status.map(str::to_string),
+            ..Default::default()
+        };
         Ok(self
             .list_documents_filtered(user_id, user_role, &filters, None, None, limit, offset)
             .await?
@@ -261,8 +297,9 @@ impl Database {
         &self,
         user_id: Uuid,
         user_role: UserRole,
-        ocr_status: Option<&str>
+        ocr_status: Option<&str>,
     ) -> Result<i64> {
-        self.count_documents_by_user_with_role_and_filter(user_id, user_role, ocr_status).await
+        self.count_documents_by_user_with_role_and_filter(user_id, user_role, ocr_status)
+            .await
     }
 }

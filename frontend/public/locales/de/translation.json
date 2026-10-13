@@ -1110,7 +1110,8 @@
       "intro": "Labels ordnen Dokumente und Quellen. Die Zahlen zeigen, wie oft ein Label verwendet wird.",
       "invalidData": "Ungültiges Datenformat vom Server erhalten",
       "unexpectedStatus": "Unerwartete Serverantwort ({{status}})",
-      "updateFailed": "Label konnte nicht aktualisiert werden"
+      "updateFailed": "Label konnte nicht aktualisiert werden",
+      "list": "Labels"
     },
     "languageSelector": {
       "addMore_one": "Weitere Sprachen hinzufügen (noch {{count}})",
@@ -1215,16 +1216,6 @@
     "search": {
       "placeholder": "Labels suchen..."
     },
-    "filters": {
-      "systemLabels": "System-Labels"
-    },
-    "sections": {
-      "systemLabels": "System-Labels",
-      "myLabels": "Meine Labels"
-    },
-    "badge": {
-      "system": "System"
-    },
     "stats": {
       "documents": "Dokumente: {{count}}",
       "sources": "Quellen: {{count}}"
@@ -1253,8 +1244,6 @@
     },
     "selector": {
       "placeholder": "Labels suchen oder erstellen...",
-      "systemLabels": "System-Labels",
-      "myLabels": "Meine Labels",
       "createLabel": "Label \"{{name}}\" erstellen",
       "noLabelsFound": "Keine Labels gefunden",
       "noLabelsMatch": "Keine Labels entsprechen \"{{query}}\"",
@@ -1283,10 +1272,8 @@
       "loadFailed": "Fehler beim Laden der Labels. Bitte überprüfen Sie Ihre Verbindung.",
       "notFound": "Label nicht gefunden. Es wurde möglicherweise von einem anderen Benutzer gelöscht.",
       "duplicateName": "Ein Label mit diesem Namen existiert bereits. Bitte wählen Sie einen anderen Namen.",
-      "systemModification": "System-Labels können nicht geändert werden. Nur benutzererstellte Labels können bearbeitet werden.",
       "alreadyDeleted": "Label nicht gefunden. Es wurde möglicherweise bereits gelöscht.",
       "inUse": "Label kann nicht gelöscht werden, da es derzeit Dokumenten zugewiesen ist. Bitte entfernen Sie das Label zuerst von allen Dokumenten.",
-      "systemDelete": "System-Labels können nicht gelöscht werden. Nur benutzererstellte Labels können entfernt werden.",
       "invalidName": "Label-Name enthält ungültige Zeichen. Bitte verwenden Sie nur Buchstaben, Zahlen und einfache Satzzeichen.",
       "invalidColor": "Ungültiges Farbformat. Bitte verwenden Sie eine gültige Hex-Farbe wie #0969da.",
       "maxLabelsReached": "Maximale Anzahl von Labels erreicht. Bitte löschen Sie einige Labels, bevor Sie neue erstellen.",

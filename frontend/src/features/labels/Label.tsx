@@ -10,7 +10,7 @@ export interface LabelProps {
   variant?: 'filled' | 'outlined';
   /** Show the document count after the name when it is above zero. */
   showCount?: boolean;
-  /** Show a remove button (never for system labels). */
+  /** Show a remove button, which takes the label off the item (it never deletes the label). */
   deletable?: boolean;
   onDelete?: (labelId: string) => void;
   /** Makes the tag a button. */
@@ -21,7 +21,7 @@ export interface LabelProps {
 
 /**
  * A label tag for a LabelData record: the ui LabelChip (colour dot plus name) with the label's
- * colour, icon, count and remove action wired up. System labels are never removable.
+ * colour, icon, count and remove action wired up.
  */
 function Label({
   label,
@@ -36,7 +36,6 @@ function Label({
 }: LabelProps) {
   const { t } = useTranslation();
   const Icon = labelIcon(label.icon);
-  const canDelete = deletable && !label.is_system;
   return (
     <LabelChip
       name={label.name}
@@ -46,7 +45,7 @@ function Label({
       size={size}
       variant={variant}
       onPress={onClick ? () => onClick(label.id) : undefined}
-      onRemove={canDelete ? () => onDelete?.(label.id) : undefined}
+      onRemove={deletable ? () => onDelete?.(label.id) : undefined}
       removeLabel={t('labels.tag.remove', { name: label.name, defaultValue: 'Remove {{name}}' })}
       isDisabled={disabled}
       className={className}

@@ -13,7 +13,6 @@ const newLabel: LabelData = {
   id: 'new-label',
   name: 'New Label',
   color: '#0969da',
-  is_system: false,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
   document_count: 0,
@@ -22,7 +21,12 @@ const newLabel: LabelData = {
 
 const renderSelector = (props: Partial<React.ComponentProps<typeof LabelSelector>> = {}) =>
   renderWithProviders(
-    <LabelSelector selectedLabels={[]} availableLabels={mockLabels} onLabelsChange={vi.fn()} {...props} />,
+    <LabelSelector
+      selectedLabels={[]}
+      availableLabels={mockLabels}
+      onLabelsChange={vi.fn()}
+      {...props}
+    />,
   );
 
 const optionNames = () => screen.getAllByRole('option').map((o) => o.textContent ?? '');
@@ -134,20 +138,13 @@ describe('LabelSelector', () => {
     });
   });
 
-  describe('grouping', () => {
-    test('groups system labels and the user’s own labels', async () => {
+  describe('options', () => {
+    test('lists every label in one plain list, with no system or personal groups', async () => {
       renderSelector();
       const list = await openList(user);
-      expect(within(list).getByText('System Labels')).toBeInTheDocument();
-      expect(within(list).getByText('My Labels')).toBeInTheDocument();
-    });
-
-    test('shows only the system group when there are no user labels', async () => {
-      renderSelector({ availableLabels: mockLabels.filter((l) => l.is_system) });
-      const list = await openList(user);
-      expect(within(list).getByText('System Labels')).toBeInTheDocument();
+      expect(within(list).queryByText('System Labels')).not.toBeInTheDocument();
       expect(within(list).queryByText('My Labels')).not.toBeInTheDocument();
-      expect(within(list).queryByText('Project Alpha')).not.toBeInTheDocument();
+      expect(within(list).getAllByRole('option')).toHaveLength(mockLabels.length);
     });
   });
 
@@ -183,7 +180,9 @@ describe('LabelSelector', () => {
     test('offers to create a label for new text', async () => {
       renderSelector({ onCreateLabel: vi.fn() });
       await user.type(screen.getByRole('combobox'), 'New Label');
-      expect(await screen.findByRole('option', { name: 'Create label "New Label"' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('option', { name: 'Create label "New Label"' }),
+      ).toBeInTheDocument();
     });
 
     test('does not offer create without onCreateLabel', async () => {
@@ -281,12 +280,18 @@ describe('LabelSelector', () => {
   describe('sizes', () => {
     test('renders the small size', () => {
       renderSelector({ size: 'small' });
-      expect(screen.getByRole('combobox').closest('[data-size]')).toHaveAttribute('data-size', 'small');
+      expect(screen.getByRole('combobox').closest('[data-size]')).toHaveAttribute(
+        'data-size',
+        'small',
+      );
     });
 
     test('renders the medium size by default', () => {
       renderSelector();
-      expect(screen.getByRole('combobox').closest('[data-size]')).toHaveAttribute('data-size', 'medium');
+      expect(screen.getByRole('combobox').closest('[data-size]')).toHaveAttribute(
+        'data-size',
+        'medium',
+      );
     });
   });
 
