@@ -11,6 +11,9 @@ use uuid::Uuid;
 
 use crate::{db::Database, ocr::enhanced::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager, monitoring::request_throttler::RequestThrottler};
 
+/// Upper bound on concurrent OCR jobs, to avoid exhausting the background DB pool.
+const MAX_CONCURRENT_OCR_JOBS: usize = 15;
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct OcrQueueItem {
     pub id: Uuid,
@@ -63,13 +66,15 @@ impl OcrQueueService {
         max_office_document_size_mb: u64,
         ocr_timeout_seconds: u64,
     ) -> Self {
+        // Clamp once so the worker semaphore, throttler and logs agree.
+        let max_concurrent_jobs = max_concurrent_jobs.clamp(1, MAX_CONCURRENT_OCR_JOBS);
         let worker_id = format!("worker-{}-{}", hostname::get().unwrap_or_default().to_string_lossy(), Uuid::new_v4());
         let transaction_manager = DocumentTransactionManager::new(pool.clone());
 
         // Create a processing throttler to limit concurrent OCR operations
         // This prevents overwhelming the database connection pool
         let processing_throttler = Arc::new(RequestThrottler::new(
-            max_concurrent_jobs.min(15), // Don't exceed 15 concurrent OCR processes
+            max_concurrent_jobs,
             60, // 60 second max wait time for OCR processing
             format!("ocr-processing-{}", worker_id),
         ));
@@ -1301,5 +1306,37 @@ impl OcrQueueService {
         } else {
             ("other", false)  // Fallback for any unrecognized errors
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::postgres::PgPoolOptions;
+
+    fn queue_with(max_concurrent_jobs: usize) -> OcrQueueService {
+        // A lazy pool never connects, so no database is needed.
+        let pool = PgPoolOptions::new().connect_lazy("postgres://localhost/unused").unwrap();
+        OcrQueueService::new(
+            Database { pool: pool.clone() },
+            pool,
+            max_concurrent_jobs,
+            Arc::new(crate::services::file_service::FileService::new("/tmp".to_string())),
+            100,
+            100,
+            300,
+        )
+    }
+
+    #[tokio::test]
+    async fn uses_configured_concurrency() {
+        assert_eq!(queue_with(1).max_concurrent_jobs, 1);
+        assert_eq!(queue_with(4).max_concurrent_jobs, 4);
+    }
+
+    #[tokio::test]
+    async fn clamps_concurrency_to_supported_range() {
+        assert_eq!(queue_with(0).max_concurrent_jobs, 1);
+        assert_eq!(queue_with(50).max_concurrent_jobs, MAX_CONCURRENT_OCR_JOBS);
     }
 }

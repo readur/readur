@@ -381,7 +381,8 @@ async fn main() -> anyhow::Result<()> {
     }
     
     // Create shared OCR queue service for both web and background operations
-    let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
+    // OcrQueueService clamps this to protect the DB pool.
+    let concurrent_jobs = config.concurrent_ocr_jobs;
     let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         background_db.clone(),
         background_db.get_pool().clone(),

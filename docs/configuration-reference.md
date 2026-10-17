@@ -136,7 +136,7 @@ Related API behavior:
 | `OCR_ENABLED` | Boolean | `true` | Enable OCR processing | No |
 | `OCR_LANGUAGE` | String | `eng` | Default OCR language(s) | No |
 | `OCR_ENGINE` | String | `tesseract` | OCR engine (tesseract, cloud) | No |
-| `CONCURRENT_OCR_JOBS` | Integer | CPU cores / 2 | Concurrent OCR workers | No |
+| `CONCURRENT_OCR_JOBS` | Integer | `4` | Concurrent OCR workers (1–15) | No |
 | `OCR_TIMEOUT_SECONDS` | Integer | `300` | OCR timeout per document | No |
 | `OCR_RETRY_ATTEMPTS` | Integer | `3` | OCR retry attempts | No |
 | `OCR_RETRY_DELAY` | Integer | `60` | Delay between retries (seconds) | No |
