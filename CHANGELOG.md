@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.1](https://github.com/readur/readur/compare/v3.1.0...v3.1.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **ocr:** honour CONCURRENT_OCR_JOBS for the OCR worker ([3c52429](https://github.com/readur/readur/commit/3c5242969ced8e52dda625b4019520b0207cdd8f))
+* **ocr:** honour CONCURRENT_OCR_JOBS for the OCR worker ([3142619](https://github.com/readur/readur/commit/3142619a5418a95f2e7149d044a62080a83fdc6d))
+
 ## [3.1.0](https://github.com/readur/readur/compare/v3.0.0...v3.1.0) (2026-10-13)
 
 
