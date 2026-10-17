@@ -36,7 +36,7 @@ compile = false
 rust = { version = "1.99.0", components = "rustfmt,clippy" }
 # Matches `FROM node:24-bookworm` in Dockerfile and `node-version: "24"` in CI.
 # npm ships with node; frontend/package-lock.json is an npm lockfile.
-node = "24.21.0"
+node = "24.22.0"
 # Formatter for everything that is not Rust: TS/JS, JSON, Markdown, YAML, TOML.
 # Config in .oxfmtrc.json, ignores in .prettierignore.
 oxfmt = "0.72.0"
