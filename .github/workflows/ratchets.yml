@@ -70,7 +70,7 @@ jobs:
             clang
 
       - name: Setup mise (Rust toolchain from .mise/mise.lock)
-        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
         with:
           install_args: rust
 
