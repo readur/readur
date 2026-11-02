@@ -6,40 +6,40 @@ on:
       - master
       - main
     paths:
-      - 'src/services/webdav/**'
-      - 'src/routes/webdav/**'
-      - 'src/webdav_xml_parser.rs'
-      - 'tests/stress/**'
-      - '.github/workflows/webdav-stress-test.yml'
+      - "src/services/webdav/**"
+      - "src/routes/webdav/**"
+      - "src/webdav_xml_parser.rs"
+      - "tests/stress/**"
+      - ".github/workflows/webdav-stress-test.yml"
   pull_request:
     branches:
       - master
       - main
     paths:
-      - 'src/services/webdav/**'
-      - 'src/routes/webdav/**'
-      - 'src/webdav_xml_parser.rs'
-      - 'tests/stress/**'
-      - '.github/workflows/webdav-stress-test.yml'
+      - "src/services/webdav/**"
+      - "src/routes/webdav/**"
+      - "src/webdav_xml_parser.rs"
+      - "tests/stress/**"
+      - ".github/workflows/webdav-stress-test.yml"
   schedule:
     # Run stress tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       stress_level:
-        description: 'Stress test intensity level'
+        description: "Stress test intensity level"
         required: true
-        default: 'medium'
+        default: "medium"
         type: choice
         options:
-        - light
-        - medium
-        - heavy
-        - extreme
+          - light
+          - medium
+          - heavy
+          - extreme
       timeout_minutes:
-        description: 'Test timeout in minutes'
+        description: "Test timeout in minutes"
         required: false
-        default: '30'
+        default: "30"
         type: string
 
 env:
@@ -47,6 +47,11 @@ env:
   RUST_LOG: debug,webdav_stress=trace
   RUST_BACKTRACE: full
   DATABASE_URL: postgresql://readur_test:readur_test@localhost:5433/readur_test
+  # Passed via env, not expanded inside run scripts (zizmor template-injection).
+  STRESS_LEVEL: ${{ github.event.inputs.stress_level || 'medium' }}
+
+permissions:
+  contents: read
 
 # A newer push to the same PR or branch supersedes this run.
 concurrency:
@@ -80,7 +85,7 @@ jobs:
         run: |
           echo "=== Initial disk usage ==="
           df -h
-          
+
           # Remove unnecessary packages to free up space
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
@@ -91,12 +96,12 @@ jobs:
           sudo rm -rf /usr/share/swift
           sudo apt-get clean
           sudo docker system prune -af --volumes
-          
+
           # Set up efficient temp directories
           echo "TMPDIR=${{ runner.temp }}" >> $GITHUB_ENV
           echo "WEBDAV_TEST_ROOT=${{ runner.temp }}/webdav-stress" >> $GITHUB_ENV
           mkdir -p ${{ runner.temp }}/webdav-stress
-          
+
           echo "=== Disk usage after cleanup ==="
           df -h
 
@@ -137,7 +142,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-stress-
 
-      - name: Cache target directory  
+      - name: Cache target directory
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: target
@@ -159,7 +164,7 @@ jobs:
           chmod +x scripts/generate-webdav-test-data.sh
           ./scripts/generate-webdav-test-data.sh \
             --webdav-root "${{ env.WEBDAV_TEST_ROOT }}/webdav-server" \
-            --stress-level "${{ github.event.inputs.stress_level || 'medium' }}" \
+            --stress-level "$STRESS_LEVEL" \
             --include-git-repos \
             --include-large-directories \
             --include-unicode-names \
@@ -226,12 +231,12 @@ jobs:
         run: |
           # Set up directories
           mkdir -p uploads watch stress-test-logs
-          
+
           # Start server with stress testing configuration
           ./target/release/readur > readur-stress.log 2>&1 &
           echo $! > readur.pid
           echo "READUR_PID=$(cat readur.pid)" >> $GITHUB_ENV
-          
+
           # Wait for readur to start
           for i in {1..30}; do
             if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
@@ -241,7 +246,7 @@ jobs:
             echo "Waiting for readur server... ($i/30)"
             sleep 2
           done
-          
+
           if ! curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
             echo "ERROR: Readur server failed to start!"
             cat readur-stress.log
@@ -446,20 +451,20 @@ jobs:
         if: always()
         run: |
           echo "=== WebDAV Performance Analysis ==="
-          
+
           # Run performance analysis
           if [ -f "stress-test-metrics.json" ]; then
             cargo run --release --bin analyze-webdav-performance -- \
               --metrics-file stress-test-metrics.json \
               --output-format github-summary
           fi
-          
+
           # Generate summary report
           echo "## WebDAV Stress Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stress Level**: ${{ github.event.inputs.stress_level || 'medium' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stress Level**: ${STRESS_LEVEL}" >> $GITHUB_STEP_SUMMARY
           echo "- **Test Duration**: $(date -d @$SECONDS -u +%H:%M:%S)" >> $GITHUB_STEP_SUMMARY
           echo "- **Infinite Loop Detection**: ${INFINITE_LOOP_DETECTED:-false}" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ -f "webdav-performance-report.md" ]; then
             cat webdav-performance-report.md >> $GITHUB_STEP_SUMMARY
           fi
@@ -468,27 +473,27 @@ jobs:
         if: always()
         run: |
           echo "=== Collecting logs for analysis ==="
-          
+
           # Create logs directory
           mkdir -p stress-test-artifacts/logs
-          
+
           # Collect all relevant logs
           cp readur-stress.log stress-test-artifacts/logs/ || echo "No readur log"
           cp dufs.log stress-test-artifacts/logs/ || echo "No dufs log"
-          
+
           # Analyze logs for loop patterns
           if [ -f scripts/analyze-webdav-loops.py ]; then
             python3 scripts/analyze-webdav-loops.py \
               --log-file stress-test-artifacts/logs/readur-stress.log \
               --output stress-test-artifacts/loop-analysis.json
           fi
-          
+
           # Check for problematic patterns
           echo "=== Log Analysis Results ==="
           if grep -q "already scanned directory" stress-test-artifacts/logs/readur-stress.log 2>/dev/null; then
             echo "::warning::Detected repeated directory scanning patterns"
           fi
-          
+
           if grep -q "timeout" stress-test-artifacts/logs/readur-stress.log 2>/dev/null; then
             echo "::warning::Detected timeout issues during WebDAV operations"
           fi
@@ -509,7 +514,7 @@ jobs:
         run: |
           echo "::error title=Infinite Loop Detected::WebDAV sync entered an infinite loop during stress testing"
           echo "::error::Check the uploaded artifacts for detailed analysis"
-          
+
           # Create GitHub issue for infinite loop detection
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "This would create a GitHub issue for infinite loop detection"
