@@ -6,6 +6,7 @@ use std::str;
 use serde_json;
 
 use crate::models::FileIngestionInfo;
+use crate::utils::xml_text::MergedTextReader;
 use crate::mime_detection::{detect_mime_for_discovery, DetectionStrategy};
 
 #[derive(Debug, Default)]
@@ -28,6 +29,7 @@ struct PropFindResponse {
 pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
+    let mut reader = MergedTextReader::new(reader);
     
     let mut files = Vec::new();
     let mut current_response: Option<PropFindResponse> = None;
@@ -70,7 +72,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                 }
             }
             Ok(Event::Text(e)) => {
-                let text = e.unescape()?.to_string();
+                let text = e.xml10_content().to_string();
                 
                 if in_response && !text.trim().is_empty() {
                     if let Some(ref mut resp) = current_response {
@@ -263,6 +265,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
 pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<FileIngestionInfo>> {
     let mut reader = Reader::from_str(xml_text);
     reader.config_mut().trim_text(true);
+    let mut reader = MergedTextReader::new(reader);
     
     let mut files = Vec::new();
     let mut current_response: Option<PropFindResponse> = None;
@@ -305,7 +308,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                 }
             }
             Ok(Event::Text(e)) => {
-                let text = e.unescape()?.to_string();
+                let text = e.xml10_content().to_string();
                 
                 if in_response && !text.trim().is_empty() {
                     if let Some(ref mut resp) = current_response {
@@ -491,17 +494,15 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
 fn get_local_name(e: &BytesStart) -> Result<String> {
     let qname = e.name();
     let local = qname.local_name();
-    let name = str::from_utf8(local.as_ref())
-        .map_err(|e| anyhow!("Invalid UTF-8 in element name: {}", e))?;
-    Ok(name.to_string())
+    // quick-xml >= 0.38 hands names out as already-validated UTF-8.
+    Ok(local.as_ref().to_string())
 }
 
 fn get_local_name_from_end(e: &quick_xml::events::BytesEnd) -> Result<String> {
     let qname = e.name();
     let local = qname.local_name();
-    let name = str::from_utf8(local.as_ref())
-        .map_err(|e| anyhow!("Invalid UTF-8 in element name: {}", e))?;
-    Ok(name.to_string())
+    // quick-xml >= 0.38 hands names out as already-validated UTF-8.
+    Ok(local.as_ref().to_string())
 }
 
 fn parse_http_date(date_str: &str) -> Option<DateTime<Utc>> {
@@ -960,5 +961,32 @@ mod tests {
         assert!(weak_compare_etags("\"1\"", "\"1\""));
         assert!(strong_compare_etags("\"1\"", "\"1\""));
     }
-}
 
+    #[test]
+    fn test_entity_references_keep_the_whole_value() {
+        // quick-xml >= 0.38 reports `&amp;` as a separate event between text
+        // fragments; a per-fragment parser kept only "Jerry.pdf" here.
+        let xml = r#"<?xml version="1.0"?>
+        <d:multistatus xmlns:d="DAV:">
+            <d:response>
+                <d:href>/webdav/Tom &amp; Jerry.pdf</d:href>
+                <d:propstat>
+                    <d:prop>
+                        <d:displayname> Tom &amp; Jerry.pdf </d:displayname>
+                        <d:getcontentlength>10</d:getcontentlength>
+                        <d:getetag>&quot;e&amp;1&quot;</d:getetag>
+                        <d:resourcetype/>
+                    </d:prop>
+                    <d:status>HTTP/1.1 200 OK</d:status>
+                </d:propstat>
+            </d:response>
+        </d:multistatus>"#;
+
+        for files in [parse_propfind_response(xml).unwrap(), parse_propfind_response_with_directories(xml).unwrap()] {
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0].name, "Tom & Jerry.pdf");
+            assert_eq!(files[0].full_path, "/webdav/Tom & Jerry.pdf");
+            assert_eq!(files[0].etag, "e&1");
+        }
+    }
+}
