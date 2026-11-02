@@ -19,3 +19,6 @@ docs/
 grafana-dashboard.json
 stress-test-metrics.json
 frontend/public/locales/
+# ts-rs output; scripts/check-ts-bindings.sh diffs it byte-for-byte against
+# the generator, so a formatter pass reads as binding drift in CI.
+frontend/src/types/generated/

@@ -1,16 +1,17 @@
 pub mod api;
 pub mod enhanced;
-pub mod image_ocr;
 pub mod error;
+pub mod failure_reason;
 pub mod health;
+pub mod image_ocr;
 pub mod queue;
 pub mod tests;
 pub mod xml_extractor;
 
-use anyhow::{anyhow, Result};
-use std::path::Path;
 use crate::ocr::error::OcrError;
 use crate::ocr::health::OcrHealthChecker;
+use anyhow::{anyhow, Result};
+use std::path::Path;
 
 #[cfg(feature = "ocr")]
 use tesseract::Tesseract;
@@ -52,32 +53,42 @@ impl OcrService {
     }
 
     pub async fn extract_text_from_image(&self, file_path: &str) -> Result<String> {
-        self.extract_text_from_image_with_lang(file_path, "eng").await
+        self.extract_text_from_image_with_lang(file_path, "eng")
+            .await
     }
 
-    pub async fn extract_text_from_image_with_lang(&self, file_path: &str, lang: &str) -> Result<String> {
+    pub async fn extract_text_from_image_with_lang(
+        &self,
+        file_path: &str,
+        lang: &str,
+    ) -> Result<String> {
         #[cfg(feature = "ocr")]
         {
             // Perform health checks first
-            self.health_checker.check_tesseract_installation()
+            self.health_checker
+                .check_tesseract_installation()
                 .map_err(|e: OcrError| anyhow!(e))?;
-            self.health_checker.validate_language_combination(lang)
+            self.health_checker
+                .validate_language_combination(lang)
                 .map_err(|e: OcrError| anyhow!(e))?;
-            
+
             let mut tesseract = Tesseract::new(None, Some(lang))
-                .map_err(|e| anyhow!(OcrError::InitializationFailed { 
-                    details: e.to_string() 
-                }))?
+                .map_err(|e| {
+                    anyhow!(OcrError::InitializationFailed {
+                        details: e.to_string()
+                    })
+                })?
                 .set_image(file_path)?;
-            
-            let text = tesseract.get_text()
-                .map_err(|e| anyhow!(OcrError::InitializationFailed { 
-                    details: format!("Failed to extract text: {}", e) 
-                }))?;
-            
+
+            let text = tesseract.get_text().map_err(|e| {
+                anyhow!(OcrError::InitializationFailed {
+                    details: format!("Failed to extract text: {}", e)
+                })
+            })?;
+
             Ok(text.trim().to_string())
         }
-        
+
         #[cfg(not(feature = "ocr"))]
         {
             Err(anyhow!(OcrError::TesseractNotInstalled))
@@ -92,7 +103,7 @@ impl OcrService {
                 .arg("--version")
                 .output()
                 .await;
-                
+
             if ocrmypdf_check.is_err() || !ocrmypdf_check.unwrap().status.success() {
                 return Err(anyhow!(
                     "ocrmypdf is not available. Please install ocrmypdf: \
@@ -100,20 +111,20 @@ impl OcrService {
                     On macOS: 'brew install ocrmypdf'."
                 ));
             }
-            
+
             // Create temporary file for text extraction
             let temp_dir = std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string());
             let temp_text_path = format!("{}/pdf_text_{}.txt", temp_dir, std::process::id());
-            
+
             // Progressive extraction with fallback strategies
             // Strategy 1: pdftotext for existing text (fastest)
             let mut output = tokio::process::Command::new("pdftotext")
-                .arg("-layout")  // Preserve layout
+                .arg("-layout") // Preserve layout
                 .arg(file_path)
                 .arg(&temp_text_path)
                 .output()
                 .await?;
-                
+
             if output.status.success() {
                 // Check if we got substantial text
                 if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
@@ -124,18 +135,18 @@ impl OcrService {
                     }
                 }
             }
-            
+
             if !output.status.success() {
                 // Strategy 2: ocrmypdf sidecar (when pdftotext fails)
                 output = tokio::process::Command::new("ocrmypdf")
-                    .arg("--skip-text")  // Don't re-OCR — just extract existing text layer
-                    .arg("--sidecar")    // Extract text to sidecar file
+                    .arg("--skip-text") // Don't re-OCR — just extract existing text layer
+                    .arg("--sidecar") // Extract text to sidecar file
                     .arg(&temp_text_path)
                     .arg(file_path)
-                    .arg("-")  // Dummy output
+                    .arg("-") // Dummy output
                     .output()
                     .await?;
-                    
+
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -173,16 +184,16 @@ impl OcrService {
                     ));
                 }
             }
-            
+
             // Read the extracted text
             let text = tokio::fs::read_to_string(&temp_text_path).await?;
-            
+
             // Clean up temporary file
             let _ = tokio::fs::remove_file(&temp_text_path).await;
-            
+
             Ok(text.trim().to_string())
         }
-        
+
         #[cfg(not(feature = "ocr"))]
         {
             Err(anyhow!(OcrError::TesseractNotInstalled))
@@ -196,11 +207,12 @@ impl OcrService {
         mime_type: &str,
     ) -> Result<crate::ocr::enhanced::OcrResult> {
         // Use XML extraction directly
-        let xml_extractor = crate::ocr::xml_extractor::XmlOfficeExtractor::new(
-            self.temp_dir.clone()
-        );
-        
-        let result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        let xml_extractor =
+            crate::ocr::xml_extractor::XmlOfficeExtractor::new(self.temp_dir.clone());
+
+        let result = xml_extractor
+            .extract_text_from_office(file_path, mime_type)
+            .await?;
         // Convert OfficeExtractionResult to OcrResult for backward compatibility
         Ok(crate::ocr::enhanced::OcrResult {
             text: result.text,
@@ -219,28 +231,38 @@ impl OcrService {
         mime_type: &str,
     ) -> Result<crate::ocr::enhanced::OcrResult> {
         // Use the same XML extraction logic as the basic method
-        self.extract_text_from_office_document(file_path, mime_type).await
+        self.extract_text_from_office_document(file_path, mime_type)
+            .await
     }
 
     pub async fn extract_text(&self, file_path: &str, mime_type: &str) -> Result<String> {
-        self.extract_text_with_lang(file_path, mime_type, "eng").await
+        self.extract_text_with_lang(file_path, mime_type, "eng")
+            .await
     }
 
-    pub async fn extract_text_with_lang(&self, file_path: &str, mime_type: &str, lang: &str) -> Result<String> {
+    pub async fn extract_text_with_lang(
+        &self,
+        file_path: &str,
+        mime_type: &str,
+        lang: &str,
+    ) -> Result<String> {
         match mime_type {
             "application/pdf" => self.extract_text_from_pdf(file_path).await,
             // Office document types - use fallback strategy if available
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" |
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation" |
-            "application/msword" |
-            "application/vnd.ms-excel" |
-            "application/vnd.ms-powerpoint" => {
-                let result = self.extract_text_from_office_document(file_path, mime_type).await?;
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            | "application/msword"
+            | "application/vnd.ms-excel"
+            | "application/vnd.ms-powerpoint" => {
+                let result = self
+                    .extract_text_from_office_document(file_path, mime_type)
+                    .await?;
                 Ok(result.text)
             }
             "image/png" | "image/jpeg" | "image/jpg" | "image/tiff" | "image/bmp" => {
-                self.extract_text_from_image_with_lang(file_path, lang).await
+                self.extract_text_from_image_with_lang(file_path, lang)
+                    .await
             }
             "text/plain" => {
                 let text = tokio::fs::read_to_string(file_path).await?;
@@ -248,10 +270,11 @@ impl OcrService {
             }
             _ => {
                 if self.is_image_file(file_path) {
-                    self.extract_text_from_image_with_lang(file_path, lang).await
+                    self.extract_text_from_image_with_lang(file_path, lang)
+                        .await
                 } else {
-                    Err(anyhow!(OcrError::InvalidImageFormat { 
-                        details: format!("Unsupported MIME type: {}", mime_type) 
+                    Err(anyhow!(OcrError::InvalidImageFormat {
+                        details: format!("Unsupported MIME type: {}", mime_type)
                     }))
                 }
             }
@@ -261,35 +284,37 @@ impl OcrService {
     /// Last resort: extract readable text directly from PDF bytes
     async fn extract_text_from_pdf_bytes(&self, file_path: &str) -> Result<String> {
         let bytes = tokio::fs::read(file_path).await?;
-        
+
         // Look for readable ASCII text in the PDF
         let mut ascii_text = String::new();
         let mut current_word = String::new();
-        
+
         for &byte in &bytes {
-            if byte >= 32 && byte <= 126 {  // Printable ASCII
+            if byte >= 32 && byte <= 126 {
+                // Printable ASCII
                 current_word.push(byte as char);
             } else {
-                if current_word.len() > 3 {  // Only keep words longer than 3 characters
+                if current_word.len() > 3 {
+                    // Only keep words longer than 3 characters
                     ascii_text.push_str(&current_word);
                     ascii_text.push(' ');
                 }
                 current_word.clear();
             }
         }
-        
+
         // Add the last word if it's long enough
         if current_word.len() > 3 {
             ascii_text.push_str(&current_word);
         }
-        
+
         // Clean up the text
         let cleaned_text = ascii_text
             .split_whitespace()
-            .filter(|word| word.len() > 1)  // Filter out single characters
+            .filter(|word| word.len() > 1) // Filter out single characters
             .collect::<Vec<_>>()
             .join(" ");
-        
+
         if cleaned_text.trim().is_empty() {
             Err(anyhow!("No readable text found in PDF"))
         } else {
@@ -303,12 +328,14 @@ impl OcrService {
             .and_then(|ext| ext.to_str())
         {
             let ext_lower = extension.to_lowercase();
-            matches!(ext_lower.as_str(), "png" | "jpg" | "jpeg" | "tiff" | "bmp" | "gif")
+            matches!(
+                ext_lower.as_str(),
+                "png" | "jpg" | "jpeg" | "tiff" | "bmp" | "gif"
+            )
         } else {
             false
         }
     }
-
 
     /// Check if Office document extraction is available
     pub fn supports_office_documents(&self) -> bool {
@@ -320,7 +347,7 @@ impl OcrService {
         let mut types = vec![
             "application/pdf",
             "image/png",
-            "image/jpeg", 
+            "image/jpeg",
             "image/jpg",
             "image/tiff",
             "image/bmp",

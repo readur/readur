@@ -43,7 +43,7 @@ stage_fixed = true
 
 [pre-commit.commands.format-ts-js]
 glob = ["*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs"]
-exclude = ["docs/**"]
+exclude = ["docs/**", "frontend/src/types/generated/**"]
 run = "oxfmt {staged_files}"
 stage_fixed = true
 
