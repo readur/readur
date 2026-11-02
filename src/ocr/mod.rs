@@ -2,6 +2,7 @@ pub mod api;
 pub mod enhanced;
 pub mod image_ocr;
 pub mod error;
+pub mod failure_reason;
 pub mod health;
 pub mod queue;
 pub mod tests;

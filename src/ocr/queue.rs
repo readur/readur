@@ -9,7 +9,7 @@ use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{db::Database, ocr::enhanced::EnhancedOcrService, db_guardrails_simple::DocumentTransactionManager, monitoring::request_throttler::RequestThrottler};
+use crate::{db::Database, ocr::{enhanced::EnhancedOcrService, failure_reason::classify_ocr_error}, db_guardrails_simple::DocumentTransactionManager, monitoring::request_throttler::RequestThrottler};
 
 /// Upper bound on concurrent OCR jobs, to avoid exhausting the background DB pool.
 const MAX_CONCURRENT_OCR_JOBS: usize = 15;
@@ -505,7 +505,7 @@ impl OcrQueueService {
                                     warn!("{} for document {}", error_msg, item.document_id);
                                     
                                     // Use classification function to determine proper failure reason
-                                    let (failure_reason, _should_suppress) = Self::classify_ocr_error(error_msg);
+                                    let (failure_reason, _should_suppress) = classify_ocr_error(error_msg);
 
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
@@ -526,7 +526,7 @@ impl OcrQueueService {
                                     error!("{}", error_msg);
                                     
                                     // Use classification function to determine proper failure reason
-                                    let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
+                                    let (failure_reason, _should_suppress) = classify_ocr_error(&error_msg);
 
                                     // Create failed document record using helper function
                                     let _ = self.create_failed_document_from_ocr_error(
@@ -550,7 +550,7 @@ impl OcrQueueService {
                                   filename, item.id, item.document_id);
                             
                             // Use classification function to determine proper failure reason
-                            let (failure_reason, _should_suppress) = Self::classify_ocr_error(&error_msg);
+                            let (failure_reason, _should_suppress) = classify_ocr_error(&error_msg);
 
                             // Create failed document record using helper function
                             let _ = self.create_failed_document_from_ocr_error(
@@ -622,7 +622,7 @@ impl OcrQueueService {
                         let error_str = e.to_string();
                         
                         // Classify error type and determine failure reason
-                        let (failure_reason, should_suppress) = Self::classify_ocr_error(&error_str);
+                        let (failure_reason, should_suppress) = classify_ocr_error(&error_str);
                         
                         // Use intelligent logging based on error type
                         if should_suppress {
@@ -1282,61 +1282,8 @@ impl OcrQueueService {
         
         Ok(())
     }
-
-    /// Helper function to map OCR error strings to standardized failure reasons
-    fn classify_ocr_error(error_str: &str) -> (&'static str, bool) {
-        if error_str.contains("font encoding") || error_str.contains("missing unicode map") {
-            ("pdf_parsing_error", true)  // Font encoding issues are PDF parsing problems
-        } else if error_str.contains("corrupted internal structure") || error_str.contains("corrupted") {
-            ("file_corrupted", true)     // Corrupted files should use file_corrupted
-        } else if error_str.contains("timeout") || error_str.contains("timed out") {
-            ("ocr_timeout", false)
-        } else if error_str.contains("memory") || error_str.contains("out of memory") {
-            ("ocr_memory_limit", false)
-        } else if error_str.contains("panic") {
-            ("pdf_parsing_error", true)
-        } else if error_str.contains("unsupported") {
-            ("unsupported_format", false)
-        } else if error_str.contains("too large") || error_str.contains("file size") {
-            ("file_too_large", false)
-        } else if error_str.contains("No extractable text") || error_str.contains("0 words") {
-            ("low_ocr_confidence", false)  // No extractable text treated as low confidence OCR
-        } else if error_str.contains("validation") || error_str.contains("document may have been modified") {
-            ("other", false)  // Document validation failures use "other"
-        } else {
-            ("other", false)  // Fallback for any unrecognized errors
-        }
-    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::postgres::PgPoolOptions;
-
-    fn queue_with(max_concurrent_jobs: usize) -> OcrQueueService {
-        // A lazy pool never connects, so no database is needed.
-        let pool = PgPoolOptions::new().connect_lazy("postgres://localhost/unused").unwrap();
-        OcrQueueService::new(
-            Database { pool: pool.clone() },
-            pool,
-            max_concurrent_jobs,
-            Arc::new(crate::services::file_service::FileService::new("/tmp".to_string())),
-            100,
-            100,
-            300,
-        )
-    }
-
-    #[tokio::test]
-    async fn uses_configured_concurrency() {
-        assert_eq!(queue_with(1).max_concurrent_jobs, 1);
-        assert_eq!(queue_with(4).max_concurrent_jobs, 4);
-    }
-
-    #[tokio::test]
-    async fn clamps_concurrency_to_supported_range() {
-        assert_eq!(queue_with(0).max_concurrent_jobs, 1);
-        assert_eq!(queue_with(50).max_concurrent_jobs, MAX_CONCURRENT_OCR_JOBS);
-    }
-}
+#[path = "queue_tests.rs"]
+mod tests;
