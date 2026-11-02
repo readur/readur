@@ -41,12 +41,12 @@ node = "24.21.0"
 # Config in .oxfmtrc.json, ignores in .prettierignore.
 oxfmt = "0.72.0"
 # Git hooks; definitions live in .lefthook.toml. Installed by [hooks] below.
-lefthook = "2.2.1"
+lefthook = "2.2.2"
 shellcheck = "0.11.0"
 actionlint = "1.7.12"
 # Prebuilt release binary (aqua), so onboarding never compiles zizmor from source
 # through the registry's cargo fallback.
-"aqua:zizmorcore/zizmor" = "1.30.1"
+"aqua:zizmorcore/zizmor" = "1.31.1"
 
 # Runs after `mise install`: wires the git hooks. Skipped in CI (both `CI` and
 # `GITHUB_ACTIONS` are checked): hooks are meaningless on a runner, and a CI job
