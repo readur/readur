@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use futures;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::models::{LoginRequest, LoginResponse};
 use readur::routes::documents::types::DocumentUploadResponse;
 
 fn get_base_url() -> String {
@@ -30,24 +30,16 @@ impl Investigator {
             .as_millis();
         let username = format!("investigator_{}", timestamp);
         let email = format!("investigator_{}@test.com", timestamp);
+        let password = readur::test_utils::test_password();
         
         // Register and login
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: "testpass123".to_string(),
-            role: Some(readur::models::UserRole::User),
-        };
-        
-        client.post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .send()
+        readur::test_utils::create_live_server_user(&username, &email, &password, readur::models::UserRole::User)
             .await
             .expect("Registration should work");
         
         let login_data = LoginRequest {
             username: username.clone(),
-            password: "testpass123".to_string(),
+            password: password.clone(),
         };
         
         let login_response = client

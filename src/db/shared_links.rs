@@ -89,17 +89,24 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn increment_shared_link_view_count(&self, link_id: Uuid) -> Result<()> {
-        sqlx::query(
+    /// Record one view of a shared link if it is still usable. The check and
+    /// the increment happen in a single statement, so concurrent requests
+    /// cannot exceed `max_views`. Returns false when no view is left.
+    pub async fn consume_shared_link_view(&self, link_id: Uuid) -> Result<bool> {
+        let row = sqlx::query(
             r#"UPDATE shared_links
                SET view_count = view_count + 1, updated_at = NOW()
-               WHERE id = $1"#,
+               WHERE id = $1
+                 AND is_revoked = FALSE
+                 AND (expires_at IS NULL OR expires_at > NOW())
+                 AND (max_views IS NULL OR view_count < max_views)
+               RETURNING id"#,
         )
         .bind(link_id)
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(row.is_some())
     }
 
     /// Fetch a document by ID without user-based access filtering.

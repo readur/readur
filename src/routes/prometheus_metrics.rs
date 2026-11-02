@@ -1,6 +1,6 @@
 use axum::{
     extract::State,
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -9,7 +9,12 @@ use std::sync::Arc;
 use std::fmt::Write;
 use std::time::Instant;
 
-use crate::AppState;
+use crate::{
+    auth::{authenticate_token, extract_token_from_headers},
+    models::UserRole,
+    utils::security::constant_time_eq,
+    AppState,
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -21,14 +26,45 @@ pub fn router() -> Router<Arc<AppState>> {
     get,
     path = "/metrics",
     tag = "metrics",
+    security(
+        ("bearer_auth" = [])
+    ),
     responses(
         (status = 200, description = "Prometheus metrics in text format", content_type = "text/plain; version=0.0.4"),
+        (status = 401, description = "Missing or invalid credentials"),
+        (status = 403, description = "Admin access required"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub async fn get_prometheus_metrics(
     State(state): State<Arc<AppState>>,
-) -> Result<Response, StatusCode> {
+    headers: HeaderMap,
+) -> Result<Response, Response> {
+    authorize_scrape(&headers, &state).await?;
+    render_metrics(state).await.map_err(IntoResponse::into_response)
+}
+
+/// Scrapers authenticate with `Authorization: Bearer <METRICS_TOKEN>` when a
+/// token is configured; otherwise (or with any other credential) the caller
+/// must be an admin.
+async fn authorize_scrape(headers: &HeaderMap, state: &Arc<AppState>) -> Result<(), Response> {
+    let token = extract_token_from_headers(headers)
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing authorization header").into_response())?;
+
+    if let Some(expected) = &state.config.security.metrics_token {
+        if constant_time_eq(token.as_bytes(), expected.as_bytes()) {
+            return Ok(());
+        }
+    }
+
+    let user = authenticate_token(&token, state).await?;
+    if user.role != UserRole::Admin {
+        return Err((StatusCode::FORBIDDEN, "Admin access required").into_response());
+    }
+    Ok(())
+}
+
+async fn render_metrics(state: Arc<AppState>) -> Result<Response, StatusCode> {
     tracing::debug!("Prometheus: get_prometheus_metrics endpoint called");
     
     let mut output = String::new();

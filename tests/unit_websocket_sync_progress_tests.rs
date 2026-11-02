@@ -27,6 +27,8 @@ fn create_test_user() -> User {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     }
 }
 

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+use ts_rs::TS;
 
 use crate::services::webdav::{SyncProgress, ProgressStats, SyncPhase};
 
@@ -20,7 +21,8 @@ struct SyncProgressTrackerInner {
 }
 
 /// Serializable progress information for API responses
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema, TS)]
+#[ts(export)]
 pub struct SyncProgressInfo {
     pub source_id: Uuid,
     pub phase: String,

@@ -11,19 +11,19 @@ Readur supports multiple authentication methods to secure your document manageme
 #### Local Authentication
 
 ```yaml
-# Basic authentication configuration
-AUTH_SECRET: "your-secure-random-secret-min-32-chars"
-SESSION_SECRET: "your-session-secret-min-32-chars"
+# Optional: JWT signing secret (min 32 bytes). Generate with: openssl rand -hex 32
+JWT_SECRET: "<output of: openssl rand -hex 32>"
+JWT_TTL_HOURS: "12"            # token lifetime, 1-720 (default 12)
+ALLOW_REGISTRATION: "false"    # self-registration (default false)
 ```
 
-Generate secure secrets:
-```bash
-# Generate auth secret
-openssl rand -hex 32
+When `JWT_SECRET` is unset, Readur generates a random signing key on first start and stores it in the database; `readur rotate-jwt-secret` replaces it (restart the servers afterwards; all sessions end). When `JWT_SECRET` is set, it takes precedence and the server refuses to start if it is shorter than 32 bytes or a published example value. `READUR_INSECURE_DEV_MODE=true` relaxes this for throwaway local development only.
 
-# Generate session secret
-openssl rand -base64 32
-```
+Initial admin account: `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written with mode `0600` to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (override with `ADMIN_PASSWORD_FILE`); it is not written to the logs. Delete the file after changing the password.
+
+When `ALLOW_REGISTRATION=true`, self-registered accounts are created inactive and need administrator approval before they can sign in. `POST /api/auth/logout` revokes all of a user's sessions.
+
+See [Security and Access Control](configuration-reference.md#security-and-access-control) for the full list of related settings (`LOCAL_SOURCE_ALLOWED_PATHS`, `TRUSTED_PROXIES`, `CORS_ALLOWED_ORIGINS`, `METRICS_TOKEN`, `PUBLIC_URL`, `OIDC_LINK_EXISTING_BY_EMAIL`).
 
 #### OIDC/SSO Integration
 
@@ -36,7 +36,11 @@ OIDC_CLIENT_SECRET: "your-client-secret"
 OIDC_ISSUER_URL: "https://auth.example.com/realms/readur"
 OIDC_REDIRECT_URI: "https://readur.example.com/api/auth/oidc/callback"
 OIDC_SCOPES: "openid profile email"
+PUBLIC_URL: "https://readur.example.com"
+OIDC_LINK_EXISTING_BY_EMAIL: "false"
 ```
+
+`PUBLIC_URL` is used to build the post-login redirect (request headers are not used). An OIDC login is linked to an existing local account with the same email only when `OIDC_LINK_EXISTING_BY_EMAIL=true` and the provider reports `email_verified: true`.
 
 ### Role-Based Access Control
 
@@ -194,13 +198,10 @@ server {
 
 ### CORS Configuration
 
-Configure Cross-Origin Resource Sharing:
+By default no cross-origin requests are allowed; the bundled frontend is served from the same origin and needs no CORS configuration. To allow other origins, list them explicitly:
 
 ```yaml
-CORS_ENABLED: "true"
 CORS_ALLOWED_ORIGINS: "https://app.example.com,https://admin.example.com"
-CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
-CORS_MAX_AGE: 3600
 ```
 
 ### Rate Limiting
@@ -210,6 +211,8 @@ Readur includes built-in rate limiting to prevent abuse:
 - **Public shared link endpoints**: 60 requests/minute per IP for general access, 10 requests/minute per IP for password verification (prevents brute-force attacks)
 - **Comment creation**: 10 comments/minute per user
 - **Shared link creation**: 20 links/hour per user
+
+Per-IP limits use the client address. `X-Forwarded-For` is only honoured for requests arriving from a trusted proxy: by default any loopback or private-network address (`127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). Set `TRUSTED_PROXIES` to your proxy's IPs or CIDRs to narrow this, or to `none` if clients reach readur directly from a private network; the header is ignored for requests from other addresses.
 
 Rate limits are enforced automatically using in-memory tracking. When a limit is exceeded, the API returns HTTP 429 (Too Many Requests) with a `retry_after_secs` field indicating when to retry.
 
@@ -222,13 +225,13 @@ Never commit secrets to version control:
 ```bash
 # .env.example (commit this)
 DATABASE_URL=postgresql://user:password@localhost/readur
-AUTH_SECRET=change-this-secret
+JWT_SECRET=
 S3_ACCESS_KEY=your-access-key
 S3_SECRET_KEY=your-secret-key
 
 # .env (don't commit - add to .gitignore)
 DATABASE_URL=postgresql://readur:SecurePass123!@db.internal/readur_prod
-AUTH_SECRET=a8f7d9s8f7sd9f87sd9f87sd9f8s7df98s7df98s7df9
+JWT_SECRET=<output of: openssl rand -hex 32>
 S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 ```
@@ -242,13 +245,13 @@ Implement regular secret rotation:
 # rotate-secrets.sh
 
 # Generate new secrets
-NEW_AUTH_SECRET=$(openssl rand -hex 32)
-NEW_SESSION_SECRET=$(openssl rand -base64 32)
+# (rotating JWT_SECRET signs out all users; without JWT_SECRET, run
+# `readur rotate-jwt-secret` instead and restart the server)
+NEW_JWT_SECRET=$(openssl rand -hex 32)
 
 # Update application configuration
 kubectl create secret generic readur-secrets \
-  --from-literal=auth-secret="$NEW_AUTH_SECRET" \
-  --from-literal=session-secret="$NEW_SESSION_SECRET" \
+  --from-literal=JWT_SECRET="$NEW_JWT_SECRET" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Restart application

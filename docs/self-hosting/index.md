@@ -124,7 +124,7 @@ Before starting Readur for the first time, you need to configure several essenti
 
 ```bash
 # Security settings - generate these securely
-APP_SECRET_KEY=<generate-with-openssl-rand-hex-32>
+JWT_SECRET=<generate-with-openssl-rand-hex-32>
 ADMIN_PASSWORD=<strong-password>
 
 # Database connection
@@ -138,7 +138,7 @@ S3_ACCESS_KEY_ID=<your-key>
 S3_SECRET_ACCESS_KEY=<your-secret>
 ```
 
-The APP_SECRET_KEY encrypts session cookies and other sensitive data - generate this using `openssl rand -hex 32` for security. Choose a strong admin password since this account has full system access. The database URL tells Readur how to connect to PostgreSQL, while storage settings determine where uploaded documents are kept.
+`JWT_SECRET` signs login tokens and is optional: when it is unset, a key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). If you set it, generate it using `openssl rand -hex 32`; the server refuses to start if it is shorter than 32 bytes or a published example value. Choose a strong admin password since this account has full system access; if `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` in the `.readur` directory inside the upload directory instead. The database URL tells Readur how to connect to PostgreSQL, while storage settings determine where uploaded documents are kept.
 
 [Complete configuration options →](../configuration-reference.md)
 
@@ -183,11 +183,11 @@ Local authentication is straightforward and works well for smaller teams or pers
 
 ```bash
 AUTH_METHOD=local
-ENABLE_REGISTRATION=false
+ALLOW_REGISTRATION=false
 REQUIRE_EMAIL_VERIFICATION=true
 ```
 
-This configuration uses username and password authentication managed entirely within Readur. Disable registration to maintain control over who can create accounts, and enable email verification for additional security. You can always enable self-registration later if you want to allow users to create their own accounts.
+This configuration uses username and password authentication managed entirely within Readur. Registration is disabled by default so administrators control who has an account. If you set `ALLOW_REGISTRATION=true`, self-registered accounts are created inactive and must be approved by an administrator in user management before they can sign in.
 
 #### Enterprise SSO Integration
 
@@ -336,8 +336,8 @@ Readur provides several endpoints for monitoring system health and performance. 
 # Basic health check - returns 200 if system is operational
 curl http://localhost:8000/health
 
-# Detailed metrics in Prometheus format
-curl http://localhost:8000/metrics
+# Detailed metrics in Prometheus format (requires METRICS_TOKEN or an admin token)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics
 
 # Human-readable status information
 curl http://localhost:8000/status

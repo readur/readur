@@ -2,8 +2,12 @@ use anyhow::Result;
 use sqlx::{QueryBuilder, Postgres};
 use uuid::Uuid;
 
-use crate::models::{Document, UserRole};
-use super::helpers::{map_row_to_document, apply_role_based_filter, apply_pagination, DOCUMENT_FIELDS};
+use crate::models::{Document, DocumentFilters, DocumentSortField, SortOrder, UserRole};
+use super::helpers::{
+    apply_document_filters, apply_pagination, apply_role_based_filter, apply_sort, map_row_to_document,
+    map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS, OCR_PROGRESS_FIELDS,
+    OCR_PROGRESS_JOIN,
+};
 use crate::db::Database;
 
 impl Database {
@@ -72,45 +76,48 @@ impl Database {
         Ok(row.map(|r| map_row_to_document(&r)))
     }
 
-    /// Gets documents for a user with role-based access and pagination
+    /// Gets a user's own documents, newest first
     pub async fn get_documents_by_user(&self, user_id: Uuid, limit: i64, offset: i64) -> Result<Vec<Document>> {
-        let query_str = format!(
-            r#"
-            SELECT {}
-            FROM documents 
-            WHERE user_id = $1 
-            ORDER BY created_at DESC 
-            LIMIT $2 OFFSET $3
-            "#,
-            DOCUMENT_FIELDS
-        );
-
-        let rows = sqlx::query(&query_str)
-            .bind(user_id)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(rows.iter().map(map_row_to_document).collect())
+        self.get_documents_by_user_with_role(user_id, UserRole::User, limit, offset).await
     }
 
-    /// Gets documents with role-based access control
+    /// Gets documents with role-based access control, newest first
     pub async fn get_documents_by_user_with_role(&self, user_id: Uuid, user_role: UserRole, limit: i64, offset: i64) -> Result<Vec<Document>> {
+        Ok(self
+            .list_documents_filtered(user_id, user_role, &DocumentFilters::default(), None, None, limit, offset)
+            .await?
+            .into_iter()
+            .map(|d| d.document)
+            .collect())
+    }
+
+    /// Lists documents with role-based access, filters, whitelisted sorting and
+    /// pagination. Each row carries the active OCR progress, if any.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn list_documents_filtered(
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
+        filters: &DocumentFilters,
+        sort: Option<DocumentSortField>,
+        order: Option<SortOrder>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<DocumentWithProgress>> {
         let mut query = QueryBuilder::<Postgres>::new("SELECT ");
         query.push(DOCUMENT_FIELDS);
-        query.push(" FROM documents WHERE 1=1");
-        
+        query.push(OCR_PROGRESS_FIELDS);
+        query.push(" FROM documents");
+        query.push(OCR_PROGRESS_JOIN);
+        query.push(" WHERE 1=1");
+
         apply_role_based_filter(&mut query, user_id, user_role);
-        query.push(" ORDER BY created_at DESC");
+        apply_document_filters(&mut query, filters);
+        apply_sort(&mut query, sort, order, false);
         apply_pagination(&mut query, limit, offset);
 
-        let rows = query
-            .build()
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(rows.iter().map(map_row_to_document).collect())
+        let rows = query.build().fetch_all(&self.pool).await?;
+        Ok(rows.iter().map(map_row_to_document_with_progress).collect())
     }
 
     /// Finds a document by user and file hash (for duplicate detection)

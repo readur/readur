@@ -1,0 +1,253 @@
+/*
+ * Home layout (Studio mockup): pipeline and Just arrived on the left, Needs attention and Sources
+ * on the right. Below 1100px the right column drops in under the pipeline, its two parts side by
+ * side while they fit; on phones everything is one column.
+ */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-areas:
+    "pipeline side"
+    "recent side";
+  align-items: start;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.pipeline {
+  grid-area: pipeline;
+}
+
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+
+.recent {
+  grid-area: recent;
+}
+
+@media (max-width: 1099px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "pipeline"
+      "side"
+      "recent";
+  }
+
+  .side {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    align-items: start;
+  }
+}
+
+/* Header: the actions wrap under the greeting on phones. */
+@media (max-width: 599px) {
+  .header {
+    flex-wrap: wrap;
+  }
+}
+
+/* Status line under the greeting */
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.statusPart + .statusPart::before {
+  content: "·";
+  margin: 0 var(--s-2);
+  color: var(--fg-meta);
+}
+
+/* Regions */
+
+.region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.regionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 32px;
+}
+
+.regionTitleRow {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.regionTitle {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.regionCount {
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--fg-meta);
+}
+
+.regionAction {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.link {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-1) var(--ease);
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+.link:focus-visible,
+.sourceName:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.notePart + .notePart::before {
+  content: "·";
+  margin: 0 var(--s-2);
+  color: var(--fg-meta);
+}
+
+/* Pipeline */
+
+.figure {
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Sources */
+
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sourceRow:last-child {
+  border-bottom: 0;
+}
+
+.sourceText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sourceName {
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceName:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sourceMeta {
+  overflow: hidden;
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Just arrived */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 599px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-3);
+  }
+}
+
+.moreLabels {
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+}
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  background: var(--new-soft);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+}
+
+.bulkCount {
+  font-weight: 600;
+}

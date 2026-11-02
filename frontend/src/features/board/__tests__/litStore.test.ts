@@ -1,0 +1,323 @@
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+type LitModule = typeof import('../litStore');
+
+class MemoryStorage implements Storage {
+  private data = new Map<string, string>();
+  get length() {
+    return this.data.size;
+  }
+  clear() {
+    this.data.clear();
+  }
+  getItem(key: string) {
+    return this.data.has(key) ? (this.data.get(key) as string) : null;
+  }
+  key(i: number) {
+    return Array.from(this.data.keys())[i] ?? null;
+  }
+  removeItem(key: string) {
+    this.data.delete(key);
+  }
+  setItem(key: string, value: string) {
+    this.data.set(key, String(value));
+  }
+}
+
+let storage: MemoryStorage;
+const originalStorage = window.localStorage;
+
+const installStorage = (s: Storage) =>
+  Object.defineProperty(window, 'localStorage', { value: s, configurable: true, writable: true });
+
+/** Fresh module instance, as after a page reload. */
+const loadModule = async (): Promise<LitModule> => {
+  vi.resetModules();
+  return import('../litStore');
+};
+
+beforeEach(() => {
+  storage = new MemoryStorage();
+  installStorage(storage);
+});
+
+afterEach(() => {
+  installStorage(originalStorage);
+});
+
+describe('litStore', () => {
+  it('is safe to read before any entry exists', async () => {
+    const lit = await loadModule();
+    expect(lit.isLit('document', 'x')).toBe(false);
+    const { result } = renderHook(() => lit.useLitCount());
+    expect(result.current).toBe(0);
+    expect(() => lit.acknowledge('document', 'x')).not.toThrow();
+    expect(() => lit.acknowledgeAll()).not.toThrow();
+  });
+
+  it('marks and acknowledges one entry', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'a', 'new');
+    expect(lit.isLit('document', 'a')).toBe(true);
+    expect(lit.isLit('source', 'a')).toBe(false);
+    lit.acknowledge('document', 'a');
+    expect(lit.isLit('document', 'a')).toBe(false);
+  });
+
+  it('acknowledgeAll clears one kind or everything', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'a', 'new');
+    lit.markLit('document', 'b', 'changed');
+    lit.markLit('source', 's1', 'failed');
+    lit.markLit('attention', 'x', 'failed');
+
+    lit.acknowledgeAll('document');
+    expect(lit.isLit('document', 'a')).toBe(false);
+    expect(lit.isLit('document', 'b')).toBe(false);
+    expect(lit.isLit('source', 's1')).toBe(true);
+
+    lit.acknowledgeAll();
+    expect(lit.isLit('source', 's1')).toBe(false);
+    expect(lit.isLit('attention', 'x')).toBe(false);
+  });
+
+  it('useLit reports the reason and re-renders on change', async () => {
+    const lit = await loadModule();
+    const { result } = renderHook(() => lit.useLit('document', 'a'));
+    expect(result.current).toEqual({ lit: false });
+
+    act(() => lit.markLit('document', 'a', 'failed'));
+    expect(result.current).toEqual({ lit: true, reason: 'failed' });
+
+    act(() => lit.markLit('document', 'a', 'changed'));
+    expect(result.current).toEqual({ lit: true, reason: 'changed' });
+
+    act(() => lit.acknowledge('document', 'a'));
+    expect(result.current).toEqual({ lit: false });
+  });
+
+  it('useLitCount counts per kind and in total', async () => {
+    const lit = await loadModule();
+    const total = renderHook(() => lit.useLitCount());
+    const docs = renderHook(() => lit.useLitCount('document'));
+
+    act(() => {
+      lit.markLit('document', 'a', 'new');
+      lit.markLit('document', 'b', 'new');
+      lit.markLit('source', 's', 'failed');
+    });
+    expect(total.result.current).toBe(3);
+    expect(docs.result.current).toBe(2);
+
+    act(() => lit.acknowledge('document', 'a'));
+    expect(total.result.current).toBe(2);
+    expect(docs.result.current).toBe(1);
+  });
+
+  it('persists entries across store re-creation and drops acknowledged ones', async () => {
+    let lit = await loadModule();
+    lit.markLit('document', 'a', 'new');
+    lit.markLit('source', 's', 'failed');
+    lit.acknowledge('document', 'a');
+    lit.flushLit();
+    expect(storage.getItem(lit.LIT_STORAGE_KEY)).not.toBeNull();
+
+    lit = await loadModule();
+    expect(lit.isLit('source', 's')).toBe(true);
+    expect(lit.isLit('document', 'a')).toBe(false);
+    const { result } = renderHook(() => lit.useLit('source', 's'));
+    expect(result.current).toEqual({ lit: true, reason: 'failed' });
+  });
+
+  it('uses the readur.lit.v1 storage key', async () => {
+    const lit = await loadModule();
+    expect(lit.LIT_STORAGE_KEY).toBe('readur.lit.v1');
+    lit.markLit('attention', 'q', 'failed');
+    lit.flushLit();
+    expect(storage.getItem('readur.lit.v1')).toContain('"q"');
+  });
+
+  it('caps at 2000 entries by dropping the oldest', async () => {
+    let lit = await loadModule();
+    for (let i = 0; i < 2005; i += 1) lit.markLit('document', `d${i}`, 'new');
+    const { result } = renderHook(() => lit.useLitCount());
+    expect(result.current).toBe(2000);
+    expect(lit.isLit('document', 'd0')).toBe(false);
+    expect(lit.isLit('document', 'd4')).toBe(false);
+    expect(lit.isLit('document', 'd5')).toBe(true);
+    expect(lit.isLit('document', 'd2004')).toBe(true);
+
+    lit.flushLit();
+    lit = await loadModule();
+    expect(lit.isLit('document', 'd4')).toBe(false);
+    expect(lit.isLit('document', 'd2004')).toBe(true);
+  });
+
+  it('re-marking an entry makes it the newest, so it survives the cap', async () => {
+    const lit = await loadModule();
+    for (let i = 0; i < 2000; i += 1) lit.markLit('document', `d${i}`, 'new');
+    lit.markLit('document', 'd0', 'changed');
+    lit.markLit('document', 'extra', 'new');
+    expect(lit.isLit('document', 'd0')).toBe(true);
+    expect(lit.isLit('document', 'd1')).toBe(false);
+  });
+
+  it('ignores corrupted storage without throwing', async () => {
+    storage.setItem('readur.lit.v1', '{not json');
+    let lit = await loadModule();
+    expect(() => lit.isLit('document', 'a')).not.toThrow();
+    expect(lit.isLit('document', 'a')).toBe(false);
+    lit.markLit('document', 'a', 'new');
+    expect(lit.isLit('document', 'a')).toBe(true);
+    lit.flushLit();
+
+    storage.setItem('readur.lit.v1', JSON.stringify([['bogus', 1], ['document', 'ok', 'new', 1]]));
+    lit = await loadModule();
+    expect(lit.isLit('document', 'ok')).toBe(true);
+  });
+
+  it('keeps working when storage throws', async () => {
+    const broken = new MemoryStorage();
+    broken.getItem = () => {
+      throw new Error('denied');
+    };
+    broken.setItem = () => {
+      throw new Error('quota');
+    };
+    installStorage(broken);
+    const lit = await loadModule();
+    expect(() => lit.markLit('document', 'a', 'new')).not.toThrow();
+    expect(lit.isLit('document', 'a')).toBe(true);
+  });
+
+  it('createLitStore gives isolated instances that share storage', async () => {
+    const { createLitStore } = await loadModule();
+    const one = createLitStore();
+    one.markLit('source', 's', 'changed');
+    one.flush();
+    const two = createLitStore();
+    expect(two.isLit('source', 's')).toBe(true);
+    expect(two.reasonOf('source', 's')).toBe('changed');
+    expect(two.count('source')).toBe(1);
+  });
+
+  it('coalesces N marks in one tick into a single storage write', async () => {
+    const lit = await loadModule();
+    const setItem = vi.spyOn(storage, 'setItem');
+    for (let i = 0; i < 50; i += 1) lit.markLit('document', `d${i}`, 'new');
+    lit.acknowledge('document', 'd0');
+    expect(setItem).not.toHaveBeenCalled();
+    // In-memory state is current straight away.
+    expect(lit.isLit('document', 'd49')).toBe(true);
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(1);
+    const stored = JSON.parse(storage.getItem('readur.lit.v1') as string) as unknown[][];
+    expect(stored).toHaveLength(49);
+
+    lit.markLit('document', 'later', 'changed');
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(2);
+  });
+
+  it('flush writes pending changes at once and is a no-op when clean', async () => {
+    const lit = await loadModule();
+    const setItem = vi.spyOn(storage, 'setItem');
+    lit.markLit('document', 'a', 'new');
+    lit.flushLit();
+    expect(setItem).toHaveBeenCalledTimes(1);
+    lit.flushLit();
+    await Promise.resolve();
+    expect(setItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('picks up changes made by another tab through the storage event', async () => {
+    const lit = await loadModule();
+    const { result } = renderHook(() => lit.useLitCount('document'));
+    expect(result.current).toBe(0);
+
+    storage.setItem('readur.lit.v1', JSON.stringify([['document', 'remote', 'new', 1]]));
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'readur.lit.v1' }));
+    });
+    expect(result.current).toBe(1);
+    expect(lit.isLit('document', 'remote')).toBe(true);
+
+    storage.setItem('readur.lit.v1', '[]');
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'readur.lit.v1' }));
+    });
+    expect(result.current).toBe(0);
+  });
+
+  it('ignores storage events for other keys', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'a', 'new');
+    storage.setItem('other', 'x');
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'other' }));
+    });
+    expect(lit.isLit('document', 'a')).toBe(true);
+  });
+  it('shows only the newest LIT_SHOWN_CAP entries of each kind, independently per kind', async () => {
+    const lit = await loadModule();
+    for (let i = 0; i < 30; i += 1) lit.markLit('document', `d${i}`, 'new');
+    lit.markLit('attention', 'a1', 'failed');
+    const docs = renderHook(() => lit.useShownLitCount('document'));
+    const attention = renderHook(() => lit.useShownLitCount('attention'));
+    expect(docs.result.current).toBe(lit.LIT_SHOWN_CAP);
+    expect(attention.result.current).toBe(1);
+    expect(lit.isShownLit('document', 'd4')).toBe(false);
+    expect(lit.isShownLit('document', 'd5')).toBe(true);
+    // Stored entries beyond the cap are kept, and surface once newer ones are seen.
+    expect(lit.isLit('document', 'd4')).toBe(true);
+    act(() => lit.acknowledge('document', 'd29'));
+    expect(lit.isShownLit('document', 'd4')).toBe(true);
+    expect(docs.result.current).toBe(lit.LIT_SHOWN_CAP);
+  });
+
+  it('useShownLit reports the reason only for shown entries', async () => {
+    const lit = await loadModule();
+    lit.markLit('document', 'old', 'changed');
+    const { result } = renderHook(() => lit.useShownLit('document', 'old'));
+    expect(result.current).toEqual({ lit: true, reason: 'changed' });
+    act(() => {
+      for (let i = 0; i < lit.LIT_SHOWN_CAP; i += 1) lit.markLit('document', `n${i}`, 'new');
+    });
+    expect(result.current).toEqual({ lit: false });
+    expect(lit.litReason('document', 'old')).toBe('changed');
+  });
+
+  it('ranks shown entries by item time, so paging through a newest-first list keeps page 1', async () => {
+    const lit = await loadModule();
+    const T = Date.parse('2026-09-30T12:00:00Z');
+    const minute = 60_000;
+    // Page 1 of a newest-first list: the 25 newest failures, marked newest first.
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p1-${i}`, 'failed', T - i * minute);
+    // Page 2: older failures, marked afterwards.
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p2-${i}`, 'failed', T - (25 + i) * minute);
+    expect(lit.isShownLit('attention', 'p1-0')).toBe(true);
+    expect(lit.isShownLit('attention', 'p1-24')).toBe(true);
+    expect(lit.isShownLit('attention', 'p2-0')).toBe(false);
+    // The older page is still stored and surfaces once page 1 is seen.
+    lit.acknowledgeAll('attention');
+    for (let i = 0; i < 25; i += 1) lit.markLit('attention', `p2-${i}`, 'failed', T - (25 + i) * minute);
+    expect(lit.isShownLit('attention', 'p2-0')).toBe(true);
+  });
+
+  it('keeps the item time across a reload and still ranks entries without one by marking time', async () => {
+    let lit = await loadModule();
+    const old = Date.parse('2020-01-01T00:00:00Z');
+    lit.markLit('document', 'aged', 'failed', old);
+    for (let i = 0; i < lit.LIT_SHOWN_CAP; i += 1) lit.markLit('document', `now${i}`, 'new');
+    lit.flushLit();
+    lit = await loadModule();
+    expect(lit.isLit('document', 'aged')).toBe(true);
+    expect(lit.isShownLit('document', 'aged')).toBe(false);
+    expect(lit.isShownLit('document', 'now0')).toBe(true);
+    // A newer item time for an entry already marked with the same reason re-ranks it.
+    lit.markLit('document', 'aged', 'failed', Date.now() + 60_000);
+    expect(lit.isShownLit('document', 'aged')).toBe(true);
+    expect(lit.isShownLit('document', 'now0')).toBe(false);
+  });
+});

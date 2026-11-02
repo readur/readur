@@ -27,7 +27,7 @@ export default defineConfig({
     assetsDir: 'assets',
     rollupOptions: {
       onwarn(warning, warn) {
-        // Suppress "use client" directive warnings from MUI
+        // Suppress module-level directive warnings ("use client") from dependencies
         if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
           return
         }

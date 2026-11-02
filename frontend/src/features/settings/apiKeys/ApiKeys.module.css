@@ -1,0 +1,40 @@
+.secret {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.secretValue {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.inlineCode {
+  font-family: var(--font-data);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.srStatus {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.prefix {
+  font-family: var(--font-data);
+  font-size: var(--fs-sm);
+}

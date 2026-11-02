@@ -218,6 +218,7 @@ run_integration_tests() {
     DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     TEST_DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     API_URL="http://localhost:8001" \
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-test-admin-password}" \
     RUST_BACKTRACE=1 \
     cargo test --test '*' --no-fail-fast 2>&1 | tee "$output_file"
     
@@ -314,6 +315,9 @@ run_e2e_tests() {
     # Set environment variables for E2E tests
     export PLAYWRIGHT_BASE_URL="http://localhost:5174"
     export API_BASE_URL="http://localhost:8001"
+    # Seeded admin from docker-compose.test.yml; the suite creates test admins through it
+    export E2E_ADMIN_USERNAME="${E2E_ADMIN_USERNAME:-admin}"
+    export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-test-admin-password}"
     
     output=$(npm run test:e2e 2>&1)
     exit_code=$?

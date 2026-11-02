@@ -51,7 +51,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .with_state(updated_state.clone());
 
     // Create admin user and regular user using TestAuthHelper
-    let auth_helper = TestAuthHelper::new(app.clone());
+    let auth_helper = TestAuthHelper::with_db(app.clone(), ctx.state.db.clone());
     let admin_user = auth_helper.create_admin_user().await;
     let admin_token = auth_helper.login_user(&admin_user.username, &admin_user.password).await;
     let admin_id = admin_user.user_response.id;
@@ -222,6 +222,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     // Test 1: Normal username works
@@ -244,6 +246,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     let malicious_result = user_watch_service.ensure_user_directory(&malicious_user).await;
@@ -266,6 +270,8 @@ async fn test_user_watch_service_security() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     let null_result = user_watch_service.ensure_user_directory(&null_user).await;
@@ -317,6 +323,8 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
         oidc_issuer: None,
         oidc_email: None,
         auth_provider: readur::models::user::AuthProvider::Local,
+        token_version: 0,
+        is_active: true,
     };
 
     // Insert user into database
@@ -390,7 +398,7 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         .with_state(updated_state.clone());
 
     // Create admin user and regular user using TestAuthHelper
-    let auth_helper = TestAuthHelper::new(app.clone());
+    let auth_helper = TestAuthHelper::with_db(app.clone(), ctx.state.db.clone());
     let admin_user = auth_helper.create_admin_user().await;
     let admin_token = auth_helper.login_user(&admin_user.username, &admin_user.password).await;
     

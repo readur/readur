@@ -1,0 +1,58 @@
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.month {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.monthHeading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.monthCount {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--fg-meta);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty {
+  padding: var(--s-6) var(--s-4);
+}
+
+/* Once anything is selected, every card shows its checkbox so more can be added. */
+.groups:has([data-selected]) [data-card-check] {
+  opacity: 1;
+}
+
+.skeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+@media (max-width: 719px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-3);
+  }
+}

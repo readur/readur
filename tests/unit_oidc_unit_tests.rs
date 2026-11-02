@@ -81,12 +81,26 @@ async fn test_get_authorization_url() {
     let config = create_test_config_with_oidc(&mock_server.uri());
     let oidc_client = OidcClient::new(&config).await.unwrap();
     
-    let (auth_url, csrf_token) = oidc_client.get_authorization_url().unwrap();
-    
-    assert!(auth_url.to_string().contains("/auth"));
-    assert!(auth_url.to_string().contains("client_id=test-client-id"));
-    assert!(auth_url.to_string().contains("scope=openid+email+profile"));
-    assert!(!csrf_token.secret().is_empty());
+    let start = oidc_client.begin_login().unwrap();
+    let auth_url = start.authorization_url.clone();
+    let params: std::collections::HashMap<String, String> =
+        auth_url.query_pairs().into_owned().collect();
+
+    assert_eq!(auth_url.path(), "/auth");
+    assert_eq!(params.get("client_id").map(String::as_str), Some("test-client-id"));
+    assert_eq!(params.get("scope").map(String::as_str), Some("openid email profile"));
+    assert_eq!(params.get("response_type").map(String::as_str), Some("code"));
+    assert_eq!(params.get("state"), Some(&start.state));
+    assert_eq!(params.get("nonce"), Some(&start.pending.nonce));
+    assert_eq!(params.get("code_challenge_method").map(String::as_str), Some("S256"));
+    assert!(params.get("code_challenge").is_some_and(|c| !c.is_empty()));
+    // The PKCE verifier is kept server-side and never sent in the URL.
+    assert!(!auth_url.as_str().contains(&start.pending.pkce_verifier));
+
+    // Each login gets fresh values.
+    let second = oidc_client.begin_login().unwrap();
+    assert_ne!(second.state, start.state);
+    assert_ne!(second.pending.nonce, start.pending.nonce);
 }
 
 #[tokio::test]
@@ -170,13 +184,8 @@ fn test_oidc_config_validation() {
     config.oidc_client_id = None;
     assert!(tokio_test::block_on(OidcClient::new(&config)).is_err());
     
-    // Test missing client secret
+    // Test missing issuer URL (a missing client secret is allowed: public client)
     config.oidc_client_id = Some("test-client-id".to_string());
-    config.oidc_client_secret = None;
-    assert!(tokio_test::block_on(OidcClient::new(&config)).is_err());
-    
-    // Test missing issuer URL
-    config.oidc_client_secret = Some("test-client-secret".to_string());
     config.oidc_issuer_url = None;
     assert!(tokio_test::block_on(OidcClient::new(&config)).is_err());
     

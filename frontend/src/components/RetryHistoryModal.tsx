@@ -1,34 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Alert,
-  LinearProgress,
-  Box,
-  Chip,
-  Tooltip,
-  IconButton,
-} from '@mui/material';
-import {
-  History as HistoryIcon,
-  Close as CloseIcon,
-  Refresh as RefreshIcon,
-  Schedule as ScheduleIcon,
-  PriorityHigh as PriorityIcon,
-} from '@mui/icons-material';
-import { documentService, DocumentRetryHistoryItem } from '../services/api';
-import { format, formatDistanceToNow } from 'date-fns';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { BoardTable, Button, Dialog, Skeleton, type BoardColumn } from '../ui';
+import { documentService, type DocumentRetryHistoryItem } from '../services/api';
+import styles from './RetryModals.module.css';
 
 interface RetryHistoryModalProps {
   open: boolean;
@@ -37,260 +11,171 @@ interface RetryHistoryModalProps {
   documentName?: string;
 }
 
-const RETRY_REASON_LABELS: Record<string, string> = {
-  manual_retry: 'Manual Retry',
-  bulk_retry_all: 'Bulk Retry (All)',
-  bulk_retry_specific: 'Bulk Retry (Selected)',
-  bulk_retry_filtered: 'Bulk Retry (Filtered)',
-  scheduled_retry: 'Scheduled Retry',
-  auto_retry: 'Automatic Retry',
+const RETRY_REASON_KEYS: Record<string, [string, string]> = {
+  manual_retry: ['intake.retry.reason.manual', 'Manual retry'],
+  bulk_retry_all: ['intake.retry.reason.bulkAll', 'Bulk retry (all)'],
+  bulk_retry_specific: ['intake.retry.reason.bulkSelected', 'Bulk retry (selected)'],
+  bulk_retry_filtered: ['intake.retry.reason.bulkFiltered', 'Bulk retry (filtered)'],
+  scheduled_retry: ['intake.retry.reason.scheduled', 'Scheduled retry'],
+  auto_retry: ['intake.retry.reason.auto', 'Automatic retry'],
 };
 
-const STATUS_COLORS: Record<string, 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'> = {
-  pending: 'info',
-  processing: 'warning',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'default',
-};
+export function priorityLevel(priority: number): 'veryHigh' | 'high' | 'medium' | 'low' | 'veryLow' {
+  if (priority >= 15) return 'veryHigh';
+  if (priority >= 12) return 'high';
+  if (priority >= 8) return 'medium';
+  if (priority >= 5) return 'low';
+  return 'veryLow';
+}
 
-export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
-  open,
-  onClose,
-  documentId,
-  documentName,
-}) => {
+function useRetryHistory(documentId: string, enabled: boolean) {
   const [history, setHistory] = useState<DocumentRetryHistoryItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalRetries, setTotalRetries] = useState(0);
 
-  const loadRetryHistory = async () => {
+  const load = useCallback(async () => {
     if (!documentId) return;
-    
     setLoading(true);
     setError(null);
     try {
       const response = await documentService.getDocumentRetryHistory(documentId);
       setHistory(response.data?.retry_history || []);
-      setTotalRetries(response.data?.total_retries || 0);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load retry history');
+      setTotal(response.data?.total_retries || 0);
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message || 'failed');
       setHistory([]);
-      setTotalRetries(0);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentId]);
 
   useEffect(() => {
-    if (open && documentId) {
-      loadRetryHistory();
+    if (enabled && documentId) void load();
+  }, [enabled, documentId, load]);
+
+  return { history, total, loading, error, load };
+}
+
+/** Retry attempts of one document, newest first. Used in the modal and in the failure details panel. */
+export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean }> = ({ documentId, enabled = true }) => {
+  const { t, i18n } = useTranslation();
+  const { history, total, loading, error, load } = useRetryHistory(documentId, enabled);
+  const dateFormat = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+
+  const priorityWord = (priority: number) => {
+    switch (priorityLevel(priority)) {
+      case 'veryHigh':
+        return t('intake.retry.priority.veryHigh', 'Very high');
+      case 'high':
+        return t('intake.retry.priority.high', 'High');
+      case 'medium':
+        return t('intake.retry.priority.medium', 'Medium');
+      case 'low':
+        return t('intake.retry.priority.low', 'Low');
+      default:
+        return t('intake.retry.priority.veryLow', 'Very low');
     }
-  }, [open, documentId]);
-
-  const formatRetryReason = (reason: string) => {
-    return RETRY_REASON_LABELS[reason] || reason.replace(/_/g, ' ');
   };
 
-  const getPriorityLabel = (priority: number) => {
-    if (priority >= 15) return 'Very High';
-    if (priority >= 12) return 'High';
-    if (priority >= 8) return 'Medium';
-    if (priority >= 5) return 'Low';
-    return 'Very Low';
-  };
+  const columns: BoardColumn<DocumentRetryHistoryItem>[] = [
+    { id: 'when', label: t('intake.retry.col.when', 'When'), mono: true, width: 170, render: (i) => dateFormat.format(new Date(i.created_at)) },
+    {
+      id: 'reason',
+      label: t('intake.retry.col.reason', 'Reason'),
+      render: (i) => {
+        const known = RETRY_REASON_KEYS[i.retry_reason];
+        return known ? t(known[0], known[1]) : i.retry_reason.replace(/_/g, ' ');
+      },
+    },
+    {
+      id: 'previous',
+      label: t('intake.retry.col.previous', 'Before'),
+      render: (i) =>
+        [i.previous_status, i.previous_failure_reason?.replace(/_/g, ' ')].filter(Boolean).join(' · ') || '—',
+    },
+    {
+      id: 'priority',
+      label: t('intake.retry.col.priority', 'Priority'),
+      width: 130,
+      render: (i) => `${priorityWord(i.priority)} (${i.priority})`,
+    },
+    {
+      id: 'queue',
+      label: t('intake.retry.col.queue', 'Queue'),
+      width: 150,
+      render: (i) =>
+        i.queue_id
+          ? t('intake.retry.queued', 'Queued · {{id}}', { id: i.queue_id.slice(0, 8) })
+          : t('intake.retry.notQueued', 'Not queued'),
+    },
+  ];
 
-  const getPriorityColor = (priority: number): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
-    if (priority >= 15) return 'error';
-    if (priority >= 12) return 'warning';
-    if (priority >= 8) return 'primary';
-    if (priority >= 5) return 'info';
-    return 'default';
-  };
-
+  if (loading && history.length === 0) {
+    return <Skeleton lines={3} label={t('intake.retry.loading', 'Loading retry history…')} />;
+  }
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box display="flex" alignItems="center" gap={1}>
-            <HistoryIcon />
-            <Box>
-              <Typography variant="h6">OCR Retry History</Typography>
-              {documentName && (
-                <Typography variant="body2" color="text.secondary">
-                  {documentName}
-                </Typography>
-              )}
-            </Box>
-          </Box>
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-
-      <DialogContent>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {loading ? (
-          <Box>
-            <LinearProgress />
-            <Typography variant="body2" color="text.secondary" mt={1} textAlign="center">
-              Loading retry history...
-            </Typography>
-          </Box>
-        ) : (!history || history.length === 0) ? (
-          <Alert severity="info">
-            <Typography variant="body1">
-              No retry attempts found for this document.
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mt={1}>
-              This document hasn't been retried yet, or retry history is not available.
-            </Typography>
-          </Alert>
-        ) : (
-          <Box>
-            {/* Summary */}
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Typography variant="body1">
-                <strong>{totalRetries}</strong> retry attempts found for this document.
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Most recent attempt: {history && history.length > 0 ? formatDistanceToNow(new Date(history[0].created_at)) + ' ago' : 'No attempts yet'}
-              </Typography>
-            </Alert>
-
-            {/* History Table */}
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date & Time</TableCell>
-                    <TableCell>Retry Reason</TableCell>
-                    <TableCell>Previous Status</TableCell>
-                    <TableCell>Priority</TableCell>
-                    <TableCell>Queue Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(history || []).map((item, index) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2">
-                            {format(new Date(item.created_at), 'MMM dd, yyyy')}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {format(new Date(item.created_at), 'h:mm a')}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            ({formatDistanceToNow(new Date(item.created_at))} ago)
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <Chip
-                          label={formatRetryReason(item.retry_reason)}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      
-                      <TableCell>
-                        <Box>
-                          {item.previous_status && (
-                            <Chip
-                              label={item.previous_status}
-                              size="small"
-                              color={STATUS_COLORS[item.previous_status] || 'default'}
-                              sx={{ mb: 0.5 }}
-                            />
-                          )}
-                          {item.previous_failure_reason && (
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              {item.previous_failure_reason.replace(/_/g, ' ')}
-                            </Typography>
-                          )}
-                          {item.previous_error && (
-                            <Tooltip title={item.previous_error}>
-                              <Typography variant="caption" display="block" color="error.main" sx={{ 
-                                maxWidth: 200,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                cursor: 'help'
-                              }}>
-                                {item.previous_error}
-                              </Typography>
-                            </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <Tooltip title={`Priority: ${item.priority}/20`}>
-                          <Chip
-                            icon={<PriorityIcon fontSize="small" />}
-                            label={`${getPriorityLabel(item.priority)} (${item.priority})`}
-                            size="small"
-                            color={getPriorityColor(item.priority)}
-                          />
-                        </Tooltip>
-                      </TableCell>
-                      
-                      <TableCell>
-                        {item.queue_id ? (
-                          <Box>
-                            <Typography variant="body2" color="success.main">
-                              ✓ Queued
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              ID: {item.queue_id.slice(0, 8)}...
-                            </Typography>
-                          </Box>
-                        ) : (
-                          <Typography variant="body2" color="warning.main">
-                            ⚠ Not queued
-                          </Typography>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
-            {/* Legend */}
-            <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
-              <Typography variant="caption" color="text.secondary" paragraph>
-                <strong>Priority Levels:</strong> Very High (15-20), High (12-14), Medium (8-11), Low (5-7), Very Low (1-4)
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                <strong>Retry Reasons:</strong> Manual (user-initiated), Bulk (batch operations), Scheduled (automatic), Auto (system-triggered)
-              </Typography>
-            </Box>
-          </Box>
-        )}
-      </DialogContent>
-
-      <DialogActions>
-        <Button
-          startIcon={<RefreshIcon />}
-          onClick={loadRetryHistory}
-          disabled={loading}
-        >
-          Refresh
+    <div className={styles.stack}>
+      {error ? (
+        <p className={styles.error} role="alert">
+          {error === 'failed' ? t('intake.retry.loadFailed', 'Could not load the retry history.') : error}
+        </p>
+      ) : null}
+      {!error && history.length === 0 ? (
+        <p className={styles.muted}>
+          {t('intake.retry.empty', 'No retry attempts found for this document.')}
+        </p>
+      ) : null}
+      {history.length > 0 ? (
+        <>
+          <p className={styles.muted}>
+            {t('intake.retry.summary', '{{count}} retry attempts', { count: total })}
+          </p>
+          <BoardTable
+            aria-label={t('intake.retry.title', 'OCR retry history')}
+            columns={columns}
+            rows={history}
+            getRowId={(i) => i.id}
+            density="compact"
+            renderRowDetail={(i) => (i.previous_error ? i.previous_error : null)}
+          />
+          <p className={styles.muted}>
+            {t(
+              'intake.retry.legend',
+              'Priority: very high 15–20, high 12–14, medium 8–11, low 5–7, very low 1–4.',
+            )}
+          </p>
+        </>
+      ) : null}
+      <div>
+        <Button size="sm" variant="ghost" onPress={() => void load()} isPending={loading}>
+          {t('intake.actions.refresh', 'Refresh')}
         </Button>
-        <Button onClick={onClose} variant="contained">
-          Close
+      </div>
+    </div>
+  );
+};
+
+export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({ open, onClose, documentId, documentName }) => {
+  const { t } = useTranslation();
+  return (
+    <Dialog
+      isOpen={open}
+      onOpenChange={(isOpen) => !isOpen && onClose()}
+      size="lg"
+      title={t('intake.retry.title', 'OCR retry history')}
+      actions={
+        <Button variant="primary" onPress={onClose}>
+          {t('intake.actions.close', 'Close')}
         </Button>
-      </DialogActions>
+      }
+    >
+      <div className={styles.stack}>
+        {documentName ? <p className={styles.subject}>{documentName}</p> : null}
+        <RetryHistoryList documentId={documentId} enabled={open} />
+      </div>
     </Dialog>
   );
 };

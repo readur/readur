@@ -11,18 +11,22 @@
  * with the correct method.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 
 const FILES_TO_SCAN = [
-  'frontend/src/services/api.ts',
-  'frontend/src/pages/DocumentManagementPage.tsx',
-  'frontend/src/pages/IgnoredFilesPage.tsx',
-  'frontend/src/pages/SourcesPage.tsx',
-  'frontend/src/pages/DebugPage.tsx',
+  ...readdirSync(join(REPO_ROOT, 'frontend/src/services/api'))
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => `frontend/src/services/api/${name}`),
+  'frontend/src/features/intake/upload/useUploadQueue.ts',
+  'frontend/src/features/intake/upload/useUploadOptions.ts',
+  'frontend/src/features/intake/attention/DuplicatesPanel.tsx',
+  'frontend/src/features/settings/debug/useDebugSession.ts',
+  'frontend/src/features/settings/debug/DebugPanels.tsx',
+  'frontend/src/features/settings/debug/Diagnostics.tsx',
 ];
 
 // Matches string literals that look like API paths. We limit to paths that
@@ -36,7 +40,7 @@ const API_ROOT_SEGMENTS = [
 ];
 const segmentAlt = API_ROOT_SEGMENTS.join('|');
 const PATH_LITERAL = new RegExp(
-  `['"\`](\\/(?:api\\/)?(?:${segmentAlt})(?:\\/[a-zA-Z0-9_\${}/\\-:.?&=]*)?)['"\`]`,
+  `['"\`](\\/(?:api\\/)?(?:${segmentAlt})(?:\\/[a-zA-Z0-9_${'$'}{}/\\-:.?&=]*)?)['"\`]`,
   'g',
 );
 

@@ -164,7 +164,7 @@ async fn start_notify_watcher(
         }
     }
     
-    let watch_interval = Duration::from_secs(config.watch_interval_seconds.unwrap_or(30));
+    let watch_interval = Duration::from_secs(config.effective_watch_interval_seconds());
     let mut known_files: HashMap<PathBuf, SystemTime> = HashMap::new();
     let mut last_processed: HashMap<PathBuf, Instant> = HashMap::new();
 
@@ -199,7 +199,7 @@ async fn start_notify_watcher(
                         }
                     }
 
-                    let stability_ms = config.file_stability_check_ms.unwrap_or(1000);
+                    let stability_ms = config.effective_file_stability_check_ms();
                     if is_file_stable(&path, stability_ms).await {
                         if let Err(e) = process_file(&path, &db, &file_service, &queue_service, &config, &user_watch_manager).await {
                             error!("Failed to process file {:?}: {}", path, e);
@@ -232,7 +232,7 @@ async fn start_polling_watcher(
     info!("Started polling-based watcher on: {}", config.watch_folder);
     
     let mut known_files: HashSet<(PathBuf, SystemTime)> = HashSet::new();
-    let mut interval = interval(Duration::from_secs(config.watch_interval_seconds.unwrap_or(30)));
+    let mut interval = interval(Duration::from_secs(config.effective_watch_interval_seconds()));
     
     // Initial scan of global watch directory
     info!("Starting initial scan of global watch directory: {}", config.watch_folder);
@@ -294,7 +294,7 @@ async fn scan_directory(
                     // Check if this is a new file or modified file
                     if !known_files.contains(&file_info) {
                         // Wait a bit to ensure file is fully written
-                        let stability_ms = config.file_stability_check_ms.unwrap_or(1000);
+                        let stability_ms = config.effective_file_stability_check_ms();
                         if is_file_stable(&path, stability_ms).await {
                             debug!("Found new/modified file: {:?}", path);
                             if let Err(e) = process_file(&path, db, file_service, queue_service, config, user_watch_manager).await {

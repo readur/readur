@@ -8,15 +8,7 @@ use axum::{
 use sqlx::Row;
 use std::{sync::Arc, error::Error};
 
-use crate::{auth::AuthUser, AppState, models::UserRole};
-
-pub fn require_admin(auth_user: &AuthUser) -> Result<(), StatusCode> {
-    if auth_user.user.role != UserRole::Admin {
-        Err(StatusCode::FORBIDDEN)
-    } else {
-        Ok(())
-    }
-}
+use crate::{auth::AdminUser, AppState};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -44,9 +36,8 @@ pub fn router() -> Router<Arc<AppState>> {
 )]
 async fn get_queue_stats(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     let queue_service = &*state.queue_service;
     
     let stats = queue_service
@@ -80,9 +71,8 @@ async fn get_queue_stats(
 )]
 async fn requeue_failed(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     let queue_service = &*state.queue_service;
     
     let count = match queue_service.requeue_failed_items().await {
@@ -128,9 +118,8 @@ async fn requeue_failed(
 )]
 async fn pause_ocr_processing(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     
     state.queue_service.pause();
     
@@ -155,9 +144,8 @@ async fn pause_ocr_processing(
 )]
 async fn resume_ocr_processing(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     
     state.queue_service.resume();
     
@@ -182,9 +170,8 @@ async fn resume_ocr_processing(
 )]
 async fn get_ocr_status(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     
     let is_paused = state.queue_service.is_paused();
     
@@ -210,9 +197,8 @@ async fn get_ocr_status(
 )]
 async fn enqueue_pending_documents(
     State(state): State<Arc<AppState>>,
-    auth_user: AuthUser,
+    _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    require_admin(&auth_user)?;
     
     // Find all documents with pending OCR status that aren't already in the queue
     let pending_documents = sqlx::query(

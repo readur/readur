@@ -24,7 +24,7 @@ This guide walks you through everything you need to know to effectively use Read
 
 ## Getting Started
 
-When you first access Readur, navigate to your installation URL (typically `http://localhost:8000` for local installations) and log in with the admin credentials. The username is `admin` and the password is auto-generated on first startup - check your container logs (`docker compose logs readur`) and look for "READUR ADMIN USER CREATED" to find your password. Save this password immediately as it won't be shown again.
+When you first access Readur, navigate to your installation URL (typically `http://localhost:8000` for local installations) and log in with the admin credentials. The username is `admin` and the password is either the `ADMIN_PASSWORD` your administrator configured or, if none was set, a random password generated on first startup and written to a file (`/app/uploads/.readur/initial-admin-password` in the Docker image; read it with `docker compose exec readur cat /app/uploads/.readur/initial-admin-password`). The password is not written to the logs. Change it after your first sign-in and delete the file.
 
 Take a moment to configure your user preferences through the settings menu. If you work with documents in languages other than English, set your preferred OCR language now - this will improve text extraction accuracy for your documents. You can also adjust search settings and display preferences to match how you like to work.
 
@@ -149,7 +149,7 @@ Labels are your primary tool for organizing documents in Readur. Unlike traditio
 
 ### Understanding Label Types
 
-Readur uses two main types of labels. User labels are the ones you create and manage - these reflect your personal or organizational categorization needs. System labels are automatically generated based on document properties like file type, OCR status, or upload source. You can use both types in searches and filters, but only user labels can be customized.
+Every label belongs to your account. You start with five (Important, To Review, Archive, Work and Personal), and you can rename, recolour or delete them like any label you create. Use labels in searches and filters to narrow down your documents.
 
 You can assign colors to your labels for visual organization. This becomes particularly helpful when you're scanning through document lists - important documents with red labels stand out immediately, while routine items might use neutral colors. The system also supports hierarchical labels where you can create categories and subcategories for complex organizational schemes.
 
@@ -236,7 +236,7 @@ Readur offers flexible user management that works for both small teams and large
 
 ### Authentication Options
 
-For most small to medium installations, local authentication provides everything you need. Users create accounts with usernames and passwords, which Readur stores securely using industry-standard bcrypt hashing. You can enable self-registration to let users create their own accounts, or keep it admin-only for tighter control.
+For most small to medium installations, local authentication provides everything you need. Users create accounts with usernames and passwords, which Readur stores securely using industry-standard bcrypt hashing. Accounts are admin-created by default. Setting `ALLOW_REGISTRATION=true` lets users register themselves; those accounts stay disabled until an administrator approves them in user management.
 
 Enterprise environments often benefit from OIDC/SSO integration, which lets users authenticate with their existing corporate credentials. Readur supports major identity providers including Microsoft Azure AD, Google Workspace, Okta, Auth0, and Keycloak. When someone logs in for the first time through SSO, Readur automatically creates their account, streamlining the onboarding process.
 

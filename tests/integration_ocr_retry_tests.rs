@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
@@ -54,26 +54,12 @@ impl OcrRetryTestHelper {
             .as_nanos();
         let username = format!("ocr_retry_admin_{}_{}", test_id, nanos);
         let email = format!("ocr_retry_admin_{}@{}.example.com", test_id, nanos);
-        let password = "testpassword123";
+        let password = &readur::test_utils::test_password();
         
-        // Register admin user
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: password.to_string(),
-            role: Some(UserRole::Admin),
-        };
-        
-        let register_response = client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .timeout(TIMEOUT)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            return Err(format!("Registration failed: {}", register_response.text().await?).into());
-        }
+        // Create the admin account in the server's database
+        readur::test_utils::create_live_server_user(&username, &email, password, UserRole::Admin)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         // Login with the new user
         let login_data = LoginRequest {

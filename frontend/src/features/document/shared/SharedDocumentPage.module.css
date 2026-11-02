@@ -1,0 +1,142 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  height: 56px;
+  padding: 0 var(--s-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.main {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: var(--s-7) var(--s-4);
+}
+
+.card,
+.ready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  width: 100%;
+}
+
+.card {
+  max-width: 440px;
+  align-self: flex-start;
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+
+.ready {
+  max-width: 1040px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.lock {
+  font-size: var(--fs-2xl);
+  color: var(--accent);
+}
+
+.title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+
+.fact + .fact::before {
+  content: '·';
+  padding: 0 var(--s-2);
+  color: var(--fg-meta);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.preview {
+  height: min(78vh, 1100px);
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.error {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (max-width: 719px) {
+  .header {
+    padding: 0 var(--s-4);
+  }
+
+  .main {
+    padding: var(--s-5) var(--s-4);
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .preview {
+    height: 70vh;
+    min-height: 360px;
+  }
+}

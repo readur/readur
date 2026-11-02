@@ -2,12 +2,14 @@ use axum::{routing::{get, post, delete, put}, Router};
 use std::sync::Arc;
 use crate::AppState;
 
+pub mod arrivals;
 pub mod crud;
 pub mod sync;
 pub mod validation;
 pub mod estimation;
 
 // Re-export commonly used functions and types for backward compatibility
+pub use arrivals::*;
 pub use crud::*;
 pub use sync::*;
 pub use validation::*;
@@ -18,6 +20,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // CRUD operations
         .route("/", get(list_sources))
         .route("/", post(create_source))
+        .route("/arrivals", get(get_source_arrivals))
         .route("/{id}", get(get_source))
         .route("/{id}", put(update_source))
         .route("/{id}", delete(delete_source))
@@ -31,9 +34,10 @@ pub fn router() -> Router<Arc<AppState>> {
         
         // Validation operations
         .route("/{id}/validate", post(validate_source))
+        .route("/{id}/test", post(test_connection))
         .route("/test/connection", post(test_connection_with_config))
         
         // Estimation operations
-        .route("/{id}/estimate", get(estimate_crawl))
+        .route("/{id}/estimate", post(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))
 }

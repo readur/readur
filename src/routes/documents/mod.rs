@@ -53,6 +53,6 @@ pub fn router() -> Router<Arc<AppState>> {
         
         // Failed documents
         .route("/failed", get(get_failed_documents))
-        .route("/failed/{id}", get(view_failed_document))
+        .route("/failed/{id}/view", get(view_failed_document))
         .route("/failed/ocr", get(get_failed_ocr_documents))
 }

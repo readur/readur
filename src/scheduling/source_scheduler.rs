@@ -12,8 +12,10 @@ use sqlx::Row;
 use crate::{
     AppState,
     models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    models::source::WebDAVTestConnection,
+    services::webdav::WebDAVConfig,
+    utils::outbound::validate_outbound_url,
 };
+use super::source_connectivity;
 use super::source_sync::SourceSyncService;
 
 struct SyncHealthAnalysis {
@@ -713,6 +715,19 @@ impl SourceScheduler {
 
         if should_trigger_deep_scan {
             info!("🎯 Intelligent deep scan trigger activated for source {}: {}", source.name, reason);
+
+            let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
+            if let Err(e) = validate_outbound_url(&WebDAVConfig::normalize_server_url(&webdav_config.server_url)).await {
+                warn!("Automatic deep scan for source {} not started: {}", source.name, e);
+                if let Err(db_err) = state
+                    .db
+                    .update_source_status(source.id, crate::models::SourceStatus::Error, Some(e.to_string()))
+                    .await
+                {
+                    error!("Failed to update source status: {}", db_err);
+                }
+                return Ok(());
+            }
             
             // Create notification about automatic deep scan
             let notification = crate::models::CreateNotification {
@@ -735,7 +750,6 @@ impl SourceScheduler {
             
             // Trigger the deep scan via the API endpoint
             // We'll reuse the existing deep scan logic from the sources route
-            let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
             let webdav_service = crate::services::webdav::WebDAVService::new(
                 crate::services::webdav::WebDAVConfig {
                     server_url: webdav_config.server_url.clone(),
@@ -866,7 +880,7 @@ impl SourceScheduler {
         // 2. Connectivity validation
         match source.source_type {
             crate::models::SourceType::WebDAV => {
-                if let Err(e) = Self::validate_webdav_connectivity(source).await {
+                if let Err(e) = source_connectivity::check_webdav(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -878,7 +892,7 @@ impl SourceScheduler {
                 }
             }
             crate::models::SourceType::LocalFolder => {
-                if let Err(e) = Self::validate_local_folder_access(source).await {
+                if let Err(e) = source_connectivity::check_local_folder(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -890,7 +904,7 @@ impl SourceScheduler {
                 }
             }
             crate::models::SourceType::S3 => {
-                if let Err(e) = Self::validate_s3_connectivity(source).await {
+                if let Err(e) = source_connectivity::check_s3(source).await {
                     validation_score -= 25;
                     if validation_status == "healthy" { validation_status = "warning"; }
                     validation_issues.push(serde_json::json!({
@@ -1017,51 +1031,6 @@ impl SourceScheduler {
             }
         }
     }
-
-    async fn validate_webdav_connectivity(source: &crate::models::Source) -> Result<(), String> {
-        use crate::models::WebDAVSourceConfig;
-        
-        let config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())
-            .map_err(|e| format!("Config parse error: {}", e))?;
-
-        let webdav_config = crate::services::webdav::WebDAVConfig {
-            server_url: config.server_url.clone(),
-            username: config.username.clone(),
-            password: config.password.clone(),
-            watch_folders: config.watch_folders.clone(),
-            file_extensions: config.file_extensions.clone(),
-            timeout_seconds: 30, // Quick connectivity test
-            server_type: config.server_type.clone(),
-        };
-
-        let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)
-            .map_err(|e| format!("Service creation failed: {}", e))?;
-
-        let test_config = WebDAVTestConnection {
-            server_url: config.server_url,
-            username: config.username,
-            password: config.password,
-            server_type: config.server_type,
-        };
-        
-        crate::services::webdav::WebDAVService::test_connection_with_config(&test_config).await
-            .map_err(|e| format!("Connection test failed: {}", e))?;
-
-        Ok(())
-    }
-
-    async fn validate_local_folder_access(_source: &crate::models::Source) -> Result<(), String> {
-        // Simplified local folder validation - could be enhanced
-        // For now, just return OK as local folders are validated differently
-        Ok(())
-    }
-
-    async fn validate_s3_connectivity(_source: &crate::models::Source) -> Result<(), String> {
-        // Simplified S3 validation - could be enhanced with actual AWS SDK calls
-        // For now, just return OK as S3 validation requires more complex setup
-        Ok(())
-    }
-
 
     async fn analyze_sync_patterns(
         source: &crate::models::Source,

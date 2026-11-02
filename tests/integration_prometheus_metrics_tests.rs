@@ -4,32 +4,41 @@ use std::collections::HashSet;
 use serde_json::json;
 use uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 
 fn get_base_url() -> String {
     std::env::var("API_URL").unwrap_or_else(|_| "http://localhost:8000".to_string())
 }
 
+/// Credential for scraping `/metrics`: `METRICS_TOKEN` when the server under
+/// test has one configured, otherwise an admin session.
+async fn metrics_token(client: &Client) -> String {
+    static TOKEN: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
+    TOKEN
+        .get_or_init(|| async {
+            match std::env::var("METRICS_TOKEN") {
+                Ok(token) if !token.is_empty() => token,
+                _ => create_user_with_token(client, UserRole::Admin)
+                    .await
+                    .expect("Failed to create admin for metrics"),
+            }
+        })
+        .await
+        .clone()
+}
+
 /// Helper to create a test user and return the auth token
 async fn create_test_user_with_token(client: &Client) -> Result<String, Box<dyn std::error::Error>> {
+    create_user_with_token(client, UserRole::User).await
+}
+
+async fn create_user_with_token(client: &Client, role: UserRole) -> Result<String, Box<dyn std::error::Error>> {
     let base_url = get_base_url();
     let username = format!("testuser_{}", uuid::Uuid::new_v4());
-    let password = "test_password123";
-    
-    // Register user
-    let register_data = CreateUser {
-        username: username.clone(),
-        password: password.to_string(),
-        email: format!("{}@test.com", username),
-        role: None,
-    };
-    
-    client
-        .post(&format!("{}/api/auth/register", base_url))
-        .json(&register_data)
-        .send()
-        .await?;
-    
+    let password = &readur::test_utils::test_password();
+
+    readur::test_utils::create_live_server_user(&username, &format!("{}@test.com", username), password, role).await?;
+
     // Login to get token
     let login_data = LoginRequest {
         username,
@@ -54,6 +63,7 @@ async fn test_prometheus_metrics_endpoint_returns_success() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -76,6 +86,7 @@ async fn test_prometheus_metrics_format_is_valid() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -128,6 +139,7 @@ async fn test_all_expected_metrics_are_present() {
     // Get metrics
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -193,6 +205,7 @@ async fn test_metrics_contain_valid_timestamps() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -225,6 +238,7 @@ async fn test_metrics_values_are_non_negative() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -285,6 +299,7 @@ async fn test_document_type_metrics_have_labels() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -312,6 +327,7 @@ async fn test_metrics_help_and_type_annotations() {
     
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(metrics_token(&client).await)
         .send()
         .await
         .expect("Failed to send request");
@@ -380,11 +396,14 @@ async fn test_metrics_endpoint_performance() {
             .await;
     }
     
+    let scrape_token = metrics_token(&client).await;
+
     // Measure response time
     let start = std::time::Instant::now();
-    
+
     let response = client
         .get(&format!("{}/metrics", base_url))
+        .bearer_auth(&scrape_token)
         .send()
         .await
         .expect("Failed to send request");
@@ -404,17 +423,20 @@ async fn test_metrics_endpoint_performance() {
 #[tokio::test]
 async fn test_metrics_concurrent_requests() {
     let base_url = get_base_url();
-    
+    let scrape_token = metrics_token(&Client::new()).await;
+
     // Send multiple concurrent requests
     let mut handles = vec![];
-    
+
     for _ in 0..5 {
         let base_url_clone = base_url.clone();
-        
+        let token = scrape_token.clone();
+
         let handle = tokio::spawn(async move {
             let client = Client::new();
             let response = client
                 .get(&format!("{}/metrics", base_url_clone))
+                .bearer_auth(token)
                 .send()
                 .await
                 .expect("Failed to send request");
@@ -433,23 +455,26 @@ async fn test_metrics_concurrent_requests() {
 }
 
 #[tokio::test]
-async fn test_metrics_endpoint_no_auth_required() {
+async fn test_metrics_endpoint_requires_auth() {
     let client = Client::new();
     let base_url = get_base_url();
-    
-    // Test that metrics endpoint doesn't require authentication
+
     let response = client
         .get(&format!("{}/metrics", base_url))
         .send()
         .await
         .expect("Failed to send request");
-    
-    // Should succeed without authentication
-    assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = response.text().await.expect("Failed to read response body");
-    assert!(!body.is_empty());
-    assert!(body.contains("readur_"));
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // A regular user's session is not enough.
+    let user_token = create_test_user_with_token(&client).await.expect("Failed to create test user");
+    let response = client
+        .get(&format!("{}/metrics", base_url))
+        .bearer_auth(&user_token)
+        .send()
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 // Helper to validate metric value ranges

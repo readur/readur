@@ -706,7 +706,7 @@ cargo run --bin test_auth
 **JWT secret mismatch:** Ensure all application instances use the same JWT secret for token validation.
 ```bash
 # Ensure consistent secret across instances
-export JWT_SECRET="same-secret-all-instances"
+export JWT_SECRET="<one value from: openssl rand -hex 32, shared by all instances>"
 
 # Restart all instances
 docker-compose restart

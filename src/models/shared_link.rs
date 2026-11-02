@@ -3,14 +3,17 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
+#[ts(export)]
 pub struct SharedLink {
     pub id: Uuid,
     pub document_id: Uuid,
     pub created_by: Uuid,
     pub token: String,
     #[serde(skip_serializing)]
+    #[ts(skip)]
     pub password_hash: Option<String>,
     pub expires_at: Option<DateTime<Utc>>,
     pub max_views: Option<i32>,
@@ -20,7 +23,8 @@ pub struct SharedLink {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct CreateSharedLinkRequest {
     pub document_id: Uuid,
     pub password: Option<String>,
@@ -28,7 +32,8 @@ pub struct CreateSharedLinkRequest {
     pub max_views: Option<i32>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SharedLinkResponse {
     pub id: Uuid,
     pub document_id: Uuid,
@@ -65,13 +70,15 @@ impl SharedLinkResponse {
 }
 
 /// Request body for accessing a password-protected shared link
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct SharedLinkPasswordRequest {
     pub password: String,
 }
 
 /// Metadata response for public shared link access
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct SharedDocumentMetadata {
     pub filename: String,
     pub original_filename: String,

@@ -510,7 +510,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
 
             let nonexistent_id = Uuid::new_v4();
@@ -541,7 +541,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
 
             // Create multiple documents
@@ -594,7 +594,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             // Create regular user and their documents
             let user = auth_helper.create_test_user().await;
@@ -703,7 +703,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             let user = auth_helper.create_test_user().await;
             let empty_ids: Vec<Uuid> = vec![];
@@ -736,7 +736,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
 
             let user = auth_helper.create_test_user().await;
 
@@ -778,7 +778,7 @@ mod document_deletion_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let admin = auth_helper.create_admin_user().await;
 
@@ -1593,7 +1593,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
 
             // Create a large number of document IDs (mostly non-existent)
@@ -1638,7 +1638,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let document_doc = create_test_document(user.user_response.id);
             let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
@@ -1689,7 +1689,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let document_doc = create_test_document(user.user_response.id);
             let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
@@ -1832,7 +1832,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let document_doc = create_test_document(user.user_response.id);
             let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
@@ -1885,7 +1885,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
 
             // Test empty list
@@ -1926,7 +1926,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let user = auth_helper.create_test_user().await;
             let document_doc = create_test_document(user.user_response.id);
             let document = ctx.state.db.create_document(document_doc).await.expect("Failed to create document");
@@ -2254,7 +2254,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let database = &ctx.state.db;
 
             // Create actual users in the database
@@ -2349,7 +2349,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let database = &ctx.state.db;
 
             // Create actual user in the database
@@ -2467,7 +2467,7 @@ mod deletion_error_handling_tests {
         
         // Ensure cleanup happens even if test fails
         let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
+            let auth_helper = ctx.auth_helper();
             let database = &ctx.state.db;
 
             // Create actual user in the database

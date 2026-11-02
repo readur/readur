@@ -133,7 +133,7 @@ Deploy with environment file:
 ```bash
 # Create .env file with secrets
 cat > .env << EOF
-JWT_SECRET=$(openssl rand -base64 64)
+JWT_SECRET=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 EOF
 
@@ -481,12 +481,15 @@ docker exec readur-postgres-1 psql -U readur -c "SELECT * FROM pg_stat_statement
 
 ### Prometheus Metrics
 
-Readur exposes metrics at `/metrics` endpoint:
+Readur exposes metrics at the `/metrics` endpoint. The endpoint requires authentication: set `METRICS_TOKEN` (at least 16 characters) on the Readur server and have Prometheus send it as a bearer token. Without `METRICS_TOKEN`, `/metrics` only accepts an admin session or admin API key.
 
 ```yaml
 # prometheus.yml
 scrape_configs:
   - job_name: 'readur'
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/readur-metrics-token  # contains METRICS_TOKEN
     static_configs:
       - targets: ['readur:8000']
 ```
@@ -524,6 +527,18 @@ secrets:
 ### Kubernetes
 
 **Important:** Readur is a single-instance application. Always set replicas to 1.
+
+**Helm chart:** The chart in `charts/readur` creates a Secret named `<release>-auth` with a random initial `ADMIN_PASSWORD`, kept on upgrade. `JWT_SECRET` is optional: without it Readur generates a signing key and stores it in its database. To provide your own values, set `auth.jwtSecret` and/or `auth.adminPassword`, or set `auth.existingSecret` to the name of a Secret that may contain `JWT_SECRET` (at least 32 bytes) and `ADMIN_PASSWORD`.
+
+**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate a new admin password on every render. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set `auth.adminPassword` explicitly.
+
+Read the generated admin password with:
+
+```bash
+kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
+```
+
+For manually written manifests like the one below, `JWT_SECRET` is optional; without it the server generates a signing key and stores it in the database.
 
 ```yaml
 apiVersion: apps/v1
@@ -566,9 +581,11 @@ spec:
 
 ### Production Checklist
 
-- [ ] **CRITICAL: Change JWT_SECRET from default value**
-- [ ] Change default admin password
-- [ ] Generate strong JWT secret (use `openssl rand -base64 32`)
+- [ ] Either leave `JWT_SECRET` unset (a key is generated and stored in the database; rotate with `readur rotate-jwt-secret`) or set it to a random value of at least 32 bytes (e.g. `openssl rand -hex 32`)
+- [ ] Change the initial admin password and delete the generated `initial-admin-password` file (if `ADMIN_PASSWORD` was not set)
+- [ ] Keep `ALLOW_REGISTRATION` disabled unless self-registration is needed
+- [ ] Set `PUBLIC_URL` when running behind a reverse proxy, and `TRUSTED_PROXIES` if the proxy is not on a loopback or private address (or `none` if clients connect directly from a private network)
+- [ ] Set `METRICS_TOKEN` if Prometheus scrapes `/metrics`
 - [ ] Use HTTPS/SSL in production
 - [ ] **Never disable SSL verification in production** (S3_VERIFY_SSL must be true)
 - [ ] Restrict database network access
@@ -584,11 +601,10 @@ spec:
 
 ```bash
 # Generate secure secrets - ALWAYS DO THIS!
-JWT_SECRET=$(openssl rand -base64 64)  # NEVER use default values
+JWT_SECRET=$(openssl rand -hex 32)  # optional; min 32 bytes when set
 DB_PASSWORD=$(openssl rand -base64 32)
 
-# WARNING: Default JWT_SECRET values are insecure
-# Always generate new secrets for production
+# The server refuses to start with a short or example JWT_SECRET
 
 # Restrict file permissions
 chmod 600 .env

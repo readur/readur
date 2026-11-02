@@ -2,8 +2,8 @@ use anyhow::Result;
 use sqlx::{QueryBuilder, Postgres, Row};
 use uuid::Uuid;
 
-use crate::models::{Document, UserRole, FailedDocument};
-use super::helpers::{map_row_to_document, apply_role_based_filter, DOCUMENT_FIELDS};
+use crate::models::{Document, DocumentFilters, UserRole, FailedDocument};
+use super::helpers::{map_row_to_document, apply_document_filters, apply_role_based_filter, DOCUMENT_FIELDS};
 use crate::db::Database;
 
 impl Database {
@@ -274,27 +274,25 @@ impl Database {
 
     /// Counts total documents for a user with role-based access control
     pub async fn count_documents_by_user_with_role(&self, user_id: Uuid, user_role: UserRole) -> Result<i64> {
-        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) as total FROM documents WHERE 1=1");
-        apply_role_based_filter(&mut query, user_id, user_role);
-        let row = query.build().fetch_one(&self.pool).await?;
-        Ok(row.get("total"))
+        self.count_documents_filtered(user_id, user_role, &DocumentFilters::default()).await
     }
 
     /// Counts documents for a user with role-based access control and OCR status filtering
     pub async fn count_documents_by_user_with_role_and_filter(
-        &self, 
-        user_id: Uuid, 
-        user_role: UserRole, 
+        &self,
+        user_id: Uuid,
+        user_role: UserRole,
         ocr_status: Option<&str>
     ) -> Result<i64> {
+        let filters = DocumentFilters { ocr_status: ocr_status.map(str::to_string), ..Default::default() };
+        self.count_documents_filtered(user_id, user_role, &filters).await
+    }
+
+    /// Counts documents matching `filters` with role-based access control
+    pub async fn count_documents_filtered(&self, user_id: Uuid, user_role: UserRole, filters: &DocumentFilters) -> Result<i64> {
         let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) as total FROM documents WHERE 1=1");
         apply_role_based_filter(&mut query, user_id, user_role);
-        
-        if let Some(status) = ocr_status {
-            query.push(" AND ocr_status = ");
-            query.push_bind(status);
-        }
-        
+        apply_document_filters(&mut query, filters);
         let row = query.build().fetch_one(&self.pool).await?;
         Ok(row.get("total"))
     }

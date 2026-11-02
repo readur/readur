@@ -214,6 +214,7 @@ mod tests {
             include_snippets: None,
             snippet_length: None,
             search_mode: None,
+            ..Default::default()
         };
         
         // Test that default values work correctly
@@ -233,6 +234,7 @@ mod tests {
             include_snippets: Some(true),
             snippet_length: Some(300),
             search_mode: Some(SearchMode::Phrase),
+            ..Default::default()
         };
         
         assert_eq!(request.query, "test query");
@@ -299,6 +301,12 @@ mod tests {
             mime_type: "application/pdf".to_string(),
             tags: vec!["test".to_string()],
             created_at: now,
+            updated_at: now,
+            labels: vec![],
+            source_id: None,
+            source_type: None,
+            ocr_progress_current: None,
+            ocr_progress_total: None,
             has_ocr_text: true,
             ocr_confidence: Some(85.5),
             ocr_word_count: Some(50),
@@ -600,6 +608,7 @@ mod tests {
             include_snippets: None,
             snippet_length: None,
             search_mode: None,
+            ..Default::default()
         };
         
         // Should handle empty query gracefully
@@ -615,6 +624,7 @@ mod tests {
             include_snippets: Some(true),
             snippet_length: Some(i32::MAX),
             search_mode: Some(SearchMode::Boolean),
+            ..Default::default()
         };
         
         // Should handle extreme values without panicking
@@ -682,6 +692,12 @@ mod tests {
             mime_type: "application/pdf".to_string(),
             tags: vec!["test".to_string(), "document".to_string()],
             created_at: now,
+            updated_at: now,
+            labels: vec![],
+            source_id: None,
+            source_type: None,
+            ocr_progress_current: None,
+            ocr_progress_total: None,
             has_ocr_text: true,
             ocr_confidence: Some(92.3),
             ocr_word_count: Some(75),
@@ -953,6 +969,7 @@ mod tests {
             include_snippets: Some(true),
             snippet_length: Some(100),
             search_mode: Some(SearchMode::Simple),
+            ..Default::default()
         };
         
         let result = ctx.state.db.enhanced_search_documents(user.user_response.id, &search_request).await;

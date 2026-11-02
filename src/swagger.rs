@@ -1,32 +1,34 @@
-use utoipa::{OpenApi, Modify};
-use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, Http};
-use utoipa_swagger_ui::SwaggerUi;
 use axum::Router;
 use std::sync::Arc;
+use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::{Modify, OpenApi};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    models::{
-        CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
-        DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
-        SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
-        FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
-        Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
-        WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
-        ProcessedImage, CreateProcessedImage, IgnoredFileResponse, IgnoredFilesQuery,
-        DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
-        BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse
-    },
     models::source::{
-        WebDAVCrawlEstimate, WebDAVTestConnection, WebDAVConnectionResult, WebDAVSyncStatus,
+        WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus, WebDAVTestConnection,
+    },
+    models::{
+        BulkDeleteResponse, CreateNotification, CreateProcessedImage, CreateSource, CreateUser,
+        DayCount, DocumentDuplicatesResponse, DocumentFilters, DocumentListResponse,
+        DocumentOcrResponse, DocumentOperationResponse, DocumentResponse, DocumentSortField,
+        EnhancedDocumentResponse, FacetItem, HighlightRange, IgnoredFileResponse,
+        IgnoredFilesQuery, LocalFolderSourceConfig, LoginRequest, LoginResponse, MonthCount,
+        Notification, NotificationSummary, PaginationInfo, ProcessedImage, S3SourceConfig,
+        SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse, SearchSnippet,
+        SettingsResponse, SortOrder, Source, SourceArrivals, SourceResponse, SourceWithStats,
+        UpdateSettings, UpdateSource, UpdateUser, UserResponse, WebDAVSourceConfig,
     },
     routes::{
-        metrics::{
-            SystemMetrics, DatabaseMetrics, OcrMetrics, DocumentMetrics, UserMetrics, GeneralSystemMetrics
-        },
+        documents::BulkDeleteRequest,
         labels::{
-            Label, CreateLabel, UpdateLabel, LabelAssignment, LabelQuery, BulkUpdateRequest as LabelBulkUpdateRequest
+            BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
+            LabelQuery, UpdateLabel,
         },
-        documents::BulkDeleteRequest
+        metrics::{
+            DatabaseMetrics, DocumentMetrics, GeneralSystemMetrics, OcrMetrics, SystemMetrics,
+            UserMetrics,
+        },
     },
     AppState,
 };
@@ -73,6 +75,7 @@ use crate::{
         crate::routes::search::search_documents,
         crate::routes::search::enhanced_search_documents,
         crate::routes::search::get_search_facets,
+        crate::routes::search::search_timeline,
         // Settings endpoints
         crate::routes::settings::get_settings,
         crate::routes::settings::update_settings,
@@ -100,6 +103,7 @@ use crate::{
         crate::routes::notifications::delete_notification,
         // Sources endpoints
         crate::routes::sources::crud::list_sources,
+        crate::routes::sources::arrivals::get_source_arrivals,
         crate::routes::sources::crud::create_source,
         crate::routes::sources::crud::get_source,
         crate::routes::sources::crud::update_source,
@@ -123,13 +127,44 @@ use crate::{
         // OCR endpoints
         crate::routes::ocr::get_available_languages,
         crate::ocr::api::health_check,
-        crate::ocr::api::perform_ocr,
         // Ignored files endpoints
         crate::routes::ignored_files::list_ignored_files,
         crate::routes::ignored_files::get_ignored_file,
         crate::routes::ignored_files::delete_ignored_file,
         crate::routes::ignored_files::bulk_delete_ignored_files,
         crate::routes::ignored_files::get_ignored_files_stats,
+        // Session endpoints
+        crate::routes::auth::get_auth_config,
+        crate::routes::auth::logout,
+        crate::routes::auth::change_password,
+        crate::routes::auth::oidc_exchange,
+        // OCR retry endpoints
+        crate::routes::documents_ocr_retry::bulk_retry_ocr,
+        crate::routes::documents_ocr_retry::get_document_retry_history,
+        crate::routes::documents_ocr_retry::get_ocr_retry_stats,
+        crate::routes::documents_ocr_retry::get_retry_recommendations,
+        crate::routes::documents::failed::get_failed_documents,
+        // Source error endpoints
+        crate::routes::source_errors::list_source_failures,
+        crate::routes::source_errors::get_failure_stats,
+        crate::routes::source_errors::get_retry_candidates,
+        crate::routes::source_errors::get_source_failure,
+        crate::routes::source_errors::retry_source_failure,
+        crate::routes::source_errors::exclude_source_failure,
+        crate::routes::source_errors::resolve_source_failure,
+        crate::routes::source_errors::list_source_type_failures,
+        crate::routes::source_errors::get_source_type_stats,
+        // WebDAV scan failure endpoints
+        crate::routes::webdav_scan_failures::list_scan_failures,
+        crate::routes::webdav_scan_failures::get_scan_failure,
+        crate::routes::webdav_scan_failures::retry_scan_failure,
+        crate::routes::webdav_scan_failures::exclude_scan_failure,
+        crate::routes::webdav_scan_failures::get_retry_candidates,
+        // Settings and user watch directories
+        crate::routes::settings::get_server_configuration,
+        crate::routes::users::get_user_watch_directory,
+        crate::routes::users::create_user_watch_directory,
+        crate::routes::users::delete_user_watch_directory,
         // Health check
         crate::health_check,
     ),
@@ -138,6 +173,7 @@ use crate::{
             CreateUser, LoginRequest, LoginResponse, UserResponse, UpdateUser,
             DocumentResponse, SearchRequest, SearchResponse, EnhancedDocumentResponse,
             SettingsResponse, UpdateSettings, SearchMode, SearchSnippet, HighlightRange,
+            DocumentSortField, SortOrder, DocumentFilters, MonthCount, SourceArrivals, DayCount,
             FacetItem, SearchFacetsResponse, Notification, NotificationSummary, CreateNotification,
             Source, SourceResponse, CreateSource, UpdateSource, SourceWithStats,
             WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig,
@@ -154,7 +190,7 @@ use crate::{
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
             crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse, crate::ocr::api::OcrRequest,
+            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo
         )
@@ -198,7 +234,7 @@ impl Modify for SecurityAddon {
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearer_auth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer))
+                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
             )
         }
     }

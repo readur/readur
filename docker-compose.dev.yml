@@ -31,7 +31,16 @@ services:
       SERVER_PORT: 8000
 
       # Security
-      JWT_SECRET: dev-secret-key-change-in-production
+      # Optional: when empty, a signing key is generated and stored in the
+      # database on first start.
+      JWT_SECRET: ${JWT_SECRET:-}
+
+      # Initial admin (only used when the admin user does not exist yet).
+      # Leave ADMIN_PASSWORD empty to generate one into
+      # <UPLOAD_PATH>/.readur/initial-admin-password.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
 
       # File paths
       UPLOAD_PATH: /app/uploads

@@ -1,0 +1,189 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-palette);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--s-4) var(--s-4);
+  background: var(--scrim);
+  backdrop-filter: blur(8px);
+}
+
+.modal {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 600px;
+  max-height: 70vh;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+
+.dialog,
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  outline: none;
+}
+
+.search {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+/* A bare, large input: the open palette is its own focus cue, so no box or ring inside it. */
+.search input {
+  min-height: 48px;
+  font-size: var(--fs-lg);
+  background: transparent;
+  border-color: transparent;
+}
+
+.search input:hover,
+.search input[data-focused] {
+  border-color: transparent;
+}
+
+.search input[data-focus-visible],
+.search input:focus-visible {
+  outline: none;
+}
+
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.menu {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-1) 0 var(--s-2);
+  outline: none;
+}
+
+.section + .section {
+  margin-top: var(--s-1);
+  border-top: 1px solid var(--line);
+}
+
+.heading {
+  padding: var(--s-3) var(--s-4) var(--s-1);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg-meta);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 40px;
+  padding: var(--s-1) var(--s-4);
+  margin: 0 var(--s-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+
+.item[data-hovered] {
+  background: var(--hover);
+}
+
+/* The focused item gets a neutral tint and a hairline box; the preview pane follows it. */
+.item[data-focused] {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 18px;
+  color: var(--fg-2);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title,
+.subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  font-size: var(--fs-md);
+}
+
+.subtitle {
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--s-5) var(--s-4);
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+  text-align: center;
+}
+
+/* With previews the palette widens to a list plus a preview column. */
+.modal:has(.frame[data-has-preview]) { max-width: 720px; }
+
+.frame[data-has-preview] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.frame[data-has-preview] > .search,
+.frame[data-has-preview] > .footer { grid-column: 1 / -1; }
+.frame[data-has-preview] > .menu { grid-column: 1; grid-row: 3; }
+
+.preview {
+  grid-column: 2;
+  grid-row: 3;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+
+.footer {
+  display: flex;
+  gap: var(--s-4);
+  padding: var(--s-2) var(--s-4);
+  font-size: var(--fs-xs);
+  color: var(--fg-meta);
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 719px) {
+  .frame[data-has-preview] { grid-template-columns: minmax(0, 1fr); }
+  .preview { display: none; }
+}

@@ -231,6 +231,7 @@ mod tests {
                 include_snippets: Some(true),
                 snippet_length: Some(200),
                 search_mode: None,
+                ..Default::default()
             };
 
             let result = db.search_documents(user.id, &search_request).await;

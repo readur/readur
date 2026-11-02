@@ -12,6 +12,7 @@ use crate::{
     models::source::{CreateWebDAVFile, UpdateWebDAVSyncState},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase},
+    utils::outbound::validate_outbound_url,
 };
 
 pub async fn perform_webdav_sync_with_tracking(
@@ -30,7 +31,26 @@ pub async fn perform_webdav_sync_with_tracking(
     
     debug!("[{}] WebDAV config: server={}, user_agent='readur-webdav-client', folders={:?}, extensions={:?}", 
            request_id, config.server_url, config.watch_folders, config.file_extensions);
-    
+
+    // The server address is re-checked at connect time: DNS may have changed
+    // since the settings were saved.
+    if let Err(e) = validate_outbound_url(&WebDAVConfig::normalize_server_url(&config.server_url)).await {
+        warn!("[{}] WebDAV sync for user {} not started: {}", request_id, user_id, e);
+        let refused_state = UpdateWebDAVSyncState {
+            last_sync_at: Some(Utc::now()),
+            sync_cursor: None,
+            is_running: false,
+            files_processed: 0,
+            files_remaining: 0,
+            current_folder: None,
+            errors: vec![e.to_string()],
+        };
+        if let Err(db_err) = state.db.update_webdav_sync_state(user_id, &refused_state).await {
+            error!("Failed to update sync state: {}", db_err);
+        }
+        return Err(Box::new(e));
+    }
+
     // Update sync state to running
     let sync_state_update = UpdateWebDAVSyncState {
         last_sync_at: Some(Utc::now()),

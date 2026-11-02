@@ -1,0 +1,74 @@
+.mark {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--fg-2);
+  font-weight: 500;
+}
+
+.lead { display: inline-flex; flex: none; color: var(--c); }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--c);
+  box-shadow: 0 0 0 3px var(--cs);
+}
+
+.spin { animation: spin 1.1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+.word {
+  /* Room for descenders: the mark itself is line-height 1 and this clips its overflow. */
+  line-height: 1.3;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar {
+  flex: none;
+  width: 38px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--cs);
+  overflow: hidden;
+}
+.bar > span { display: block; height: 100%; background: var(--c); border-radius: var(--radius-pill); }
+
+.sm { font-size: var(--fs-xs); }
+.md { font-size: var(--fs-sm); }
+
+.neutral { --c: var(--fg-meta); --cs: var(--surface-sunken); }
+.active { --c: var(--accent); --cs: var(--accent-soft); }
+.ok { --c: var(--ok); --cs: var(--ok-soft); }
+.warn { --c: var(--warn); --cs: var(--warn-soft); }
+.danger { --c: var(--danger); --cs: var(--danger-soft); }
+
+/* With a reason: the word is underlined to say "there's more", the trigger takes focus. */
+.mark[data-reason] .word {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--c);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.reasonTrigger {
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.reasonTrigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

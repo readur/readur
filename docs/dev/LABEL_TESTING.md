@@ -136,11 +136,9 @@ cd frontend && npm run test:coverage
    - Partial updates
    - Full updates
    - Concurrent update handling
-   - System label protection
 
 3. **Label Deletion**
    - Successful deletion
-   - System label protection
    - Cascade behavior verification
    - Usage count validation
 
@@ -155,7 +153,7 @@ cd frontend && npm run test:coverage
 1. **Authentication & Authorization**
    - Valid JWT token required
    - User can only manage own labels
-   - System labels accessible to all
+   - Every new account owns the five default labels
    - Permission boundary enforcement
 
 2. **Input Validation**

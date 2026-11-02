@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use ts_rs::TS;
 
 use axum::{
     extract::{Path, State},
@@ -53,13 +54,15 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/retry/candidates", get(get_retry_candidates))
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, rename = "WebDAVRetryFailureRequest", optional_fields)]
 pub struct RetryFailureRequest {
     /// Optional notes about why the retry is being attempted
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct ExcludeFailureRequest {
     /// User notes about why the directory is being excluded
     pub notes: Option<String>,
@@ -67,7 +70,8 @@ pub struct ExcludeFailureRequest {
     pub permanent: bool,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct ScanFailureStatsResponse {
     pub active_failures: i64,
     pub resolved_failures: i64,
@@ -79,7 +83,8 @@ pub struct ScanFailureStatsResponse {
     pub ready_for_retry: i64,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct ScanFailuresListResponse {
     pub failures: Vec<WebDAVScanFailureResponse>,
     pub stats: ScanFailureStatsResponse,

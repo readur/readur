@@ -87,7 +87,18 @@ For OIDC/SSO authentication:
 GET /api/auth/oidc/login
 ```
 
-This will redirect to your configured OIDC provider. After successful authentication, the callback URL will receive the token.
+This will redirect to your configured OIDC provider. After successful authentication, the provider calls `GET /api/auth/oidc/callback`, and Readur redirects the browser to `<PUBLIC_URL>/auth/callback#code=<one-time code>`. The frontend exchanges that code for a session:
+
+```bash
+POST /api/auth/oidc/exchange
+Content-Type: application/json
+
+{
+  "code": "<one-time code>"
+}
+```
+
+The response has the same shape as the login response. The code is single-use and short-lived; the session token itself is never placed in a URL.
 
 ### API Key Authentication
 
@@ -250,7 +261,9 @@ POST /api/auth/register
 }
 ```
 
-**Response:** `201 Created`
+**Response:** `200 OK` with the created user
+
+Returns `403 Forbidden` unless the server runs with `ALLOW_REGISTRATION=true`. Registered accounts get the `user` role and are created inactive; an administrator must activate them (`PUT /api/users/{id}` with `{"is_active": true}`) before they can sign in.
 
 #### Logout
 
@@ -259,7 +272,26 @@ POST /api/auth/logout
 Authorization: Bearer <token>
 ```
 
-**Response:** `200 OK`
+**Response:** `204 No Content`
+
+Logout revokes all sessions of the current user, not only the token used for the request.
+
+#### Change Own Password
+
+```http
+POST /api/auth/password
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "current_password": "old_password",
+  "new_password": "new_secure_password"
+}
+```
+
+**Response:** `200 OK` with a fresh session (same shape as the login response). Other sessions of the user are revoked.
 
 ### Document Endpoints
 
@@ -570,6 +602,8 @@ GET /api/settings
 }
 ```
 
+The settings response does not include the stored WebDAV password; it reports `has_webdav_password` (boolean) instead.
+
 #### Update Settings
 
 ```http
@@ -635,6 +669,8 @@ POST /api/sources
 ```http
 PUT /api/sources/{id}
 ```
+
+Source responses never include stored credentials. In the returned `config`, WebDAV sources report `has_password` and S3 sources report `has_secret_access_key` instead of the secret values. When updating a source, omit the password / secret access key field or send an empty string to keep the stored value; send a new value to replace it.
 
 #### Delete Source
 
@@ -757,17 +793,7 @@ PUT /api/users/profile
 
 #### Change Password
 
-```http
-POST /api/users/change-password
-```
-
-**Request Body:**
-```json
-{
-  "current_password": "old_password",
-  "new_password": "new_secure_password"
-}
-```
+Users change their own password with `POST /api/auth/password` (see [Authentication Endpoints](#change-own-password)).
 
 ### Notification Endpoints
 

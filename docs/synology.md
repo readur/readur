@@ -40,8 +40,11 @@ services:
       # POSTGRES_USER: readur
       # POSTGRES_PASSWORD: readur
 
-      # Security - CHANGE THIS in production
-      JWT_SECRET: your-secret-key-change-this
+      # Security - optional. When empty, a signing key is generated on first start
+      # and stored in the database. To manage it yourself, add a line with
+      # JWT_SECRET=<output of: openssl rand -hex 32>
+      # to a .env file next to this file.
+      JWT_SECRET: ${JWT_SECRET:-}
 
       # File paths
       UPLOAD_PATH: /app/uploads

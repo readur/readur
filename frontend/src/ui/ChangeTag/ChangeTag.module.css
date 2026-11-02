@@ -1,0 +1,22 @@
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--new);
+}
+
+.tag::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}

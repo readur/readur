@@ -48,10 +48,14 @@ CLIENT_PORT=5173
 docker run -d \
   -e SERVER_PORT=3000 \
   -e DATABASE_URL=postgresql://user:pass@host/db \
-  -e JWT_SECRET=your-secret-key \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
+  -e PUBLIC_URL=https://readur.example.com \
+  -e TRUSTED_PROXIES=172.16.0.0/12 \
   -p 3000:3000 \
   readur:latest
 ```
+
+`JWT_SECRET` is optional; when it is unset, a key is generated on first start and stored in the database. If you set it, it must be at least 32 bytes; store the value (for example in a `.env` file) so it stays the same across restarts, since changing it signs out all users.
 
 ### Docker Compose with Custom Ports
 
@@ -64,10 +68,20 @@ services:
     environment:
       SERVER_PORT: 3000
       DATABASE_URL: postgresql://readur:readur@postgres/readur
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}   # generate with: openssl rand -hex 32
+      PUBLIC_URL: https://readur.example.com
+      TRUSTED_PROXIES: 172.16.0.0/12
     ports:
       - "3000:3000"
 ```
+
+### Proxy-Related Settings
+
+| Variable | Purpose |
+|----------|---------|
+| `PUBLIC_URL` | The public base URL clients use (e.g. `https://readur.example.com`, or `https://example.com/readur` for a subpath). Readur uses it to build the OIDC post-login redirect and shared-link URLs. Request headers such as `Host` or `X-Forwarded-Host` are not used for this, so set `PUBLIC_URL` when running behind a proxy. |
+| `TRUSTED_PROXIES` | Comma-separated IPs or CIDRs of your reverse proxies. Only requests arriving from these addresses have their `X-Forwarded-For` header used to determine the client IP (for rate limiting). When unset, loopback and private networks (`127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) are trusted, which covers a proxy on the same host or Docker network. Set it to the address or network the proxy connects from to narrow this, or to `none` to trust no proxy. |
+| `CORS_ALLOWED_ORIGINS` | Not needed when the bundled frontend is served through the same proxy (same origin). Set only if a different origin must call the API. |
 
 ## Nginx Configuration
 

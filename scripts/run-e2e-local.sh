@@ -149,6 +149,7 @@ main() {
     print_status "Starting backend server on port $BACKEND_PORT..."
     DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" \
     TEST_MODE=true \
+    ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-test-admin-password}" \
     ROCKET_PORT=$BACKEND_PORT \
     ./target/release/readur > backend.log 2>&1 &
     BACKEND_PID=$!
@@ -185,6 +186,9 @@ main() {
     
     # Update Playwright config for local testing
     export PLAYWRIGHT_BASE_URL="http://localhost:$FRONTEND_PORT"
+    # Seeded admin (see ADMIN_PASSWORD above); the suite creates test admins through it
+    export E2E_ADMIN_USERNAME="${E2E_ADMIN_USERNAME:-admin}"
+    export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-test-admin-password}"
     
     if [ "$1" = "--headed" ]; then
         npm run test:e2e:headed

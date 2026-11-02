@@ -6,3 +6,16 @@
 # Environment variables for test execution
 RUST_TEST_THREADS = "1"
 READUR_TEST_MODE = "true"
+# ts-rs: `cargo test export_bindings` writes the frontend API types here.
+# Regenerate with scripts/generate-ts-bindings.sh.
+TS_RS_EXPORT_DIR = { value = "frontend/src/types/generated", relative = true }
+# i64/u64 serialize as JSON numbers, so emit `number` instead of `bigint`.
+TS_RS_LARGE_INT = "number"
+# leptonica >= 1.86 (ubuntu-26.04, now ubuntu-latest) types a field as C11
+# `atomic_int`, which the runner's libclang fails to resolve while bindgen
+# builds leptonica-sys. Declaring "no C11 atomics" makes the header fall back
+# to its own `typedef int l_atomic` -- same layout, and the bindings never
+# touch it. A macro rather than `-std=c99`: tesseract-sys parses its headers as
+# C++, where a C `-std` is rejected. An already-set BINDGEN_EXTRA_CLANG_ARGS
+# (scripts/generate-ts-bindings.sh sets one under nix) takes precedence.
+BINDGEN_EXTRA_CLANG_ARGS = "-D__STDC_NO_ATOMICS__"

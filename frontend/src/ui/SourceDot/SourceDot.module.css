@@ -1,0 +1,61 @@
+/* The slot picks the hue; everything else reads --src / --src-soft. */
+:is(.badge, .dot)[data-slot="1"] { --src: var(--src-1); --src-soft: var(--src-1-soft); }
+:is(.badge, .dot)[data-slot="2"] { --src: var(--src-2); --src-soft: var(--src-2-soft); }
+:is(.badge, .dot)[data-slot="3"] { --src: var(--src-3); --src-soft: var(--src-3-soft); }
+:is(.badge, .dot)[data-slot="4"] { --src: var(--src-4); --src-soft: var(--src-4-soft); }
+:is(.badge, .dot)[data-slot="5"] { --src: var(--src-5); --src-soft: var(--src-5-soft); }
+:is(.badge, .dot)[data-slot="6"] { --src: var(--src-6); --src-soft: var(--src-6-soft); }
+:is(.badge, .dot)[data-slot="7"] { --src: var(--src-7); --src-soft: var(--src-7-soft); }
+:is(.badge, .dot)[data-slot="8"] { --src: var(--src-8); --src-soft: var(--src-8-soft); }
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--src);
+  box-shadow: 0 0 0 3px var(--src-soft);
+  vertical-align: middle;
+}
+
+.dot.md {
+  width: 10px;
+  height: 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px var(--s-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.badge .dot {
+  width: 8px;
+  height: 8px;
+  box-shadow: none;
+}
+
+.badge.sm {
+  padding: 1px 6px;
+  font-size: var(--fs-xs);
+  line-height: 16px;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

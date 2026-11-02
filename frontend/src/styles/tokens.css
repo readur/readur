@@ -1,0 +1,245 @@
+/* Design tokens: the only source of colour, type, space, shape and motion.
+   Colour: tinted neutral surfaces with an indigo accent and an amber "new" signal (Studio). Source hues (--src-1..8) stay
+   at least 25° from the accent so a source badge never reads as an action. */
+
+:root,
+[data-theme="light"] {
+  --bg: #F0F1F7;
+  --surface: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --surface-sunken: #E4E6F0;
+  --line: #D8DBE8;
+  --line-strong: #737896;
+  --fg: #161A2E;
+  --fg-2: #474C66;
+  --fg-meta: #585D78;
+  --accent: #4338CA;
+  --accent-hover: #3730A3;
+  --accent-soft: #E2E3F9;
+  --accent-fg: #FFFFFF;
+  --new: #8F5300;
+  --new-fill: #BF7A0A;
+  --new-soft: #FCEFD6;
+  --new-fg: #FFFFFF;
+  --ok: #1C7247;
+  --ok-soft: #D8F0E2;
+  --warn: #A3440C;
+  --warn-fill: #E8782E;
+  --warn-soft: #FCE5D5;
+  --danger: #B4313A;
+  --danger-soft: #F8DDE0;
+  --danger-fg: #FFFFFF;
+  --src-1: #1F6E9E;
+  --src-2: #9636BC;
+  --src-3: #22732C;
+  --src-4: #5A6B13;
+  --src-5: #9A5111;
+  --src-6: #BA2859;
+  --src-7: #A83198;
+  --src-8: #12766A;
+  --src-1-soft: #DFEEF7;
+  --src-2-soft: #F1E3F7;
+  --src-3-soft: #E3F7E6;
+  --src-4-soft: #F3F7E3;
+  --src-5-soft: #F7ECE3;
+  --src-6-soft: #F7E3EA;
+  --src-7-soft: #F7E3F4;
+  --src-8-soft: #DDF2EE;
+  --selection: #CDD0F7;
+  --scrollbar: #BDC1D6;
+  --shadow-1: 0 1px 2px rgba(22, 26, 46, 0.06), 0 4px 14px rgba(22, 26, 46, 0.06);
+  --shadow-overlay: 0 2px 6px rgba(22, 26, 46, 0.08), 0 16px 40px rgba(22, 26, 46, 0.14);
+  --scrim: rgba(16, 18, 40, 0.32);
+  --accent-soft-hover: #D3D5F5;
+  --focus-halo: rgba(67, 56, 202, 0.32);
+  --hover: rgba(22, 26, 46, 0.05);
+  --press: rgba(22, 26, 46, 0.09);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] {
+  --bg: #10121C;
+  --surface: #171A28;
+  --surface-2: #1D2132;
+  --surface-sunken: #0B0D15;
+  --line: #272B3D;
+  --line-strong: #646A88;
+  --fg: #E7E9F5;
+  --fg-2: #B3B8CF;
+  --fg-meta: #959BB6;
+  --accent: #A5B4FC;
+  --accent-hover: #C0CBFD;
+  --accent-soft: #262B52;
+  --accent-fg: #12153A;
+  --new: #FBC15E;
+  --new-fill: #FBC15E;
+  --new-soft: #3A2C10;
+  --new-fg: #1F1400;
+  --ok: #6FD69F;
+  --ok-soft: #15301F;
+  --warn: #FFA066;
+  --warn-fill: #FFA066;
+  --warn-soft: #3A2312;
+  --danger: #F28B93;
+  --danger-soft: #3A1A1E;
+  --danger-fg: #2A0A0E;
+  --src-1: #7CC0E8;
+  --src-2: #C79ED7;
+  --src-3: #66C072;
+  --src-4: #9EB739;
+  --src-5: #DBA16E;
+  --src-6: #DC9AB0;
+  --src-7: #D59ACD;
+  --src-8: #6FCFBF;
+  --src-1-soft: #16303F;
+  --src-2-soft: #2D1736;
+  --src-3-soft: #17361B;
+  --src-4-soft: #2F3617;
+  --src-5-soft: #362517;
+  --src-6-soft: #361721;
+  --src-7-soft: #361731;
+  --src-8-soft: #163330;
+  --selection: #2E3570;
+  --scrollbar: #383D55;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+  --shadow-overlay: 0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45);
+  --scrim: rgba(4, 5, 12, 0.6);
+  --accent-soft-hover: #2F3563;
+  --focus-halo: rgba(165, 180, 252, 0.35);
+  --hover: rgba(231, 233, 245, 0.06);
+  --press: rgba(231, 233, 245, 0.1);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Before the theme is known (no data-theme yet), follow the system setting so a
+   dark system never paints a light page first. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #10121C;
+    --surface: #171A28;
+    --surface-2: #1D2132;
+    --surface-sunken: #0B0D15;
+    --line: #272B3D;
+    --line-strong: #646A88;
+    --fg: #E7E9F5;
+    --fg-2: #B3B8CF;
+    --fg-meta: #959BB6;
+    --accent: #A5B4FC;
+    --accent-hover: #C0CBFD;
+    --accent-soft: #262B52;
+    --accent-fg: #12153A;
+    --new: #FBC15E;
+    --new-fill: #FBC15E;
+    --new-soft: #3A2C10;
+    --new-fg: #1F1400;
+    --ok: #6FD69F;
+    --ok-soft: #15301F;
+    --warn: #FFA066;
+    --warn-fill: #FFA066;
+    --warn-soft: #3A2312;
+    --danger: #F28B93;
+    --danger-soft: #3A1A1E;
+    --danger-fg: #2A0A0E;
+    --src-1: #7CC0E8;
+    --src-2: #C79ED7;
+    --src-3: #66C072;
+    --src-4: #9EB739;
+    --src-5: #DBA16E;
+    --src-6: #DC9AB0;
+    --src-7: #D59ACD;
+    --src-8: #6FCFBF;
+    --src-1-soft: #16303F;
+    --src-2-soft: #2D1736;
+    --src-3-soft: #17361B;
+    --src-4-soft: #2F3617;
+    --src-5-soft: #362517;
+    --src-6-soft: #361721;
+    --src-7-soft: #361731;
+    --src-8-soft: #163330;
+    --selection: #2E3570;
+    --scrollbar: #383D55;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.25);
+    --shadow-overlay: 0 2px 8px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.45);
+    --scrim: rgba(4, 5, 12, 0.6);
+    --accent-soft-hover: #2F3563;
+    --focus-halo: rgba(165, 180, 252, 0.35);
+    --hover: rgba(231, 233, 245, 0.06);
+    --press: rgba(231, 233, 245, 0.1);
+    --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* Older names, kept so styles not yet converted keep working. New code uses the names above. */
+:root {
+  --ground: var(--bg);
+  --signal: var(--new);
+  --signal-ink: var(--new-fg);
+  --danger-bg: var(--danger-soft);
+  --focus: var(--accent);
+  --btn-bg: var(--accent);
+  --btn-fg: var(--accent-fg);
+}
+
+:root {
+  /* Layers: the shell sits below every overlay; the palette is topmost. */
+  --z-local: 1; /* stacking inside one component (sticky headers) */
+  --z-shell: 1100;
+  --z-dock: 1150;
+  --z-overlay: 1200;
+  --z-toast: 1300;
+  --z-palette: 1400;
+  --z-skip: 1500;
+
+  /* Type (family names as declared by the @fontsource-variable packages) */
+  --font-ui: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --font-label: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --font-data: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-label-stretch: 100%;
+  --tracking-label: 0.07em;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-title: 24px;
+  --fs-2xl: 28px;
+  --fs-3xl: 40px;
+  --lh-body: 1.45;
+  --lh-display: 1.1;
+  --lh-title: 1.2;
+
+  /* Space (4px module) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  /* Shape: controls, panels and cards, overlays */
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Shell */
+  --sidebar-width: 248px;
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 480ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --ease-out-expo: cubic-bezier(.16, 1, .3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+  }
+}

@@ -12,7 +12,9 @@ controllers:
           - |
             echo "Fixing permissions for Readur directories, this may take some time..."
             chown -R 1000:1000 /app/uploads /app/watch
-            chmod -R 755 /app/uploads /app/watch
+            # uploads/.readur holds owner-only files (e.g. a generated admin
+            # password); keep their modes.
+            find /app/uploads /app/watch -path /app/uploads/.readur -prune -o -exec chmod 755 {} +
             echo "Permissions fixed successfully"
         securityContext:
           runAsUser: 0
@@ -30,7 +32,23 @@ controllers:
           repository: readur/readur
           tag: latest
           pullPolicy: IfNotPresent
-        
+
+        env:
+          # Optional: without it Readur keeps a generated key in its database.
+          JWT_SECRET:
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "readur.authSecretName" . }}
+                key: JWT_SECRET
+                optional: true
+          # Only used when the admin account is first created.
+          ADMIN_PASSWORD:
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "readur.authSecretName" . }}
+                key: ADMIN_PASSWORD
+                optional: true
+
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000

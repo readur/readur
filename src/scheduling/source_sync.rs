@@ -4,17 +4,32 @@ use anyhow::{anyhow, Result};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::{
     AppState,
-    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, User, UserRole, WebDAVSourceConfig},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::local_folder_service::LocalFolderService,
+    services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
     services::s3_service::S3Service,
     services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
+    utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
 };
+
+/// Status message recorded on a source whose owner cannot sync it.
+pub const OWNER_INACTIVE_MESSAGE: &str = "Sync skipped: the source owner's account is disabled";
+
+/// Sources sync on behalf of their owner, so only an active owner's sources sync.
+fn owner_may_sync(owner: Option<&User>) -> bool {
+    owner.is_some_and(|owner| owner.is_active)
+}
+
+/// Whether the owner may read local folders outside the configured allowlist
+/// (an active admin, and only when no allowlist is configured).
+fn owner_is_active_admin(owner: Option<&User>) -> bool {
+    owner.is_some_and(|owner| owner.is_active && owner.role == UserRole::Admin)
+}
 
 #[derive(Clone)]
 pub struct SourceSyncService {
@@ -40,6 +55,15 @@ impl SourceSyncService {
         if cancellation_token.is_cancelled() {
             info!("Sync for source {} was cancelled before starting", source.name);
             return Err(anyhow!("Sync cancelled"));
+        }
+
+        let owner = self.state.db.get_user_by_id(source.user_id).await?;
+        if !owner_may_sync(owner.as_ref()) {
+            warn!("Skipping sync for source {} ({}): owner account is disabled", source.name, source.id);
+            if let Err(e) = self.update_source_status(source.id, SourceStatus::Error, Some(OWNER_INACTIVE_MESSAGE)).await {
+                error!("Failed to update source status: {}", e);
+            }
+            return Err(anyhow!(OWNER_INACTIVE_MESSAGE));
         }
 
         // Update source status to syncing
@@ -98,6 +122,15 @@ impl SourceSyncService {
 
         info!("WebDAV source sync config: server_url={}, username={}, watch_folders={:?}, file_extensions={:?}, server_type={:?}", 
             config.server_url, config.username, config.watch_folders, config.file_extensions, config.server_type);
+
+        // Re-check the destination at connect time; DNS may have changed
+        // since the source was saved. A host that does not resolve right now
+        // is left to the WebDAV client: its resolver applies the same address
+        // checks, and its retry and error handling report the failure through
+        // the sync progress like any other connection problem.
+        validate_outbound_url_for_config(&WebDAVConfig::normalize_server_url(&config.server_url))
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
 
         // Requests to list files in a Nextcloud folder might take > 2 minutes
         // Set timeout to 3 minutes to accommodate large folder structures
@@ -199,6 +232,17 @@ impl SourceSyncService {
         let config: LocalFolderSourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid LocalFolder config: {}", e))?;
 
+        // Re-check against the current configuration: the allowlist or the
+        // owner's role may have changed since the source was saved.
+        let owner = self.state.db.get_user_by_id(source.user_id).await?;
+        let owner_is_admin = owner_is_active_admin(owner.as_ref());
+        authorize_local_folder_paths(
+            &config.watch_folders,
+            owner_is_admin,
+            &self.state.config.security.local_source_allowed_paths,
+        )
+        .map_err(|e| anyhow!("Local folder source is not permitted: {}", e))?;
+
         let local_service = LocalFolderService::new(config.clone())
             .map_err(|e| anyhow!("Failed to create LocalFolder service: {}", e))?;
 
@@ -244,6 +288,10 @@ impl SourceSyncService {
     async fn sync_s3_source_with_cancellation(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<usize> {
         let config: S3SourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid S3 config: {}", e))?;
+
+        for url in S3Service::outbound_urls(&config) {
+            validate_outbound_url(&url).await.map_err(|e| anyhow!("{}", e))?;
+        }
 
         let s3_service = S3Service::new(config.clone()).await
             .map_err(|e| anyhow!("Failed to create S3 service: {}", e))?;
@@ -820,4 +868,44 @@ impl SourceSyncService {
         Ok(())
     }
 
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+    use crate::models::AuthProvider;
+
+    fn owner(role: UserRole, is_active: bool) -> User {
+        User {
+            id: Uuid::new_v4(),
+            username: "owner".into(),
+            email: "owner@example.com".into(),
+            password_hash: None,
+            role,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            oidc_subject: None,
+            oidc_issuer: None,
+            oidc_email: None,
+            auth_provider: AuthProvider::Local,
+            token_version: 0,
+            is_active,
+        }
+    }
+
+    #[test]
+    fn only_active_owners_sync() {
+        assert!(owner_may_sync(Some(&owner(UserRole::User, true))));
+        assert!(!owner_may_sync(Some(&owner(UserRole::User, false))));
+        assert!(!owner_may_sync(Some(&owner(UserRole::Admin, false))));
+        assert!(!owner_may_sync(None));
+    }
+
+    #[test]
+    fn local_folder_admin_rights_require_an_active_admin() {
+        assert!(owner_is_active_admin(Some(&owner(UserRole::Admin, true))));
+        assert!(!owner_is_active_admin(Some(&owner(UserRole::Admin, false))));
+        assert!(!owner_is_active_admin(Some(&owner(UserRole::User, true))));
+        assert!(!owner_is_active_admin(None));
+    }
 }

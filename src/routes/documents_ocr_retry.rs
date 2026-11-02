@@ -9,6 +9,7 @@ use sqlx::Row;
 use uuid::Uuid;
 use tracing::{info, error, warn};
 use utoipa::ToSchema;
+use ts_rs::TS;
 
 use crate::{
     auth::AuthUser,
@@ -16,7 +17,8 @@ use crate::{
     models::UserRole,
 };
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct BulkOcrRetryRequest {
     /// Selection mode: "all", "specific", "filter"
     pub mode: SelectionMode,
@@ -30,7 +32,8 @@ pub struct BulkOcrRetryRequest {
     pub preview_only: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, ToSchema, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionMode {
     All,      // All failed OCR documents
@@ -38,7 +41,8 @@ pub enum SelectionMode {
     Filter,   // Filter by criteria
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, ToSchema, TS)]
+#[ts(export, optional_fields)]
 pub struct OcrRetryFilter {
     /// Filter by MIME types
     pub mime_types: Option<Vec<String>>,
@@ -60,7 +64,8 @@ pub struct OcrRetryFilter {
     pub limit: Option<i64>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct BulkOcrRetryResponse {
     pub success: bool,
     pub message: String,
@@ -70,7 +75,8 @@ pub struct BulkOcrRetryResponse {
     pub estimated_total_time_minutes: f64,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct OcrRetryDocumentInfo {
     pub id: Uuid,
     pub filename: String,

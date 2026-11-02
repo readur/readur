@@ -10,6 +10,7 @@ pub mod responses;
 pub mod shared_link;
 pub mod comment;
 pub mod api_key;
+pub mod arrivals;
 
 // Re-export commonly used types
 pub use user::*;
@@ -18,5 +19,6 @@ pub use search::*;
 pub use settings::*;
 pub use source::*;
 pub use source_error::*;
+pub use arrivals::*;
 
 pub use responses::*;

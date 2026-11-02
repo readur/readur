@@ -27,6 +27,11 @@ on:
       - 'requirements.txt'
       - '.github/workflows/deploy-docs.yml'
 
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     name: Build and Deploy MkDocs

@@ -1,0 +1,55 @@
+import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { cx } from '../../ui/shared/FieldParts';
+import { DESTINATIONS, activeDestination, type DestinationId } from './destinations';
+import styles from './Sidebar.module.css';
+import shellStyles from './AppShell.module.css';
+
+export interface PrimaryNavProps {
+  /** `side` is the sidebar list; `bottom` is the fixed phone tab bar (no Settings). */
+  variant: 'side' | 'bottom';
+  label: string;
+  /** Figures shown after a destination's label in the side variant. */
+  counts?: Partial<Record<DestinationId, number>>;
+}
+
+/** The destinations. The current one carries `aria-current="page"`. */
+export function PrimaryNav({ variant, label, counts }: PrimaryNavProps) {
+  const { t, i18n } = useTranslation();
+  const { pathname } = useLocation();
+  const active = activeDestination(pathname);
+  const side = variant === 'side';
+  const items = side ? DESTINATIONS : DESTINATIONS.filter((d) => d.inTabBar);
+
+  return (
+    <nav aria-label={label} className={side ? styles.primaryNav : shellStyles.bottomBar}>
+      <ul className={side ? styles.navList : shellStyles.tabList}>
+        {items.map((d) => {
+          const isActive = d.id === active;
+          return (
+            <li key={d.id} className={side ? undefined : shellStyles.tabItem}>
+              <Link
+                to={d.path}
+                className={cx(
+                  side ? styles.navLink : shellStyles.tabLink,
+                  isActive && (side ? styles.navLinkActive : shellStyles.tabLinkActive),
+                )}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <span className={side ? styles.navIcon : shellStyles.tabIcon} aria-hidden="true">
+                  {d.icon}
+                </span>
+                <span className={side ? styles.navLabel : shellStyles.tabLabel}>
+                  {!side && d.shortLabelKey ? t(d.shortLabelKey, d.shortFallback ?? d.fallback) : t(d.labelKey, d.fallback)}
+                </span>
+                {side && counts?.[d.id] !== undefined ? (
+                  <span className={styles.navCount}>{new Intl.NumberFormat(i18n.language).format(counts[d.id] as number)}</span>
+                ) : null}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}

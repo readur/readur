@@ -13,6 +13,18 @@ on:
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgresql://readur:readur@localhost:5432/readur
+  # CI_JWT_SECRET is generated per run (see "Generate throwaway JWT secret").
+  # The server and test steps read the same value so tokens minted in tests
+  # verify on the server.
+  CI_ADMIN_PASSWORD: integration-ci-admin-password
+
+permissions:
+  contents: read
+
+# A newer push to the same PR or branch supersedes this run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   integration-tests:
@@ -33,7 +45,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
 
     steps:
       - name: Free disk space
@@ -87,6 +98,12 @@ jobs:
           [ -f .env.test ] && mv .env.test .env.test.backup || true
           echo "Removed local env files to ensure CI env vars take precedence"
 
+      - name: Generate throwaway JWT secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -114,10 +131,10 @@ jobs:
           # Install pinned ocrmypdf from PyPI instead of stale apt version.
           # Pinned so upstream releases can't break unrelated PRs (e.g. 17.8.0
           # moved --help/--version to stderr); Renovate bumps this pin.
-          pip3 install --no-cache-dir 'ocrmypdf==17.12.1'
+          pip3 install --no-cache-dir 'ocrmypdf==17.13.0'
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
       - name: Build readur binary
         run: cargo build --release
@@ -131,7 +148,9 @@ jobs:
           echo "Server started with PID: $(cat readur.pid)"
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ env.CI_ADMIN_PASSWORD }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch
@@ -240,7 +259,7 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
           API_URL: http://localhost:8000
-          JWT_SECRET: test-secret-key
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           SERVER_ADDRESS: 0.0.0.0:8000
           UPLOAD_PATH: ./uploads
           WATCH_FOLDER: ./watch

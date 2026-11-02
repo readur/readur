@@ -29,7 +29,7 @@ struct Ctx {
 impl Ctx {
     async fn new() -> Self {
         let ctx = TestContext::new().await;
-        let auth = TestAuthHelper::new(ctx.app().clone());
+        let auth = ctx.auth_helper();
         Self { ctx, auth }
     }
 

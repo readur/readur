@@ -11,6 +11,7 @@ frontend/dist/
 # Python
 venv/
 site/
+__pycache__/
 
 # Testing
 readur_uploads/
@@ -19,4 +20,9 @@ test-results/
 uploads/
 
 # Misc.
+tmp/
 .claude/settings.local.json
+frontend/coverage/
+.superpowers/
+docs/superpowers/
+.playwright-mcp/

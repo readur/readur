@@ -64,7 +64,7 @@ services:
     image: ghcr.io/readur/readur:latest
     environment:
       DATABASE_URL: postgresql://readur:readur@postgres/readur
-      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      JWT_SECRET: ${JWT_SECRET:-}   # optional; generated and stored in the database when empty
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8000
       UPLOAD_PATH: /app/uploads
@@ -100,9 +100,9 @@ Create your environment file:
 **For Option A (Official Container):**
 
 ```bash
-# Create .env file with your secrets
-cat > .env << 'EOF'
-JWT_SECRET=your-secret-key-change-this
+# Create .env file with your secrets (JWT_SECRET is optional; min 32 bytes when set)
+cat > .env << EOF
+JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_PASSWORD=YourSecurePassword123!
 EOF
 ```
@@ -119,9 +119,10 @@ Open `.env` in your preferred editor and configure these essential settings:
 # Database connection (default works with Docker Compose)
 DATABASE_URL=postgresql://readur:readur@postgres/readur
 
-# Security - IMPORTANT: Change this in production!
-# Generate a secure key with: openssl rand -hex 32
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+# Security - REQUIRED. The server will not start if this is unset,
+# shorter than 32 bytes, or an example value.
+# Generate a key with: openssl rand -hex 32
+JWT_SECRET=<output of: openssl rand -hex 32>
 
 # Server binding
 SERVER_HOST=0.0.0.0
@@ -134,14 +135,15 @@ CONCURRENT_OCR_JOBS=4
 
 ### Admin Password
 
-By default, Readur auto-generates a secure admin password on first startup and displays it once in the logs. You can also set it explicitly in `.env`:
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character admin password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the container), with mode `0600`. The password is not written to the logs. Set `ADMIN_PASSWORD_FILE` to write it elsewhere. You can also set the password explicitly in `.env`:
 
 ```bash
 # Optional: Set a custom admin password (minimum 8 characters)
 ADMIN_PASSWORD=YourSecurePassword123!
+# Optional: admin username and email (defaults: admin, <username>@localhost)
+# ADMIN_USERNAME=admin
+# ADMIN_EMAIL=admin@example.com
 ```
-
-**Tip**: For production deployments, we recommend letting Readur auto-generate the password and saving it immediately from the startup logs.
 
 ## Step 3: Start Services
 
@@ -180,13 +182,19 @@ Look for these indicators of successful startup:
 - `Database migrations completed successfully`
 - `Server listening on 0.0.0.0:8000`
 
-**First-time startup**: If you did not set `ADMIN_PASSWORD`, look for a line like:
+**First-time startup**: If you did not set `ADMIN_PASSWORD`, the log shows where the generated password was written:
 
 ```
-READUR ADMIN USER CREATED - Password: AbCdEf123456...
+🔑 The generated admin password was written to /app/uploads/.readur/initial-admin-password - sign in, change it, then delete the file
 ```
 
-**Save this password immediately** - it is only displayed once!
+Read it with:
+
+```bash
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
+```
+
+After signing in and changing the password, delete the file.
 
 Press `Ctrl+C` to stop following the logs once startup is complete.
 
@@ -230,7 +238,7 @@ You should see the Readur login page.
 **Login credentials:**
 
 - Username: `admin`
-- Password: The password you set in `ADMIN_PASSWORD`, or the auto-generated password from the startup logs
+- Password: The password you set in `ADMIN_PASSWORD`, or the generated password from `/app/uploads/.readur/initial-admin-password`
 
 **Congratulations!** You now have Readur running. Continue to the next step to upload your first document.
 
@@ -279,7 +287,7 @@ For production deployments, implement these security measures:
 
 1. **Enable HTTPS**: Set up a reverse proxy with TLS certificates. See [Reverse Proxy Setup](../REVERSE_PROXY.md)
 
-2. **Use strong secrets**: Ensure `JWT_SECRET` is a long, random string:
+2. **Use strong secrets**: `JWT_SECRET` is optional (without it a key is generated and stored in the database; rotate it with `readur rotate-jwt-secret`). If you set it, it must be at least 32 bytes (the server enforces this); use a random value:
    ```bash
    openssl rand -hex 32
    ```

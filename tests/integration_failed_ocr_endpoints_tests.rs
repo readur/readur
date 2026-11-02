@@ -14,7 +14,7 @@ use serde_json::Value;
 use std::time::Duration;
 use uuid::Uuid;
 
-use readur::models::{CreateUser, LoginRequest, LoginResponse, UserRole};
+use readur::models::{LoginRequest, LoginResponse, UserRole};
 use readur::test_utils::document_helpers::{assert_success_with_debug, assert_error_with_debug};
 
 fn get_base_url() -> String {
@@ -61,28 +61,12 @@ impl FailedOcrTestClient {
             .as_nanos();
         let username = format!("failed_ocr_{}_{}_{}_{}", role.to_string(), test_id, nanos, Uuid::new_v4().simple());
         let email = format!("failed_ocr_{}_{}@{}.example.com", test_id, nanos, Uuid::new_v4().simple());
-        let password = "testpassword123";
+        let password = &readur::test_utils::test_password();
         
-        // Register user
-        let user_data = CreateUser {
-            username: username.clone(),
-            email: email.clone(),
-            password: password.to_string(),
-            role: Some(role),
-        };
-        
-        let register_response = self.client
-            .post(&format!("{}/api/auth/register", get_base_url()))
-            .json(&user_data)
-            .timeout(TIMEOUT)
-            .send()
-            .await?;
-        
-        if !register_response.status().is_success() {
-            let status = register_response.status();
-            let text = register_response.text().await?;
-            return Err(format!("Registration failed: {}", text).into());
-        }
+        // Create the account in the server's database
+        readur::test_utils::create_live_server_user(&username, &email, password, role)
+            .await
+            .map_err(|e| format!("Registration failed: {}", e))?;
         
         // Login to get token
         let login_data = LoginRequest {

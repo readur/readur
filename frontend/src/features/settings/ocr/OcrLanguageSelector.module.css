@@ -1,0 +1,37 @@
+.root {
+  gap: var(--s-2);
+}
+
+.full {
+  width: 100%;
+}
+
+.small .select {
+  min-height: 32px;
+  font-size: var(--fs-sm);
+}
+
+.select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-meta);
+}
+
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+}

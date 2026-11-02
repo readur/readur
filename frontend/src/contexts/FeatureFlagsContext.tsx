@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../services/api'
+import type { AuthConfig } from '../types/generated'
 
 interface FeatureFlags {
   allowLocalAuth: boolean
+  /** Self-registration is open (only ever true together with local sign-in). */
+  allowRegistration: boolean
   oidcEnabled: boolean
   enablePerUserWatch: boolean
 }
@@ -15,6 +18,7 @@ interface FeatureFlagsContextType {
 
 const defaultFlags: FeatureFlags = {
   allowLocalAuth: true,
+  allowRegistration: false,
   oidcEnabled: false,
   enablePerUserWatch: false,
 }
@@ -29,14 +33,11 @@ export function FeatureFlagsProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await api.get<{
-          allow_local_auth: boolean
-          oidc_enabled: boolean
-          enable_per_user_watch: boolean
-        }>('/auth/config')
+        const response = await api.get<AuthConfig>('/auth/config')
 
         setFlags({
           allowLocalAuth: response.data.allow_local_auth,
+          allowRegistration: response.data.allow_local_auth && response.data.allow_registration === true,
           oidcEnabled: response.data.oidc_enabled,
           enablePerUserWatch: response.data.enable_per_user_watch,
         })

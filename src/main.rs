@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, error, warn};
 use anyhow;
 use sqlx::Column;
@@ -32,6 +32,8 @@ enum Commands {
     Serve,
     /// Reset the admin user's password
     ResetAdminPassword,
+    /// Replace the JWT signing key stored in the database (signs out every session)
+    RotateJwtSecret,
 }
 
 /// Determines the correct path for static files based on the environment
@@ -112,6 +114,12 @@ async fn main() -> anyhow::Result<()> {
 
             return Ok(());
         }
+        Some(Commands::RotateJwtSecret) => {
+            let config = Config::from_env()?;
+            let db = Database::new(&config.database_url).await?;
+            commands::rotate_jwt_secret(&db, !config.jwt_secret.is_empty()).await?;
+            return Ok(());
+        }
         Some(Commands::Serve) | None => {
             // Default: Start the web server
             // Continue with normal server startup below
@@ -122,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "=".repeat(60));
     
     // Load and validate configuration with comprehensive logging
-    let config = match Config::from_env() {
+    let mut config = match Config::from_env() {
         Ok(cfg) => {
             println!("✅ Configuration loaded and validated successfully");
             cfg
@@ -139,32 +147,7 @@ async fn main() -> anyhow::Result<()> {
     println!("\n🔗 STARTUP CONFIGURATION:");
     println!("{}", "=".repeat(50));
     println!("🌐 Server will start on: {}", config.server_address);
-    // Parse database URL safely without exposing credentials
-    let db_info = if let Some(at_pos) = config.database_url.find('@') {
-        let host_part = &config.database_url[at_pos + 1..];
-        let protocol = if config.database_url.starts_with("postgresql://") { "postgresql" } else { "postgres" };
-        
-        // Extract just username from credentials part (before @)
-        let creds_part = &config.database_url[..at_pos];
-        let username = if let Some(proto_end) = creds_part.find("://") {
-            let after_proto = &creds_part[proto_end + 3..];
-            if let Some(colon_pos) = after_proto.find(':') {
-                &after_proto[..colon_pos]
-            } else {
-                after_proto
-            }
-        } else {
-            "unknown"
-        };
-        // if we get the username, let's now mask it to get just the first and last character
-        let masked_username = format!("{}{}", &username[..1], &username[username.len() - 1..]);
-        
-        format!("{}://{}:***@{}", protocol, masked_username, host_part)
-    } else {
-        "Invalid database URL format".to_string()
-    };
-    
-    println!("🗄️  Database connection: {}", db_info);
+    println!("🗄️  Database: configured");
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
     
@@ -239,6 +222,7 @@ async fn main() -> anyhow::Result<()> {
     let background_db = match Database::new_with_pool_config(&config.database_url, 30, 3).await {
         Ok(db) => {
             println!("✅ Background database pool created (max: 30 connections, min idle: 3)");
+            println!("🗄️  Database: connected");
             db
         }
         Err(e) => {
@@ -359,8 +343,18 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     
-    // Seed admin user  
-    seed::seed_admin_user(&background_db).await?;
+    // Sign sessions with JWT_SECRET, or with the key stored in the database.
+    let origin = if config.jwt_secret.is_empty() {
+        let (stored, origin) = readur::jwt_signing_key::load_or_generate(&web_db).await?;
+        config.jwt_secret = stored;
+        origin
+    } else {
+        readur::jwt_signing_key::SigningKeyOrigin::Environment
+    };
+    origin.log_startup();
+
+    // Seed admin user
+    seed::seed_admin_user(&background_db, &config.upload_path).await?;
     
     // Reset any running WebDAV syncs from previous server instance using background DB
     match background_db.reset_running_webdav_syncs().await {
@@ -387,7 +381,8 @@ async fn main() -> anyhow::Result<()> {
     }
     
     // Create shared OCR queue service for both web and background operations
-    let concurrent_jobs = 15; // Limit concurrent OCR jobs to prevent DB pool exhaustion
+    // OcrQueueService clamps this to protect the DB pool.
+    let concurrent_jobs = config.concurrent_ocr_jobs;
     let shared_queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
         background_db.clone(),
         background_db.get_pool().clone(),
@@ -574,27 +569,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Using index.html file: {}", index_file.display());
     
     // Create the router with the updated state
-    let app = Router::new()
-        .route("/api/health", get(readur::health_check))
-        .nest("/api/auth", readur::routes::auth::router())
-        .nest("/api/documents", readur::routes::documents::router())
-        .nest("/api/ignored/files", readur::routes::ignored_files::ignored_files_routes())
-        .nest("/api/labels", readur::routes::labels::router())
-        .nest("/api/metrics", readur::routes::metrics::router())
-        .nest("/metrics", readur::routes::prometheus_metrics::router())
-        .nest("/api/notifications", readur::routes::notifications::router())
-        .nest("/api/ocr", readur::routes::ocr::router())
-        .nest("/api/queue", readur::routes::queue::router())
-        .nest("/api/search", readur::routes::search::router())
-        .nest("/api/settings", readur::routes::settings::router())
-        .nest("/api/source/errors", readur::routes::source_errors::router())
-        .nest("/api/sources", readur::routes::sources::router())
-        .nest("/api/users", readur::routes::users::router())
-        .nest("/api/webdav", readur::routes::webdav::router())
-        .nest("/api/webdav/scan/failures", readur::routes::webdav_scan_failures::router())
-        .nest("/api/shared/links", readur::routes::shared_links::authenticated_router())
-        .nest("/api/public/shared", readur::routes::shared_links::public_router())
-        .nest("/api/comments", readur::routes::comments::router())
+    let mut app = readur::routes::api_router()
         .merge(readur::swagger::create_swagger_router())
         .fallback_service(
             ServeDir::new(&static_dir)
@@ -603,8 +578,11 @@ async fn main() -> anyhow::Result<()> {
                 .fallback(ServeFile::new(&index_file))
         )
         .layer(DefaultBodyLimit::max(config.max_file_size_mb as usize * 1024 * 1024))
-        .layer(CorsLayer::permissive())
+        .layer(readur::http_security::cors_layer(&config))
         .with_state(web_state.clone());
+    for layer in readur::http_security::security_header_layers(&config) {
+        app = app.layer(layer);
+    }
 
     println!("\n🌐 STARTING HTTP SERVER:");
     println!("{}", "=".repeat(50));
@@ -645,7 +623,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    axum::serve(listener, app).await?;
+    // Connection info feeds client IP resolution (rate limiting, audit logs).
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     
     Ok(())
 }

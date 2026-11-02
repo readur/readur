@@ -156,7 +156,7 @@ pub async fn get_document_thumbnail(
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/jpeg")
                 .header("Content-Length", data.len().to_string())
-                .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+                .header("Cache-Control", "private, max-age=3600")
                 .body(axum::body::Body::from(data))
                 .map_err(|e| {
                     error!("Failed to build thumbnail response: {}", e);
@@ -227,7 +227,7 @@ pub async fn get_processed_image(
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/png")
                 .header("Content-Length", image_data.len().to_string())
-                .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+                .header("Cache-Control", "private, max-age=3600")
                 .body(axum::body::Body::from(image_data))
                 .map_err(|e| {
                     error!("Failed to build processed image response: {}", e);

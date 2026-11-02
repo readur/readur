@@ -214,6 +214,47 @@ mod tests {
     }
 
     #[test]
+    fn test_ocrmypdf_ocr_command_writes_sidecar_in_the_ocr_run() {
+        let args = crate::ocr::enhanced::ocrmypdf_ocr_command_args(
+            &crate::ocr::enhanced::ocrmypdf_strategy1_args(),
+            "/tmp/out.pdf.txt",
+            "/tmp/in.pdf",
+            "/tmp/out.pdf",
+        );
+        let n = args.len();
+        assert_eq!(&args[n - 4..], ["--sidecar", "/tmp/out.pdf.txt", "/tmp/in.pdf", "/tmp/out.pdf"]);
+        assert!(args.contains(&"--force-ocr".to_string()));
+        // --skip-text would skip every page and leave only "[OCR skipped on page(s) N]" in the sidecar
+        assert!(!args.contains(&"--skip-text".to_string()));
+    }
+
+    /// Runs the real ocrmypdf (skipped when it is not installed) the way
+    /// extract_text_from_pdf_with_ocr does, and checks the sidecar holds the page text.
+    #[test]
+    fn test_ocrmypdf_sidecar_holds_recognised_text() {
+        use crate::ocr::enhanced::{ocrmypdf_ocr_command_args, ocrmypdf_strategy1_args, ocrmypdf_strategy2_args};
+        if std::process::Command::new("ocrmypdf").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+            eprintln!("ocrmypdf not installed; skipping");
+            return;
+        }
+        let input = concat!(env!("CARGO_MANIFEST_DIR"), "/frontend/test_data/multilingual/english_test.pdf");
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("out.pdf");
+        let sidecar = dir.path().join("out.pdf.txt");
+        let ok = [ocrmypdf_strategy1_args(), ocrmypdf_strategy2_args()].iter().any(|strategy| {
+            std::process::Command::new("ocrmypdf")
+                .args(ocrmypdf_ocr_command_args(strategy, sidecar.to_str().unwrap(), input, output.to_str().unwrap()))
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        });
+        assert!(ok, "ocrmypdf failed on {}", input);
+        let text = std::fs::read_to_string(&sidecar).unwrap();
+        assert!(!text.contains("OCR skipped"), "sidecar holds the skip placeholder: {text}");
+        assert!(text.contains("English"), "sidecar lacks the page text: {text}");
+    }
+
+    #[test]
     fn test_language_validation_integration() {
         let health_checker = OcrHealthChecker::new();
         

@@ -215,7 +215,7 @@ Different languages have varying accuracy rates:
 
 If you're experiencing issues:
 
-1. **Check the OCR Health page** - `GET /api/ocr/health`
+1. **Check the OCR Health page** - `GET /api/ocr/health` (requires authentication)
 2. **Review your language selection** - ensure languages match document content
 3. **Try with English fallback** - adds reliability to processing
 4. **Contact support** with document ID and language combination used
