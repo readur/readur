@@ -502,6 +502,7 @@ impl FileService {
             .arg("-l").arg("1")          // Last page (same as first)
             .arg("-scale-to").arg("200") // Scale to 200px width
             .arg("-png")                 // Output as PNG
+            .arg("-singlefile")          // Omit the page-number suffix
             .arg(&temp_pdf_path)
             .arg(&format!("/tmp/pdf_thumb_{}", temp_id)) // Output prefix
             .output();
@@ -511,14 +512,11 @@ impl FileService {
         
         match output {
             Ok(result) if result.status.success() => {
-                // pdftoppm adds "-1" to the filename for the first page
-                let actual_png_path = format!("/tmp/pdf_thumb_{}-1.png", temp_id);
-                
                 // Read the generated PNG file
-                match fs::read(&actual_png_path).await {
+                match fs::read(&temp_png_path).await {
                     Ok(png_data) => {
                         // Clean up temporary PNG file
-                        let _ = fs::remove_file(&actual_png_path).await;
+                        let _ = fs::remove_file(&temp_png_path).await;
                         
                         // Convert PNG to JPEG thumbnail
                         match image::load_from_memory(&png_data) {
@@ -539,7 +537,7 @@ impl FileService {
                         }
                     }
                     Err(_) => {
-                        let _ = fs::remove_file(&actual_png_path).await;
+                        let _ = fs::remove_file(&temp_png_path).await;
                         self.generate_placeholder_thumbnail("PDF").await
                     }
                 }
@@ -547,7 +545,6 @@ impl FileService {
             _ => {
                 // Clean up any potential PNG files
                 let _ = fs::remove_file(&temp_png_path).await;
-                let _ = fs::remove_file(&format!("/tmp/pdf_thumb_{}-1.png", temp_id)).await;
                 self.generate_placeholder_thumbnail("PDF").await
             }
         }
