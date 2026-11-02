@@ -6,12 +6,16 @@ use sqlx::postgres::PgPoolOptions;
 
 fn queue_with(max_concurrent_jobs: usize) -> OcrQueueService {
     // A lazy pool never connects, so no database is needed.
-    let pool = PgPoolOptions::new().connect_lazy("postgres://localhost/unused").unwrap();
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://localhost/unused")
+        .unwrap();
     OcrQueueService::new(
         Database { pool: pool.clone() },
         pool,
         max_concurrent_jobs,
-        Arc::new(crate::services::file_service::FileService::new("/tmp".to_string())),
+        Arc::new(crate::services::file_service::FileService::new(
+            "/tmp".to_string(),
+        )),
         100,
         100,
         300,
