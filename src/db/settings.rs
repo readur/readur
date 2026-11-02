@@ -4,6 +4,7 @@ use uuid::Uuid;
 use serde_json::Value;
 
 use super::Database;
+use super::sanitize::{DbJson, ToDb};
 
 // Helper function to parse JSONB array to Vec<String>
 fn parse_jsonb_string_array(value: Value) -> Vec<String> {
@@ -375,14 +376,14 @@ impl Database {
             "#
         )
         .bind(user_id)
-        .bind(settings.ocr_language.as_ref().unwrap_or(&current.ocr_language))
-        .bind(serde_json::to_value(settings.preferred_languages.as_ref().unwrap_or(&current.preferred_languages)).unwrap())
-        .bind(settings.primary_language.as_ref().unwrap_or(&current.primary_language))
+        .bind(settings.ocr_language.as_ref().unwrap_or(&current.ocr_language).for_db())
+        .bind(DbJson(settings.preferred_languages.as_ref().unwrap_or(&current.preferred_languages)))
+        .bind(settings.primary_language.as_ref().unwrap_or(&current.primary_language).for_db())
         .bind(settings.auto_detect_language_combination.unwrap_or(current.auto_detect_language_combination))
         .bind(settings.concurrent_ocr_jobs.unwrap_or(current.concurrent_ocr_jobs))
         .bind(settings.ocr_timeout_seconds.unwrap_or(current.ocr_timeout_seconds))
         .bind(settings.max_file_size_mb.unwrap_or(current.max_file_size_mb))
-        .bind(settings.allowed_file_types.as_ref().unwrap_or(&current.allowed_file_types))
+        .bind(settings.allowed_file_types.as_ref().unwrap_or(&current.allowed_file_types).for_db())
         .bind(settings.auto_rotate_images.unwrap_or(current.auto_rotate_images))
         .bind(settings.enable_image_preprocessing.unwrap_or(current.enable_image_preprocessing))
         .bind(settings.search_results_per_page.unwrap_or(current.search_results_per_page))
@@ -392,7 +393,7 @@ impl Database {
         .bind(settings.enable_auto_cleanup.unwrap_or(current.enable_auto_cleanup))
         .bind(settings.enable_compression.unwrap_or(current.enable_compression))
         .bind(settings.memory_limit_mb.unwrap_or(current.memory_limit_mb))
-        .bind(settings.cpu_priority.as_ref().unwrap_or(&current.cpu_priority))
+        .bind(settings.cpu_priority.as_ref().unwrap_or(&current.cpu_priority).for_db())
         .bind(settings.enable_background_ocr.unwrap_or(current.enable_background_ocr))
         .bind(settings.ocr_page_segmentation_mode.unwrap_or(current.ocr_page_segmentation_mode))
         .bind(settings.ocr_engine_mode.unwrap_or(current.ocr_engine_mode))
@@ -401,8 +402,8 @@ impl Database {
         .bind(settings.ocr_enhance_contrast.unwrap_or(current.ocr_enhance_contrast))
         .bind(settings.ocr_remove_noise.unwrap_or(current.ocr_remove_noise))
         .bind(settings.ocr_detect_orientation.unwrap_or(current.ocr_detect_orientation))
-        .bind(settings.ocr_whitelist_chars.as_ref().unwrap_or(&current.ocr_whitelist_chars))
-        .bind(settings.ocr_blacklist_chars.as_ref().unwrap_or(&current.ocr_blacklist_chars))
+        .bind(settings.ocr_whitelist_chars.as_ref().unwrap_or(&current.ocr_whitelist_chars).for_db())
+        .bind(settings.ocr_blacklist_chars.as_ref().unwrap_or(&current.ocr_blacklist_chars).for_db())
         .bind(settings.ocr_brightness_boost.unwrap_or(current.ocr_brightness_boost))
         .bind(settings.ocr_contrast_multiplier.unwrap_or(current.ocr_contrast_multiplier))
         .bind(settings.ocr_noise_reduction_level.unwrap_or(current.ocr_noise_reduction_level))
@@ -420,11 +421,11 @@ impl Database {
         .bind(settings.ocr_quality_threshold_sharpness.unwrap_or(current.ocr_quality_threshold_sharpness))
         .bind(settings.ocr_skip_enhancement.unwrap_or(current.ocr_skip_enhancement))
         .bind(settings.webdav_enabled.unwrap_or(current.webdav_enabled))
-        .bind(settings.webdav_server_url.as_ref().unwrap_or(&current.webdav_server_url))
-        .bind(settings.webdav_username.as_ref().unwrap_or(&current.webdav_username))
-        .bind(settings.webdav_password.as_ref().unwrap_or(&current.webdav_password))
-        .bind(settings.webdav_watch_folders.as_ref().unwrap_or(&current.webdav_watch_folders))
-        .bind(settings.webdav_file_extensions.as_ref().unwrap_or(&current.webdav_file_extensions))
+        .bind(settings.webdav_server_url.as_ref().unwrap_or(&current.webdav_server_url).for_db())
+        .bind(settings.webdav_username.as_ref().unwrap_or(&current.webdav_username).for_db())
+        .bind(settings.webdav_password.as_ref().unwrap_or(&current.webdav_password).for_db())
+        .bind(settings.webdav_watch_folders.as_ref().unwrap_or(&current.webdav_watch_folders).for_db())
+        .bind(settings.webdav_file_extensions.as_ref().unwrap_or(&current.webdav_file_extensions).for_db())
         .bind(settings.webdav_auto_sync.unwrap_or(current.webdav_auto_sync))
         .bind(settings.webdav_sync_interval_minutes.unwrap_or(current.webdav_sync_interval_minutes))
         .bind(settings.office_extraction_timeout_seconds.unwrap_or(current.office_extraction_timeout_seconds))
@@ -447,7 +448,7 @@ impl Database {
                 "#
             )
             .bind(user_id)
-            .bind(language)
+            .bind(language.for_db())
             .execute(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to update OCR language: {}", e))?;

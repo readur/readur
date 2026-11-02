@@ -3,6 +3,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use super::Database;
+use super::sanitize::ToDb;
 
 impl Database {
     pub async fn create_processed_image(&self, processed_image: &crate::models::CreateProcessedImage) -> Result<crate::models::ProcessedImage> {
@@ -17,10 +18,10 @@ impl Database {
         )
         .bind(processed_image.document_id)
         .bind(processed_image.user_id)
-        .bind(&processed_image.original_image_path)
-        .bind(&processed_image.processed_image_path)
-        .bind(&processed_image.processing_parameters)
-        .bind(&processed_image.processing_steps)
+        .bind(processed_image.original_image_path.for_db())
+        .bind(processed_image.processed_image_path.for_db())
+        .bind(processed_image.processing_parameters.for_db())
+        .bind(processed_image.processing_steps.for_db())
         .bind(processed_image.image_width)
         .bind(processed_image.image_height)
         .bind(processed_image.file_size)

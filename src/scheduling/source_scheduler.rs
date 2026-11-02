@@ -145,7 +145,7 @@ impl SourceScheduler {
                 if let Err(update_err) = sqlx::query(
                     r#"UPDATE sources SET status = 'error', last_error = $1, last_error_at = NOW(), updated_at = NOW() WHERE id = $2"#
                 )
-                .bind(format!("Configuration error: {}", e))
+                .bind(crate::db::sanitize::DbText(&format!("Configuration error: {}", e)))
                 .bind(source.id)
                 .execute(self.state.db.get_pool())
                 .await {
@@ -422,7 +422,7 @@ impl SourceScheduler {
                             "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
                         )
                         .bind(source_id)
-                        .bind(error_msg)
+                        .bind(crate::db::sanitize::DbText(&error_msg))
                         .execute(state_clone.db.get_pool())
                         .await;
                     }
@@ -444,7 +444,7 @@ impl SourceScheduler {
                             "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
                         )
                         .bind(source_id)
-                        .bind(error_msg)
+                        .bind(crate::db::sanitize::DbText(&error_msg))
                         .execute(state_clone.db.get_pool())
                         .await;
                     }

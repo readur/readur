@@ -4,6 +4,7 @@ use uuid::Uuid;
 use std::collections::HashMap;
 
 use super::Database;
+use super::sanitize::{DbJson, ToDb};
 use crate::models::{
     CreateSourceScanFailure, SourceScanFailure, SourceScanFailureStats,
     ErrorSourceType, ListFailuresQuery,
@@ -19,15 +20,15 @@ impl Database {
             .bind(failure.user_id)
             .bind(failure.source_type.to_string())
             .bind(failure.source_id)
-            .bind(&failure.resource_path)
+            .bind(failure.resource_path.for_db())
             .bind(failure.error_type.to_string())
-            .bind(&failure.error_message)
-            .bind(&failure.error_code)
+            .bind(failure.error_message.for_db())
+            .bind(failure.error_code.for_db())
             .bind(failure.http_status_code)
             .bind(failure.response_time_ms)
             .bind(failure.response_size_bytes)
             .bind(failure.resource_size_bytes)
-            .bind(&failure.diagnostic_data.clone().unwrap_or(serde_json::json!({})))
+            .bind(DbJson(failure.diagnostic_data.as_ref().unwrap_or(&serde_json::json!({}))))
             .fetch_one(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
@@ -197,7 +198,7 @@ impl Database {
             .bind(user_id)
             .bind(source_type.to_string())
             .bind(source_id)
-            .bind(resource_path)
+            .bind(resource_path.for_db())
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
@@ -273,7 +274,7 @@ impl Database {
             .bind(user_id)
             .bind(source_type.to_string())
             .bind(source_id)
-            .bind(resource_path)
+            .bind(resource_path.for_db())
             .fetch_one(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
@@ -298,7 +299,7 @@ impl Database {
             .bind(user_id)
             .bind(source_type.to_string())
             .bind(source_id)
-            .bind(resource_path)
+            .bind(resource_path.for_db())
             .bind(resolution_method)
             .fetch_one(&self.pool)
             .await
@@ -330,8 +331,8 @@ impl Database {
             .bind(user_id)
             .bind(source_type.to_string())
             .bind(source_id)
-            .bind(resource_path)
-            .bind(user_notes)
+            .bind(resource_path.for_db())
+            .bind(user_notes.for_db())
             .execute(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database update failed: {}", e))?;

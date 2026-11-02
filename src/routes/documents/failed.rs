@@ -10,6 +10,7 @@ use sqlx::Row;
 
 use crate::{
     auth::AuthUser,
+    db::sanitize::ToDb,
     models::UserRole,
     AppState,
 };
@@ -82,11 +83,11 @@ pub async fn get_failed_documents(
     });
     
     if let Some(stage) = &params.stage {
-        query = query.bind(stage);
+        query = query.bind(stage.for_db());
     }
     
     if let Some(reason) = &params.reason {
-        query = query.bind(reason);
+        query = query.bind(reason.for_db());
     }
     
     query = query.bind(limit).bind(offset);
