@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use base64ct::Encoding;
-use rand::Rng;
+use rand::RngExt;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
