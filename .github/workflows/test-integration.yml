@@ -18,6 +18,9 @@ env:
   # verify on the server.
   CI_ADMIN_PASSWORD: integration-ci-admin-password
 
+permissions:
+  contents: read
+
 # A newer push to the same PR or branch supersedes this run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,7 +45,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
 
     steps:
       - name: Free disk space

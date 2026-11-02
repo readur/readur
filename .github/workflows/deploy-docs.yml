@@ -9,23 +9,23 @@ on:
       - main
     # Only run when docs files change
     paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'requirements.txt'
-      - '.github/workflows/deploy-docs.yml'
-  
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements.txt"
+      - ".github/workflows/deploy-docs.yml"
+
   # Allow manual triggering from Actions tab
   workflow_dispatch:
-  
+
   # Run on pull requests for preview deployments
   pull_request:
     branches:
       - main
     paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'requirements.txt'
-      - '.github/workflows/deploy-docs.yml'
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements.txt"
+      - ".github/workflows/deploy-docs.yml"
 
 # A newer push to the same PR or branch supersedes this run.
 concurrency:
@@ -37,35 +37,37 @@ jobs:
     name: Build and Deploy MkDocs
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     # Required permissions for deployment
     permissions:
       contents: read
       deployments: write
       pull-requests: write # For PR preview comments
       id-token: write # For OIDC authentication (if needed)
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0 # Fetch all history for git info and mkdocs-git-revision-date plugin
-      
+
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: '3.14'
-          cache: 'pip'
-          cache-dependency-path: 'requirements.txt'
-      
+          python-version: "3.14"
+
       - name: Install MkDocs and Dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: 1
-      
+
       - name: Build MkDocs Site
+        env:
+          # Material for MkDocs prints a boxed MkDocs-2 notice; the strict-mode
+          # fallback below counts WARNING lines and tolerates only the README one.
+          NO_MKDOCS_2_WARNING: 1
         run: |
           # Build with strict mode but ignore the expected README.md warning
           # MkDocs always warns when README.md exists alongside index.md
@@ -81,7 +83,7 @@ jobs:
               exit $EXIT_CODE
             fi
           }
-      
+
       - name: Validate Built Site
         run: |
           # Basic validation that important files exist
@@ -89,7 +91,7 @@ jobs:
           test -f site/sitemap.xml || (echo "ERROR: site/sitemap.xml not found" && exit 1)
           test -d site/assets || (echo "ERROR: site/assets directory not found" && exit 1)
           echo "✅ Site validation passed"
-      
+
       # Deploy using Wrangler (recommended by Cloudflare)
       - name: Deploy to Cloudflare Pages
         id: deploy
@@ -99,7 +101,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy site --project-name=readur-docs --branch=${{ github.ref_name }}
-      
+
       # Deploy preview for PRs
       - name: Deploy Preview to Cloudflare Pages
         id: preview-deployment
@@ -109,7 +111,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy site --project-name=readur-docs --branch=pr-${{ github.event.pull_request.number }}
-      
+
       # Post deployment URL as PR comment
       - name: Comment PR with Preview URL
         if: github.event_name == 'pull_request'
@@ -122,21 +124,21 @@ jobs:
             // Note: Actual URL may vary based on Cloudflare configuration
             const previewUrl = `https://pr-${prNumber}.readur-docs.pages.dev`;
             const mainUrl = 'https://readur.app';
-            
+
             // Check if we already commented
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber
             });
-            
+
             const botComment = comments.data.find(comment => 
               comment.user.type === 'Bot' && 
               comment.body.includes('Documentation preview is ready')
             );
-            
+
             const commentBody = `📚 Documentation preview is ready!\n\n🔗 Preview URL: ${previewUrl}\n📖 Production URL: ${mainUrl}\n\n✅ All checks passed\n\n_This preview will be updated automatically with new commits._`;
-            
+
             if (botComment) {
               // Update existing comment
               await github.rest.issues.updateComment({
