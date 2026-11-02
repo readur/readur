@@ -717,8 +717,8 @@ impl XmlOfficeExtractor {
             // Validate all entry names before processing to prevent directory traversal
             for i in 0..entry_count {
                 let entry = archive.by_index(i)?;
-                let entry_name = entry.name();
-                Self::validate_zip_entry_name(entry_name)?;
+                let entry_name = entry.name()?;
+                Self::validate_zip_entry_name(&entry_name)?;
             }
             
             // Try to extract the main document content from word/document.xml
@@ -896,8 +896,8 @@ impl XmlOfficeExtractor {
             // Validate all entry names before processing to prevent directory traversal
             for i in 0..entry_count {
                 let entry = archive.by_index(i)?;
-                let entry_name = entry.name();
-                Self::validate_zip_entry_name(entry_name)?;
+                let entry_name = entry.name()?;
+                Self::validate_zip_entry_name(&entry_name)?;
             }
             
             // First, extract shared strings (xl/sharedStrings.xml)
