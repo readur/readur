@@ -41,7 +41,7 @@ pub fn public_router() -> Router<Arc<AppState>> {
 }
 
 fn generate_token() -> String {
-    use rand::Rng;
+    use rand::RngExt;
     use base64ct::Encoding;
     let bytes: [u8; 32] = rand::rng().random();
     // URL-safe base64 without padding
