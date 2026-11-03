@@ -380,7 +380,7 @@ impl SmartSyncService {
             })
             .collect();
 
-        match self.state.db.sync_webdav_directories(user_id, &directories_to_save).await {
+        match self.state.db.sync_webdav_directories(user_id, folder_path, &directories_to_save, true).await {
             Ok((saved_directories, deleted_count)) => {
                 info!("✅ Atomic sync completed: {} directories updated/created, {} deleted", 
                       saved_directories.len(), deleted_count);

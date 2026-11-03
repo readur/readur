@@ -529,17 +529,23 @@ impl Database {
         Ok(result.rows_affected() as i64)
     }
 
-    /// Perform a complete atomic sync of directory state
-    /// This combines creation/updates and deletion in a single transaction
+    /// Atomically records the directory state of one watch folder.
+    ///
+    /// Upserts `discovered_directories`, then (only when `prune_missing`) deletes
+    /// rows that are `folder_path` or lie under it and were not discovered. Rows
+    /// belonging to other folders are never touched. Callers pass
+    /// `prune_missing = false` when discovery was incomplete, so directories that
+    /// could not be listed keep their rows and are rescanned next time.
     pub async fn sync_webdav_directories(
-        &self, 
-        user_id: Uuid, 
-        discovered_directories: &[CreateWebDAVDirectory]
+        &self,
+        user_id: Uuid,
+        folder_path: &str,
+        discovered_directories: &[CreateWebDAVDirectory],
+        prune_missing: bool,
     ) -> Result<(Vec<WebDAVDirectory>, i64)> {
         let mut tx = self.pool.begin().await?;
         let mut updated_directories = Vec::new();
 
-        // First, update/create all discovered directories
         for directory in discovered_directories {
             let row = sqlx::query(
                 r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
@@ -575,44 +581,29 @@ impl Database {
             });
         }
 
-        // Then, delete directories that are no longer present
-        let discovered_paths: Vec<String> = discovered_directories
-            .iter()
-            .map(|d| d.directory_path.clone())
-            .collect();
-
-        let deleted_count = if discovered_paths.is_empty() {
-            // If no directories discovered, delete all for this user
+        let deleted_count = if prune_missing {
+            let scope = folder_path.trim_end_matches('/');
+            let discovered_paths: Vec<_> = discovered_directories
+                .iter()
+                .map(|d| d.directory_path.for_db())
+                .collect();
+            // A row is in scope when it is the folder itself or a descendant of it
+            // (prefix match on "folder/", so "/A" never captures "/AB").
             let result = sqlx::query(
-                r#"DELETE FROM webdav_directories WHERE user_id = $1"#
+                r#"DELETE FROM webdav_directories
+                   WHERE user_id = $1
+                     AND (directory_path = $2
+                          OR left(directory_path, char_length($2) + 1) = $2 || '/')
+                     AND directory_path <> ALL($3)"#
             )
             .bind(user_id)
+            .bind(scope.for_db())
+            .bind(&discovered_paths)
             .execute(&mut *tx)
             .await?;
             result.rows_affected() as i64
         } else {
-            // Build the NOT IN clause
-            let placeholders = (0..discovered_paths.len())
-                .map(|i| format!("${}", i + 2))
-                .collect::<Vec<_>>()
-                .join(",");
-
-            let query = format!(
-                r#"DELETE FROM webdav_directories 
-                   WHERE user_id = $1 AND directory_path NOT IN ({})"#,
-                placeholders
-            );
-
-            // SQL interpolates only generated `$N` placeholders; the paths are binds.
-            let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(query));
-            query_builder = query_builder.bind(user_id);
-            
-            for path in &discovered_paths {
-                query_builder = query_builder.bind(path.for_db());
-            }
-
-            let result = query_builder.execute(&mut *tx).await?;
-            result.rows_affected() as i64
+            0
         };
 
         tx.commit().await?;

@@ -137,7 +137,7 @@ async fn test_sync_webdav_directories_atomic() {
             // dir2 is missing, should be deleted
         ];
 
-        let result = db.sync_webdav_directories(user_id, &sync_directories).await;
+        let result = db.sync_webdav_directories(user_id, "/test", &sync_directories, true).await;
         assert!(result.is_ok());
 
         let (updated_directories, deleted_count) = result.unwrap();
