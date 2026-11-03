@@ -53,7 +53,7 @@ raw-cpuid = { version = "11", optional = true }
 # WebDAV/S3 servers that only speak legacy TLS keep working. `form` (OIDC) is opt-in
 # since 0.13, as is `query`.
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "multipart", "form", "query"] }
-quick-xml = { version = "0.37", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 urlencoding = "2.1"
 url = "2.4"
 ipnet = "2"
