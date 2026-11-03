@@ -299,7 +299,8 @@ mod latest_migration_tests {
             let start_time = std::time::Instant::now();
             
             // Use raw SQL execution to handle complex PostgreSQL statements including functions
-            sqlx::raw_sql(&content)
+            // Migration files from the repository.
+            sqlx::raw_sql(sqlx::AssertSqlSafe(content.as_str()))
                 .execute(pool)
                 .await
                 .expect(&format!("Failed to apply migration: {}", migration_name));
@@ -338,7 +339,8 @@ mod latest_migration_tests {
         println!("   🔄 Applying: {}", migration_name);
         
         // Use raw SQL execution to handle complex PostgreSQL statements including functions
-        sqlx::raw_sql(&content).execute(pool).await?;
+        // Migration files from the repository.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(content.as_str())).execute(pool).await?;
         
         println!("   ✅ Applied: {}", migration_name);
         Ok(())

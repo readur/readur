@@ -580,7 +580,8 @@ mod pr_migration_validation_tests {
             
             // Get row count
             let count_query = format!("SELECT COUNT(*) FROM {}", table_name);
-            let row_count: i64 = sqlx::query_scalar(&count_query)
+            // table_name comes from the information_schema listing above.
+            let row_count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(count_query.as_str()))
                 .fetch_one(pool)
                 .await
                 .unwrap_or(0);
@@ -729,7 +730,8 @@ mod pr_migration_validation_tests {
                 ));
             }
             
-            sqlx::query(&query).execute(pool).await.unwrap();
+            // Values are generated UUIDs, integers and fixed status literals.
+            sqlx::query(sqlx::AssertSqlSafe(query.as_str())).execute(pool).await.unwrap();
         }
         
         println!("✅ Created {} test documents", count);

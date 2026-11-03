@@ -144,7 +144,8 @@ impl Database {
         bind_count += 1;
         query.push_str(&format!(" AND user_id = ${} RETURNING *", bind_count));
 
-        let mut query_builder = sqlx::query(&query);
+        // SQL interpolates only fixed column names and `$N` indices; values are binds.
+        let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(query));
 
         // Bind values in order
         if let Some(name) = &update.name {

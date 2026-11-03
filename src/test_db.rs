@@ -25,6 +25,10 @@ use sqlx::{Connection, Executor, PgConnection};
 pub const POSTGRES_TAG: &str = "18";
 
 /// Point tests at an existing server instead of starting a container.
+// DDL here interpolates database identifiers, which PostgreSQL cannot bind.
+// Every one is generated in this file (readur_test_<pid>_<n>,
+// readur_template_<fingerprint>), never taken from input, so the dynamic SQL
+// is asserted safe for sqlx 0.9.
 pub const SERVER_URL_ENV: &str = "READUR_TEST_POSTGRES_URL";
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -62,7 +66,7 @@ impl TestDatabase {
     pub async fn drop_database(&self) -> Result<(), sqlx::Error> {
         let mut admin = PgConnection::connect(&server().admin_url).await?;
         admin
-            .execute(format!(r#"DROP DATABASE IF EXISTS "{}" WITH (FORCE)"#, self.name).as_str())
+            .execute(sqlx::AssertSqlSafe(format!(r#"DROP DATABASE IF EXISTS "{}" WITH (FORCE)"#, self.name)))
             .await?;
         server().created.lock().unwrap().retain(|n| n != &self.name);
         Ok(())
@@ -86,7 +90,7 @@ impl TestDatabase {
             .expect("connect to test postgres");
         // A template cannot be copied while another session is connected to it.
         for attempt in 1.. {
-            match admin.execute(sql.as_str()).await {
+            match admin.execute(sqlx::AssertSqlSafe(sql.clone())).await {
                 Ok(_) => break,
                 Err(sqlx::Error::Database(e))
                     if e.code().as_deref() == Some("55006") && attempt < 50 =>
@@ -225,11 +229,11 @@ async fn build_template(admin_url: &str) -> Result<String, String> {
     if ready != Some(true) {
         // A database that is not yet flagged as a template is a half-built one.
         admin
-            .execute(format!(r#"DROP DATABASE IF EXISTS "{template}" WITH (FORCE)"#).as_str())
+            .execute(sqlx::AssertSqlSafe(format!(r#"DROP DATABASE IF EXISTS "{template}" WITH (FORCE)"#)))
             .await
             .map_err(err)?;
         admin
-            .execute(format!(r#"CREATE DATABASE "{template}""#).as_str())
+            .execute(sqlx::AssertSqlSafe(format!(r#"CREATE DATABASE "{template}""#)))
             .await
             .map_err(err)?;
         let mut conn = PgConnection::connect(&with_database(admin_url, &template))
@@ -241,7 +245,7 @@ async fn build_template(admin_url: &str) -> Result<String, String> {
             .map_err(|e| format!("migrating {template}: {e}"))?;
         conn.close().await.map_err(err)?;
         admin
-            .execute(format!(r#"ALTER DATABASE "{template}" IS_TEMPLATE true"#).as_str())
+            .execute(sqlx::AssertSqlSafe(format!(r#"ALTER DATABASE "{template}" IS_TEMPLATE true"#)))
             .await
             .map_err(err)?;
     }
@@ -260,7 +264,7 @@ async fn drop_created_databases() {
     };
     for name in names {
         let _ = admin
-            .execute(format!(r#"DROP DATABASE IF EXISTS "{name}" WITH (FORCE)"#).as_str())
+            .execute(sqlx::AssertSqlSafe(format!(r#"DROP DATABASE IF EXISTS "{name}" WITH (FORCE)"#)))
             .await;
     }
 }

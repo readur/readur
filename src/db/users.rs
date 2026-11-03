@@ -12,6 +12,12 @@ use crate::models::{AuthProvider, CreateUser, User, UserRole};
 pub const BCRYPT_COST: u32 = 12;
 
 /// Column list matching [`user_from_row`]. Keep the two in sync.
+/// Dynamic SQL in this module only ever interpolates the `USER_COLUMNS`
+/// constant; every value is a `$N` bind, so it is safe to assert (sqlx 0.9).
+fn user_sql(sql: String) -> sqlx::AssertSqlSafe<String> {
+    sqlx::AssertSqlSafe(sql)
+}
+
 const USER_COLUMNS: &str = "id, username, email, password_hash, role, created_at, updated_at, \
      oidc_subject, oidc_issuer, oidc_email, auth_provider, token_version, is_active";
 
@@ -51,11 +57,11 @@ impl Database {
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
 
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "INSERT INTO users (username, email, password_hash, role, created_at, updated_at, auth_provider, is_active)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(user.username.for_db())
         .bind(user.email.for_db())
         .bind(&password_hash)
@@ -74,9 +80,9 @@ impl Database {
     }
 
     pub async fn get_user_by_username(&self, username: &str) -> Result<Option<User>> {
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "SELECT {USER_COLUMNS} FROM users WHERE username = $1"
-        ))
+        )))
         .bind(username)
         .fetch_optional(&self.pool)
         .await?;
@@ -84,7 +90,7 @@ impl Database {
     }
 
     pub async fn get_user_by_id(&self, id: Uuid) -> Result<Option<User>> {
-        let row = sqlx::query(&format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1"))
+        let row = sqlx::query(user_sql(format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1")))
             .bind(id)
             .fetch_optional(&self.pool)
             .await?;
@@ -92,9 +98,9 @@ impl Database {
     }
 
     pub async fn get_all_users(&self) -> Result<Vec<User>> {
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(user_sql(format!(
             "SELECT {USER_COLUMNS} FROM users ORDER BY created_at DESC"
-        ))
+        )))
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.iter().map(user_from_row).collect())
@@ -125,14 +131,14 @@ impl Database {
         let new_is_active = is_active.unwrap_or(user.is_active);
         let revoke_sessions = password_changed || (user.is_active && !new_is_active);
 
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "UPDATE users SET username = $1, email = $2, password_hash = $3, is_active = $4,
                  token_version = token_version + CASE WHEN $5 THEN 1 ELSE 0 END,
                  password_changed_at = CASE WHEN $6 THEN NOW() ELSE password_changed_at END,
                  updated_at = NOW()
              WHERE id = $7
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(username.for_db())
         .bind(email.for_db())
         .bind(&password_hash)
@@ -149,12 +155,12 @@ impl Database {
     /// Replace a user's password and revoke all outstanding session tokens.
     pub async fn set_user_password(&self, id: Uuid, new_password: &str) -> Result<User> {
         let password_hash = bcrypt::hash(new_password, BCRYPT_COST)?;
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "UPDATE users SET password_hash = $2, password_changed_at = NOW(),
                  token_version = token_version + 1, updated_at = NOW()
              WHERE id = $1
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(id)
         .bind(&password_hash)
         .fetch_one(&self.pool)
@@ -187,9 +193,9 @@ impl Database {
         subject: &str,
         issuer: &str,
     ) -> Result<Option<User>> {
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "SELECT {USER_COLUMNS} FROM users WHERE oidc_subject = $1 AND oidc_issuer = $2"
-        ))
+        )))
         .bind(subject.for_db())
         .bind(issuer.for_db())
         .fetch_optional(&self.pool)
@@ -199,11 +205,11 @@ impl Database {
 
     /// Rewrite the stored issuer of an account bound to an OIDC identity.
     pub async fn update_user_oidc_issuer(&self, user_id: Uuid, oidc_issuer: &str) -> Result<User> {
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "UPDATE users SET oidc_issuer = $2, updated_at = NOW()
              WHERE id = $1
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(user_id)
         .bind(oidc_issuer.for_db())
         .fetch_one(&self.pool)
@@ -221,12 +227,12 @@ impl Database {
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
 
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "INSERT INTO users (username, email, role, created_at, updated_at,
                                 oidc_subject, oidc_issuer, oidc_email, auth_provider)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(user.username.for_db())
         .bind(user.email.for_db())
         .bind(user.role.as_ref().unwrap_or(&UserRole::User).to_string())
@@ -246,9 +252,9 @@ impl Database {
     }
 
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "SELECT {USER_COLUMNS} FROM users WHERE email = $1"
-        ))
+        )))
         .bind(email.for_db())
         .fetch_optional(&self.pool)
         .await?;
@@ -262,7 +268,7 @@ impl Database {
         oidc_issuer: &str,
         oidc_email: &str,
     ) -> Result<User> {
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "UPDATE users
              SET oidc_subject = $2,
                  oidc_issuer = $3,
@@ -271,7 +277,7 @@ impl Database {
                  updated_at = NOW()
              WHERE id = $1
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(user_id)
         .bind(oidc_subject.for_db())
         .bind(oidc_issuer.for_db())
@@ -298,7 +304,7 @@ impl Database {
     pub async fn reset_user_password(&self, username: &str, new_password: &str) -> Result<User> {
         let password_hash = bcrypt::hash(new_password, BCRYPT_COST)?;
 
-        let row = sqlx::query(&format!(
+        let row = sqlx::query(user_sql(format!(
             "UPDATE users
              SET password_hash = $2,
                  password_changed_at = NOW(),
@@ -306,7 +312,7 @@ impl Database {
                  updated_at = NOW()
              WHERE username = $1
              RETURNING {USER_COLUMNS}"
-        ))
+        )))
         .bind(username)
         .bind(&password_hash)
         .fetch_one(&self.pool)

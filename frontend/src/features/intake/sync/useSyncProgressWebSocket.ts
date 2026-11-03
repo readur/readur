@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { SyncProgressWebSocket, SyncProgressInfo, sourcesService } from '../../../services/api';
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'failed';
+export type ConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+  | 'failed';
 
 export interface UseSyncProgressWebSocketOptions {
   sourceId: string;
@@ -41,70 +47,85 @@ export const useSyncProgressWebSocket = ({
     progressInfo: null,
     lastUpdate: Date.now(),
   });
-  
+
   const wsRef = useRef<SyncProgressWebSocket | null>(null);
   const mountedRef = useRef(true);
-  const stateUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const stateUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Atomic state update function to prevent race conditions
-  const updateConnectionState = useCallback((updates: Partial<ConnectionState>) => {
-    if (!mountedRef.current) return;
-    
-    // Clear any pending state updates to prevent race conditions
-    if (stateUpdateTimeoutRef.current) {
-      clearTimeout(stateUpdateTimeoutRef.current);
-    }
-    
-    // Use functional update to ensure consistency
-    setConnectionState(prevState => {
-      const newState = {
-        ...prevState,
-        ...updates,
-        lastUpdate: Date.now(),
-      };
-      
-      // Only notify if status actually changed
-      if (updates.status && updates.status !== prevState.status) {
-        // Schedule callback on next tick to avoid synchronous state updates
-        stateUpdateTimeoutRef.current = setTimeout(() => {
-          if (mountedRef.current) {
-            onConnectionStatusChange?.(updates.status!);
-          }
-        }, 0);
+  const updateConnectionState = useCallback(
+    (updates: Partial<ConnectionState>) => {
+      if (!mountedRef.current) return;
+
+      // Clear any pending state updates to prevent race conditions
+      if (stateUpdateTimeoutRef.current) {
+        clearTimeout(stateUpdateTimeoutRef.current);
       }
-      
-      return newState;
-    });
-  }, [onConnectionStatusChange]);
+
+      // Use functional update to ensure consistency
+      setConnectionState((prevState) => {
+        const newState = {
+          ...prevState,
+          ...updates,
+          lastUpdate: Date.now(),
+        };
+
+        // Only notify if status actually changed
+        if (updates.status && updates.status !== prevState.status) {
+          // Schedule callback on next tick to avoid synchronous state updates
+          stateUpdateTimeoutRef.current = setTimeout(() => {
+            if (mountedRef.current) {
+              onConnectionStatusChange?.(updates.status!);
+            }
+          }, 0);
+        }
+
+        return newState;
+      });
+    },
+    [onConnectionStatusChange],
+  );
 
   // Handle progress updates from WebSocket
-  const handleProgress = useCallback((data: SyncProgressInfo) => {
-    if (!mountedRef.current) return;
-    updateConnectionState({ progressInfo: data });
-  }, [updateConnectionState]);
+  const handleProgress = useCallback(
+    (data: SyncProgressInfo) => {
+      if (!mountedRef.current) return;
+      updateConnectionState({ progressInfo: data });
+    },
+    [updateConnectionState],
+  );
 
   // Handle heartbeat messages from WebSocket
-  const handleHeartbeat = useCallback((data: any) => {
-    if (!mountedRef.current) return;
+  const handleHeartbeat = useCallback(
+    (data: any) => {
+      if (!mountedRef.current) return;
 
-    // Clear progress info if sync is not active
-    if (data && !data.is_active) {
-      updateConnectionState({ progressInfo: null });
-    }
-  }, [updateConnectionState]);
+      // Clear progress info if sync is not active
+      if (data && !data.is_active) {
+        updateConnectionState({ progressInfo: null });
+      }
+    },
+    [updateConnectionState],
+  );
 
   // Handle WebSocket errors
-  const handleError = useCallback((error: any) => {
-    if (!mountedRef.current) return;
-    
-    console.error('WebSocket error:', error);
-    onError?.(error);
-  }, [onError]);
+  const handleError = useCallback(
+    (error: any) => {
+      if (!mountedRef.current) return;
+
+      console.error('WebSocket error:', error);
+      onError?.(error);
+    },
+    [onError],
+  );
 
   // Handle connection status changes from WebSocket
-  const handleConnectionStatus = useCallback((status: ConnectionStatus) => {
-    updateConnectionState({ status });
-  }, [updateConnectionState]);
+  const handleConnectionStatus = useCallback(
+    (status: ConnectionStatus) => {
+      updateConnectionState({ status });
+    },
+    [updateConnectionState],
+  );
 
   // Connect to WebSocket
   const connect = useCallback(async () => {
@@ -120,7 +141,7 @@ export const useSyncProgressWebSocket = ({
 
     try {
       updateConnectionState({ status: 'connecting' });
-      
+
       const ws = sourcesService.createSyncProgressWebSocket(sourceId);
       wsRef.current = ws;
 
@@ -139,7 +160,16 @@ export const useSyncProgressWebSocket = ({
         onError?.(error);
       }
     }
-  }, [enabled, sourceId, handleProgress, handleHeartbeat, handleError, handleConnectionStatus, updateConnectionState, onError]);
+  }, [
+    enabled,
+    sourceId,
+    handleProgress,
+    handleHeartbeat,
+    handleError,
+    handleConnectionStatus,
+    updateConnectionState,
+    onError,
+  ]);
 
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
@@ -147,11 +177,11 @@ export const useSyncProgressWebSocket = ({
       wsRef.current.close();
       wsRef.current = null;
     }
-    
+
     if (mountedRef.current) {
-      updateConnectionState({ 
-        status: 'disconnected', 
-        progressInfo: null 
+      updateConnectionState({
+        status: 'disconnected',
+        progressInfo: null,
       });
     }
   }, [sourceId, updateConnectionState]);
@@ -159,7 +189,7 @@ export const useSyncProgressWebSocket = ({
   // Reconnect to WebSocket
   const reconnect = useCallback(() => {
     disconnect();
-    
+
     // Use setTimeout to ensure cleanup is complete before reconnecting
     setTimeout(() => {
       if (mountedRef.current) {
@@ -201,15 +231,18 @@ export const useSyncProgressWebSocket = ({
       }
     };
   }, []);
-  
+
   // Memoize return values to prevent unnecessary re-renders
-  const returnValue = useMemo(() => ({
-    progressInfo: connectionState.progressInfo,
-    connectionStatus: connectionState.status,
-    isConnected: connectionState.status === 'connected',
-    reconnect,
-    disconnect,
-  }), [connectionState.progressInfo, connectionState.status, reconnect, disconnect]);
+  const returnValue = useMemo(
+    () => ({
+      progressInfo: connectionState.progressInfo,
+      connectionStatus: connectionState.status,
+      isConnected: connectionState.status === 'connected',
+      reconnect,
+      disconnect,
+    }),
+    [connectionState.progressInfo, connectionState.status, reconnect, disconnect],
+  );
 
   return returnValue;
 };

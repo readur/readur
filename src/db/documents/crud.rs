@@ -23,7 +23,8 @@ impl Database {
             DOCUMENT_FIELDS
         );
 
-        let row = sqlx::query(&query_str)
+        // SQL interpolates only the DOCUMENT_FIELDS constant; values are binds.
+        let row = sqlx::query(sqlx::AssertSqlSafe(query_str))
             .bind(document.id)
             .bind(document.filename.for_db())
             .bind(document.original_filename.for_db())
@@ -132,7 +133,8 @@ impl Database {
             DOCUMENT_FIELDS
         );
 
-        let row = sqlx::query(&query_str)
+        // SQL interpolates only the DOCUMENT_FIELDS constant; values are binds.
+        let row = sqlx::query(sqlx::AssertSqlSafe(query_str))
             .bind(user_id)
             .bind(file_hash)
             .fetch_optional(&self.pool)
@@ -155,7 +157,8 @@ impl Database {
         );
 
         let search_pattern = format!("%{}%", filename);
-        let rows = sqlx::query(&query_str)
+        // SQL interpolates only the DOCUMENT_FIELDS constant; values are binds.
+        let rows = sqlx::query(sqlx::AssertSqlSafe(query_str))
             .bind(user_id)
             .bind(search_pattern)
             .bind(limit)
@@ -200,7 +203,8 @@ impl Database {
             DOCUMENT_FIELDS
         );
 
-        let rows = sqlx::query(&query_str)
+        // SQL interpolates only the DOCUMENT_FIELDS constant; values are binds.
+        let rows = sqlx::query(sqlx::AssertSqlSafe(query_str))
             .bind(user_id)
             .bind(source_id)
             .bind(limit)

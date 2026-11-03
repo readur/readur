@@ -114,7 +114,8 @@ impl Database {
                 sql.push_str(&format!(" OFFSET ${}", bind_index));
             }
 
-            let mut query_builder = sqlx::query_as::<_, SourceScanFailure>(&sql);
+            // SQL interpolates only static fragments and `$N` indices; values are binds.
+            let mut query_builder = sqlx::query_as::<_, SourceScanFailure>(sqlx::AssertSqlSafe(sql));
             query_builder = query_builder.bind(user_id);
 
             if let Some(source_type) = &query.source_type {
@@ -241,7 +242,8 @@ impl Database {
 
             sql.push_str(&format!(" ORDER BY error_severity ASC, next_retry_at ASC LIMIT ${}", bind_index));
 
-            let mut query_builder = sqlx::query_as::<_, SourceScanFailure>(&sql);
+            // SQL interpolates only static fragments and `$N` indices; values are binds.
+            let mut query_builder = sqlx::query_as::<_, SourceScanFailure>(sqlx::AssertSqlSafe(sql));
             query_builder = query_builder.bind(user_id);
 
             if let Some(source_type) = source_type {
@@ -367,7 +369,8 @@ impl Database {
                 sql.push_str(&format!(" AND source_type = ${}::source_error_source_type", bind_index));
             }
 
-            let mut query_builder = sqlx::query(&sql);
+            // SQL interpolates only static fragments and `$N` indices; values are binds.
+            let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(sql));
             query_builder = query_builder.bind(user_id);
 
             if let Some(source_type) = source_type {
