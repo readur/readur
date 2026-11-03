@@ -13,7 +13,11 @@ pub fn build_user_agent() -> String {
 /// (for example a login page served by a proxy in front of the WebDAV server).
 ///
 /// `content_type` is the media type from the response without parameters, and
-/// `content_length` the declared length when the server sent one.
+/// `content_length` the declared length when the server sent one. The body is
+/// what decides: an HTML-looking body is rejected when the server declared it
+/// as HTML or gave no usable type, while a declared type such as `text/plain`
+/// is trusted. A `text/html` header alone does not reject a body that is
+/// plainly not HTML, since some servers and proxies send it for every file.
 pub fn verify_download(
     path: &str,
     file_name: &str,
@@ -38,7 +42,7 @@ pub fn verify_download(
 
     let declared_html = content_type.is_some_and(|ct| ct == "text/html" || ct == "application/xhtml+xml");
     let unspecified = content_type.is_none_or(|ct| ct == "application/octet-stream");
-    if declared_html || (unspecified && looks_like_html(body)) {
+    if (declared_html || unspecified) && looks_like_html(body) {
         return Err(anyhow!(
             "Download for '{}' returned an HTML page instead of file content (Content-Type: {}); \
              the server may be answering with a login or error page",
@@ -91,6 +95,23 @@ mod tests {
     fn html_content_type_for_non_html_file_is_rejected() {
         let err = verify_download("/a/report.pdf", "report.pdf", b"<html><body>login</body></html>", None, Some("text/html")).unwrap_err();
         assert!(err.to_string().contains("HTML page"), "{err}");
+        assert!(verify_download("/a/report.pdf", "report.pdf", b"<!DOCTYPE html><html>", None, Some("application/xhtml+xml")).is_err());
+    }
+
+    /// A server that labels every file `text/html` must not fail downloads
+    /// whose bodies are plainly not HTML.
+    #[test]
+    fn html_content_type_with_a_non_html_body_is_accepted() {
+        for (name, body) in [
+            ("report.pdf", &b"%PDF-1.7 binary"[..]),
+            ("archive.zip", b"PK\x03\x04\x14\x00"),
+            ("scan.jpg", b"\xFF\xD8\xFF\xE0\x00\x10JFIF"),
+            ("scan.png", b"\x89PNG\r\n\x1a\n"),
+            ("notes.txt", b"plain text, no markup"),
+        ] {
+            assert!(verify_download(&format!("/a/{name}"), name, body, None, Some("text/html")).is_ok(), "{name}");
+            assert!(verify_download(&format!("/a/{name}"), name, body, None, Some("application/xhtml+xml")).is_ok(), "{name}");
+        }
     }
 
     #[test]
