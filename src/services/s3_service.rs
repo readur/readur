@@ -520,47 +520,6 @@ impl S3Service {
         }
     }
 
-    /// Retrieve a file from S3
-    pub async fn retrieve_file(&self, key: &str) -> Result<Vec<u8>> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
-
-            let key_owned = key.to_string();
-            let bucket_name = self.config.bucket_name.clone();
-            let client = self.client.clone();
-
-            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
-                let key = key_owned.clone();
-                let bucket_name = bucket_name.clone();
-                let client = client.clone();
-
-                async move {
-                    let response = client
-                        .get_object()
-                        .bucket(&bucket_name)
-                        .key(&key)
-                        .send()
-                        .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, describe_error(&e)))?;
-
-                    let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", describe_error(&e)))?;
-
-                    Ok(body.into_bytes().to_vec())
-                }
-            }).await?;
-
-            info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
-            Ok(bytes)
-        }
-    }
-
     /// Delete a file from S3
     pub async fn delete_file(&self, key: &str) -> Result<()> {
         #[cfg(not(feature = "s3"))]
@@ -581,75 +540,6 @@ impl S3Service {
                 .map_err(|e| anyhow!("Failed to delete file {}: {}", key, describe_error(&e)))?;
 
             info!("Successfully deleted file: {}", key);
-            Ok(())
-        }
-    }
-
-    /// Check if a file exists in S3
-    pub async fn file_exists(&self, key: &str) -> Result<bool> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            match self.client
-                .head_object()
-                .bucket(&self.config.bucket_name)
-                .key(key)
-                .send()
-                .await
-            {
-                Ok(_) => Ok(true),
-                // HeadObject reports a missing key as a NotFound service error.
-                Err(e) if e.as_service_error().map(|s| s.is_not_found()) == Some(true) => Ok(false),
-                Err(e) => Err(anyhow!("Failed to check file existence {}: {}", key, describe_error(&e))),
-            }
-        }
-    }
-
-    /// Delete all files for a document (document, thumbnail, processed image)
-    pub async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            let document_key = self.generate_document_key(user_id, document_id, filename);
-            let thumbnail_key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
-            let processed_key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
-
-            let mut errors = Vec::new();
-
-            // Delete document file
-            if let Err(e) = self.delete_file(&document_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Document: {}", e));
-                }
-            }
-
-            // Delete thumbnail
-            if let Err(e) = self.delete_file(&thumbnail_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Thumbnail: {}", e));
-                }
-            }
-
-            // Delete processed image
-            if let Err(e) = self.delete_file(&processed_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Processed image: {}", e));
-                }
-            }
-
-            if !errors.is_empty() {
-                return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
-            }
-
-            info!("Successfully deleted all files for document {}", document_id);
             Ok(())
         }
     }
