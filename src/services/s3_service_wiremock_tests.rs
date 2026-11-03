@@ -42,6 +42,37 @@ async fn test_connection_error_is_categorised_as_authentication() {
 }
 
 #[tokio::test]
+async fn download_returns_body_and_checks_length() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/b/docs/ok.pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"hello".to_vec()))
+        .mount(&server)
+        .await;
+
+    let service = S3Service::new(config_for(&server)).await.unwrap();
+    assert_eq!(service.download_file("docs/ok.pdf").await.unwrap(), b"hello");
+}
+
+#[tokio::test]
+async fn download_with_body_shorter_than_content_length_is_an_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/b/docs/short.pdf"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Length", "100")
+                .set_body_bytes(b"hello".to_vec()),
+        )
+        .mount(&server)
+        .await;
+
+    let service = S3Service::new(config_for(&server)).await.unwrap();
+    let err = service.download_file("docs/short.pdf").await.unwrap_err().to_string();
+    assert!(err.contains("docs/short.pdf"), "{err}");
+    // Every attempt (initial + retries) hit the server; none returned truncated bytes as success.
+    assert!(server.received_requests().await.unwrap().len() >= 2, "download is retried");
+}
+
+#[tokio::test]
 async fn file_exists_distinguishes_missing_from_failure() {
     let server = MockServer::start().await;
     Mock::given(method("HEAD")).and(path("/b/missing.pdf"))

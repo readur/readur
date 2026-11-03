@@ -26,6 +26,44 @@ const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
 /// Multipart upload chunk size (16MB - AWS minimum is 5MB, we use 16MB for better performance)
 const MULTIPART_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Upper bound on reading one object's body. The SDK's attempt timeout ends
+/// once the response headers arrive; the streamed body is read here.
+const DOWNLOAD_BODY_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Check that a downloaded body matches the Content-Length the server sent.
+pub fn verify_content_length(key: &str, expected: Option<i64>, actual: usize) -> Result<()> {
+    match expected {
+        Some(expected) if expected >= 0 && expected as u64 != actual as u64 => Err(anyhow!(
+            "S3 object {} download incomplete: expected {} bytes, received {}",
+            key, expected, actual
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// One GetObject attempt: fetch, read the body within a bound, and verify
+/// the length. Retrying is the caller's job.
+#[cfg(feature = "s3")]
+async fn fetch_object(client: &Client, bucket: &str, key: &str) -> Result<Vec<u8>> {
+    let response = client
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await
+        .map_err(|e| anyhow!("Failed to download S3 object {}: {}", key, describe_error(&e)))?;
+
+    let expected = response.content_length();
+    let body = tokio::time::timeout(DOWNLOAD_BODY_TIMEOUT, response.body.collect())
+        .await
+        .map_err(|_| anyhow!("Timed out reading S3 object {} after {:?}", key, DOWNLOAD_BODY_TIMEOUT))?
+        .map_err(|e| anyhow!("Failed to read S3 object body {}: {}", key, describe_error(&e)))?;
+
+    let bytes = body.into_bytes().to_vec();
+    verify_content_length(key, expected, bytes.len())?;
+    Ok(bytes)
+}
+
 #[derive(Debug, Clone)]
 pub struct S3Service {
     #[cfg(feature = "s3")]
@@ -107,23 +145,28 @@ impl S3Service {
         #[cfg(feature = "s3")]
         {
         info!("Downloading S3 object: {}/{}", self.config.bucket_name, object_key);
-
-        let response = self.client
-            .get_object()
-            .bucket(&self.config.bucket_name)
-            .key(object_key)
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to download S3 object {}: {}", object_key, describe_error(&e)))?;
-
-        let body = response.body.collect().await
-            .map_err(|e| anyhow!("Failed to read S3 object body: {}", describe_error(&e)))?;
-
-        let bytes = body.into_bytes().to_vec();
+        let bytes = self.fetch_object_with_retry("download_file", object_key).await?;
         info!("Downloaded S3 object {} ({} bytes)", object_key, bytes.len());
-        
         Ok(bytes)
         }
+    }
+
+    /// GetObject with the service's retry policy, a bounded body read and a
+    /// Content-Length check. Used by both the sync download path and the
+    /// storage-backend read path.
+    #[cfg(feature = "s3")]
+    async fn fetch_object_with_retry(&self, operation: &str, key: &str) -> Result<Vec<u8>> {
+        let key_owned = key.to_string();
+        let bucket_name = self.config.bucket_name.clone();
+        let client = self.client.clone();
+
+        self.retry_operation(&format!("{}: {}", operation, key), || {
+            let key = key_owned.clone();
+            let bucket_name = bucket_name.clone();
+            let client = client.clone();
+            async move { fetch_object(&client, &bucket_name, &key).await }
+        })
+        .await
     }
 
     /// Test S3 connection and access to bucket
@@ -715,32 +758,7 @@ impl StorageBackend for S3Service {
         #[cfg(feature = "s3")]
         {
             info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
-
-            let key_owned = key.to_string();
-            let bucket_name = self.config.bucket_name.clone();
-            let client = self.client.clone();
-
-            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
-                let key = key_owned.clone();
-                let bucket_name = bucket_name.clone();
-                let client = client.clone();
-
-                async move {
-                    let response = client
-                        .get_object()
-                        .bucket(&bucket_name)
-                        .key(&key)
-                        .send()
-                        .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, describe_error(&e)))?;
-
-                    let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", describe_error(&e)))?;
-
-                    Ok(body.into_bytes().to_vec())
-                }
-            }).await?;
-
+            let bytes = self.fetch_object_with_retry("retrieve_file", key).await?;
             info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
             Ok(bytes)
         }
@@ -861,6 +879,15 @@ mod tests {
         assert!(service.is_ok());
         #[cfg(not(feature = "s3"))]
         assert!(service.is_err());
+    }
+
+    #[test]
+    fn content_length_mismatch_is_an_error() {
+        assert!(verify_content_length("k", None, 5).is_ok());
+        assert!(verify_content_length("k", Some(5), 5).is_ok());
+        assert!(verify_content_length("k", Some(-1), 5).is_ok(), "unknown length is not checked");
+        let err = verify_content_length("k", Some(100), 5).unwrap_err().to_string();
+        assert!(err.contains("expected 100 bytes, received 5"), "{err}");
     }
 
     #[test]
