@@ -281,7 +281,7 @@ fn test_file_deduplication_logic() {
 fn calculate_content_hash(content: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content);
-    format!("{:x}", hasher.finalize())
+    readur::utils::hash::to_hex(&hasher.finalize())
 }
 
 #[test]

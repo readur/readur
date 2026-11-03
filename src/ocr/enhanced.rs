@@ -1389,7 +1389,7 @@ impl EnhancedOcrService {
 
     /// Convert PDF pages to PNG images using pdftoppm
     #[cfg(feature = "ocr")]
-    async fn extract_pdf_pages_as_images(&self, file_path: &str, page_count: usize) -> Result<Vec<String>> {
+    async fn extract_pdf_pages_as_images(&self, file_path: &str) -> Result<Vec<String>> {
         let temp_prefix = format!("{}/pdf_page_{}_{}",
             self.temp_dir,
             std::process::id(),
@@ -1410,14 +1410,9 @@ impl EnhancedOcrService {
             return Err(anyhow!("pdftoppm failed: {}", String::from_utf8_lossy(&output.stderr)));
         }
 
-        // Collect generated image paths
-        let mut image_paths = Vec::new();
-        for page_num in 1..=page_count {
-            let image_path = format!("{}-{}.png", temp_prefix, page_num);
-            if tokio::fs::metadata(&image_path).await.is_ok() {
-                image_paths.push(image_path);
-            }
-        }
+        // pdftoppm zero-pads page numbers to the page count's width, so list what it wrote
+        let image_paths: Vec<String> = crate::utils::pdftoppm::list_page_images(&temp_prefix, "png").await?
+            .into_iter().map(|p| p.to_string_lossy().into_owned()).collect();
 
         if image_paths.is_empty() {
             return Err(anyhow!("pdftoppm did not produce any image files"));
@@ -1441,7 +1436,7 @@ impl EnhancedOcrService {
         }
 
         // Convert pages to images
-        let image_paths = self.extract_pdf_pages_as_images(file_path, page_count).await?;
+        let image_paths = self.extract_pdf_pages_as_images(file_path).await?;
 
         // OCR each page
         let mut all_text = String::new();
