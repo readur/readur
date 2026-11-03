@@ -280,13 +280,12 @@ impl SourceScheduler {
         Ok(true)
     }
 
-    pub async fn trigger_sync(&self, source_id: uuid::Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn trigger_sync(&self, source_id: uuid::Uuid) -> Result<(), SyncStartError> {
         info!("Triggering manual sync for source {}", source_id);
 
         let source = self.state.db.get_source_by_id(source_id).await?.ok_or(SyncStartError::NotFound)?;
         self.validate_source_config(&source).map_err(SyncStartError::Configuration)?;
-        self.launch_sync(source).await?;
-        Ok(())
+        self.launch_sync(source).await
     }
 
     /// Claims `source` and runs a full sync for it in the background. The

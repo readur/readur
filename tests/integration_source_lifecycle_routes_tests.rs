@@ -300,3 +300,32 @@ async fn stop_ends_a_running_deep_scan() {
     assert!(!h.ctx.state().sync_progress_tracker.is_syncing(id));
     let _ = h.ctx.cleanup_and_close().await;
 }
+
+/// A source whose configuration cannot be used is a client error, not a
+/// server one.
+#[tokio::test]
+async fn sync_of_a_misconfigured_source_is_a_bad_request() {
+    let h = harness().await;
+    let source = CreateSource {
+        name: "no-credentials".into(),
+        source_type: SourceType::WebDAV,
+        enabled: Some(true),
+        config: json!({
+            "server_url": "http://127.0.0.1:1",
+            "username": "",
+            "password": "p",
+            "watch_folders": ["/Documents"],
+            "file_extensions": ["pdf"],
+            "auto_sync": false,
+            "sync_interval_minutes": 60,
+            "server_type": "generic"
+        }),
+    };
+    let id = h.ctx.state().db.create_source(h.user_id, &source).await.unwrap().id;
+
+    let (status, _) = h.send("POST", &format!("/api/sources/{id}/sync"), None).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(!h.scheduler.is_running(id));
+    let _ = h.ctx.cleanup_and_close().await;
+}

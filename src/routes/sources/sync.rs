@@ -34,6 +34,7 @@ use crate::{
     ),
     responses(
         (status = 200, description = "Sync triggered successfully"),
+        (status = 400, description = "Source configuration is invalid"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
         (status = 409, description = "Source is already syncing"),
@@ -61,17 +62,13 @@ pub async fn trigger_sync(
                 // Sync started successfully
             }
             Err(e) => {
-                let error_msg = e.to_string();
-                error!("Failed to trigger sync for source {}: {}", source_id, error_msg);
-                
-                // Map specific errors to appropriate HTTP status codes
-                if error_msg.contains("already syncing") || error_msg.contains("already running") || error_msg.contains("is stopping") {
-                    return Err(StatusCode::CONFLICT);
-                } else if error_msg.contains("not found") {
-                    return Err(StatusCode::NOT_FOUND);
-                } else {
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
+                error!("Failed to trigger sync for source {}: {}", source_id, e);
+                return Err(match e {
+                    SyncStartError::AlreadyRunning | SyncStartError::Stopping | SyncStartError::NotClaimed => StatusCode::CONFLICT,
+                    SyncStartError::NotFound => StatusCode::NOT_FOUND,
+                    SyncStartError::Configuration(_) => StatusCode::BAD_REQUEST,
+                    SyncStartError::Db(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                });
             }
         }
     } else {
