@@ -749,7 +749,7 @@ impl EnhancedOcrService {
         
         // Wrap in panic-safe block to catch overflow errors
         let enhanced = catch_unwind(AssertUnwindSafe(|| {
-            adaptive_threshold(&img, threshold_size)
+            adaptive_threshold(&img, threshold_size, 0) // delta 0 = block mean, as imageproc < 0.27
         }));
         
         match enhanced {
