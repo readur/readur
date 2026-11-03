@@ -5,6 +5,8 @@ use uuid::Uuid;
 use crate::models::{Document, DocumentFilters, UserRole, FailedDocument};
 use super::helpers::{map_row_to_document, apply_document_filters, apply_role_based_filter, DOCUMENT_FIELDS};
 use crate::db::Database;
+use crate::db::constraint_validation::ConstraintValidator;
+use crate::db::sanitize::ToDb;
 
 impl Database {
     /// Deletes a single document with role-based access control
@@ -109,6 +111,11 @@ impl Database {
 
     /// Creates a failed document record
     pub async fn create_failed_document(&self, failed_document: FailedDocument) -> Result<FailedDocument> {
+        let (failure_reason, failure_stage, error_message) = ConstraintValidator::storable_failure(
+            &failed_document.failure_reason,
+            &failed_document.failure_stage,
+            failed_document.error_message.as_deref(),
+        );
         let row = sqlx::query(
             r#"
             INSERT INTO failed_documents (
@@ -124,24 +131,24 @@ impl Database {
         )
         .bind(failed_document.id)
         .bind(failed_document.user_id)
-        .bind(&failed_document.filename)
-        .bind(&failed_document.original_filename)
-        .bind(&failed_document.original_path)
-        .bind(&failed_document.file_path)
+        .bind(failed_document.filename.for_db())
+        .bind(failed_document.original_filename.for_db())
+        .bind(failed_document.original_path.for_db())
+        .bind(failed_document.file_path.for_db())
         .bind(failed_document.file_size)
         .bind(&failed_document.file_hash)
-        .bind(&failed_document.mime_type)
-        .bind(&failed_document.content)
-        .bind(&failed_document.tags)
-        .bind(&failed_document.ocr_text)
+        .bind(failed_document.mime_type.for_db())
+        .bind(failed_document.content.for_db())
+        .bind(failed_document.tags.for_db())
+        .bind(failed_document.ocr_text.for_db())
         .bind(failed_document.ocr_confidence)
         .bind(failed_document.ocr_word_count)
         .bind(failed_document.ocr_processing_time_ms)
-        .bind(&failed_document.failure_reason)
-        .bind(&failed_document.failure_stage)
+        .bind(&failure_reason)
+        .bind(&failure_stage)
         .bind(failed_document.existing_document_id)
-        .bind(&failed_document.ingestion_source)
-        .bind(&failed_document.error_message)
+        .bind(failed_document.ingestion_source.for_db())
+        .bind(error_message.for_db())
         .bind(failed_document.retry_count)
         .bind(failed_document.last_retry_at)
         .bind(failed_document.created_at)

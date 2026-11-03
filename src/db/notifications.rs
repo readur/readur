@@ -3,6 +3,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use super::Database;
+use super::sanitize::ToDb;
 
 impl Database {
     pub async fn create_notification(&self, user_id: Uuid, notification: &crate::models::CreateNotification) -> Result<crate::models::Notification> {
@@ -14,10 +15,10 @@ impl Database {
             )
             .bind(user_id)
             .bind(&notification.notification_type)
-            .bind(&notification.title)
-            .bind(&notification.message)
-            .bind(&notification.action_url)
-            .bind(&notification.metadata)
+            .bind(notification.title.for_db())
+            .bind(notification.message.for_db())
+            .bind(notification.action_url.for_db())
+            .bind(notification.metadata.for_db())
             .fetch_one(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database insert failed: {}", e))?;

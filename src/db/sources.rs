@@ -5,6 +5,7 @@ use uuid::Uuid;
 use tracing::{info, warn, error};
 
 use super::Database;
+use super::sanitize::ToDb;
 
 impl Database {
     pub async fn create_source(&self, user_id: Uuid, source: &crate::models::CreateSource) -> Result<crate::models::Source> {
@@ -18,10 +19,10 @@ impl Database {
         )
         .bind(id)
         .bind(user_id)
-        .bind(&source.name)
+        .bind(source.name.for_db())
         .bind(source.source_type.to_string())
         .bind(source.enabled.unwrap_or(true))
-        .bind(&source.config)
+        .bind(source.config.for_db())
         .bind(now)
         .bind(now)
         .fetch_one(&self.pool)
@@ -147,13 +148,13 @@ impl Database {
 
         // Bind values in order
         if let Some(name) = &update.name {
-            query_builder = query_builder.bind(name);
+            query_builder = query_builder.bind(name.for_db());
         }
         if let Some(enabled) = &update.enabled {
             query_builder = query_builder.bind(enabled);
         }
         if let Some(config) = &update.config {
-            query_builder = query_builder.bind(config);
+            query_builder = query_builder.bind(config.for_db());
         }
         query_builder = query_builder.bind(source_id);
         query_builder = query_builder.bind(user_id);
@@ -203,7 +204,7 @@ impl Database {
                    WHERE id = $3"#
             )
             .bind(status.to_string())
-            .bind(error_msg)
+            .bind(error_msg.for_db())
             .bind(source_id)
             .execute(&self.pool)
             .await?;
@@ -450,7 +451,7 @@ impl Database {
                    WHERE id = $3"#
             )
             .bind(new_status.to_string())
-            .bind(error_msg)
+            .bind(error_msg.for_db())
             .bind(source_id)
             .execute(&mut *tx)
             .await?
@@ -567,7 +568,7 @@ impl Database {
                     )
                     .bind(new_status)
                     .bind(files)
-                    .bind(error_msg)
+                    .bind(error_msg.for_db())
                     .bind(source_id)
                     .execute(&mut *tx)
                     .await?
@@ -594,7 +595,7 @@ impl Database {
                            WHERE id = $3"#
                     )
                     .bind(new_status)
-                    .bind(error_msg)
+                    .bind(error_msg.for_db())
                     .bind(source_id)
                     .execute(&mut *tx)
                     .await?

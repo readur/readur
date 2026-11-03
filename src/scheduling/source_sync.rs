@@ -819,7 +819,7 @@ impl SourceSyncService {
             )
             .bind(source_id)
             .bind(status.to_string())
-            .bind(error)
+            .bind(crate::db::sanitize::DbText(error))
         } else {
             sqlx::query(
                 r#"UPDATE sources 
@@ -847,7 +847,7 @@ impl SourceSyncService {
             )
             .bind(source_id)
             .bind(status.to_string())
-            .bind(error)
+            .bind(crate::db::sanitize::DbText(error))
         } else {
             sqlx::query(
                 r#"UPDATE sources 
