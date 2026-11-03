@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf, Component};
 use tracing::{warn, debug};
-use rand::Rng;
+use rand::RngExt;
 
 /// Validate and sanitize file paths to prevent path traversal attacks
 pub fn validate_and_sanitize_path(input_path: &str) -> Result<String> {
@@ -245,11 +245,11 @@ pub fn generate_secure_password(length: usize) -> String {
                             0123456789\
                             !@#$%^&*-_=+";
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     (0..length)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()

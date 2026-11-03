@@ -8,7 +8,7 @@ use tokio::time::sleep;
 // futures_util::stream import removed as unused
 use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use rand::Rng;
+use rand::RngExt;
 
 use crate::models::{
     FileIngestionInfo,
@@ -651,7 +651,7 @@ impl WebDAVService {
         let exponential_delay = (base_delay as f64 * self.retry_config.backoff_multiplier.powi(attempt as i32)) as u64;
         
         // Add jitter: 0.9 to 1.1 multiplier (10-20% randomization)
-        let jitter_multiplier = 0.9 + rand::thread_rng().gen::<f64>() * 0.2;
+        let jitter_multiplier = 0.9 + rand::rng().random::<f64>() * 0.2;
         
         let jittered_delay = (exponential_delay as f64 * jitter_multiplier) as u64;
         

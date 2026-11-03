@@ -80,7 +80,7 @@ testcontainers-modules = { version = "0.15", features = ["postgres"], optional =
 libc = { version = "0.2", optional = true }
 # Office document support - now using XML extraction only
 zip = "9"             # Still needed for other archive handling
-rand = "0.9"
+rand = "0.10"
 
 [features]
 default = ["ocr", "s3"]
@@ -94,7 +94,7 @@ tempfile = "3"
 wiremock = "0.6"
 tokio-test = "0.4"
 futures = "0.3"
-rand = "0.9"
+rand = "0.10"
 # Database testing dependencies
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
