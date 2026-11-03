@@ -492,8 +492,8 @@ fn test_file_hash_comparison() {
     assert_eq!(hash_1, hash_3, "Same content should have same hashes");
     
     // Test hex encoding
-    let hash_1_hex = format!("{:x}", hash_1);
-    let hash_3_hex = format!("{:x}", hash_3);
+    let hash_1_hex = readur::utils::hash::to_hex(&hash_1);
+    let hash_3_hex = readur::utils::hash::to_hex(&hash_3);
     assert_eq!(hash_1_hex, hash_3_hex);
     assert_eq!(hash_1_hex.len(), 64); // SHA256 is 64 hex characters
 }
