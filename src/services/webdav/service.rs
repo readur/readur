@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use std::collections::HashSet;
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 // futures_util::stream import removed as unused
 use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -209,6 +210,8 @@ pub struct WebDAVService {
     download_semaphore: Arc<Semaphore>,
     /// Stores the working protocol (updated after successful protocol detection)
     working_protocol: Arc<std::sync::RwLock<Option<String>>>,
+    /// When set, discovery and downloads stop at the next check once it is cancelled.
+    cancellation: Option<CancellationToken>,
 }
 
 impl WebDAVService {
@@ -256,7 +259,22 @@ impl WebDAVService {
             scan_semaphore,
             download_semaphore,
             working_protocol: Arc::new(std::sync::RwLock::new(None)),
+            cancellation: None,
         })
+    }
+
+    /// Makes discovery and downloads stop (with an error) once `token` is cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation = Some(token);
+        self
+    }
+
+    /// Fails fast when the cancellation token, if any, has been triggered.
+    fn check_cancelled(&self) -> Result<()> {
+        match &self.cancellation {
+            Some(token) if token.is_cancelled() => Err(anyhow!("WebDAV operation cancelled")),
+            _ => Ok(()),
+        }
     }
 
 
@@ -755,6 +773,7 @@ impl WebDAVService {
         }
 
         loop {
+            self.check_cancelled()?;
             let mut request = self.client
                 .request(method.clone(), url)
                 .basic_auth(&self.config.username, Some(&self.config.password))
@@ -987,6 +1006,7 @@ impl WebDAVService {
         recursive: bool,
         tracking: Option<&DiscoveryTracking>,
     ) -> Result<WebDAVScanResult> {
+        self.check_cancelled()?;
         let request_id = uuid::Uuid::new_v4();
         let start_time = Instant::now();
         info!("[{}] 🔍 Discovering '{}' (recursive: {}, tracked: {}, user_agent: '{}')",
@@ -1020,6 +1040,7 @@ impl WebDAVService {
         let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
 
         while !directories_to_scan.is_empty() {
+            self.check_cancelled()?;
             let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
             let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
             debug!("Processing batch of {} directories, {} remaining in queue",
@@ -1255,82 +1276,6 @@ impl WebDAVService {
     }
 
     // ============================================================================
-    // Error Tracking Helper Methods
-    // ============================================================================
-
-    /// Creates a SourceErrorTracker for use with enhanced discovery methods
-    pub fn create_error_tracker(&self, db: crate::db::Database) -> SourceErrorTracker {
-        SourceErrorTracker::new(db)
-    }
-
-    /// Helper method to check if a directory should be skipped due to previous failures
-    /// This is useful for individual operations that want to integrate error tracking
-    pub async fn should_skip_directory_for_failures(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-    ) -> Result<bool> {
-        error_tracker.should_skip_resource(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-        ).await
-    }
-
-    /// Helper method to mark a directory operation as successful
-    /// This resolves any previous failure tracking for the directory
-    pub async fn mark_directory_operation_success(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-    ) -> Result<()> {
-        error_tracker.mark_success(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-        ).await
-    }
-
-    /// Helper method to track a directory operation failure
-    /// This records the error and applies appropriate retry logic
-    pub async fn mark_directory_operation_failure(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        error: &anyhow::Error,
-        operation: &str,
-        duration: std::time::Duration,
-    ) -> Result<uuid::Uuid> {
-        let context = ErrorContext {
-            resource_path: directory_path.to_string(),
-            source_id,
-            operation: operation.to_string(),
-            response_time: Some(duration),
-            response_size: None,
-            server_type: self.config.server_type.clone(),
-            server_version: None,
-            additional_context: std::collections::HashMap::new(),
-        };
-
-        error_tracker.track_error(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-            error,
-            context,
-        ).await
-    }
-
-    // ============================================================================
     // File Operations
     // ============================================================================
 
@@ -1361,23 +1306,6 @@ impl WebDAVService {
         Ok(deduplicated_files)
     }
 
-    /// Discovers files changed since a specific date (for incremental syncs)
-    pub async fn discover_changed_files(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<FileIngestionInfo>> {
-        info!("🔍 Discovering files changed since: {}", since);
-        
-        let all_files = self.discover_all_files().await?;
-        let changed_files = self.filter_files_by_date(all_files, since);
-        
-        info!("📈 Found {} files changed since {}", changed_files.len(), since);
-        Ok(changed_files)
-    }
-
-    /// Discovers files in a specific directory
-    pub async fn discover_files_in_directory(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileIngestionInfo>> {
-        info!("🔍 Discovering files in directory: {} (recursive: {})", directory_path, recursive);
-        self.discover_files(directory_path, recursive).await
-    }
-
     /// Downloads a file from WebDAV server by path
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {
         // Convert full WebDAV paths to relative paths to prevent double path construction
@@ -1395,7 +1323,9 @@ impl WebDAVService {
     /// after checking the body is complete and is not an HTML page standing in
     /// for the file.
     async fn fetch_file(&self, relative_path: &str, file_name: &str) -> Result<(Vec<u8>, Option<String>)> {
+        self.check_cancelled()?;
         let _permit = self.download_semaphore.acquire().await?;
+        self.check_cancelled()?;
         debug!("⬇️ Downloading file: {}", relative_path);
 
         let url = self.get_url_for_path(relative_path);
@@ -1943,6 +1873,7 @@ impl Clone for WebDAVService {
             scan_semaphore: Arc::clone(&self.scan_semaphore),
             download_semaphore: Arc::clone(&self.download_semaphore),
             working_protocol: Arc::clone(&self.working_protocol),
+            cancellation: self.cancellation.clone(),
         }
     }
 }

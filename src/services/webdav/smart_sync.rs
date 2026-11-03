@@ -4,6 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+use tokio_util::sync::CancellationToken;
 
 use crate::{AppState, models::{FileIngestionInfo}};
 use crate::models::source::{CreateWebDAVDirectory};
@@ -84,6 +85,7 @@ fn is_immediate_child(parent_path: &str, child_path: &str) -> bool {
 pub struct SmartSyncService {
     state: Arc<AppState>,
     error_tracker: SourceErrorTracker,
+    cancellation: Option<CancellationToken>,
 }
 
 /// Result of smart sync evaluation
@@ -144,7 +146,20 @@ pub struct SmartSyncOutcome {
 impl SmartSyncService {
     pub fn new(state: Arc<AppState>) -> Self {
         let error_tracker = SourceErrorTracker::new(state.db.clone());
-        Self { state, error_tracker }
+        Self { state, error_tracker, cancellation: None }
+    }
+
+    /// Makes evaluation and scanning stop (with an error) once `token` is cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation = Some(token);
+        self
+    }
+
+    fn check_cancelled(&self) -> Result<()> {
+        match &self.cancellation {
+            Some(token) if token.is_cancelled() => Err(anyhow::anyhow!("Smart sync cancelled")),
+            _ => Ok(()),
+        }
     }
 
     /// Get access to the application state (primarily for testing)
@@ -179,6 +194,7 @@ impl SmartSyncService {
         webdav_service: &WebDAVService,
         folder_path: &str,
     ) -> Result<Evaluation> {
+        self.check_cancelled()?;
         let evaluation_start = Instant::now();
         let eval_request_id = Uuid::new_v4();
         
@@ -367,6 +383,7 @@ impl SmartSyncService {
         strategy: SmartSyncStrategy,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncResult> {
+        self.check_cancelled()?;
         let sync_request_id = Uuid::new_v4();
         match strategy {
             SmartSyncStrategy::FullDeepScan => {
@@ -557,6 +574,7 @@ impl SmartSyncService {
         let mut directories_scanned = 0;
 
         for target_dir in &target_directories {
+            self.check_cancelled()?;
             info!("Scanning target directory: {}", target_dir);
             let scan = match webdav_service.discover_tree(target_dir, true, Some(&tracking)).await {
                 Ok(scan) => scan,
