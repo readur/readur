@@ -243,6 +243,7 @@ async fn perform_sync_internal(
                             enable_background_ocr,
                             semaphore_clone,
                             webdav_source_id,
+                            None,
                         ).await
                     };
                     
@@ -368,6 +369,7 @@ async fn process_single_file(
     enable_background_ocr: bool,
     semaphore: Arc<Semaphore>,
     webdav_source_id: Option<uuid::Uuid>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<bool, String> {
     let file_start_time = Instant::now();
     let file_request_id = Uuid::new_v4();
@@ -378,6 +380,13 @@ async fn process_single_file(
                file_request_id, file_info.path, e);
         format!("Semaphore error: {}", e)
     })?;
+
+    // Checked after the permit, so files queued behind the concurrency
+    // limit are not started once the run has been stopped.
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        debug!("[{}] Run cancelled, not starting file: '{}'", file_request_id, file_info.path);
+        return Ok(false);
+    }
     
     // Check if sync has been cancelled before processing this file
     if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
@@ -571,7 +580,10 @@ async fn process_single_file(
     Ok(true) // Successfully processed
 }
 
-/// Process files for deep scan - similar to regular sync but forces processing
+/// Process files for deep scan - similar to regular sync but forces processing.
+/// Once `cancellation` is triggered no further file is started and the
+/// count of files processed so far is returned; the caller decides how to
+/// record the interrupted run.
 pub async fn process_files_for_deep_scan(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
@@ -579,6 +591,7 @@ pub async fn process_files_for_deep_scan(
     files_to_process: &[crate::models::FileIngestionInfo],
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
+    cancellation: &tokio_util::sync::CancellationToken,
 ) -> Result<usize, anyhow::Error> {
     let deep_scan_start = Instant::now();
     let deep_scan_request_id = Uuid::new_v4();
@@ -604,6 +617,7 @@ pub async fn process_files_for_deep_scan(
         let webdav_service_clone = webdav_service.clone();
         let file_info_clone = file_info.clone();
         let semaphore_clone = semaphore.clone();
+        let cancellation = cancellation.clone();
         
         // Create a future for processing this file
         let future = async move {
@@ -615,6 +629,7 @@ pub async fn process_files_for_deep_scan(
                 enable_background_ocr,
                 semaphore_clone,
                 webdav_source_id,
+                Some(&cancellation),
             ).await
         };
         

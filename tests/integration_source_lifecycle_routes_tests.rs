@@ -13,7 +13,54 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path, path_regex},
+    Mock, MockServer, ResponseTemplate,
+};
+
+const DEEP_SCAN_FILE_COUNT: usize = 30;
+
+fn entry(href: &str, etag: &str, is_dir: bool) -> String {
+    let resourcetype = if is_dir { "<d:resourcetype><d:collection/></d:resourcetype>" } else { "<d:resourcetype/>" };
+    format!(
+        r#"<d:response><d:href>{href}</d:href><d:propstat><d:prop>
+            <d:getlastmodified>Tue, 29 Jul 2025 01:34:17 GMT</d:getlastmodified>
+            <d:getetag>"{etag}"</d:getetag>{resourcetype}<d:getcontentlength>9</d:getcontentlength>
+        </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"#
+    )
+}
+
+/// `/Documents` with many PDF files, each of which takes a second to download.
+async fn mount_slow_documents(server: &MockServer) {
+    let mut entries = vec![entry("/Documents/", "root-v1", true)];
+    entries.extend((0..DEEP_SCAN_FILE_COUNT).map(|i| entry(&format!("/Documents/file-{i}.pdf"), &format!("f-{i}"), false)));
+    let listing = format!(r#"<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">{}</d:multistatus>"#, entries.join(""));
+    Mock::given(method("PROPFIND"))
+        .and(path("/Documents"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(listing))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/Documents/file-\d+\.pdf$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/pdf")
+                .set_body_bytes(b"%PDF-1.4\n".to_vec())
+                .set_delay(Duration::from_secs(1)),
+        )
+        .mount(server)
+        .await;
+}
+
+async fn downloads_received(server: &MockServer) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r.method == wiremock::http::Method::GET)
+        .count()
+}
 
 struct Harness {
     ctx: TestContext,
@@ -212,6 +259,44 @@ async fn deep_scan_claims_and_releases_the_source() {
         assert!(tokio::time::Instant::now() < deadline, "source stayed syncing after the deep scan");
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
+    assert!(!h.ctx.state().sync_progress_tracker.is_syncing(id));
+    let _ = h.ctx.cleanup_and_close().await;
+}
+
+/// A stop request ends a deep scan that is in the middle of downloading:
+/// the task exits well before it would have finished, the files not yet
+/// started are not fetched, and the run is recorded as cancelled.
+#[tokio::test]
+async fn stop_ends_a_running_deep_scan() {
+    let h = harness().await;
+    let server = MockServer::start().await;
+    mount_slow_documents(&server).await;
+    let id = h.webdav_source(&server.uri()).await;
+
+    let (status, body) = h.send("POST", &format!("/api/sources/{id}/scan/deep"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["success"], json!(true), "{body}");
+
+    // Wait until the scan is downloading, then stop it.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while downloads_received(&server).await == 0 {
+        assert!(tokio::time::Instant::now() < deadline, "deep scan never started downloading");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    let (status, _) = h.send("POST", &format!("/api/sources/{id}/sync/stop"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Left alone the scan would need 6 s (30 files, 5 at a time, 1 s each).
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
+    while h.scheduler.is_running(id) {
+        assert!(tokio::time::Instant::now() < deadline, "deep scan kept running after the stop request");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(downloads_received(&server).await < DEEP_SCAN_FILE_COUNT, "every file was still downloaded");
+    let source = h.source(id).await.unwrap();
+    assert_eq!(source.status, SourceStatus::Idle);
+    assert_eq!(source.last_error.as_deref(), Some("Sync cancelled by user"));
+    assert!(source.last_sync_at.is_some());
     assert!(!h.ctx.state().sync_progress_tracker.is_syncing(id));
     let _ = h.ctx.cleanup_and_close().await;
 }

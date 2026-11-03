@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crate::{
     auth::AuthUser,
-    db::sources::SyncCompletion,
+    db::sources::{SyncCompletion, SYNC_CANCELLED_MESSAGE},
     models::SourceStatus,
     scheduling::source_scheduler::SyncStartError,
     services::webdav::{SyncProgress, SyncPhase},
@@ -279,7 +279,7 @@ pub async fn trigger_deep_scan(
 
     // The same claim as every other sync: refused while any sync task for
     // the source is alive, released when the scan task ends.
-    match scheduler.run_claimed(source_id, move |_token, progress| scan.run(progress)).await {
+    match scheduler.run_claimed(source_id, move |token, progress| scan.run(token, progress)).await {
         Ok(()) => Ok(Json(serde_json::json!({
             "success": true,
             "message": format!("Deep scan started for source '{}'. This will perform a complete rescan of all configured folders.", source.name)
@@ -311,52 +311,65 @@ struct DeepScan {
 }
 
 impl DeepScan {
-    async fn run(self, progress: Arc<SyncProgress>) {
+    /// Runs the scan to completion, or until `token` is cancelled; a
+    /// cancelled run is recorded like a stopped sync, with the files it had
+    /// already ingested.
+    async fn run(self, token: tokio_util::sync::CancellationToken, progress: Arc<SyncProgress>) {
         let start_time = chrono::Utc::now();
         progress.set_phase(SyncPhase::Initializing);
         info!("🚀 Starting manual deep scan for source '{}'", self.source_name);
+        let scan = DeepScan { webdav_service: self.webdav_service.with_cancellation_token(token.clone()), ..self };
+        let this = &scan;
 
-        let (files, directories_tracked) = self.discover(&progress).await;
-
-        if files.is_empty() {
-            info!("Deep scan found no files but tracked {} directories for source {}", directories_tracked, self.source_id);
-            progress.set_phase(SyncPhase::Completed);
-            let message = format!("Smart deep scan completed: {} directories tracked, no files found", directories_tracked);
-            self.finish(SourceStatus::Idle, &message, 0).await;
+        let (files, directories_tracked) = this.discover(&token, &progress).await;
+        if token.is_cancelled() {
+            this.finish_cancelled(0).await;
             return;
         }
 
-        info!("Deep scan will process {} files from {} directories for source {}", files.len(), directories_tracked, self.source_id);
+        if files.is_empty() {
+            info!("Deep scan found no files but tracked {} directories for source {}", directories_tracked, this.source_id);
+            progress.set_phase(SyncPhase::Completed);
+            let message = format!("Smart deep scan completed: {} directories tracked, no files found", directories_tracked);
+            this.finish(SourceStatus::Idle, &message, 0, Some(0)).await;
+            return;
+        }
+
+        info!("Deep scan will process {} files from {} directories for source {}", files.len(), directories_tracked, this.source_id);
         match crate::routes::webdav::webdav_sync::process_files_for_deep_scan(
-            self.state.clone(),
-            self.user_id,
-            &self.webdav_service,
+            this.state.clone(),
+            this.user_id,
+            &this.webdav_service,
             &files,
             true, // enable background OCR
-            Some(self.source_id),
+            Some(this.source_id),
+            &token,
         ).await {
+            Ok(files_processed) if token.is_cancelled() => {
+                this.finish_cancelled(files_processed as i64).await;
+            }
             Ok(files_processed) => {
                 let duration = chrono::Utc::now() - start_time;
-                info!("Deep scan completed for source {}: {} files processed in {:?}", self.source_id, files_processed, duration);
+                info!("Deep scan completed for source {}: {} files processed in {:?}", this.source_id, files_processed, duration);
                 progress.set_phase(SyncPhase::Completed);
-                self.finish(SourceStatus::Idle, &format!("Deep scan completed: {} files processed", files_processed), files_processed as i64).await;
-                self.notify("success", "Deep Scan Completed", format!(
+                this.finish(SourceStatus::Idle, &format!("Deep scan completed: {} files processed", files_processed), files_processed as i64, Some(0)).await;
+                this.notify("success", "Deep Scan Completed", format!(
                     "Smart deep scan of {} completed successfully. {} files processed, {} directories tracked in {:.1} minutes.",
-                    self.source_name, files_processed, directories_tracked, duration.num_seconds() as f64 / 60.0
+                    this.source_name, files_processed, directories_tracked, duration.num_seconds() as f64 / 60.0
                 ), serde_json::json!({
-                    "source_id": self.source_id,
+                    "source_id": this.source_id,
                     "scan_type": "deep_scan",
                     "files_processed": files_processed,
                     "duration_seconds": duration.num_seconds()
                 })).await;
             }
             Err(e) => {
-                error!("Deep scan file processing failed for source {}: {}", self.source_id, e);
+                error!("Deep scan file processing failed for source {}: {}", this.source_id, e);
                 progress.set_phase(SyncPhase::Failed(e.to_string()));
                 progress.add_error(&format!("File processing failed: {}", e));
-                self.finish(SourceStatus::Error, &format!("Deep scan failed: {}", e), 0).await;
-                self.notify("error", "Deep Scan Failed", format!("Deep scan of {} failed: {}", self.source_name, e), serde_json::json!({
-                    "source_id": self.source_id,
+                this.finish(SourceStatus::Error, &format!("Deep scan failed: {}", e), 0, Some(0)).await;
+                this.notify("error", "Deep Scan Failed", format!("Deep scan of {} failed: {}", this.source_name, e), serde_json::json!({
+                    "source_id": this.source_id,
                     "scan_type": "deep_scan",
                     "error": e.to_string()
                 })).await;
@@ -365,11 +378,20 @@ impl DeepScan {
     }
 
     /// Rescans every watch folder; a folder that fails is logged and skipped.
-    async fn discover(&self, progress: &Arc<SyncProgress>) -> (Vec<crate::models::FileIngestionInfo>, usize) {
-        let smart_sync_service = crate::services::webdav::SmartSyncService::new(self.state.clone());
+    /// Stops between folders once `token` is cancelled.
+    async fn discover(
+        &self,
+        token: &tokio_util::sync::CancellationToken,
+        progress: &Arc<SyncProgress>,
+    ) -> (Vec<crate::models::FileIngestionInfo>, usize) {
+        let smart_sync_service = crate::services::webdav::SmartSyncService::new(self.state.clone())
+            .with_cancellation_token(token.clone());
         let mut files = Vec::new();
         let mut directories_tracked = 0;
         for watch_folder in &self.watch_folders {
+            if token.is_cancelled() {
+                break;
+            }
             info!("🔍 Deep scan processing watch folder: {}", watch_folder);
             progress.set_current_directory(watch_folder);
             match smart_sync_service.perform_smart_sync(
@@ -385,6 +407,8 @@ impl DeepScan {
                     files.extend(result.files.into_iter().filter(|f| self.extensions.matches_name(&f.name)));
                     directories_tracked += result.directories.len();
                 }
+                // A scan interrupted by the stop request is not a folder failure.
+                Err(_) if token.is_cancelled() => break,
                 Err(e) => {
                     let error_msg = format!("Deep scan failed for watch folder {}: {}", watch_folder, e);
                     error!("{}", error_msg);
@@ -395,8 +419,16 @@ impl DeepScan {
         (files, directories_tracked)
     }
 
-    async fn finish(&self, status: SourceStatus, message: &str, files_synced: i64) {
-        let completion = SyncCompletion { status, error: Some(message), files_synced, files_pending: Some(0) };
+    /// Records a stopped scan: idle with the cancelled message, the files
+    /// ingested so far added to the total, and the pending count left alone
+    /// because the scan did not get to count what remained.
+    async fn finish_cancelled(&self, files_synced: i64) {
+        info!("Deep scan for source {} was cancelled after {} files", self.source_id, files_synced);
+        self.finish(SourceStatus::Idle, SYNC_CANCELLED_MESSAGE, files_synced, None).await;
+    }
+
+    async fn finish(&self, status: SourceStatus, message: &str, files_synced: i64, files_pending: Option<i64>) {
+        let completion = SyncCompletion { status, error: Some(message), files_synced, files_pending };
         match self.state.db.finish_sync(self.source_id, &completion).await {
             Ok(true) => {}
             Ok(false) => warn!("Deep scan completion for source {} not recorded: the source was no longer marked as syncing", self.source_id),
