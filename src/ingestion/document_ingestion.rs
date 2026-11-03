@@ -343,7 +343,7 @@ impl DocumentIngestionService {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let result = hasher.finalize();
-        format!("{:x}", result)
+        crate::utils::hash::to_hex(&result)
     }
 
     /// Auto-rotate image bytes according to EXIF orientation tag (if present).
