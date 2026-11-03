@@ -70,6 +70,14 @@ describe('Add documents: drop area (ported from UploadZone)', () => {
     expect(screen.getByRole('button', { name: 'Choose files' })).toBeInTheDocument();
   });
 
+  it('hides the dropzone file input from assistive tech', async () => {
+    renderIntake(<UploadSection />);
+    await settle();
+    // react-dropzone >= 16 leaves the input in the accessibility tree, where browsers
+    // announce a file input as a second "Choose files" button (jsdom gives it no role).
+    expect(fileInput()).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('keeps Choose files enabled and pressable', async () => {
     const user = userEvent.setup();
     renderIntake(<UploadSection />);
