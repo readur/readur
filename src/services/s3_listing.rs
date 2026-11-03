@@ -14,6 +14,8 @@ use anyhow::{anyhow, Result};
 #[cfg(feature = "s3")]
 use crate::models::FileIngestionInfo;
 #[cfg(feature = "s3")]
+use crate::services::s3_client::describe_error;
+#[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
 use chrono::DateTime;
@@ -94,7 +96,7 @@ pub(crate) async fn list_objects(ctx: &ListingContext<'_>, prefix: &str) -> Resu
         let response = request
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to list S3 objects: {}", e))?;
+            .map_err(|e| anyhow!("Failed to list S3 objects: {}", describe_error(&e)))?;
 
         for object in response.contents.unwrap_or_default() {
             if let Some(info) = object_to_file_info(object, ctx) {

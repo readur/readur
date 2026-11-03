@@ -13,6 +13,8 @@ use aws_sdk_s3::primitives::ByteStream;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
 #[cfg(feature = "s3")]
+use crate::services::s3_client::describe_error;
+#[cfg(feature = "s3")]
 use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, MAX_LISTING_PAGES};
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
@@ -112,10 +114,10 @@ impl S3Service {
             .key(object_key)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to download S3 object {}: {}", object_key, e))?;
+            .map_err(|e| anyhow!("Failed to download S3 object {}: {}", object_key, describe_error(&e)))?;
 
         let body = response.body.collect().await
-            .map_err(|e| anyhow!("Failed to read S3 object body: {}", e))?;
+            .map_err(|e| anyhow!("Failed to read S3 object body: {}", describe_error(&e)))?;
 
         let bytes = body.into_bytes().to_vec();
         info!("Downloaded S3 object {} ({} bytes)", object_key, bytes.len());
@@ -142,7 +144,7 @@ impl S3Service {
                 .max_keys(1)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Failed to access S3 bucket {}: {}", self.config.bucket_name, e))?;
+                .map_err(|e| anyhow!("Failed to access S3 bucket {}: {}", self.config.bucket_name, describe_error(&e)))?;
 
             // Test if we can get bucket region (additional validation)
             let _head_bucket_response = self.client
@@ -150,7 +152,7 @@ impl S3Service {
                 .bucket(&self.config.bucket_name)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Cannot access bucket {}: {}", self.config.bucket_name, e))?;
+                .map_err(|e| anyhow!("Cannot access bucket {}: {}", self.config.bucket_name, describe_error(&e)))?;
 
             let object_count = response.key_count.unwrap_or(0);
             
@@ -308,7 +310,7 @@ impl S3Service {
                     }
 
                     put_request.send().await
-                        .map_err(|e| anyhow!("Failed to store file {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to store file {}: {}", key, describe_error(&e)))?;
 
                     Ok(())
                 }
@@ -364,7 +366,7 @@ impl S3Service {
                     }
 
                     let create_response = create_request.send().await
-                        .map_err(|e| anyhow!("Failed to initiate multipart upload for {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to initiate multipart upload for {}: {}", key, describe_error(&e)))?;
                     
                     let upload_id = create_response.upload_id()
                         .ok_or_else(|| anyhow!("Missing upload ID in multipart upload response"))?;
@@ -390,7 +392,7 @@ impl S3Service {
                             .body(ByteStream::from(chunk.to_vec()))
                             .send()
                             .await
-                            .map_err(|e| anyhow!("Failed to upload part {} for {}: {}", part_number, key, e))?;
+                            .map_err(|e| anyhow!("Failed to upload part {} for {}: {}", part_number, key, describe_error(&e)))?;
 
                         let etag = upload_part_response.e_tag()
                             .ok_or_else(|| anyhow!("Missing ETag in upload part response"))?;
@@ -434,11 +436,11 @@ impl S3Service {
                                     .send()
                                     .await
                                 {
-                                    error!("Failed to abort multipart upload: {}", abort_err);
+                                    error!("Failed to abort multipart upload: {}", describe_error(&abort_err));
                                 }
                             });
                             
-                            anyhow!("Failed to complete multipart upload for {}: {}", key, e)
+                            anyhow!("Failed to complete multipart upload for {}: {}", key, describe_error(&e))
                         })?;
 
                     info!("Successfully completed multipart upload for {}", key);
@@ -477,10 +479,10 @@ impl S3Service {
                         .key(&key)
                         .send()
                         .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, describe_error(&e)))?;
 
                     let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to read file body: {}", describe_error(&e)))?;
 
                     Ok(body.into_bytes().to_vec())
                 }
@@ -508,7 +510,7 @@ impl S3Service {
                 .key(key)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, e))?;
+                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, describe_error(&e)))?;
 
             info!("Successfully deleted file: {}", key);
             Ok(())
@@ -532,14 +534,9 @@ impl S3Service {
                 .await
             {
                 Ok(_) => Ok(true),
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("NotFound") || error_msg.contains("404") {
-                        Ok(false)
-                    } else {
-                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
-                    }
-                }
+                // HeadObject reports a missing key as a NotFound service error.
+                Err(e) if e.as_service_error().map(|s| s.is_not_found()) == Some(true) => Ok(false),
+                Err(e) => Err(anyhow!("Failed to check file existence {}: {}", key, describe_error(&e))),
             }
         }
     }
@@ -735,10 +732,10 @@ impl StorageBackend for S3Service {
                         .key(&key)
                         .send()
                         .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, describe_error(&e)))?;
 
                     let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to read file body: {}", describe_error(&e)))?;
 
                     Ok(body.into_bytes().to_vec())
                 }
@@ -816,14 +813,9 @@ impl StorageBackend for S3Service {
                 .await
             {
                 Ok(_) => Ok(true),
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("NotFound") || error_msg.contains("404") {
-                        Ok(false)
-                    } else {
-                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
-                    }
-                }
+                // HeadObject reports a missing key as a NotFound service error.
+                Err(e) if e.as_service_error().map(|s| s.is_not_found()) == Some(true) => Ok(false),
+                Err(e) => Err(anyhow!("Failed to check file existence {}: {}", key, describe_error(&e))),
             }
         }
     }

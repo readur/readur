@@ -3,7 +3,65 @@
 
 use super::S3Service;
 use crate::services::s3_listing::mock_s3::*;
-use wiremock::{matchers::{method, path_regex, query_param}, Mock, MockServer, ResponseTemplate};
+use crate::storage::StorageBackend;
+use wiremock::{matchers::{method, path, path_regex, query_param}, Mock, MockServer, ResponseTemplate};
+
+const ACCESS_DENIED_XML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>r1</RequestId><HostId>h1</HostId></Error>"#;
+
+#[tokio::test]
+async fn listing_error_reports_the_service_error_code() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/b/?$"))
+        .respond_with(ResponseTemplate::new(403).set_body_raw(ACCESS_DENIED_XML, "application/xml"))
+        .mount(&server)
+        .await;
+
+    let service = S3Service::new(config_for(&server)).await.unwrap();
+    let err = service.discover_files_in_folder("docs").await.unwrap_err().to_string();
+    assert!(err.contains("AccessDenied"), "error text should carry the S3 error code, got: {err}");
+    assert!(err.contains("Access Denied"), "error text should carry the S3 message, got: {err}");
+}
+
+#[tokio::test]
+async fn test_connection_error_is_categorised_as_authentication() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/b/?$"))
+        .respond_with(ResponseTemplate::new(403).set_body_raw(ACCESS_DENIED_XML, "application/xml"))
+        .mount(&server)
+        .await;
+
+    let service = S3Service::new(config_for(&server)).await.unwrap();
+    let err = service.test_connection().await.unwrap_err().to_string();
+    assert_eq!(
+        crate::utils::outbound::categorize_connection_error(&err),
+        "Authentication failed - check the credentials"
+    );
+}
+
+#[tokio::test]
+async fn file_exists_distinguishes_missing_from_failure() {
+    let server = MockServer::start().await;
+    Mock::given(method("HEAD")).and(path("/b/missing.pdf"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    Mock::given(method("HEAD")).and(path("/b/present.pdf"))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Length", "3"))
+        .mount(&server)
+        .await;
+    Mock::given(method("HEAD")).and(path("/b/forbidden.pdf"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+
+    let service = S3Service::new(config_for(&server)).await.unwrap();
+    assert!(!StorageBackend::file_exists(&service, "s3://missing.pdf").await.unwrap());
+    assert!(StorageBackend::file_exists(&service, "s3://present.pdf").await.unwrap());
+    assert!(StorageBackend::file_exists(&service, "forbidden.pdf").await.is_err());
+}
 
 #[tokio::test]
 async fn discovery_lists_under_joined_prefix() {

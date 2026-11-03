@@ -19,6 +19,15 @@ use aws_types::region::Region as AwsRegion;
 #[cfg(feature = "s3")]
 use tracing::{debug, info, warn};
 
+/// Render an SDK error with its full source chain, including the service
+/// error code and message. `SdkError`'s own `Display` is only the variant
+/// name ("service error"), which hides the cause from logs, from
+/// `sources.last_error`, and from the string-based error categorisation.
+#[cfg(feature = "s3")]
+pub(crate) fn describe_error<E: std::error::Error>(err: &E) -> String {
+    aws_sdk_s3::error::DisplayErrorContext(err).to_string()
+}
+
 fn custom_endpoint(config: &S3SourceConfig) -> Option<&str> {
     config.endpoint_url.as_deref().map(str::trim).filter(|u| !u.is_empty())
 }
