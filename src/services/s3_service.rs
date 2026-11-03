@@ -20,6 +20,7 @@ use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, 
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
+use crate::utils::extension_filter::ExtensionFilter;
 
 /// Threshold for using streaming multipart uploads (100MB)
 const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
@@ -70,6 +71,8 @@ pub struct S3Service {
     #[cfg(feature = "s3")]
     client: Client,
     config: S3SourceConfig,
+    /// Normalised form of `config.file_extensions`; empty allows every key.
+    extension_filter: ExtensionFilter,
     /// Checked before each listing page and each download attempt.
     cancellation_token: Option<CancellationToken>,
 }
@@ -96,10 +99,12 @@ impl S3Service {
 
         let client = crate::services::s3_client::build_client(&config).await;
 
+        let extension_filter = ExtensionFilter::new(&config.file_extensions);
         Ok(Self {
             #[cfg(feature = "s3")]
             client,
             config,
+            extension_filter,
             cancellation_token: None,
         })
         }
@@ -144,7 +149,7 @@ impl S3Service {
             client: &self.client,
             bucket: &self.config.bucket_name,
             region: &self.config.region,
-            file_extensions: &self.config.file_extensions,
+            filter: &self.extension_filter,
             cancellation: self.cancellation_token.as_ref(),
             max_pages: MAX_LISTING_PAGES,
         };

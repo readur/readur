@@ -16,6 +16,8 @@ use crate::models::FileIngestionInfo;
 #[cfg(feature = "s3")]
 use crate::services::s3_client::describe_error;
 #[cfg(feature = "s3")]
+use crate::utils::extension_filter::ExtensionFilter;
+#[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
 use chrono::DateTime;
@@ -70,7 +72,7 @@ pub(crate) struct ListingContext<'a> {
     pub client: &'a Client,
     pub bucket: &'a str,
     pub region: &'a str,
-    pub file_extensions: &'a [String],
+    pub filter: &'a ExtensionFilter,
     pub cancellation: Option<&'a CancellationToken>,
     pub max_pages: usize,
 }
@@ -134,7 +136,7 @@ fn object_to_file_info(object: aws_sdk_s3::types::Object, ctx: &ListingContext<'
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if !ctx.file_extensions.contains(&extension) {
+    if !ctx.filter.matches_extension(&extension) {
         debug!("Skipping S3 object with unsupported extension: {}", key);
         return None;
     }
@@ -292,25 +294,50 @@ mod listing_tests {
     use wiremock::MockServer;
 
     async fn list_with(server: &MockServer, max_pages: usize) -> Result<Vec<FileIngestionInfo>> {
-        list_with_token(server, max_pages, None).await
+        list_with_token(server, max_pages, None, &["pdf"]).await
     }
 
     async fn list_with_token(
         server: &MockServer,
         max_pages: usize,
         cancellation: Option<&CancellationToken>,
+        extensions: &[&str],
     ) -> Result<Vec<FileIngestionInfo>> {
         let cfg = config_for(server);
         let client = crate::services::s3_client::build_client(&cfg).await;
+        let filter = ExtensionFilter::new(extensions);
         let ctx = ListingContext {
             client: &client,
             bucket: &cfg.bucket_name,
             region: &cfg.region,
-            file_extensions: &cfg.file_extensions,
+            filter: &filter,
             cancellation,
             max_pages,
         };
         list_objects(&ctx, "docs/").await
+    }
+
+    async fn listed_keys(server: &MockServer, extensions: &[&str]) -> Vec<String> {
+        list_with_token(server, MAX_LISTING_PAGES, None, extensions)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|f| f.relative_path)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn extension_filter_is_case_and_dot_insensitive_and_empty_allows_all() {
+        let server = MockServer::start().await;
+        mount_first_page(&server, list_page(&["docs/a.pdf", "docs/B.PDF", "docs/c.zip", "docs/README"], None, false)).await;
+
+        assert_eq!(listed_keys(&server, &[".PDF"]).await, vec!["docs/a.pdf", "docs/B.PDF"]);
+        assert_eq!(listed_keys(&server, &["Zip"]).await, vec!["docs/c.zip"]);
+        assert_eq!(
+            listed_keys(&server, &[]).await,
+            vec!["docs/a.pdf", "docs/B.PDF", "docs/c.zip", "docs/README"],
+            "an empty list allows every object"
+        );
     }
 
     #[tokio::test]
@@ -320,7 +347,7 @@ mod listing_tests {
 
         let token = CancellationToken::new();
         token.cancel();
-        let err = list_with_token(&server, MAX_LISTING_PAGES, Some(&token)).await.unwrap_err();
+        let err = list_with_token(&server, MAX_LISTING_PAGES, Some(&token), &["pdf"]).await.unwrap_err();
         assert!(err.to_string().contains("cancelled"), "{err}");
         assert_eq!(server.received_requests().await.unwrap().len(), 0);
     }

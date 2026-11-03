@@ -8,6 +8,7 @@ use sha2::{Sha256, Digest};
 use serde_json;
 
 use crate::models::{FileIngestionInfo, LocalFolderSourceConfig};
+use crate::utils::extension_filter::ExtensionFilter;
 
 /// Why a set of local folder paths was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +81,8 @@ fn is_under_any_root(path: &Path, roots: &[PathBuf]) -> bool {
 #[derive(Debug, Clone)]
 pub struct LocalFolderService {
     config: LocalFolderSourceConfig,
+    /// Normalised form of `config.file_extensions`; empty allows every file.
+    extension_filter: ExtensionFilter,
 }
 
 impl LocalFolderService {
@@ -95,7 +98,8 @@ impl LocalFolderService {
             }
         }
 
-        Ok(Self { config })
+        let extension_filter = ExtensionFilter::new(&config.file_extensions);
+        Ok(Self { config, extension_filter })
     }
 
     /// Discover files in a specific folder
@@ -109,7 +113,8 @@ impl LocalFolderService {
         // Use tokio::task::spawn_blocking for file system operations
         let folder_path_clone = folder_path.to_string();
         let config = self.config.clone();
-        
+        let extension_filter = self.extension_filter.clone();
+
         let discovered_files = tokio::task::spawn_blocking(move || -> Result<Vec<FileIngestionInfo>> {
             let mut files: Vec<FileIngestionInfo> = Vec::new();
             
@@ -149,7 +154,7 @@ impl LocalFolderService {
                             .unwrap_or("")
                             .to_lowercase();
 
-                        if !config.file_extensions.contains(&extension) {
+                        if !extension_filter.matches_extension(&extension) {
                             debug!("Skipping file with unsupported extension: {}", path.display());
                             continue;
                         }
@@ -377,6 +382,46 @@ mod tests {
 
     fn path_string(p: &Path) -> String {
         p.to_str().unwrap().to_string()
+    }
+
+    fn config_with_extensions(dir: &TempDir, extensions: &[&str]) -> LocalFolderSourceConfig {
+        LocalFolderSourceConfig {
+            watch_folders: vec![path_string(dir.path())],
+            file_extensions: extensions.iter().map(|s| s.to_string()).collect(),
+            auto_sync: false,
+            sync_interval_minutes: 60,
+            recursive: false,
+            follow_symlinks: false,
+        }
+    }
+
+    async fn discovered_names(dir: &TempDir, extensions: &[&str]) -> Vec<String> {
+        let service = LocalFolderService::new(config_with_extensions(dir, extensions)).unwrap();
+        let mut names: Vec<String> = service
+            .discover_files_in_folder(&path_string(dir.path()))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[tokio::test]
+    async fn extension_filter_is_case_and_dot_insensitive_and_empty_allows_all() {
+        let dir = TempDir::new().unwrap();
+        for name in ["a.pdf", "B.PDF", "c.zip", "README"] {
+            File::create(dir.path().join(name)).unwrap().write_all(b"x").unwrap();
+        }
+
+        assert_eq!(discovered_names(&dir, &[".PDF"]).await, vec!["B.PDF", "a.pdf"]);
+        assert_eq!(discovered_names(&dir, &["Zip"]).await, vec!["c.zip"]);
+        assert_eq!(
+            discovered_names(&dir, &[]).await,
+            vec!["B.PDF", "README", "a.pdf", "c.zip"],
+            "an empty list allows every file"
+        );
     }
 
     #[test]
