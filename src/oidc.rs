@@ -312,6 +312,8 @@ impl OidcClient {
             | Algorithm::ES256
             | Algorithm::ES384
             | Algorithm::EdDSA => self.signing_key(header.kid.as_deref()).await?,
+            // `Algorithm` is non-exhaustive: reject anything not reviewed above.
+            alg => return Err(anyhow!("Unsupported ID token algorithm: {:?}", alg)),
         };
 
         let mut validation = Validation::new(header.alg);

@@ -1,28 +1,18 @@
 #[cfg(test)]
 mod generic_migration_tests {
     use sqlx::{PgPool, Row};
-    use testcontainers::{runners::AsyncRunner, ImageExt};
-    use testcontainers_modules::postgres::Postgres;
+    use readur::test_db::TestDatabase;
     use std::process::Command;
 
-    async fn setup_test_db() -> (PgPool, testcontainers::ContainerAsync<Postgres>) {
-        let postgres_image = Postgres::default()
-            .with_tag("15-alpine")
-            .with_env_var("POSTGRES_USER", "test")
-            .with_env_var("POSTGRES_PASSWORD", "test")
-            .with_env_var("POSTGRES_DB", "test");
-        
-        let container = postgres_image.start().await.expect("Failed to start postgres container");
-        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
-        
-        let database_url = format!("postgresql://test:test@localhost:{}/test", port);
+    /// An empty database (no migrations applied) on the shared test server.
+    async fn setup_test_db() -> (PgPool, TestDatabase) {
+        let database = TestDatabase::empty().await;
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
-            .connect(&database_url)
+            .connect(database.url())
             .await
             .expect("Failed to connect to test database");
-        
-        (pool, container)
+        (pool, database)
     }
 
     fn get_new_migrations() -> Vec<String> {
@@ -79,7 +69,7 @@ mod generic_migration_tests {
             println!("  - {}", migration);
         }
 
-        let (pool, _container) = setup_test_db().await;
+        let (pool, _database) = setup_test_db().await;
         
         // Run all migrations (including the new ones)
         let result = sqlx::migrate!("./migrations").run(&pool).await;
@@ -97,7 +87,7 @@ mod generic_migration_tests {
             return;
         }
 
-        let (pool, _container) = setup_test_db().await;
+        let (pool, _database) = setup_test_db().await;
         
         // Run migrations twice to test idempotency
         let result1 = sqlx::migrate!("./migrations").run(&pool).await;
@@ -141,7 +131,7 @@ mod generic_migration_tests {
             return;
         }
 
-        let (pool, _container) = setup_test_db().await;
+        let (pool, _database) = setup_test_db().await;
         
         // Test that we can run migrations and they create expected schema elements
         let result = sqlx::migrate!("./migrations").run(&pool).await;

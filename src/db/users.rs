@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use super::labels::seed_default_labels;
 use super::Database;
+use super::sanitize::ToDb;
 use crate::models::{AuthProvider, CreateUser, User, UserRole};
 
 /// bcrypt work factor used for all stored password hashes.
@@ -55,8 +56,8 @@ impl Database {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING {USER_COLUMNS}"
         ))
-        .bind(&user.username)
-        .bind(&user.email)
+        .bind(user.username.for_db())
+        .bind(user.email.for_db())
         .bind(&password_hash)
         .bind(user.role.as_ref().unwrap_or(&UserRole::User).to_string())
         .bind(now)
@@ -132,8 +133,8 @@ impl Database {
              WHERE id = $7
              RETURNING {USER_COLUMNS}"
         ))
-        .bind(&username)
-        .bind(&email)
+        .bind(username.for_db())
+        .bind(email.for_db())
         .bind(&password_hash)
         .bind(new_is_active)
         .bind(revoke_sessions)
@@ -189,8 +190,8 @@ impl Database {
         let row = sqlx::query(&format!(
             "SELECT {USER_COLUMNS} FROM users WHERE oidc_subject = $1 AND oidc_issuer = $2"
         ))
-        .bind(subject)
-        .bind(issuer)
+        .bind(subject.for_db())
+        .bind(issuer.for_db())
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.as_ref().map(user_from_row))
@@ -204,7 +205,7 @@ impl Database {
              RETURNING {USER_COLUMNS}"
         ))
         .bind(user_id)
-        .bind(oidc_issuer)
+        .bind(oidc_issuer.for_db())
         .fetch_one(&self.pool)
         .await?;
         Ok(user_from_row(&row))
@@ -226,14 +227,14 @@ impl Database {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING {USER_COLUMNS}"
         ))
-        .bind(&user.username)
-        .bind(&user.email)
+        .bind(user.username.for_db())
+        .bind(user.email.for_db())
         .bind(user.role.as_ref().unwrap_or(&UserRole::User).to_string())
         .bind(now)
         .bind(now)
-        .bind(oidc_subject)
-        .bind(oidc_issuer)
-        .bind(oidc_email)
+        .bind(oidc_subject.for_db())
+        .bind(oidc_issuer.for_db())
+        .bind(oidc_email.for_db())
         .bind(AuthProvider::Oidc.to_string())
         .fetch_one(&mut *tx)
         .await?;
@@ -248,7 +249,7 @@ impl Database {
         let row = sqlx::query(&format!(
             "SELECT {USER_COLUMNS} FROM users WHERE email = $1"
         ))
-        .bind(email)
+        .bind(email.for_db())
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.as_ref().map(user_from_row))
@@ -272,9 +273,9 @@ impl Database {
              RETURNING {USER_COLUMNS}"
         ))
         .bind(user_id)
-        .bind(oidc_subject)
-        .bind(oidc_issuer)
-        .bind(oidc_email)
+        .bind(oidc_subject.for_db())
+        .bind(oidc_issuer.for_db())
+        .bind(oidc_email.for_db())
         .bind(AuthProvider::Oidc.to_string())
         .fetch_one(&self.pool)
         .await?;

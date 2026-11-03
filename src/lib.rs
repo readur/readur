@@ -27,6 +27,8 @@ pub mod webdav_xml_parser;
 mod tests;
 
 #[cfg(any(test, feature = "test-utils"))]
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_db;
 pub mod test_utils;
 
 #[cfg(any(test, feature = "test-utils"))]
