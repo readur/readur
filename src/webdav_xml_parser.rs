@@ -7,6 +7,7 @@ use std::str;
 use crate::models::FileIngestionInfo;
 use crate::utils::xml_text::MergedTextReader;
 use crate::mime_detection::{detect_mime_for_discovery, DetectionStrategy};
+use crate::services::webdav::fallback_etag::fallback_etag;
 
 #[derive(Debug, Default)]
 struct PropFindResponse {
@@ -200,7 +201,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                     });
                                 
                                 // Use the metadata collected during parsing
-                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(&resp));
+                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(resp.last_modified.as_deref(), resp.content_length));
                                 let metadata = resp.metadata;
                                 
                                 // Determine MIME type using improved detection
@@ -442,7 +443,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                     mime_detection_result.mime_type
                                 };
 
-                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(&resp));
+                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(resp.last_modified.as_deref(), resp.content_length));
                                 let file_info = FileIngestionInfo {
                                     relative_path: "TEMP".to_string(), // Will be set by discovery layer
                                     full_path: resp.href.clone(),
@@ -490,12 +491,6 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
     }
     
     Ok(files)
-}
-
-/// Stand-in ETag for servers that omit `getetag`, derived from the entry's
-/// own properties so an unchanged entry compares equal between scans.
-fn fallback_etag(resp: &PropFindResponse) -> String {
-    format!("fallback-{}-{}", resp.last_modified.as_deref().unwrap_or("nolastmod"), resp.content_length.unwrap_or(0))
 }
 
 fn get_local_name(e: &BytesStart) -> Result<String> {

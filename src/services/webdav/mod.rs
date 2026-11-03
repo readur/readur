@@ -2,6 +2,7 @@
 
 pub mod common; // Common utilities and shared functions
 pub mod config;
+pub mod fallback_etag;
 pub mod paths;
 pub mod service; 
 pub mod smart_sync;
