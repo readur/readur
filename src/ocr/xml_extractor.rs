@@ -278,7 +278,7 @@ impl XmlOfficeExtractor {
     }
     
     /// Create a secure XML reader with protection against entity expansion attacks
-    fn create_secure_xml_reader(xml_content: &str) -> quick_xml::Reader<&[u8]> {
+    fn create_secure_xml_reader(xml_content: &str) -> crate::utils::xml_text::MergedTextReader<&[u8]> {
         use quick_xml::Reader;
         
         let mut reader = Reader::from_str(xml_content);
@@ -292,7 +292,7 @@ impl XmlOfficeExtractor {
         // Note: quick-xml doesn't support external entity expansion by default,
         // but we're being explicit about security configurations
         
-        reader
+        crate::utils::xml_text::MergedTextReader::new(reader)
     }
     
     /// Validate file path for security to prevent directory traversal and shell injection
@@ -454,12 +454,12 @@ impl XmlOfficeExtractor {
             
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-                    if e.name().as_ref() == b"sheet" {
+                    if e.name().as_ref() == "sheet" {
                         // Look for the r:id attribute to get the worksheet relationship
                         for attr in e.attributes() {
                             if let Ok(attr) = attr {
-                                if attr.key.as_ref() == b"r:id" {
-                                    let sheet_id = String::from_utf8_lossy(&attr.value);
+                                if attr.key.as_ref() == "r:id" {
+                                    let sheet_id = &attr.value;
                                     // Convert relationship ID to worksheet filename
                                     // Typical pattern: rId1 -> sheet1.xml, rId2 -> sheet2.xml, etc.
                                     if let Some(sheet_num) = sheet_id.strip_prefix("rId") {
@@ -728,31 +728,29 @@ impl XmlOfficeExtractor {
                 match reader.read_event_into(&mut buf) {
                     Ok(Event::Start(ref e)) => {
                         // Look for text elements (w:t tags contain the actual text)
-                        if e.name().as_ref() == b"w:t" {
+                        if e.name().as_ref() == "w:t" {
                             in_text_element = true;
                         }
                     }
                     Ok(Event::Empty(ref e)) => {
                         // Handle self-closing elements that represent spacing
                         match e.name().as_ref() {
-                            b"w:tab" => {
+                            "w:tab" => {
                                 text_content.push("\t".to_string());
                             }
-                            b"w:br" => {
+                            "w:br" => {
                                 text_content.push("\n".to_string());
                             }
-                            b"w:cr" => {
+                            "w:cr" => {
                                 text_content.push("\r".to_string());
                             }
-                            b"w:space" => {
+                            "w:space" => {
                                 // Check for xml:space="preserve" attribute
                                 let mut space_count = 1; // Default to one space
                                 for attr in e.attributes() {
                                     if let Ok(attr) = attr {
-                                        if attr.key.as_ref() == b"w:count" {
-                                            if let Ok(count_str) = std::str::from_utf8(&attr.value) {
-                                                space_count = count_str.parse::<usize>().unwrap_or(1);
-                                            }
+                                        if attr.key.as_ref() == "w:count" {
+                                            space_count = attr.value.parse::<usize>().unwrap_or(1);
                                         }
                                     }
                                 }
@@ -764,35 +762,35 @@ impl XmlOfficeExtractor {
                     Ok(Event::Text(e)) => {
                         if in_text_element {
                             // Extract and decode the text content
-                            let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
+                            let text = e.xml10_content();
                             text_content.push(text.into_owned());
                         }
                     }
                     Ok(Event::End(ref e)) => {
-                        if e.name().as_ref() == b"w:t" {
+                        if e.name().as_ref() == "w:t" {
                             in_text_element = false;
                         }
                         // Add proper breaks and spacing to preserve document structure
                         match e.name().as_ref() {
-                            b"w:p" => {
+                            "w:p" => {
                                 // End of paragraph - add double newline for better readability
                                 text_content.push("\n\n".to_string());
                             }
-                            b"w:tr" => {
+                            "w:tr" => {
                                 // End of table row - add single newline
                                 text_content.push("\n".to_string());
                             }
-                            b"w:tc" => {
+                            "w:tc" => {
                                 // End of table cell - add tab separator
                                 text_content.push("\t".to_string());
                             }
                             // Remove automatic spacing after w:r - this was causing words to be split
                             // Instead, rely on explicit w:space elements and natural paragraph breaks
                             // Handle section breaks and page breaks with just whitespace
-                            b"w:sectPr" => {
+                            "w:sectPr" => {
                                 text_content.push("\n\n".to_string());
                             }
-                            b"w:lastRenderedPageBreak" => {
+                            "w:lastRenderedPageBreak" => {
                                 text_content.push("\n\n".to_string());
                             }
                             _ => {}
@@ -896,19 +894,19 @@ impl XmlOfficeExtractor {
                 loop {
                     match reader.read_event_into(&mut buf) {
                         Ok(Event::Start(ref e)) => {
-                            if e.name().as_ref() == b"t" {
+                            if e.name().as_ref() == "t" {
                                 in_string = true;
                                 current_string.clear();
                             }
                         }
                         Ok(Event::Text(e)) => {
                             if in_string {
-                                let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
+                                let text = e.xml10_content();
                                 current_string.push_str(&text);
                             }
                         }
                         Ok(Event::End(ref e)) => {
-                            if e.name().as_ref() == b"t" {
+                            if e.name().as_ref() == "t" {
                                 in_string = false;
                                 shared_strings.push(current_string.clone());
                                 current_string.clear();
@@ -954,24 +952,24 @@ impl XmlOfficeExtractor {
                     loop {
                         match reader.read_event_into(&mut buf) {
                             Ok(Event::Start(ref e)) => {
-                                if e.name().as_ref() == b"c" {
+                                if e.name().as_ref() == "c" {
                                     // Cell element - check if it has a type attribute
                                     current_cell_type.clear();
                                     for attr in e.attributes() {
                                         if let Ok(attr) = attr {
-                                            if attr.key.as_ref() == b"t" {
-                                                current_cell_type = String::from_utf8_lossy(&attr.value).to_string();
+                                            if attr.key.as_ref() == "t" {
+                                                current_cell_type = attr.value.to_string();
                                             }
                                         }
                                     }
-                                } else if e.name().as_ref() == b"v" {
+                                } else if e.name().as_ref() == "v" {
                                     // Cell value
                                     in_cell_value = true;
                                 }
                             }
                             Ok(Event::Text(e)) => {
                                 if in_cell_value {
-                                    let text = e.unescape().map_err(|e| anyhow!("Text unescape error: {}", e))?;
+                                    let text = e.xml10_content();
                                     
                                     // If this is a shared string reference (t="s"), look up the string
                                     if current_cell_type == "s" {
@@ -987,7 +985,7 @@ impl XmlOfficeExtractor {
                                 }
                             }
                             Ok(Event::End(ref e)) => {
-                                if e.name().as_ref() == b"v" {
+                                if e.name().as_ref() == "v" {
                                     in_cell_value = false;
                                 }
                             }
