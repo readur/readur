@@ -185,8 +185,9 @@ async fn test_malformed_etag_handling() {
                 assert!(found_dir.is_some(), "Should find directory with malformed ETag");
                 
                 if let Some(dir) = found_dir {
-                    // System should preserve the ETag as-is (no corruption)
-                    assert_eq!(dir.directory_etag, malformed_etag, 
+                    // Preserved as stored, except U+0000, which PostgreSQL cannot hold and
+                    // db::sanitize strips from every text bind (#901)
+                    assert_eq!(dir.directory_etag, readur::db::sanitize::strip_nul(malformed_etag),
                               "ETag should be preserved exactly as stored");
                 }
             }

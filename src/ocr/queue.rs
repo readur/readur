@@ -377,7 +377,7 @@ impl OcrQueueService {
             "#
         )
         .bind(item_id)
-        .bind(error)
+        .bind(crate::db::sanitize::DbText(error))
         .fetch_one(&self.pool)
         .await?;
 
@@ -477,7 +477,7 @@ impl OcrQueueService {
                                 "#
                             )
                             .bind(item.document_id)
-                            .bind(&error_msg)
+                            .bind(crate::db::sanitize::DbText(&error_msg))
                             .execute(&self.pool)
                             .await?;
                             
@@ -575,7 +575,7 @@ impl OcrQueueService {
                                 "#
                             )
                             .bind(item.document_id)
-                            .bind(&error_msg)
+                            .bind(crate::db::sanitize::DbText(&error_msg))
                             .execute(&self.pool)
                             .await?;
                             
@@ -659,7 +659,7 @@ impl OcrQueueService {
                             "#
                         )
                         .bind(item.document_id)
-                        .bind(&error_msg)
+                        .bind(crate::db::sanitize::DbText(&error_msg))
                         .bind(failure_reason)
                         .execute(&self.pool)
                         .await?;
@@ -867,9 +867,9 @@ impl OcrQueueService {
         )
         .bind(document_id)
         .bind(user_id)
-        .bind(original_image_path)
+        .bind(crate::db::sanitize::DbText(original_image_path))
         .bind(permanent_path.to_string_lossy().to_string())
-        .bind(&processing_parameters)
+        .bind(crate::db::sanitize::DbJson(&processing_parameters))
         .bind(processing_steps)
         .bind(image_width as i32)
         .bind(image_height as i32)

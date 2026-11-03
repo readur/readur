@@ -14,6 +14,7 @@ use ts_rs::TS;
 use crate::{
     auth::AuthUser,
     AppState,
+    db::sanitize::{strip_nul, strip_nul_vec},
     models::UserRole,
 };
 
@@ -609,7 +610,7 @@ async fn get_filtered_documents(
     if let Some(mime_types) = &filter.mime_types {
         if !mime_types.is_empty() {
             query.push(" AND mime_type = ANY(");
-            query.push_bind(mime_types);
+            query.push_bind(strip_nul_vec(mime_types));
             query.push(")");
         }
     }
@@ -623,7 +624,7 @@ async fn get_filtered_documents(
                     query.push(" OR ");
                 }
                 query.push("filename ILIKE ");
-                query.push_bind(format!("%.{}", ext));
+                query.push_bind(strip_nul(&format!("%.{}", ext)).into_owned());
             }
             query.push(")");
         }
@@ -633,7 +634,7 @@ async fn get_filtered_documents(
     if let Some(reasons) = &filter.failure_reasons {
         if !reasons.is_empty() {
             query.push(" AND ocr_failure_reason = ANY(");
-            query.push_bind(reasons);
+            query.push_bind(strip_nul_vec(reasons));
             query.push(")");
         }
     }
@@ -664,7 +665,7 @@ async fn get_filtered_documents(
     if let Some(tags) = &filter.tags {
         if !tags.is_empty() {
             query.push(" AND tags && ");
-            query.push_bind(tags);
+            query.push_bind(strip_nul_vec(tags));
         }
     }
     
