@@ -4,6 +4,7 @@ use chrono::Datelike;
 use tracing::{debug, info, warn, error};
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 #[cfg(feature = "s3")]
@@ -69,6 +70,8 @@ pub struct S3Service {
     #[cfg(feature = "s3")]
     client: Client,
     config: S3SourceConfig,
+    /// Checked before each listing page and each download attempt.
+    cancellation_token: Option<CancellationToken>,
 }
 
 impl S3Service {
@@ -96,8 +99,24 @@ impl S3Service {
         Ok(Self {
             #[cfg(feature = "s3")]
             client,
-            config
+            config,
+            cancellation_token: None,
         })
+        }
+    }
+
+    /// Attach a token that stops listing (between pages) and downloads
+    /// (before each attempt) once cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Error when the attached token (if any) has been cancelled.
+    fn check_cancelled(&self, what: &str) -> Result<()> {
+        match &self.cancellation_token {
+            Some(token) if token.is_cancelled() => Err(anyhow!("S3 {} cancelled", what)),
+            _ => Ok(()),
         }
     }
 
@@ -126,6 +145,7 @@ impl S3Service {
             bucket: &self.config.bucket_name,
             region: &self.config.region,
             file_extensions: &self.config.file_extensions,
+            cancellation: self.cancellation_token.as_ref(),
             max_pages: MAX_LISTING_PAGES,
         };
         let files = list_objects(&ctx, &prefix).await?;
@@ -683,6 +703,7 @@ impl S3Service {
         let mut last_error = None;
         
         for attempt in 0..=MAX_RETRIES {
+            self.check_cancelled(operation_name)?;
             match operation().await {
                 Ok(result) => {
                     if attempt > 0 {

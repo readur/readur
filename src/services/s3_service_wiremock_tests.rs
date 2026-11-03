@@ -73,6 +73,23 @@ async fn download_with_body_shorter_than_content_length_is_an_error() {
 }
 
 #[tokio::test]
+async fn cancelled_service_makes_no_requests() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"hello".to_vec()))
+        .mount(&server)
+        .await;
+
+    let token = tokio_util::sync::CancellationToken::new();
+    token.cancel();
+    let service = S3Service::new(config_for(&server)).await.unwrap().with_cancellation_token(token);
+
+    assert!(service.discover_files_in_folder("docs").await.is_err());
+    assert!(service.download_file("docs/a.pdf").await.is_err());
+    assert_eq!(server.received_requests().await.unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn file_exists_distinguishes_missing_from_failure() {
     let server = MockServer::start().await;
     Mock::given(method("HEAD")).and(path("/b/missing.pdf"))

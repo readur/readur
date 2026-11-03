@@ -20,6 +20,8 @@ use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
 use chrono::DateTime;
 #[cfg(feature = "s3")]
+use tokio_util::sync::CancellationToken;
+#[cfg(feature = "s3")]
 use tracing::debug;
 
 /// Upper bound on pages followed in a single listing. At the default 1000
@@ -69,6 +71,7 @@ pub(crate) struct ListingContext<'a> {
     pub bucket: &'a str,
     pub region: &'a str,
     pub file_extensions: &'a [String],
+    pub cancellation: Option<&'a CancellationToken>,
     pub max_pages: usize,
 }
 
@@ -80,6 +83,9 @@ pub(crate) async fn list_objects(ctx: &ListingContext<'_>, prefix: &str) -> Resu
     let mut pages = 0usize;
 
     loop {
+        if ctx.cancellation.is_some_and(|token| token.is_cancelled()) {
+            return Err(anyhow!("Listing of S3 prefix '{}' cancelled after {} pages", prefix, pages));
+        }
         if pages >= ctx.max_pages {
             return Err(anyhow!(
                 "Listing of S3 prefix '{}' exceeded {} pages; aborting",
@@ -286,6 +292,14 @@ mod listing_tests {
     use wiremock::MockServer;
 
     async fn list_with(server: &MockServer, max_pages: usize) -> Result<Vec<FileIngestionInfo>> {
+        list_with_token(server, max_pages, None).await
+    }
+
+    async fn list_with_token(
+        server: &MockServer,
+        max_pages: usize,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<Vec<FileIngestionInfo>> {
         let cfg = config_for(server);
         let client = crate::services::s3_client::build_client(&cfg).await;
         let ctx = ListingContext {
@@ -293,9 +307,22 @@ mod listing_tests {
             bucket: &cfg.bucket_name,
             region: &cfg.region,
             file_extensions: &cfg.file_extensions,
+            cancellation,
             max_pages,
         };
         list_objects(&ctx, "docs/").await
+    }
+
+    #[tokio::test]
+    async fn cancelled_token_stops_listing_before_any_request() {
+        let server = MockServer::start().await;
+        mount_first_page(&server, list_page(&["docs/a.pdf"], None, false)).await;
+
+        let token = CancellationToken::new();
+        token.cancel();
+        let err = list_with_token(&server, MAX_LISTING_PAGES, Some(&token)).await.unwrap_err();
+        assert!(err.to_string().contains("cancelled"), "{err}");
+        assert_eq!(server.received_requests().await.unwrap().len(), 0);
     }
 
     #[tokio::test]
