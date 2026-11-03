@@ -83,11 +83,9 @@ jobs:
       - name: Pre-pull Docker images for testcontainers
         run: |
           echo "Pre-pulling Docker images that testcontainers will use..."
-          # Only pull the specific version we're using to save space
-          docker pull postgres:latest
-          docker pull postgres:15
-          docker pull postgres:15-alpine
-          docker pull postgres:17
+          # The one image tests use: readur::test_db::POSTGRES_TAG. Each test
+          # process starts a single server and clones a migrated template per test.
+          docker pull postgres:18
           echo "Images pulled successfully. These are now in local Docker cache."
           echo "Testcontainers will use the local cached images."
 
