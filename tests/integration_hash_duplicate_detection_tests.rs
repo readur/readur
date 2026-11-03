@@ -31,7 +31,7 @@ fn calculate_file_hash(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
-    format!("{:x}", result)
+    readur::utils::hash::to_hex(&result)
 }
 
 // Helper function to create a test document
