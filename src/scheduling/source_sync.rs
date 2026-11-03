@@ -699,13 +699,21 @@ impl SourceSyncService {
     }
 
     /// Removes a document this run created but could not finish setting up:
-    /// the row first (so the file is retried next run even if the stored copy
-    /// lingers), then its stored files.
+    /// the row first, and its stored files only once the row is gone. If the
+    /// row cannot be deleted the files stay, so the surviving document remains
+    /// openable; a lingering file after a successful row delete is only an
+    /// orphan, which is logged.
     async fn discard_document(state: &AppState, document: &crate::models::Document) {
         match state.db.delete_document(document.id, document.user_id, UserRole::User).await {
             Ok(true) => {}
             Ok(false) => warn!("Document {} was already gone while discarding it", document.id),
-            Err(e) => error!("Failed to delete document {} after a failed OCR enqueue: {}", document.id, e),
+            Err(e) => {
+                error!(
+                    "Failed to delete document {} after a failed OCR enqueue, keeping its stored files: {}",
+                    document.id, e
+                );
+                return;
+            }
         }
         if let Err(e) = state.file_service.delete_document_files(document).await {
             error!("Failed to delete stored files of discarded document {}: {}", document.id, e);

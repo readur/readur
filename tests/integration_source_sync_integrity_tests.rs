@@ -1,7 +1,8 @@
 //! Per-file integrity in `SourceSyncService`: a download whose length does
 //! not match the listing is a failure (retried next run), and a document
 //! whose OCR enqueue fails is discarded so the next run retries it instead
-//! of leaving it pending forever.
+//! of leaving it pending forever. If the row cannot be removed, the stored
+//! file is kept so the surviving document stays openable.
 
 use anyhow::anyhow;
 use readur::models::{CreateSource, FileIngestionInfo, SourceType};
@@ -154,6 +155,57 @@ async fn failed_ocr_enqueue_discards_the_document_for_retry() {
     assert_eq!(ctx.state().db.count_documents_for_source(user_id, source.id).await.unwrap().0, 1);
     let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ocr_queue").fetch_one(pool).await.unwrap();
     assert_eq!(queued, 1);
+
+    let _ = ctx.cleanup_and_close().await;
+}
+
+/// When the document row cannot be deleted after a failed OCR enqueue, the
+/// stored file is left alone: the document is still openable and nothing is
+/// removed that the surviving row points at.
+#[tokio::test]
+async fn failed_row_delete_keeps_the_stored_file() {
+    let ctx = TestContext::new().await;
+    let admin = ctx.auth_helper().create_admin_user().await;
+    let user_id = admin.user_response.id;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("scan.txt"), b"needs ocr").unwrap();
+    let source = local_source(&ctx, user_id, dir.path()).await;
+    let pool = ctx.state().db.get_pool();
+
+    for statement in [
+        "CREATE FUNCTION refuse_ocr_queue_insert() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'ocr_queue unavailable'; END $$ LANGUAGE plpgsql",
+        "CREATE TRIGGER refuse_ocr_queue_insert BEFORE INSERT ON ocr_queue
+         FOR EACH ROW EXECUTE FUNCTION refuse_ocr_queue_insert()",
+        "CREATE FUNCTION refuse_document_delete() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'documents unavailable'; END $$ LANGUAGE plpgsql",
+        "CREATE TRIGGER refuse_document_delete BEFORE DELETE ON documents
+         FOR EACH ROW EXECUTE FUNCTION refuse_document_delete()",
+    ] {
+        sqlx::query(statement).execute(pool).await.unwrap();
+    }
+
+    let outcome = SourceSyncService::new(ctx.state().clone()).sync_source(&source, true).await.unwrap();
+    assert_eq!(outcome.failed, 1, "{outcome:?}");
+
+    let file_path: String = sqlx::query_scalar("SELECT file_path FROM documents WHERE source_id = $1")
+        .bind(source.id)
+        .fetch_one(pool)
+        .await
+        .expect("the document row survives the failed delete");
+    assert!(
+        std::path::Path::new(&file_path).exists(),
+        "stored file {file_path} must not be deleted while its row exists"
+    );
+
+    for statement in [
+        "DROP TRIGGER refuse_document_delete ON documents",
+        "DROP FUNCTION refuse_document_delete()",
+        "DROP TRIGGER refuse_ocr_queue_insert ON ocr_queue",
+        "DROP FUNCTION refuse_ocr_queue_insert()",
+    ] {
+        sqlx::query(statement).execute(pool).await.unwrap();
+    }
 
     let _ = ctx.cleanup_and_close().await;
 }
