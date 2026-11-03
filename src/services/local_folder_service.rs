@@ -79,21 +79,16 @@ fn is_under_any_root(path: &Path, roots: &[PathBuf]) -> bool {
     roots.iter().any(|root| path.starts_with(root))
 }
 
-/// Open `path` (already canonical) for reading. On platforms where the flag
-/// is known, `O_NOFOLLOW` makes the open fail if the final component has
-/// been replaced by a symlink since the path was resolved.
+/// Open `path` (already canonical) for reading. On Unix, `O_NOFOLLOW` makes
+/// the open fail if the final component has been replaced by a symlink since
+/// the path was resolved.
 fn open_without_following_symlinks(path: &Path) -> std::io::Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(0o400000); // O_NOFOLLOW (asm-generic fcntl.h)
-    }
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(0x0100); // O_NOFOLLOW (BSD fcntl.h)
+        options.custom_flags(libc::O_NOFOLLOW);
     }
     options.open(path)
 }
