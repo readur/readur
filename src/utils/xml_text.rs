@@ -24,16 +24,17 @@ use std::io::BufRead;
 pub struct MergedTextReader<R> {
     inner: Reader<R>,
     pending: Option<Event<'static>>,
-    trim: bool,
+    trim_start: bool,
+    trim_end: bool,
 }
 
 impl<R: BufRead> MergedTextReader<R> {
     /// Wraps `inner`, taking over its `trim_text` setting: trimming is applied
     /// to the merged text node instead of to each fragment.
     pub fn new(mut inner: Reader<R>) -> Self {
-        let trim = inner.config().trim_text_start;
+        let (trim_start, trim_end) = (inner.config().trim_text_start, inner.config().trim_text_end);
         inner.config_mut().trim_text(false);
-        Self { inner, pending: None, trim }
+        Self { inner, pending: None, trim_start, trim_end }
     }
 
     /// Like [`Reader::read_event_into`], but text nodes come back whole.
@@ -46,11 +47,17 @@ impl<R: BufRead> MergedTextReader<R> {
             if !matches!(event, Event::Text(_) | Event::GeneralRef(_)) {
                 return Ok(event);
             }
-            let mut text = String::new();
+            // Literal fragments and resolved references, kept apart so trimming can
+            // treat references as opaque content, as trimming the raw text did.
+            let mut pieces: Vec<(bool, String)> = Vec::new();
             loop {
                 match event {
-                    Event::Text(t) => text.push_str(&t.xml10_content()),
-                    Event::GeneralRef(r) => resolve_reference(&r, &mut text)?,
+                    Event::Text(t) => pieces.push((false, t.xml10_content().into_owned())),
+                    Event::GeneralRef(r) => {
+                        let mut resolved = String::new();
+                        resolve_reference(&r, &mut resolved)?;
+                        pieces.push((true, resolved));
+                    }
                     other => {
                         self.pending = Some(other);
                         break;
@@ -58,9 +65,18 @@ impl<R: BufRead> MergedTextReader<R> {
                 }
                 event = self.next_owned(buf)?;
             }
-            let text = if self.trim { text.trim().to_string() } else { text };
+            if self.trim_start {
+                trim_edge(&mut pieces, |s| s.trim_start_matches(is_xml_space).len(), true);
+            }
+            if self.trim_end {
+                trim_edge(&mut pieces, |s| s.trim_end_matches(is_xml_space).len(), false);
+            }
             // A trimming reader never reported whitespace-only text; keep that.
-            if !(self.trim && text.is_empty()) {
+            let trimming = self.trim_start || self.trim_end;
+            if !(trimming && pieces.is_empty()) {
+                let text: String = pieces.into_iter().map(|(_, piece)| piece).collect();
+                // Already resolved: read it back with xml10_content(), which only
+                // normalizes line endings (a literal `&#13;` would become `\n`).
                 return Ok(Event::Text(BytesText::from_escaped(text)));
             }
         }
@@ -69,6 +85,36 @@ impl<R: BufRead> MergedTextReader<R> {
     fn next_owned(&mut self, buf: &mut Vec<u8>) -> Result<Event<'static>> {
         buf.clear();
         Ok(self.inner.read_event_into(buf)?.into_owned())
+    }
+}
+
+/// XML whitespace (S in the XML spec): what quick-xml's `trim_text` strips.
+/// Unlike `char::is_whitespace`, this leaves U+00A0 and other Unicode spaces.
+fn is_xml_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\r' | '\n')
+}
+
+/// Strips XML whitespace from the literal pieces at one edge of a text run,
+/// stopping at the first resolved reference or non-blank literal. `kept_len`
+/// returns how much of a piece survives; it is cut from the end of the piece
+/// when trimming the start, and kept from the start when trimming the end.
+fn trim_edge(pieces: &mut Vec<(bool, String)>, kept_len: impl Fn(&str) -> usize, start: bool) {
+    loop {
+        let idx = if start { 0 } else { match pieces.len() { 0 => return, n => n - 1 } };
+        let Some((is_ref, piece)) = pieces.get_mut(idx) else { return };
+        if *is_ref {
+            return;
+        }
+        let keep = kept_len(piece);
+        if keep > 0 {
+            if start {
+                piece.drain(..piece.len() - keep);
+            } else {
+                piece.truncate(keep);
+            }
+            return;
+        }
+        pieces.remove(idx);
     }
 }
 
@@ -152,6 +198,33 @@ mod tests {
     #[test]
     fn a_node_that_is_only_a_reference() {
         assert_eq!(events("<t>&amp;</t>", false), ["start:t", "text:&", "end:t"]);
+    }
+
+    #[test]
+    fn trimming_keeps_unicode_spaces_like_quick_xml_037() {
+        // trim_text strips XML whitespace only; U+00A0 is content (e.g. a DOCX run).
+        assert_eq!(events("<t>\u{a0}</t>", true), ["start:t", "text:\u{a0}", "end:t"]);
+        assert_eq!(events("<t> \u{a0}Foo </t>", true), ["start:t", "text:\u{a0}Foo", "end:t"]);
+    }
+
+    #[test]
+    fn trimming_never_strips_resolved_references() {
+        // 0.37 trimmed the raw text, where `&#32;` is not whitespace.
+        assert_eq!(events("<t>&#32;</t>", true), ["start:t", "text: ", "end:t"]);
+        assert_eq!(events("<t>  &#160;x&#10;  </t>", true), ["start:t", "text:\u{a0}x\n", "end:t"]);
+    }
+
+    #[test]
+    fn honours_start_and_end_trimming_separately() {
+        let mut reader = Reader::from_str("<t>  a  </t>");
+        reader.config_mut().trim_text_start = true;
+        let mut reader = MergedTextReader::new(reader);
+        let mut buf = Vec::new();
+        reader.read_event_into(&mut buf).unwrap();
+        match reader.read_event_into(&mut buf).unwrap() {
+            Event::Text(t) => assert_eq!(t.xml10_content(), "a  "),
+            other => panic!("expected text, got {other:?}"),
+        }
     }
 
     #[test]
