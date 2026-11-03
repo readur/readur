@@ -196,7 +196,7 @@ description = "Ratchet gate: count of over-threshold functions may not exceed BU
 # reviewed increase.
 run = '''
 set -eu
-BUDGET=121
+BUDGET=111
 OUT=$(cargo clippy --all-targets --all-features -q -- -A clippy::all -W clippy::cognitive_complexity 2>&1) || {
   printf '%s\n' "$OUT" >&2
   echo "error: clippy failed to build the crate; the complexity count would be meaningless." >&2
