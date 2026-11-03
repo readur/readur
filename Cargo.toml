@@ -16,8 +16,6 @@ name = "analyze-webdav-performance"
 path = "src/bin/analyze-webdav-performance.rs"
 
 
-
-
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", features = ["multipart", "ws"] }
@@ -25,13 +23,21 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7", features = ["cors", "fs", "set-header"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "sqlite", "chrono", "uuid", "migrate"] }
+sqlx = { version = "0.8", features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "sqlite",
+  "chrono",
+  "uuid",
+  "migrate",
+] }
 regex = "1.11"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.19"
 base64ct = { version = "=1.8.3", features = ["alloc"] }
-jsonwebtoken = "11"
+# 11.x needs exactly one crypto backend; aws-lc is already built for the AWS SDK.
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -74,13 +80,20 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 testcontainers = { version = "0.26", optional = true }
 testcontainers-modules = { version = "0.14", features = ["postgres"], optional = true }
 # Office document support - now using XML extraction only
-zip = "8"             # Still needed for other archive handling
+zip = "8" # Still needed for other archive handling
 rand = "0.9"
 
 [features]
 default = ["ocr", "s3"]
 ocr = ["tesseract", "image", "imageproc", "raw-cpuid", "kamadak-exif"]
-s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types", "aws-smithy-http-client", "aws-smithy-runtime-api"]
+s3 = [
+  "aws-config",
+  "aws-sdk-s3",
+  "aws-credential-types",
+  "aws-types",
+  "aws-smithy-http-client",
+  "aws-smithy-runtime-api",
+]
 test-utils = ["testcontainers", "testcontainers-modules"]
 stress-testing = ["test-utils"]
 
@@ -94,7 +107,7 @@ rand = "0.9"
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
-rust_xlsxwriter = "0.99"  # For creating proper XLSX test files
+rust_xlsxwriter = "0.99" # For creating proper XLSX test files
 # WebDAV server for realistic stress testing
 dav-server = { version = "0.11", features = ["memfs"] }
 hyper = { version = "1", features = ["server", "http1"] }
