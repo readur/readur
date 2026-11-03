@@ -9,7 +9,7 @@
     // per-topic presets folded into one default.json that ships managers only;
     // grouping, labels and commit policy now live in packageRules below. Pinned
     // so an upstream restructure can't halt Renovate again (#986).
-    'github>home-operations/renovate-presets#10.0.1',
+    'github>home-operations/renovate-presets#11.0.0',
     ':automergePr',
     ':configMigration',
     ':dependencyDashboard',
