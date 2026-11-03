@@ -15,6 +15,7 @@ pub mod images;
 pub mod labels;
 pub mod notifications;
 pub mod ocr_retry;
+pub mod sanitize;
 pub mod server_secrets;
 pub mod settings;
 pub mod shared_links;

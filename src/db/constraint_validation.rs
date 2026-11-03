@@ -45,6 +45,29 @@ impl ConstraintValidator {
         }
     }
 
+    /// The `(failure_reason, failure_stage, error_message)` to store for a failed
+    /// document. A value the table's CHECK constraints would reject becomes
+    /// `other` / `processing`, with the original kept in the error message, so that
+    /// recording a failure cannot itself fail and hide the document (#901).
+    pub fn storable_failure(reason: &str, stage: &str, error_message: Option<&str>) -> (String, String, Option<String>) {
+        let mut unknown = Vec::new();
+        let reason = if Self::validate_failure_reason(reason).is_ok() { reason } else {
+            unknown.push(format!("failure_reason={reason}"));
+            "other"
+        };
+        let stage = if Self::validate_failure_stage(stage).is_ok() { stage } else {
+            unknown.push(format!("failure_stage={stage}"));
+            "processing"
+        };
+        if unknown.is_empty() {
+            return (reason.to_string(), stage.to_string(), error_message.map(str::to_string));
+        }
+        let note = format!("[{}]", unknown.join(", "));
+        tracing::warn!("Recording failed document with unrecognised {note}; stored as {reason}/{stage}");
+        let message = match error_message { Some(m) => format!("{note} {m}"), None => note };
+        (reason.to_string(), stage.to_string(), Some(message))
+    }
+
     /// Maps legacy ocr_failure_reason values to new constraint-compliant values
     /// This ensures migration compatibility and prevents constraint violations
     pub fn map_legacy_ocr_failure_reason(legacy_reason: Option<&str>) -> &'static str {

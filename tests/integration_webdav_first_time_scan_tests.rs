@@ -221,9 +221,7 @@ fn mock_realistic_directory_structure() -> Vec<FileIngestionInfo> {
 
 // Helper function to create test database
 async fn create_test_database() -> Result<(Database, Uuid)> {
-    let db_url = std::env::var("DATABASE_URL")
-        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    let db_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
     
     let database = Database::new(&db_url).await?;
     

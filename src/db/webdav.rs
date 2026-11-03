@@ -3,6 +3,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use super::Database;
+use super::sanitize::ToDb;
 use crate::models::source::{
     WebDAVSyncState, UpdateWebDAVSyncState, WebDAVFile, CreateWebDAVFile,
     WebDAVDirectory, CreateWebDAVDirectory, UpdateWebDAVDirectory,
@@ -58,12 +59,12 @@ impl Database {
             )
             .bind(user_id)
             .bind(state.last_sync_at)
-            .bind(&state.sync_cursor)
+            .bind(state.sync_cursor.for_db())
             .bind(state.is_running)
             .bind(state.files_processed)
             .bind(state.files_remaining)
-            .bind(&state.current_folder)
-            .bind(&state.errors)
+            .bind(state.current_folder.for_db())
+            .bind(state.errors.for_db())
             .execute(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database update failed: {}", e))?;
@@ -120,7 +121,7 @@ impl Database {
                FROM webdav_files WHERE user_id = $1 AND webdav_path = $2"#
         )
         .bind(user_id)
-        .bind(webdav_path)
+        .bind(webdav_path.for_db())
         .fetch_optional(&self.pool)
         .await?;
 
@@ -161,14 +162,14 @@ impl Database {
                mime_type, document_id, sync_status, sync_error, created_at, updated_at"#
         )
         .bind(file.user_id)
-        .bind(&file.webdav_path)
-        .bind(&file.etag)
+        .bind(file.webdav_path.for_db())
+        .bind(file.etag.for_db())
         .bind(file.last_modified)
         .bind(file.file_size)
-        .bind(&file.mime_type)
+        .bind(file.mime_type.for_db())
         .bind(file.document_id)
         .bind(&file.sync_status)
-        .bind(&file.sync_error)
+        .bind(file.sync_error.for_db())
         .fetch_one(&self.pool)
         .await?;
 
@@ -232,7 +233,7 @@ impl Database {
                    FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#
             )
             .bind(user_id)
-            .bind(directory_path)
+            .bind(directory_path.for_db())
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
@@ -269,8 +270,8 @@ impl Database {
                file_count, total_size_bytes, created_at, updated_at"#
         )
         .bind(directory.user_id)
-        .bind(&directory.directory_path)
-        .bind(&directory.directory_etag)
+        .bind(directory.directory_path.for_db())
+        .bind(directory.directory_etag.for_db())
         .bind(directory.file_count)
         .bind(directory.total_size_bytes)
         .fetch_one(&self.pool)
@@ -301,8 +302,8 @@ impl Database {
                    WHERE user_id = $1 AND directory_path = $2"#
             )
             .bind(user_id)
-            .bind(directory_path)
-            .bind(&update.directory_etag)
+            .bind(directory_path.for_db())
+            .bind(update.directory_etag.for_db())
             .bind(update.last_scanned_at)
             .bind(update.file_count)
             .bind(update.total_size_bytes)
@@ -362,7 +363,7 @@ impl Database {
             r#"DELETE FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#
         )
         .bind(user_id)
-        .bind(directory_path)
+        .bind(directory_path.for_db())
         .execute(&self.pool)
         .await?;
 
@@ -408,7 +409,7 @@ impl Database {
                DO UPDATE SET scan_in_progress = TRUE, scan_started_at = NOW(), scan_error = NULL"#
         )
         .bind(user_id)
-        .bind(directory_path)
+        .bind(directory_path.for_db())
         .execute(&self.pool)
         .await?;
 
@@ -424,7 +425,7 @@ impl Database {
                WHERE user_id = $1 AND directory_path = $2"#
         )
         .bind(user_id)
-        .bind(directory_path)
+        .bind(directory_path.for_db())
         .execute(&self.pool)
         .await?;
 
@@ -439,8 +440,8 @@ impl Database {
                WHERE user_id = $1 AND directory_path = $2"#
         )
         .bind(user_id)
-        .bind(directory_path)
-        .bind(error)
+        .bind(directory_path.for_db())
+        .bind(error.for_db())
         .execute(&self.pool)
         .await?;
 
@@ -472,8 +473,8 @@ impl Database {
                    file_count, total_size_bytes, created_at, updated_at"#
             )
             .bind(directory.user_id)
-            .bind(&directory.directory_path)
-            .bind(&directory.directory_etag)
+            .bind(directory.directory_path.for_db())
+            .bind(directory.directory_etag.for_db())
             .bind(directory.file_count)
             .bind(directory.total_size_bytes)
             .fetch_one(&mut *tx)
@@ -520,7 +521,7 @@ impl Database {
         query_builder = query_builder.bind(user_id);
         
         for path in existing_paths {
-            query_builder = query_builder.bind(path);
+            query_builder = query_builder.bind(path.for_db());
         }
 
         let result = query_builder.execute(&self.pool).await?;
@@ -553,8 +554,8 @@ impl Database {
                    file_count, total_size_bytes, created_at, updated_at"#
             )
             .bind(directory.user_id)
-            .bind(&directory.directory_path)
-            .bind(&directory.directory_etag)
+            .bind(directory.directory_path.for_db())
+            .bind(directory.directory_etag.for_db())
             .bind(directory.file_count)
             .bind(directory.total_size_bytes)
             .fetch_one(&mut *tx)
@@ -605,7 +606,7 @@ impl Database {
             query_builder = query_builder.bind(user_id);
             
             for path in &discovered_paths {
-                query_builder = query_builder.bind(path);
+                query_builder = query_builder.bind(path.for_db());
             }
 
             let result = query_builder.execute(&mut *tx).await?;

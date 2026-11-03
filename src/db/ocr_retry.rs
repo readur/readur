@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+use crate::db::sanitize::strip_nul_vec;
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct OcrRetryHistory {
     pub id: Uuid,
@@ -213,7 +215,7 @@ pub async fn get_eligible_documents_for_retry(
     if let Some(types) = mime_types {
         if !types.is_empty() {
             query.push(" AND d.mime_type = ANY(");
-            query.push_bind(types);
+            query.push_bind(strip_nul_vec(&types));
             query.push(")");
         }
     }
@@ -222,7 +224,7 @@ pub async fn get_eligible_documents_for_retry(
     if let Some(reasons) = failure_reasons {
         if !reasons.is_empty() {
             query.push(" AND d.ocr_failure_reason = ANY(");
-            query.push_bind(reasons);
+            query.push_bind(strip_nul_vec(&reasons));
             query.push(")");
         }
     }

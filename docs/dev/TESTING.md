@@ -127,6 +127,18 @@ Integration tests run against the complete system and require:
 - ✅ Server infrastructure
 - ✅ Full OCR processing pipeline
 
+#### Test databases
+
+Tests that need PostgreSQL get their own database from `readur::test_db::TestDatabase` (used by `TestContext`). Each test process starts one server, runs the migrations once into a template database, and clones it per test with `CREATE DATABASE … TEMPLATE …`, which takes milliseconds. Tests of the migrations themselves use `TestDatabase::empty()`.
+
+The server is a `postgres:18` testcontainer by default (`test_db::POSTGRES_TAG`). To use an existing server instead, for example when Docker cannot run containers, point `READUR_TEST_POSTGRES_URL` at any database on it whose role can `CREATEDB`:
+
+```bash
+export READUR_TEST_POSTGRES_URL=postgresql://readur:readur@localhost:5432/readur
+```
+
+The container, or on an existing server the per-test databases, are removed when the test process exits. The template is kept on an existing server and reused until the migrations change.
+
 #### What Integration Tests Cover
 
 ```bash

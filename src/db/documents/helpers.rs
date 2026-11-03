@@ -1,6 +1,8 @@
 use sqlx::{Row, QueryBuilder, Postgres};
 use uuid::Uuid;
 
+use crate::db::sanitize::strip_nul_vec;
+
 use crate::models::{Document, DocumentFilters, DocumentSortField, SortOrder, UserRole};
 
 /// Standard document fields for SELECT queries
@@ -122,7 +124,7 @@ pub fn apply_document_filters(query: &mut QueryBuilder<Postgres>, filters: &Docu
 
     if let Some(mime_types) = filters.mime_types.as_ref().filter(|v| !v.is_empty()) {
         query.push(" AND mime_type = ANY(");
-        query.push_bind(mime_types.clone());
+        query.push_bind(strip_nul_vec(mime_types));
         query.push(")");
     }
 
@@ -134,7 +136,7 @@ pub fn apply_document_filters(query: &mut QueryBuilder<Postgres>, filters: &Docu
 
     if let Some(tags) = filters.tags.as_ref().filter(|v| !v.is_empty()) {
         query.push(" AND documents.id IN (SELECT dl.document_id FROM document_labels dl JOIN labels l ON dl.label_id = l.id WHERE l.name = ANY(");
-        query.push_bind(tags.clone());
+        query.push_bind(strip_nul_vec(tags));
         query.push("))");
     }
 
@@ -146,7 +148,7 @@ pub fn apply_document_filters(query: &mut QueryBuilder<Postgres>, filters: &Docu
 
     if let Some(source_types) = filters.source_types.as_ref().filter(|v| !v.is_empty()) {
         query.push(" AND (source_type = ANY(");
-        query.push_bind(source_types.clone());
+        query.push_bind(strip_nul_vec(source_types));
         query.push(")");
         if source_types.iter().any(|t| t == "direct_upload") {
             // Direct uploads are not always tagged with a source type

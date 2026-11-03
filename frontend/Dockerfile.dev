@@ -1,5 +1,5 @@
 # Development Dockerfile for frontend with Vite hot-reloading
-FROM node:24-bookworm
+FROM node:26-bookworm
 
 WORKDIR /app
 
