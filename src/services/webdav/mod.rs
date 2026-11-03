@@ -2,6 +2,7 @@
 
 pub mod common; // Common utilities and shared functions
 pub mod config;
+pub mod paths;
 pub mod service; 
 pub mod smart_sync;
 pub mod progress_shim; // Backward compatibility shim for simplified progress tracking

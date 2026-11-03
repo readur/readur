@@ -24,6 +24,7 @@ use crate::utils::outbound::{self, check_url_without_dns};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
+use super::paths::{decode_href, encode_path};
 
 /// Longest wait a server-supplied Retry-After header can impose.
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(120);
@@ -75,13 +76,14 @@ const PROPFIND_LISTING_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
                 </D:prop>
             </D:propfind>"#;
 
-/// Joins a base URL and a relative path with exactly one slash between them.
+/// Joins a base URL and a decoded relative path with exactly one slash between
+/// them, percent-encoding the path's segments for the request line.
 fn join_url(base_url: &str, path: &str) -> String {
     let clean_path = path.trim_start_matches('/');
     if clean_path.is_empty() {
         base_url.trim_end_matches('/').to_string()
     } else {
-        format!("{}/{}", base_url.trim_end_matches('/'), clean_path)
+        format!("{}/{}", base_url.trim_end_matches('/'), encode_path(clean_path))
     }
 }
 
@@ -890,39 +892,13 @@ impl WebDAVService {
         final_url
     }
 
-    /// Convert full WebDAV href (from XML response) to relative path
-    /// 
-    /// Input:  "/remote.php/dav/files/username/Photos/image.jpg"
-    /// Output: "/Photos/image.jpg"
+    /// Converts a percent-encoded href from a PROPFIND response into the decoded
+    /// relative path used internally.
+    ///
+    /// Input:  "/remote.php/dav/files/username/My%20Photos/image.jpg"
+    /// Output: "/My Photos/image.jpg"
     pub fn href_to_relative_path(&self, href: &str) -> String {
-        match self.config.server_type.as_deref() {
-            Some("nextcloud") => {
-                let prefix = format!("/remote.php/dav/files/{}", self.config.username);
-                if href.starts_with(&prefix) {
-                    let relative = &href[prefix.len()..];
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            Some("owncloud") => {
-                if href.starts_with("/remote.php/webdav") {
-                    let relative = &href[18..]; // Remove "/remote.php/webdav"
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            Some("generic") => {
-                if href.starts_with("/webdav") {
-                    let relative = &href[7..]; // Remove "/webdav"
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            _ => href.to_string()
-        }
+        self.convert_to_relative_path(&decode_href(href))
     }
 
     /// Convert file paths to the proper URL format for the server
@@ -930,7 +906,8 @@ impl WebDAVService {
         self.get_url_for_path(relative_path)
     }
 
-    /// Converts a full WebDAV path to a relative path by removing server-specific prefixes
+    /// Removes the server-specific prefix from an already-decoded WebDAV path.
+    /// Paths without the prefix are returned unchanged.
     pub fn convert_to_relative_path(&self, full_webdav_path: &str) -> String {
         // For Nextcloud/ownCloud, remove the server-specific prefixes
         if let Some(server_type) = &self.config.server_type {
