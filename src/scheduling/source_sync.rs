@@ -35,21 +35,24 @@ fn owner_is_active_admin(owner: Option<&User>) -> bool {
     owner.is_some_and(|owner| owner.is_active && owner.role == UserRole::Admin)
 }
 
-/// What one sync run did, counted per file after the extension and size
-/// filters. `discovered = processed + skipped + failed` once the run has
-/// finished; a cancelled run stops early and leaves the remainder pending.
+/// What one sync run did, counted per file after the extension filter.
+/// `discovered = processed + skipped + failed` once the run has finished; a
+/// cancelled run stops early and leaves the remainder pending.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SyncOutcome {
-    /// Files that passed the filters and were handed to the processor.
+    /// Files that passed the extension filter, including those skipped for
+    /// their size.
     pub discovered: usize,
     /// Files ingested as new documents.
     pub processed: usize,
     /// Files not ingested on purpose: already present, duplicate content, or
-    /// over the size limit. Includes `unchanged`.
+    /// over the size limit. Includes `unchanged` and `oversized`.
     pub skipped: usize,
     /// Files skipped before download because the stored document has the
     /// same path, size and modification time.
     pub unchanged: usize,
+    /// Files skipped before download because they are over `max_file_size_mb`.
+    pub oversized: usize,
     /// Files whose download or ingestion failed; they are retried next run.
     pub failed: usize,
     /// Watch folders the run tried to list.
@@ -107,6 +110,14 @@ impl SyncOutcome {
         if self.first_error.is_none() {
             self.first_error = Some(message);
         }
+    }
+
+    /// Counts a listed file that is over the size limit: discovered, and
+    /// skipped without being handed to the processor.
+    fn skip_oversized(&mut self) {
+        self.discovered += 1;
+        self.skipped += 1;
+        self.oversized += 1;
     }
 }
 
@@ -428,7 +439,6 @@ impl SourceSyncService {
         let max_file_bytes = i64::try_from(self.state.config.max_file_size_mb.saturating_mul(1024 * 1024)).unwrap_or(i64::MAX);
         let mut outcome = SyncOutcome { folders: watch_folders.len(), ..Default::default() };
         let mut files_to_process: Vec<FileIngestionInfo> = Vec::new();
-        let mut oversized = 0usize;
 
         progress.set_phase(SyncPhase::DiscoveringFiles);
         for folder_path in watch_folders {
@@ -453,9 +463,10 @@ impl SourceSyncService {
                             continue;
                         }
                         if max_file_bytes > 0 && file_info.size > max_file_bytes {
-                            oversized += 1;
+                            outcome.skip_oversized();
                             continue;
                         }
+                        outcome.discovered += 1;
                         outcome.total_size_bytes += file_info.size;
                         files_to_process.push(file_info);
                     }
@@ -471,10 +482,9 @@ impl SourceSyncService {
             }
         }
 
-        if oversized > 0 {
+        if outcome.oversized > 0 {
             warn!("Skipped {} files larger than the {} MiB limit (max_file_size_mb) for source {}",
-                  oversized, self.state.config.max_file_size_mb, source_id);
-            outcome.skipped += oversized;
+                  outcome.oversized, self.state.config.max_file_size_mb, source_id);
         }
         if !watch_folders.is_empty() && outcome.folders_failed == watch_folders.len() {
             return Err(anyhow!(
@@ -484,7 +494,6 @@ impl SourceSyncService {
             ));
         }
 
-        outcome.discovered = files_to_process.len();
         progress.add_files_found(outcome.discovered);
         progress.set_phase(SyncPhase::ProcessingFiles);
         if let Err(e) = self.state.db.update_source_sync_stats(
@@ -751,6 +760,21 @@ mod outcome_tests {
         assert_eq!(outcome.pending(), 3);
         assert!(!outcome.is_clean());
         assert!(SyncOutcome { discovered: 2, processed: 2, ..Default::default() }.is_clean());
+    }
+
+    /// An oversized file is discovered and skipped, so it does not hide a
+    /// pending or failed file behind it.
+    #[test]
+    fn oversized_files_count_as_discovered_and_skipped() {
+        let mut outcome = SyncOutcome::default();
+        outcome.skip_oversized();
+        outcome.discovered += 2; // two files handed to the processor
+        outcome.processed += 1;
+        outcome.failed += 1;
+        assert_eq!(outcome.oversized, 1);
+        assert_eq!(outcome.skipped, 1);
+        assert_eq!(outcome.discovered, outcome.processed + outcome.skipped + outcome.failed);
+        assert_eq!(outcome.pending(), 1);
     }
 
     #[test]
