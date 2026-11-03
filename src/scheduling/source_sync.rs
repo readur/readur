@@ -662,9 +662,11 @@ impl SourceSyncService {
                 info!("Skipped duplicate file {}: {} (existing: {})", file_info.name, reason, existing_document_id);
                 return Ok(FileOutcome::Skipped);
             }
+            // Produced when another writer stored the same content first:
+            // nothing new was ingested by this run.
             IngestionResult::ExistingDocument(doc) => {
                 debug!("Found existing document for {}: {}", file_info.name, doc.id);
-                (doc, false) // Existing document - don't re-queue OCR
+                return Ok(FileOutcome::Skipped);
             }
             IngestionResult::TrackedAsDuplicate { existing_document_id } => {
                 info!("Tracked {} as duplicate of existing document: {}", file_info.name, existing_document_id);
