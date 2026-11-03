@@ -44,8 +44,11 @@ pub struct SyncOutcome {
     /// Files ingested as new documents.
     pub processed: usize,
     /// Files not ingested on purpose: already present, duplicate content, or
-    /// over the size limit.
+    /// over the size limit. Includes `unchanged`.
     pub skipped: usize,
+    /// Files skipped before download because the stored document has the
+    /// same path, size and modification time.
+    pub unchanged: usize,
     /// Files whose download or ingestion failed; they are retried next run.
     pub failed: usize,
     /// Watch folders the run tried to list.
@@ -104,6 +107,8 @@ impl SyncOutcome {
 enum FileOutcome {
     Ingested,
     Skipped,
+    /// Skipped before download: already synced and unchanged.
+    Unchanged,
 }
 
 #[derive(Clone)]
@@ -473,6 +478,10 @@ impl SourceSyncService {
                     }
                 }
                 Ok(FileOutcome::Skipped) => outcome.skipped += 1,
+                Ok(FileOutcome::Unchanged) => {
+                    outcome.skipped += 1;
+                    outcome.unchanged += 1;
+                }
                 Err(_) if cancellation_token.is_cancelled() => {
                     debug!("File {} not processed: sync cancelled", file_info.relative_path);
                 }
@@ -527,6 +536,18 @@ impl SourceSyncService {
         // Check for cancellation again after acquiring semaphore
         if cancellation_token.is_cancelled() {
             return Err(anyhow!("Processing cancelled"));
+        }
+
+        // A document already stored for this path with the same size and
+        // modification time needs no download. Any lookup failure or unknown
+        // value falls through to the download and content check.
+        match state.db.find_synced_document(user_id, source_id, &file_info.relative_path).await {
+            Ok(Some(stored)) if stored.matches(file_info.size, file_info.last_modified) => {
+                debug!("Skipping unchanged file {} (document {})", file_info.relative_path, stored.id);
+                return Ok(FileOutcome::Unchanged);
+            }
+            Ok(_) => {}
+            Err(e) => warn!("Could not look up stored document for {}: {}", file_info.relative_path, e),
         }
 
         // Download the file
