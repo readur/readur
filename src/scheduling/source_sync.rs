@@ -540,6 +540,16 @@ impl SourceSyncService {
 
         debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());
 
+        // A listing size of 0 means the source did not report one; otherwise
+        // a different length means a truncated transfer or a file that was
+        // still being written, so leave it for the next run.
+        if file_info.size > 0 && file_data.len() as i64 != file_info.size {
+            return Err(anyhow!(
+                "size mismatch for {}: listed {} bytes, downloaded {}; file may have changed during sync",
+                file_info.relative_path, file_info.size, file_data.len()
+            ));
+        }
+
         // Use the unified ingestion service for consistent deduplication
         let file_service = (*state.file_service).clone();
         let ingestion_service = DocumentIngestionService::new(state.db.clone(), file_service);
@@ -586,13 +596,30 @@ impl SourceSyncService {
             else { 2 };
 
             if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
-                error!("Failed to enqueue document for OCR: {}", e);
-            } else {
-                debug!("Enqueued document {} for OCR processing", document.id);
+                // Without a queue row the document would stay pending forever and
+                // the content-hash check would skip it on every later run, so
+                // discard it and let the next run retry the file.
+                Self::discard_document(&state, &document).await;
+                return Err(anyhow!("Failed to enqueue {} for OCR: {}", file_info.name, e));
             }
+            debug!("Enqueued document {} for OCR processing", document.id);
         }
 
         Ok(FileOutcome::Ingested)
+    }
+
+    /// Removes a document this run created but could not finish setting up:
+    /// the row first (so the file is retried next run even if the stored copy
+    /// lingers), then its stored files.
+    async fn discard_document(state: &AppState, document: &crate::models::Document) {
+        match state.db.delete_document(document.id, document.user_id, UserRole::User).await {
+            Ok(true) => {}
+            Ok(false) => warn!("Document {} was already gone while discarding it", document.id),
+            Err(e) => error!("Failed to delete document {} after a failed OCR enqueue: {}", document.id, e),
+        }
+        if let Err(e) = state.file_service.delete_document_files(document).await {
+            error!("Failed to delete stored files of discarded document {}: {}", document.id, e);
+        }
     }
 
     async fn update_source_status(&self, source_id: Uuid, status: SourceStatus, error_message: Option<&str>) -> Result<()> {
