@@ -311,7 +311,8 @@ async fn the_migration_gives_each_user_their_own_copy_and_keeps_every_tag() {
     let pool = ctx.state.db.get_pool();
     let (alice, bob, alice_doc, bob_doc, bobs_work) = restore_shared_labels(pool).await;
 
-    sqlx::raw_sql(&conversion_migration())
+    // The repository's own migration SQL.
+    sqlx::raw_sql(sqlx::AssertSqlSafe(conversion_migration()))
         .execute(pool)
         .await
         .unwrap();
@@ -356,7 +357,8 @@ async fn the_migration_gives_each_user_their_own_copy_and_keeps_every_tag() {
     assert_eq!(column, 0, "the is_system column is gone");
 
     // Running it again (as the latest-migration tests do) changes nothing.
-    sqlx::raw_sql(&conversion_migration())
+    // The repository's own migration SQL.
+    sqlx::raw_sql(sqlx::AssertSqlSafe(conversion_migration()))
         .execute(pool)
         .await
         .unwrap();

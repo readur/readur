@@ -517,7 +517,8 @@ impl Database {
             placeholders
         );
 
-        let mut query_builder = sqlx::query(&query);
+        // SQL interpolates only generated `$N` placeholders; the paths are binds.
+        let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(query));
         query_builder = query_builder.bind(user_id);
         
         for path in existing_paths {
@@ -602,7 +603,8 @@ impl Database {
                 placeholders
             );
 
-            let mut query_builder = sqlx::query(&query);
+            // SQL interpolates only generated `$N` placeholders; the paths are binds.
+            let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(query));
             query_builder = query_builder.bind(user_id);
             
             for path in &discovered_paths {

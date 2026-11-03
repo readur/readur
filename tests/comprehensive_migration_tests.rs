@@ -355,7 +355,8 @@ mod comprehensive_migration_tests {
                     filename, filename, reason));
             }
             
-            sqlx::query(&query)
+            // Interpolated values are UUID-hex/integer filenames and fixed reason literals.
+            sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
                 .bind(user_id)
                 .execute(pool)
                 .await

@@ -514,7 +514,7 @@ impl TestContext {
 
         match tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            sqlx::query(query).execute(self.state.db.get_pool())
+            sqlx::query(sqlx::AssertSqlSafe(query)).execute(self.state.db.get_pool()) // fixed cleanup tables; ids are bound
         ).await {
             Ok(Ok(result)) => {
                 let rows_affected = result.rows_affected();
@@ -545,7 +545,7 @@ impl TestContext {
 
         match tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            sqlx::query(query).bind(user_uuids).execute(self.state.db.get_pool())
+            sqlx::query(sqlx::AssertSqlSafe(query)).bind(user_uuids).execute(self.state.db.get_pool()) // fixed cleanup tables; ids are bound
         ).await {
             Ok(Ok(result)) => {
                 let rows_affected = result.rows_affected();
