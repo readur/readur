@@ -6,12 +6,14 @@ use axum::{
 };
 use std::sync::Arc;
 use uuid::Uuid;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use std::time::Duration;
 
 use crate::{
     auth::AuthUser,
+    db::sources::SyncCompletion,
     models::SourceStatus,
+    scheduling::source_scheduler::SyncStartError,
     services::webdav::{SyncProgress, SyncPhase},
     utils::{client_ip::PeerIsTrustedProxy, outbound::validate_outbound_url},
     AppState,
@@ -206,7 +208,7 @@ pub async fn trigger_deep_scan(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     info!("Starting deep scan for source {} by user {}", source_id, auth_user.user.username);
-    
+
     let source = state
         .db
         .get_source(auth_user.user.id, source_id)
@@ -214,283 +216,207 @@ pub async fn trigger_deep_scan(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Check if source is already syncing
-    if matches!(source.status, SourceStatus::Syncing) {
+    let Some(scheduler) = state.source_scheduler.as_ref() else {
+        error!("Deep scan for source {} not started: no source scheduler is running", source_id);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    if source.source_type != crate::models::SourceType::WebDAV {
+        error!("Deep scan not supported for source type: {:?}", source.source_type);
         return Ok(Json(serde_json::json!({
             "success": false,
-            "error": "source_already_syncing",
-            "message": "Source is already syncing. Please wait for the current sync to complete before starting a deep scan."
+            "error": "unsupported_source_type",
+            "message": "Deep scan is currently only supported for WebDAV sources"
         })));
     }
 
-    match source.source_type {
-        crate::models::SourceType::WebDAV => {
-            // Handle WebDAV deep scan
-            let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
-                .map_err(|e| {
-                    error!("Failed to parse WebDAV config for source {}: {}", source_id, e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
+    let config: crate::models::WebDAVSourceConfig = serde_json::from_value(source.config)
+        .map_err(|e| {
+            error!("Failed to parse WebDAV config for source {}: {}", source_id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-            // Re-check the destination at connect time; DNS may have changed
-            // since the source was saved.
-            let server_url = crate::services::webdav::WebDAVConfig::normalize_server_url(&config.server_url);
-            if let Err(e) = validate_outbound_url(&server_url).await {
-                error!("Deep scan for source {} not started: {}", source_id, e);
-                if let Err(db_err) = state
-                    .db
-                    .update_source_status(source_id, SourceStatus::Error, Some(e.to_string()))
-                    .await
-                {
-                    error!("Failed to update source status: {}", db_err);
-                }
-                return Err(StatusCode::BAD_REQUEST);
-            }
-
-            // Create WebDAV service
-            let webdav_config = crate::services::webdav::WebDAVConfig {
-                server_url: config.server_url.clone(),
-                username: config.username.clone(),
-                password: config.password.clone(),
-                watch_folders: config.watch_folders.clone(),
-                file_extensions: config.file_extensions.clone(),
-                timeout_seconds: 600, // 10 minutes for deep scan
-                server_type: config.server_type.clone(),
-            };
-
-            let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config.clone())
-                .map_err(|e| {
-                    error!("Failed to create WebDAV service for deep scan: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-
-            // Update source status to syncing
-            state
-                .db
-                .update_source_status(
-                    source_id,
-                    SourceStatus::Syncing,
-                    Some("Deep scan in progress - this can take a while, especially initial requests".to_string()),
-                )
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-            // Start deep scan in background
-            let state_clone = state.clone();
-            let user_id = auth_user.user.id;
-            let source_name = source.name.clone();
-            let source_id_clone = source_id;
-            let config_clone = config.clone();
-            
-            tokio::spawn(async move {
-                let start_time = chrono::Utc::now();
-                
-                // Create progress tracker for manual deep scan
-                let progress = Arc::new(SyncProgress::new());
-                progress.set_phase(SyncPhase::Initializing);
-                
-                // Register progress with global tracker so SSE can find it
-                state_clone.sync_progress_tracker.register_sync(source_id_clone, progress.clone());
-                info!("🚀 Starting manual deep scan with progress tracking for source '{}'", source_name);
-                
-                let mut progress_unregistered = false;
-                
-                // Use smart sync service for deep scans - this will properly reset directory ETags
-                let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone.clone());
-                let mut all_files_to_process = Vec::new();
-                let mut total_directories_tracked = 0;
-                
-                // Process each watch folder using smart sync
-                for watch_folder in &webdav_config.watch_folders {
-                    info!("🔍 Deep scan processing watch folder: {}", watch_folder);
-                    progress.set_current_directory(&watch_folder);
-                    
-                    match smart_sync_service.perform_smart_sync(
-                        user_id, 
-                        Some(source_id),
-                        &webdav_service, 
-                        watch_folder, 
-                        crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for directory reset
-                        Some(&progress) // Add progress tracking for manual deep scan
-                    ).await {
-                        Ok(sync_result) => {
-                            info!("Deep scan found {} files and {} directories in {}", 
-                                  sync_result.files.len(), sync_result.directories.len(), watch_folder);
-                            
-                            // Filter files by extensions 
-                            let filtered_files: Vec<_> = sync_result.files.into_iter()
-                                .filter(|file_info| {
-                                    let file_extension = std::path::Path::new(&file_info.name)
-                                        .extension()
-                                        .and_then(|ext| ext.to_str())
-                                        .unwrap_or("")
-                                        .to_lowercase();
-                                    config_clone.file_extensions.contains(&file_extension)
-                                })
-                                .collect();
-                                
-                            all_files_to_process.extend(filtered_files);
-                            total_directories_tracked += sync_result.directories.len();
-                        }
-                        Err(e) => {
-                            let error_msg = format!("Deep scan failed for watch folder {}: {}", watch_folder, e);
-                            error!("{}", error_msg);
-                            progress.add_error(&error_msg);
-                            // Continue with other folders rather than failing completely
-                        }
-                    }
-                }
-                
-                if !all_files_to_process.is_empty() {
-                    info!("Deep scan will process {} files from {} directories for source {}", 
-                          all_files_to_process.len(), total_directories_tracked, source_id_clone);
-                        
-                            // Process files using the existing sync mechanism
-                            match crate::routes::webdav::webdav_sync::process_files_for_deep_scan(
-                                state_clone.clone(),
-                                user_id,
-                                &webdav_service,
-                                &all_files_to_process,
-                                true, // enable background OCR
-                                Some(source_id_clone)
-                            ).await {
-                                Ok(files_processed) => {
-                                    let duration = chrono::Utc::now() - start_time;
-                                    info!("Deep scan completed for source {}: {} files processed in {:?}", 
-                                        source_id_clone, files_processed, duration);
-                                    
-                                    // Mark progress as completed and log final statistics
-                                    progress.set_phase(SyncPhase::Completed);
-                                    if let Some(stats) = progress.get_stats() {
-                                        info!("📊 Manual deep scan statistics: {} files processed, {} errors, {} warnings, elapsed: {}s", 
-                                              stats.files_processed, stats.errors.len(), stats.warnings, stats.elapsed_time.as_secs());
-                                    }
-                                    
-                                    // Unregister progress from global tracker
-                                    if !progress_unregistered {
-                                        state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
-                                        progress_unregistered = true;
-                                    }
-                                    
-                                    // Update source status to idle
-                                    if let Err(e) = state_clone.db.update_source_status(
-                                        source_id_clone,
-                                        SourceStatus::Idle,
-                                        Some(format!("Deep scan completed: {} files processed", files_processed)),
-                                    ).await {
-                                        error!("Failed to update source status after deep scan: {}", e);
-                                    }
-                                    
-                                    // Send success notification
-                                    let notification = crate::models::CreateNotification {
-                                        notification_type: "success".to_string(),
-                                        title: "Deep Scan Completed".to_string(),
-                                        message: format!(
-                                            "Smart deep scan of {} completed successfully. {} files processed, {} directories tracked in {:.1} minutes.",
-                                            source_name,
-                                            files_processed,
-                                            total_directories_tracked,
-                                            duration.num_seconds() as f64 / 60.0
-                                        ),
-                                        action_url: Some("/documents".to_string()),
-                                        metadata: Some(serde_json::json!({
-                                            "source_id": source_id_clone,
-                                            "scan_type": "deep_scan",
-                                            "files_processed": files_processed,
-                                            "duration_seconds": duration.num_seconds()
-                                        })),
-                                    };
-                                    
-                                    if let Err(e) = state_clone.db.create_notification(user_id, &notification).await {
-                                        error!("Failed to create deep scan success notification: {}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Deep scan file processing failed for source {}: {}", source_id_clone, e);
-                                    
-                                    // Mark progress as failed and log error
-                                    progress.set_phase(SyncPhase::Failed(e.to_string()));
-                                    progress.add_error(&format!("File processing failed: {}", e));
-                                    
-                                    // Unregister progress from global tracker
-                                    if !progress_unregistered {
-                                        state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
-                                        progress_unregistered = true;
-                                    }
-                                    
-                                    // Update source status to error
-                                    if let Err(e2) = state_clone.db.update_source_status(
-                                        source_id_clone,
-                                        SourceStatus::Error,
-                                        Some(format!("Deep scan failed: {}", e)),
-                                    ).await {
-                                        error!("Failed to update source status after deep scan error: {}", e2);
-                                    }
-                                    
-                                    // Send error notification
-                                    let notification = crate::models::CreateNotification {
-                                        notification_type: "error".to_string(),
-                                        title: "Deep Scan Failed".to_string(),
-                                        message: format!("Deep scan of {} failed: {}", source_name, e),
-                                        action_url: Some("/sources".to_string()),
-                                        metadata: Some(serde_json::json!({
-                                            "source_id": source_id_clone,
-                                            "scan_type": "deep_scan",
-                                            "error": e.to_string()
-                                        })),
-                                    };
-                                    
-                                    if let Err(e) = state_clone.db.create_notification(user_id, &notification).await {
-                                        error!("Failed to create deep scan error notification: {}", e);
-                                    }
-                                }
-                            }
-
-                        } else {
-                            info!("Deep scan found no files but tracked {} directories for source {}", 
-                                  total_directories_tracked, source_id_clone);
-                            
-                            // Mark progress as completed (no files found case)
-                            progress.set_phase(SyncPhase::Completed);
-                            
-                            // Unregister progress from global tracker
-                            if !progress_unregistered {
-                                state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
-                                progress_unregistered = true;
-                            }
-                            
-                            // Update source status to idle even if no files found
-                            if let Err(e) = state_clone.db.update_source_status(
-                                source_id_clone,
-                                SourceStatus::Idle,
-                                Some(format!("Smart deep scan completed: {} directories tracked, no files found", total_directories_tracked)),
-                            ).await {
-                                error!("Failed to update source status after empty deep scan: {}", e);
-                            }
-                        }
-                        
-                        // Ensure progress is always unregistered at the end, even if we missed a case
-                        if !progress_unregistered {
-                            state_clone.sync_progress_tracker.unregister_sync(source_id_clone);
-                        }
-            });
-
-            Ok(Json(serde_json::json!({
-                "success": true,
-                "message": format!("Deep scan started for source '{}'. This will perform a complete rescan of all configured folders.", source.name)
-            })))
+    // Re-check the destination at connect time; DNS may have changed
+    // since the source was saved.
+    let server_url = crate::services::webdav::WebDAVConfig::normalize_server_url(&config.server_url);
+    if let Err(e) = validate_outbound_url(&server_url).await {
+        error!("Deep scan for source {} not started: {}", source_id, e);
+        if let Err(db_err) = state
+            .db
+            .update_source_status(source_id, SourceStatus::Error, Some(e.to_string()))
+            .await
+        {
+            error!("Failed to update source status: {}", db_err);
         }
-        _ => {
-            error!("Deep scan not supported for source type: {:?}", source.source_type);
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let webdav_config = crate::services::webdav::WebDAVConfig {
+        server_url: config.server_url.clone(),
+        username: config.username.clone(),
+        password: config.password.clone(),
+        watch_folders: config.watch_folders.clone(),
+        file_extensions: config.file_extensions.clone(),
+        timeout_seconds: 600, // 10 minutes for deep scan
+        server_type: config.server_type.clone(),
+    };
+
+    let webdav_service = crate::services::webdav::WebDAVService::new(webdav_config)
+        .map_err(|e| {
+            error!("Failed to create WebDAV service for deep scan: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let scan = DeepScan {
+        state: state.clone(),
+        user_id: auth_user.user.id,
+        source_id,
+        source_name: source.name.clone(),
+        webdav_service,
+        watch_folders: config.watch_folders,
+        extensions: crate::utils::extension_filter::ExtensionFilter::new(&config.file_extensions),
+    };
+
+    // The same claim as every other sync: refused while any sync task for
+    // the source is alive, released when the scan task ends.
+    match scheduler.run_claimed(source_id, move |_token, progress| scan.run(progress)).await {
+        Ok(()) => Ok(Json(serde_json::json!({
+            "success": true,
+            "message": format!("Deep scan started for source '{}'. This will perform a complete rescan of all configured folders.", source.name)
+        }))),
+        Err(SyncStartError::AlreadyRunning | SyncStartError::Stopping | SyncStartError::NotClaimed) => {
             Ok(Json(serde_json::json!({
                 "success": false,
-                "error": "unsupported_source_type",
-                "message": "Deep scan is currently only supported for WebDAV sources"
+                "error": "source_already_syncing",
+                "message": "Source is already syncing. Please wait for the current sync to complete before starting a deep scan."
             })))
+        }
+        Err(e) => {
+            error!("Deep scan for source {} could not be started: {}", source_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }
 
+/// A manual WebDAV deep scan: every watch folder is rescanned in full, the
+/// files found are ingested, and the run is recorded like any other sync.
+struct DeepScan {
+    state: Arc<AppState>,
+    user_id: Uuid,
+    source_id: Uuid,
+    source_name: String,
+    webdav_service: crate::services::webdav::WebDAVService,
+    watch_folders: Vec<String>,
+    extensions: crate::utils::extension_filter::ExtensionFilter,
+}
+
+impl DeepScan {
+    async fn run(self, progress: Arc<SyncProgress>) {
+        let start_time = chrono::Utc::now();
+        progress.set_phase(SyncPhase::Initializing);
+        info!("🚀 Starting manual deep scan for source '{}'", self.source_name);
+
+        let (files, directories_tracked) = self.discover(&progress).await;
+
+        if files.is_empty() {
+            info!("Deep scan found no files but tracked {} directories for source {}", directories_tracked, self.source_id);
+            progress.set_phase(SyncPhase::Completed);
+            let message = format!("Smart deep scan completed: {} directories tracked, no files found", directories_tracked);
+            self.finish(SourceStatus::Idle, &message, 0).await;
+            return;
+        }
+
+        info!("Deep scan will process {} files from {} directories for source {}", files.len(), directories_tracked, self.source_id);
+        match crate::routes::webdav::webdav_sync::process_files_for_deep_scan(
+            self.state.clone(),
+            self.user_id,
+            &self.webdav_service,
+            &files,
+            true, // enable background OCR
+            Some(self.source_id),
+        ).await {
+            Ok(files_processed) => {
+                let duration = chrono::Utc::now() - start_time;
+                info!("Deep scan completed for source {}: {} files processed in {:?}", self.source_id, files_processed, duration);
+                progress.set_phase(SyncPhase::Completed);
+                self.finish(SourceStatus::Idle, &format!("Deep scan completed: {} files processed", files_processed), files_processed as i64).await;
+                self.notify("success", "Deep Scan Completed", format!(
+                    "Smart deep scan of {} completed successfully. {} files processed, {} directories tracked in {:.1} minutes.",
+                    self.source_name, files_processed, directories_tracked, duration.num_seconds() as f64 / 60.0
+                ), serde_json::json!({
+                    "source_id": self.source_id,
+                    "scan_type": "deep_scan",
+                    "files_processed": files_processed,
+                    "duration_seconds": duration.num_seconds()
+                })).await;
+            }
+            Err(e) => {
+                error!("Deep scan file processing failed for source {}: {}", self.source_id, e);
+                progress.set_phase(SyncPhase::Failed(e.to_string()));
+                progress.add_error(&format!("File processing failed: {}", e));
+                self.finish(SourceStatus::Error, &format!("Deep scan failed: {}", e), 0).await;
+                self.notify("error", "Deep Scan Failed", format!("Deep scan of {} failed: {}", self.source_name, e), serde_json::json!({
+                    "source_id": self.source_id,
+                    "scan_type": "deep_scan",
+                    "error": e.to_string()
+                })).await;
+            }
+        }
+    }
+
+    /// Rescans every watch folder; a folder that fails is logged and skipped.
+    async fn discover(&self, progress: &Arc<SyncProgress>) -> (Vec<crate::models::FileIngestionInfo>, usize) {
+        let smart_sync_service = crate::services::webdav::SmartSyncService::new(self.state.clone());
+        let mut files = Vec::new();
+        let mut directories_tracked = 0;
+        for watch_folder in &self.watch_folders {
+            info!("🔍 Deep scan processing watch folder: {}", watch_folder);
+            progress.set_current_directory(watch_folder);
+            match smart_sync_service.perform_smart_sync(
+                self.user_id,
+                Some(self.source_id),
+                &self.webdav_service,
+                watch_folder,
+                crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for directory reset
+                Some(progress),
+            ).await {
+                Ok(result) => {
+                    info!("Deep scan found {} files and {} directories in {}", result.files.len(), result.directories.len(), watch_folder);
+                    files.extend(result.files.into_iter().filter(|f| self.extensions.matches_name(&f.name)));
+                    directories_tracked += result.directories.len();
+                }
+                Err(e) => {
+                    let error_msg = format!("Deep scan failed for watch folder {}: {}", watch_folder, e);
+                    error!("{}", error_msg);
+                    progress.add_error(&error_msg);
+                }
+            }
+        }
+        (files, directories_tracked)
+    }
+
+    async fn finish(&self, status: SourceStatus, message: &str, files_synced: i64) {
+        let completion = SyncCompletion { status, error: Some(message), files_synced, files_pending: Some(0) };
+        match self.state.db.finish_sync(self.source_id, &completion).await {
+            Ok(true) => {}
+            Ok(false) => warn!("Deep scan completion for source {} not recorded: the source was no longer marked as syncing", self.source_id),
+            Err(e) => error!("Failed to record deep scan completion for source {}: {}", self.source_id, e),
+        }
+    }
+
+    async fn notify(&self, kind: &str, title: &str, message: String, metadata: serde_json::Value) {
+        let notification = crate::models::CreateNotification {
+            notification_type: kind.to_string(),
+            title: title.to_string(),
+            message,
+            action_url: Some(if kind == "success" { "/documents" } else { "/sources" }.to_string()),
+            metadata: Some(metadata),
+        };
+        if let Err(e) = self.state.db.create_notification(self.user_id, &notification).await {
+            error!("Failed to create deep scan notification: {}", e);
+        }
+    }
+}
 
 /// WebSocket endpoint for real-time sync progress updates
 /// 
