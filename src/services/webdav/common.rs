@@ -37,7 +37,7 @@ pub fn verify_download(
     }
 
     let declared_html = content_type.is_some_and(|ct| ct == "text/html" || ct == "application/xhtml+xml");
-    let unspecified = content_type.map_or(true, |ct| ct == "application/octet-stream");
+    let unspecified = content_type.is_none_or(|ct| ct == "application/octet-stream");
     if declared_html || (unspecified && looks_like_html(body)) {
         return Err(anyhow!(
             "Download for '{}' returned an HTML page instead of file content (Content-Type: {}); \
