@@ -220,3 +220,78 @@ async fn deep_scan_records_the_folder_etag() {
     }
     result.unwrap();
 }
+
+/// Listing of `folder` with its own entry and one file, and no subdirectories.
+async fn mount_flat_listing(server: &MockServer, request_path: &str, href_dir: &str, file: &str) {
+    Mock::given(method("PROPFIND"))
+        .and(path(request_path))
+        .respond_with(ResponseTemplate::new(207).set_body_string(multistatus(&[
+            entry(&format!("{href_dir}/"), "root-v1", true),
+            entry(&format!("{href_dir}/{file}"), "f-1", false),
+        ])))
+        .expect(1)
+        .mount(server)
+        .await;
+}
+
+/// A watch folder configured without a leading slash still matches the
+/// folder's own href entry: its ETag is stored under `/Documents` and the
+/// root is listed once, not again as a pseudo-subdirectory.
+#[tokio::test]
+async fn watch_folder_without_leading_slash_matches_its_own_listing() {
+    let ctx = TestContext::new().await;
+    let server = MockServer::start().await;
+    let result: Result<()> = async {
+        let user_id = create_user(&ctx).await;
+        mount_flat_listing(&server, "/Documents", "/Documents", "new.pdf").await;
+
+        let service = service_for(&server);
+        let smart_sync = SmartSyncService::new(ctx.state.clone());
+        let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "Documents", None).await?;
+
+        let names: Vec<&str> = outcome.files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["new.pdf"], "the root must be listed exactly once");
+        let stored = ctx.state.db.list_webdav_directories(user_id).await?;
+        let root = stored.iter().find(|d| d.directory_path == "/Documents").expect("root row under /Documents");
+        assert_eq!(root.directory_etag, "root-v1");
+        assert!(!stored.iter().any(|d| d.directory_path == "Documents"), "{stored:?}");
+        Ok(())
+    }
+    .await;
+
+    server.verify().await;
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    result.unwrap();
+}
+
+/// A watch folder that was configured percent-encoded keeps working: it is
+/// decoded once, requested encoded once, and stored decoded.
+#[tokio::test]
+async fn percent_encoded_watch_folder_is_decoded_once() {
+    let ctx = TestContext::new().await;
+    let server = MockServer::start().await;
+    let result: Result<()> = async {
+        let user_id = create_user(&ctx).await;
+        mount_flat_listing(&server, "/My%20Docs", "/My%20Docs", "a.pdf").await;
+
+        let service = service_for(&server);
+        let smart_sync = SmartSyncService::new(ctx.state.clone());
+        let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "/My%20Docs", None).await?;
+
+        let names: Vec<&str> = outcome.files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["a.pdf"]);
+        assert_eq!(outcome.files[0].relative_path, "/My Docs/a.pdf");
+        let stored = ctx.state.db.list_webdav_directories(user_id).await?;
+        assert!(stored.iter().any(|d| d.directory_path == "/My Docs"), "{stored:?}");
+        Ok(())
+    }
+    .await;
+
+    server.verify().await;
+    if let Err(e) = ctx.cleanup_and_close().await {
+        eprintln!("Warning: Test cleanup failed: {}", e);
+    }
+    result.unwrap();
+}

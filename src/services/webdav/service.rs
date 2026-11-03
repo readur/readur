@@ -25,7 +25,7 @@ use crate::utils::outbound::{self, check_url_without_dns};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
-use super::paths::{decode_href, encode_path};
+use super::paths::{decode_href, encode_path, normalize_watch_folder};
 
 /// Longest wait a server-supplied Retry-After header can impose.
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(120);
@@ -276,7 +276,6 @@ impl WebDAVService {
             _ => Ok(()),
         }
     }
-
 
     // ============================================================================
     // Protocol Detection Methods
@@ -1007,6 +1006,7 @@ impl WebDAVService {
         tracking: Option<&DiscoveryTracking>,
     ) -> Result<WebDAVScanResult> {
         self.check_cancelled()?;
+        let directory_path = &normalize_watch_folder(directory_path);
         let request_id = uuid::Uuid::new_v4();
         let start_time = Instant::now();
         info!("[{}] 🔍 Discovering '{}' (recursive: {}, tracked: {}, user_agent: '{}')",

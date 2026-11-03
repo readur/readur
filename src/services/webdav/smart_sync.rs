@@ -12,6 +12,7 @@ use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
+use super::paths::normalize_watch_folder;
 use super::service::{DiscoveryTracking, WebDAVScanResult};
 
 /// Normalize a path by removing trailing slashes for consistent comparison
@@ -20,10 +21,10 @@ fn normalize_path(path: &str) -> String {
     path.trim_end_matches('/').to_string()
 }
 
-/// Row key under which a watch folder's own ETag is stored.
+/// Row key under which a watch folder's own ETag is stored: the watch folder
+/// in the same form as the href-derived directory paths.
 fn root_row_path(folder_path: &str) -> String {
-    let normalized = normalize_path(folder_path);
-    if normalized.is_empty() { "/".to_string() } else { normalized }
+    normalize_watch_folder(folder_path)
 }
 
 /// True when `path` is one of `failed` or lies anywhere beneath one of them.
@@ -195,6 +196,7 @@ impl SmartSyncService {
         folder_path: &str,
     ) -> Result<Evaluation> {
         self.check_cancelled()?;
+        let folder_path = &normalize_watch_folder(folder_path);
         let evaluation_start = Instant::now();
         let eval_request_id = Uuid::new_v4();
         
@@ -384,6 +386,7 @@ impl SmartSyncService {
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncResult> {
         self.check_cancelled()?;
+        let folder_path = &normalize_watch_folder(folder_path);
         let sync_request_id = Uuid::new_v4();
         match strategy {
             SmartSyncStrategy::FullDeepScan => {
@@ -408,6 +411,7 @@ impl SmartSyncService {
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<Option<SmartSyncResult>> {
+        let folder_path = &normalize_watch_folder(folder_path);
         let eval_and_sync_start = Instant::now();
         let eval_sync_request_id = Uuid::new_v4();
 
@@ -684,6 +688,8 @@ mod tests {
     fn test_root_row_path_is_normalized() {
         assert_eq!(root_row_path("/Documents/"), "/Documents");
         assert_eq!(root_row_path("/Documents"), "/Documents");
+        assert_eq!(root_row_path("Documents"), "/Documents");
+        assert_eq!(root_row_path("/My%20Docs"), "/My Docs");
         assert_eq!(root_row_path("/"), "/");
         assert_eq!(root_row_path(""), "/");
     }
