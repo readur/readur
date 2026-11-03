@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::fs;
+use std::io::Read;
 use anyhow::{anyhow, Result};
 use chrono::DateTime;
 use tracing::{debug, info, warn};
@@ -78,9 +79,30 @@ fn is_under_any_root(path: &Path, roots: &[PathBuf]) -> bool {
     roots.iter().any(|root| path.starts_with(root))
 }
 
+/// Open `path` (already canonical) for reading. On platforms where the flag
+/// is known, `O_NOFOLLOW` makes the open fail if the final component has
+/// been replaced by a symlink since the path was resolved.
+fn open_without_following_symlinks(path: &Path) -> std::io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(0o400000); // O_NOFOLLOW (asm-generic fcntl.h)
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(0x0100); // O_NOFOLLOW (BSD fcntl.h)
+    }
+    options.open(path)
+}
+
 #[derive(Debug, Clone)]
 pub struct LocalFolderService {
     config: LocalFolderSourceConfig,
+    /// Canonical form of every watch folder; reads must resolve under one.
+    canonical_roots: Vec<PathBuf>,
     /// Normalised form of `config.file_extensions`; empty allows every file.
     extension_filter: ExtensionFilter,
 }
@@ -88,6 +110,7 @@ pub struct LocalFolderService {
 impl LocalFolderService {
     pub fn new(config: LocalFolderSourceConfig) -> Result<Self> {
         // Validate that watch folders exist and are accessible
+        let mut canonical_roots = Vec::with_capacity(config.watch_folders.len());
         for folder in &config.watch_folders {
             let path = Path::new(folder);
             if !path.exists() {
@@ -96,10 +119,14 @@ impl LocalFolderService {
             if !path.is_dir() {
                 return Err(anyhow!("Watch folder is not a directory: {}", folder));
             }
+            canonical_roots.push(
+                path.canonicalize()
+                    .map_err(|e| anyhow!("Cannot resolve watch folder {}: {}", folder, e))?,
+            );
         }
 
         let extension_filter = ExtensionFilter::new(&config.file_extensions);
-        Ok(Self { config, extension_filter })
+        Ok(Self { config, canonical_roots, extension_filter })
     }
 
     /// Discover files in a specific folder
@@ -254,12 +281,31 @@ impl LocalFolderService {
         Ok(discovered_files)
     }
 
-    /// Read file content for processing
+    /// Read file content for processing.
+    ///
+    /// Discovery and reading are separate passes, so the path is checked
+    /// again here: it must still resolve to a regular file under one of the
+    /// configured watch folders at the moment it is opened.
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
         let file_path = file_path.to_string();
-        
+        let roots = self.canonical_roots.clone();
+
         tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
-            let content = fs::read(&file_path)
+            let resolved = fs::canonicalize(&file_path)
+                .map_err(|e| anyhow!("Failed to read file {}: {}", file_path, e))?;
+            if !is_under_any_root(&resolved, &roots) {
+                return Err(anyhow!("Refusing to read {}: not inside a configured watch folder", file_path));
+            }
+
+            let mut file = open_without_following_symlinks(&resolved)
+                .map_err(|e| anyhow!("Failed to read file {}: {}", file_path, e))?;
+            let metadata = file.metadata()?;
+            if !metadata.is_file() {
+                return Err(anyhow!("Refusing to read {}: not a regular file", file_path));
+            }
+
+            let mut content = Vec::with_capacity(metadata.len() as usize);
+            file.read_to_end(&mut content)
                 .map_err(|e| anyhow!("Failed to read file {}: {}", file_path, e))?;
             Ok(content)
         }).await?
@@ -517,6 +563,37 @@ mod tests {
 
         let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, vec!["inside.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn read_file_requires_path_inside_watch_folder_at_read_time() {
+        let watch = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        File::create(watch.path().join("inside.txt")).unwrap().write_all(b"ok").unwrap();
+        File::create(outside.path().join("secret.txt")).unwrap().write_all(b"no").unwrap();
+        // Symlinks created after discovery would have passed the discovery check.
+        std::os::unix::fs::symlink(outside.path().join("secret.txt"), watch.path().join("escape.txt")).unwrap();
+        std::os::unix::fs::symlink(watch.path().join("inside.txt"), watch.path().join("alias.txt")).unwrap();
+        std::fs::create_dir(watch.path().join("sub")).unwrap();
+
+        let service = LocalFolderService::new(config_with_extensions(&watch, &["txt"])).unwrap();
+
+        assert_eq!(service.read_file(&path_string(&watch.path().join("inside.txt"))).await.unwrap(), b"ok");
+        assert_eq!(
+            service.read_file(&path_string(&watch.path().join("alias.txt"))).await.unwrap(),
+            b"ok",
+            "symlinks that stay inside the watch folder are fine"
+        );
+
+        let escaped = service.read_file(&path_string(&watch.path().join("escape.txt"))).await.unwrap_err();
+        assert!(escaped.to_string().contains("not inside a configured watch folder"), "{escaped}");
+        let direct = service.read_file(&path_string(&outside.path().join("secret.txt"))).await.unwrap_err();
+        assert!(direct.to_string().contains("not inside a configured watch folder"), "{direct}");
+        let dotdot = format!("{}/../{}/secret.txt", path_string(watch.path()), outside.path().file_name().unwrap().to_str().unwrap());
+        assert!(service.read_file(&dotdot).await.is_err());
+        assert!(service.read_file(&path_string(&watch.path().join("sub"))).await.is_err(), "directories are not readable");
+        assert!(service.read_file(&path_string(&watch.path().join("missing.txt"))).await.is_err());
     }
 
     #[tokio::test]
