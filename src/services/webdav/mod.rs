@@ -14,7 +14,7 @@ pub use service::{
     ValidationReport, ValidationIssue, ValidationIssueType, ValidationSeverity, 
     ValidationRecommendation, ValidationAction, ValidationSummary
 };
-pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult};
+pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult, SmartSyncOutcome};
 
 // Backward compatibility exports for progress tracking (simplified)
 pub use progress_shim::{SyncProgress, SyncPhase, ProgressStats};
