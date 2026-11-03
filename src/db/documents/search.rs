@@ -8,6 +8,7 @@ use super::helpers::{
     OCR_PROGRESS_FIELDS, OCR_PROGRESS_JOIN,
 };
 use crate::db::Database;
+use crate::db::sanitize::strip_nul;
 use crate::models::{
     Document, EnhancedDocumentResponse, HighlightRange, MonthCount, SearchMode, SearchRequest,
     SearchSnippet, UserRole,
@@ -29,14 +30,14 @@ fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode
     match mode {
         SearchMode::Fuzzy => {
             query.push(", similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
-            query.push_bind(search_query.to_string());
+            query.push_bind(strip_nul(search_query).into_owned());
             query.push(") as search_rank");
         }
         _ => {
             query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), ");
             query.push(tsquery_function(mode));
             query.push("('english', ");
-            query.push_bind(search_query.to_string());
+            query.push_bind(strip_nul(search_query).into_owned());
             query.push(")) as search_rank");
         }
     }
@@ -51,7 +52,7 @@ fn push_search_condition(
     match mode {
         SearchMode::Fuzzy => {
             query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
-            query.push_bind(search_query.to_string());
+            query.push_bind(strip_nul(search_query).into_owned());
             query.push(") > 0.3");
         }
         _ => {
@@ -59,11 +60,11 @@ fn push_search_condition(
             query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ ");
             query.push(func);
             query.push("('english', ");
-            query.push_bind(search_query.to_string());
+            query.push_bind(strip_nul(search_query).into_owned());
             query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ ");
             query.push(func);
             query.push("('english', ");
-            query.push_bind(search_query.to_string());
+            query.push_bind(strip_nul(search_query).into_owned());
             query.push("))");
         }
     }

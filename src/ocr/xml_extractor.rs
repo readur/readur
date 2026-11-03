@@ -495,26 +495,6 @@ impl XmlOfficeExtractor {
         }
     }
 
-    /// Remove null bytes from text to prevent PostgreSQL errors
-    /// This is the ONLY sanitization we do - preserving all other original content
-    fn remove_null_bytes(text: &str) -> String {
-        let original_len = text.len();
-        let cleaned: String = text.chars().filter(|&c| c != '\0').collect();
-        
-        // Log if we found and removed null bytes (shouldn't happen with valid documents)
-        let cleaned_len = cleaned.len();
-        if cleaned_len < original_len {
-            let null_bytes_removed = text.chars().filter(|&c| c == '\0').count();
-            warn!(
-                "Removed {} null bytes from extracted text (original: {} chars, cleaned: {} chars). \
-                This indicates corrupted or malformed document data.",
-                null_bytes_removed, original_len, cleaned_len
-            );
-        }
-        
-        cleaned
-    }
-
     /// Validates ZIP entry names to prevent directory traversal attacks
     fn validate_zip_entry_name(entry_name: &str) -> Result<()> {
         // Check entry name length
@@ -844,8 +824,8 @@ impl XmlOfficeExtractor {
         
         let processing_time = start_time.elapsed().as_millis() as u64;
         
-        // Only remove null bytes - preserve all original formatting
-        let cleaned_text = Self::remove_null_bytes(&extraction_result);
+        // Preserve all original formatting; U+0000 is stripped where it is stored (db::sanitize)
+        let cleaned_text = extraction_result;
         let word_count = self.count_words_safely(&cleaned_text);
         
         info!(
@@ -1045,8 +1025,8 @@ impl XmlOfficeExtractor {
         
         let processing_time = start_time.elapsed().as_millis() as u64;
         
-        // Only remove null bytes - preserve all original formatting
-        let cleaned_text = Self::remove_null_bytes(&extraction_result);
+        // Preserve all original formatting; U+0000 is stripped where it is stored (db::sanitize)
+        let cleaned_text = extraction_result;
         let word_count = self.count_words_safely(&cleaned_text);
         
         info!(
@@ -1090,7 +1070,8 @@ impl XmlOfficeExtractor {
                     
                     // Clean and validate the extracted text
                     let cleaned_text = Self::clean_extracted_text(&extracted_text);
-                    let sanitized_text = Self::remove_null_bytes(&cleaned_text);
+                    // Strip U+0000 here too, so all-NUL output counts as an empty document
+                    let sanitized_text = crate::db::sanitize::strip_nul(&cleaned_text).into_owned();
                     
                     if sanitized_text.trim().is_empty() {
                         return Err(OfficeExtractionError::empty_document_error(file_path, "DOC"));
@@ -1370,17 +1351,6 @@ mod tests {
         // Too long name should fail
         let long_name = "a".repeat(300);
         assert!(XmlOfficeExtractor::validate_zip_entry_name(&long_name).is_err());
-    }
-
-    #[test]
-    fn test_remove_null_bytes() {
-        let text_with_nulls = "Hello\0World\0Test";
-        let cleaned = XmlOfficeExtractor::remove_null_bytes(text_with_nulls);
-        assert_eq!(cleaned, "HelloWorldTest");
-        
-        let text_without_nulls = "Hello World Test";
-        let cleaned = XmlOfficeExtractor::remove_null_bytes(text_without_nulls);
-        assert_eq!(cleaned, "Hello World Test");
     }
 
     #[test]

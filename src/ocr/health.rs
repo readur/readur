@@ -207,10 +207,11 @@ impl OcrHealthChecker {
         }
     }
     
-    pub fn check_memory_available(&self) -> u64 {
-        let mut sys = System::new_all();
+    /// Available memory in MB, or `None` if the system can't be queried.
+    pub fn check_memory_available(&self) -> Option<u64> {
+        let mut sys = System::new().ok()?;
         sys.refresh_memory();
-        sys.available_memory() / (1024 * 1024) // Convert to MB
+        Some(sys.available_memory() / (1024 * 1024)) // Convert to MB
     }
     
     pub fn check_temp_space(&self) -> u64 {
@@ -300,7 +301,8 @@ impl OcrHealthChecker {
     
     pub fn validate_memory_for_image(&self, width: u32, height: u32) -> Result<(), OcrError> {
         let required = self.estimate_memory_requirement(width, height);
-        let available = self.check_memory_available();
+        // An unknown amount of memory must not block every OCR job.
+        let Some(available) = self.check_memory_available() else { return Ok(()) };
         
         if required > available {
             return Err(OcrError::InsufficientMemory { required, available });
@@ -315,7 +317,7 @@ impl OcrHealthChecker {
             available_languages: self.get_available_languages().unwrap_or_else(|_| vec![]),
             tessdata_path: None, // No longer managing tessdata paths
             cpu_features: self.check_cpu_features(),
-            memory_available_mb: self.check_memory_available(),
+            memory_available_mb: self.check_memory_available().unwrap_or(0),
             temp_space_available_mb: self.check_temp_space(),
         }
     }

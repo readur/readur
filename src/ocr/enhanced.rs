@@ -123,26 +123,6 @@ impl EnhancedOcrService {
     // Security limits for Office document processing
     const MAX_ENTRY_NAME_LENGTH: usize = 255; // Maximum length of entry names
 
-    /// Remove null bytes from text to prevent PostgreSQL errors
-    /// This is the ONLY sanitization we do - preserving all other original content
-    fn remove_null_bytes(text: &str) -> String {
-        let original_len = text.len();
-        let cleaned: String = text.chars().filter(|&c| c != '\0').collect();
-        
-        // Log if we found and removed null bytes (shouldn't happen with valid documents)
-        let cleaned_len = cleaned.len();
-        if cleaned_len < original_len {
-            let null_bytes_removed = text.chars().filter(|&c| c == '\0').count();
-            warn!(
-                "Removed {} null bytes from extracted text (original: {} chars, cleaned: {} chars). \
-                This indicates corrupted or malformed document data.",
-                null_bytes_removed, original_len, cleaned_len
-            );
-        }
-        
-        cleaned
-    }
-
 
     pub fn new(temp_dir: String, file_service: FileService, max_pdf_size_mb: u64, max_office_document_size_mb: u64, ocr_timeout_seconds: u64) -> Self {
         Self {
@@ -190,9 +170,6 @@ impl EnhancedOcrService {
         }).await??;
 
         let (text, confidence) = ocr_result;
-
-        // Sanitize null bytes to prevent PostgreSQL errors
-        let text = Self::remove_null_bytes(&text);
 
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = text.split_whitespace().count();
@@ -1004,9 +981,6 @@ impl EnhancedOcrService {
                 if self.is_text_extraction_quality_sufficient(&text, word_count, file_size) {
                     info!("PDF text extraction successful for '{}' using quick method", file_path);
 
-                    // Sanitize null bytes to prevent PostgreSQL errors
-                    let text = Self::remove_null_bytes(&text);
-
                     return Ok(OcrResult {
                         text,
                         confidence: 95.0,
@@ -1204,9 +1178,6 @@ impl EnhancedOcrService {
         info!("OCR extraction completed for '{}': {} words in {}ms",
               file_path, word_count, processing_time);
 
-        // Sanitize null bytes to prevent PostgreSQL errors
-        let ocr_text_result = Self::remove_null_bytes(&ocr_text_result);
-
         Ok(OcrResult {
             text: ocr_text_result,
             confidence: 85.0, // OCR is generally lower confidence than direct text extraction
@@ -1389,7 +1360,7 @@ impl EnhancedOcrService {
 
     /// Convert PDF pages to PNG images using pdftoppm
     #[cfg(feature = "ocr")]
-    async fn extract_pdf_pages_as_images(&self, file_path: &str, page_count: usize) -> Result<Vec<String>> {
+    async fn extract_pdf_pages_as_images(&self, file_path: &str) -> Result<Vec<String>> {
         let temp_prefix = format!("{}/pdf_page_{}_{}",
             self.temp_dir,
             std::process::id(),
@@ -1410,14 +1381,9 @@ impl EnhancedOcrService {
             return Err(anyhow!("pdftoppm failed: {}", String::from_utf8_lossy(&output.stderr)));
         }
 
-        // Collect generated image paths
-        let mut image_paths = Vec::new();
-        for page_num in 1..=page_count {
-            let image_path = format!("{}-{}.png", temp_prefix, page_num);
-            if tokio::fs::metadata(&image_path).await.is_ok() {
-                image_paths.push(image_path);
-            }
-        }
+        // pdftoppm zero-pads page numbers to the page count's width, so list what it wrote
+        let image_paths: Vec<String> = crate::utils::pdftoppm::list_page_images(&temp_prefix, "png").await?
+            .into_iter().map(|p| p.to_string_lossy().into_owned()).collect();
 
         if image_paths.is_empty() {
             return Err(anyhow!("pdftoppm did not produce any image files"));
@@ -1441,7 +1407,7 @@ impl EnhancedOcrService {
         }
 
         // Convert pages to images
-        let image_paths = self.extract_pdf_pages_as_images(file_path, page_count).await?;
+        let image_paths = self.extract_pdf_pages_as_images(file_path).await?;
 
         // OCR each page
         let mut all_text = String::new();
@@ -1487,7 +1453,7 @@ impl EnhancedOcrService {
               successful_pages, total_words, avg_confidence);
 
         Ok(OcrResult {
-            text: Self::remove_null_bytes(&all_text),
+            text: all_text,
             confidence: avg_confidence,
             processing_time_ms: processing_time,
             word_count: total_words,
@@ -1640,10 +1606,8 @@ impl EnhancedOcrService {
                     ));
                 }
                 
-                let text = tokio::fs::read_to_string(&resolved_path).await?;
-                
-                // Only remove null bytes - preserve all original formatting
-                let cleaned_text = Self::remove_null_bytes(&text);
+                // U+0000 is stripped where the text is bound for PostgreSQL (db::sanitize)
+                let cleaned_text = tokio::fs::read_to_string(&resolved_path).await?;
                 
                 // Limit text content size in memory
                 const MAX_TEXT_CONTENT_SIZE: usize = 10 * 1024 * 1024; // 10MB of text content
