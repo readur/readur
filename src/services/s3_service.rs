@@ -1,13 +1,10 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike};
+use chrono::Datelike;
 use tracing::{debug, info, warn, error};
-use serde_json;
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
-use futures::stream::StreamExt;
-use tokio::io::AsyncReadExt;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
@@ -15,6 +12,8 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::ByteStream;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
+#[cfg(feature = "s3")]
+use crate::services::s3_listing::{list_objects, ListingContext, MAX_LISTING_PAGES};
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
@@ -79,126 +78,14 @@ impl S3Service {
         {
         info!("Scanning S3 bucket: {} prefix: {}", self.config.bucket_name, folder_path);
 
-        let mut files = Vec::new();
-        let mut continuation_token: Option<String> = None;
-
-        loop {
-            let mut list_request = self.client
-                .list_objects_v2()
-                .bucket(&self.config.bucket_name)
-                .prefix(folder_path);
-
-            if let Some(token) = &continuation_token {
-                list_request = list_request.continuation_token(token);
-            }
-
-            match list_request.send().await {
-                Ok(response) => {
-                    if let Some(contents) = response.contents {
-                        for object in contents {
-                            if let Some(key) = object.key {
-                                // Skip "directories" (keys ending with /)
-                                if key.ends_with('/') {
-                                    continue;
-                                }
-
-                                // Check file extension
-                                let extension = std::path::Path::new(&key)
-                                    .extension()
-                                    .and_then(|ext| ext.to_str())
-                                    .unwrap_or("")
-                                    .to_lowercase();
-
-                                if !self.config.file_extensions.contains(&extension) {
-                                    debug!("Skipping S3 object with unsupported extension: {}", key);
-                                    continue;
-                                }
-
-                                let file_name = std::path::Path::new(&key)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&key)
-                                    .to_string();
-
-                                let size = object.size.unwrap_or(0);
-                                let last_modified = object.last_modified
-                                    .and_then(|dt| {
-                                        // Convert AWS DateTime to chrono DateTime
-                                        let timestamp = dt.secs();
-                                        DateTime::from_timestamp(timestamp, 0)
-                                    });
-
-                                let etag = object.e_tag.unwrap_or_else(|| {
-                                    // Generate a fallback ETag if none provided
-                                    format!("fallback-{}", &key.chars().take(16).collect::<String>())
-                                });
-
-                                // Remove quotes from ETag if present
-                                let etag = etag.trim_matches('"').to_string();
-
-                                let mime_type = Self::get_mime_type(&extension);
-
-                                // Build additional metadata from S3 object properties
-                                let mut metadata_map = serde_json::Map::new();
-                                
-                                // Add S3-specific metadata
-                                if let Some(storage_class) = &object.storage_class {
-                                    metadata_map.insert("storage_class".to_string(), serde_json::Value::String(storage_class.as_str().to_string()));
-                                }
-                                
-                                if let Some(owner) = &object.owner {
-                                    if let Some(display_name) = &owner.display_name {
-                                        metadata_map.insert("owner_display_name".to_string(), serde_json::Value::String(display_name.clone()));
-                                    }
-                                    if let Some(id) = &owner.id {
-                                        metadata_map.insert("owner_id".to_string(), serde_json::Value::String(id.clone()));
-                                    }
-                                }
-                                
-                                // Store the S3 key for reference
-                                metadata_map.insert("s3_key".to_string(), serde_json::Value::String(key.clone()));
-                                
-                                // Add bucket name for reference
-                                metadata_map.insert("s3_bucket".to_string(), serde_json::Value::String(self.config.bucket_name.clone()));
-                                
-                                // If we have region info, add it
-                                metadata_map.insert("s3_region".to_string(), serde_json::Value::String(self.config.region.clone()));
-                                
-                                let file_info = FileIngestionInfo {
-                                    relative_path: key.clone(),
-                                    full_path: format!("s3://{}/{}", self.config.bucket_name, key), // S3 full path includes bucket
-                                    #[allow(deprecated)]
-                                    path: key.clone(),
-                                    name: file_name,
-                                    size,
-                                    mime_type,
-                                    last_modified,
-                                    etag,
-                                    is_directory: false,
-                                    created_at: None, // S3 doesn't provide creation time, only last modified
-                                    permissions: None, // S3 uses different permission model (ACLs/policies)
-                                    owner: object.owner.as_ref().and_then(|o| o.display_name.clone()),
-                                    group: None, // S3 doesn't have Unix-style groups
-                                    metadata: if metadata_map.is_empty() { None } else { Some(serde_json::Value::Object(metadata_map)) },
-                                };
-
-                                files.push(file_info);
-                            }
-                        }
-                    }
-
-                    // Check if there are more results
-                    if response.is_truncated == Some(true) {
-                        continuation_token = response.next_continuation_token;
-                    } else {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    return Err(anyhow!("Failed to list S3 objects: {}", e));
-                }
-            }
-        }
+        let ctx = ListingContext {
+            client: &self.client,
+            bucket: &self.config.bucket_name,
+            region: &self.config.region,
+            file_extensions: &self.config.file_extensions,
+            max_pages: MAX_LISTING_PAGES,
+        };
+        let files = list_objects(&ctx, folder_path).await?;
 
         info!("Found {} files in S3 bucket {} prefix {}", files.len(), self.config.bucket_name, folder_path);
         Ok(files)
@@ -292,7 +179,7 @@ impl S3Service {
     }
 
     /// Get MIME type based on file extension
-    fn get_mime_type(extension: &str) -> String {
+    pub(crate) fn get_mime_type(extension: &str) -> String {
         match extension {
             "pdf" => "application/pdf",
             "txt" => "text/plain",

@@ -1,0 +1,293 @@
+//! `ListObjectsV2` pagination for S3 sources.
+//!
+//! The listing loop lives here, separate from [`crate::services::s3_service::S3Service`],
+//! so it can be exercised against a mock endpoint without the rest of the
+//! service and so the pagination rules are in one place:
+//!
+//! * a page with `IsTruncated=true` and a `NextContinuationToken` is followed;
+//! * a page with `IsTruncated=true` and **no** token is an error (re-requesting
+//!   the first page would loop forever and grow memory);
+//! * anything else ends the listing.
+
+use anyhow::{anyhow, Result};
+
+#[cfg(feature = "s3")]
+use crate::models::FileIngestionInfo;
+#[cfg(feature = "s3")]
+use aws_sdk_s3::Client;
+#[cfg(feature = "s3")]
+use chrono::DateTime;
+#[cfg(feature = "s3")]
+use tracing::debug;
+
+/// Upper bound on pages followed in a single listing. At the default 1000
+/// keys per page this allows 100 million objects under one prefix; beyond
+/// that the listing is treated as runaway and aborted.
+pub const MAX_LISTING_PAGES: usize = 100_000;
+
+/// Decide how to proceed after a `ListObjectsV2` page.
+///
+/// Returns `Ok(Some(token))` to request the next page, `Ok(None)` when the
+/// listing is complete, and an error when the page claims to be truncated but
+/// carries no continuation token.
+pub fn next_continuation(is_truncated: Option<bool>, next_token: Option<String>) -> Result<Option<String>> {
+    match (is_truncated, next_token) {
+        (Some(true), Some(token)) => Ok(Some(token)),
+        (Some(true), None) => Err(anyhow!("truncated listing without continuation token")),
+        _ => Ok(None),
+    }
+}
+
+/// Everything a listing needs besides the prefix.
+#[cfg(feature = "s3")]
+pub(crate) struct ListingContext<'a> {
+    pub client: &'a Client,
+    pub bucket: &'a str,
+    pub region: &'a str,
+    pub file_extensions: &'a [String],
+    pub max_pages: usize,
+}
+
+/// List every object under `prefix`, following continuation tokens.
+#[cfg(feature = "s3")]
+pub(crate) async fn list_objects(ctx: &ListingContext<'_>, prefix: &str) -> Result<Vec<FileIngestionInfo>> {
+    let mut files = Vec::new();
+    let mut continuation_token: Option<String> = None;
+    let mut pages = 0usize;
+
+    loop {
+        if pages >= ctx.max_pages {
+            return Err(anyhow!(
+                "Listing of S3 prefix '{}' exceeded {} pages; aborting",
+                prefix, ctx.max_pages
+            ));
+        }
+        pages += 1;
+
+        let mut request = ctx.client.list_objects_v2().bucket(ctx.bucket).prefix(prefix);
+        if let Some(token) = &continuation_token {
+            request = request.continuation_token(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to list S3 objects: {}", e))?;
+
+        for object in response.contents.unwrap_or_default() {
+            if let Some(info) = object_to_file_info(object, ctx) {
+                files.push(info);
+            }
+        }
+
+        match next_continuation(response.is_truncated, response.next_continuation_token)? {
+            Some(token) => continuation_token = Some(token),
+            None => break,
+        }
+    }
+
+    Ok(files)
+}
+
+/// Convert one listed object into a [`FileIngestionInfo`], or `None` when it
+/// is a directory marker or its extension is not configured.
+#[cfg(feature = "s3")]
+fn object_to_file_info(object: aws_sdk_s3::types::Object, ctx: &ListingContext<'_>) -> Option<FileIngestionInfo> {
+    let key = object.key?;
+    // Skip "directories" (keys ending with /)
+    if key.ends_with('/') {
+        return None;
+    }
+
+    let extension = std::path::Path::new(&key)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if !ctx.file_extensions.contains(&extension) {
+        debug!("Skipping S3 object with unsupported extension: {}", key);
+        return None;
+    }
+
+    let file_name = std::path::Path::new(&key)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&key)
+        .to_string();
+
+    let size = object.size.unwrap_or(0);
+    let last_modified = object
+        .last_modified
+        .and_then(|dt| DateTime::from_timestamp(dt.secs(), 0));
+
+    // Fallback ETag when none is provided; quotes are stripped either way.
+    let etag = object
+        .e_tag
+        .unwrap_or_else(|| format!("fallback-{}", key.chars().take(16).collect::<String>()))
+        .trim_matches('"')
+        .to_string();
+
+    let mime_type = crate::services::s3_service::S3Service::get_mime_type(&extension);
+
+    let mut metadata_map = serde_json::Map::new();
+    if let Some(storage_class) = &object.storage_class {
+        metadata_map.insert("storage_class".to_string(), serde_json::Value::String(storage_class.as_str().to_string()));
+    }
+    if let Some(owner) = &object.owner {
+        if let Some(display_name) = &owner.display_name {
+            metadata_map.insert("owner_display_name".to_string(), serde_json::Value::String(display_name.clone()));
+        }
+        if let Some(id) = &owner.id {
+            metadata_map.insert("owner_id".to_string(), serde_json::Value::String(id.clone()));
+        }
+    }
+    metadata_map.insert("s3_key".to_string(), serde_json::Value::String(key.clone()));
+    metadata_map.insert("s3_bucket".to_string(), serde_json::Value::String(ctx.bucket.to_string()));
+    metadata_map.insert("s3_region".to_string(), serde_json::Value::String(ctx.region.to_string()));
+
+    Some(FileIngestionInfo {
+        relative_path: key.clone(),
+        full_path: format!("s3://{}/{}", ctx.bucket, key),
+        #[allow(deprecated)]
+        path: key.clone(),
+        name: file_name,
+        size,
+        mime_type,
+        last_modified,
+        etag,
+        is_directory: false,
+        created_at: None,  // S3 only exposes last-modified
+        permissions: None, // S3 uses ACLs/policies, not mode bits
+        owner: object.owner.as_ref().and_then(|o| o.display_name.clone()),
+        group: None,
+        metadata: Some(serde_json::Value::Object(metadata_map)),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn continuation_rules() {
+        assert_eq!(next_continuation(Some(true), Some("t".into())).unwrap(), Some("t".to_string()));
+        assert_eq!(next_continuation(Some(false), Some("t".into())).unwrap(), None);
+        assert_eq!(next_continuation(None, None).unwrap(), None);
+        let err = next_continuation(Some(true), None).unwrap_err();
+        assert!(err.to_string().contains("continuation token"), "{err}");
+    }
+}
+
+#[cfg(all(test, feature = "s3"))]
+pub(crate) mod mock_s3 {
+    //! Shared helpers for tests against a wiremock S3 endpoint.
+    use crate::models::S3SourceConfig;
+    use wiremock::{matchers::{method, path_regex, query_param, query_param_is_missing}, Mock, MockServer, ResponseTemplate};
+
+    pub fn config_for(server: &MockServer) -> S3SourceConfig {
+        S3SourceConfig {
+            bucket_name: "b".to_string(),
+            region: "us-east-1".to_string(),
+            access_key_id: "k".to_string(),
+            secret_access_key: "s".to_string(),
+            endpoint_url: Some(format!("http://localhost:{}", server.address().port())),
+            force_path_style: Some(true),
+            prefix: None,
+            watch_folders: vec!["docs/".to_string()],
+            file_extensions: vec!["pdf".to_string()],
+            auto_sync: false,
+            sync_interval_minutes: 0,
+        }
+    }
+
+    pub fn list_page(keys: &[&str], next_token: Option<&str>, truncated: bool) -> String {
+        let contents: String = keys
+            .iter()
+            .map(|k| format!(
+                "<Contents><Key>{k}</Key><LastModified>2024-01-01T00:00:00.000Z</LastModified><ETag>\"etag-{k}\"</ETag><Size>10</Size><StorageClass>STANDARD</StorageClass></Contents>"
+            ))
+            .collect();
+        let token = next_token
+            .map(|t| format!("<NextContinuationToken>{t}</NextContinuationToken>"))
+            .unwrap_or_default();
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>b</Name><KeyCount>{}</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>{truncated}</IsTruncated>{token}{contents}</ListBucketResult>",
+            keys.len()
+        )
+    }
+
+    /// Mount a first page (request carries no continuation token).
+    pub async fn mount_first_page(server: &MockServer, body: String) {
+        Mock::given(method("GET"))
+            .and(path_regex("^/b/?$"))
+            .and(query_param("list-type", "2"))
+            .and(query_param_is_missing("continuation-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(body, "application/xml"))
+            .mount(server)
+            .await;
+    }
+
+    /// Mount the page served for a given continuation token.
+    pub async fn mount_page_for_token(server: &MockServer, token: &str, body: String) {
+        Mock::given(method("GET"))
+            .and(path_regex("^/b/?$"))
+            .and(query_param("continuation-token", token))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(body, "application/xml"))
+            .mount(server)
+            .await;
+    }
+}
+
+#[cfg(all(test, feature = "s3"))]
+mod listing_tests {
+    use super::mock_s3::*;
+    use super::*;
+    use wiremock::MockServer;
+
+    async fn list_with(server: &MockServer, max_pages: usize) -> Result<Vec<FileIngestionInfo>> {
+        let cfg = config_for(server);
+        let client = crate::services::s3_client::build_client(&cfg).await;
+        let ctx = ListingContext {
+            client: &client,
+            bucket: &cfg.bucket_name,
+            region: &cfg.region,
+            file_extensions: &cfg.file_extensions,
+            max_pages,
+        };
+        list_objects(&ctx, "docs/").await
+    }
+
+    #[tokio::test]
+    async fn follows_continuation_tokens_across_pages() {
+        let server = MockServer::start().await;
+        mount_first_page(&server, list_page(&["docs/a.pdf"], Some("t1"), true)).await;
+        mount_page_for_token(&server, "t1", list_page(&["docs/b.pdf", "docs/skip.zip"], None, false)).await;
+
+        let files = list_with(&server, MAX_LISTING_PAGES).await.unwrap();
+        let keys: Vec<&str> = files.iter().map(|f| f.relative_path.as_str()).collect();
+        assert_eq!(keys, vec!["docs/a.pdf", "docs/b.pdf"]);
+        assert_eq!(files[0].etag, "etag-docs/a.pdf");
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn truncated_page_without_token_is_an_error() {
+        let server = MockServer::start().await;
+        mount_first_page(&server, list_page(&["docs/a.pdf"], None, true)).await;
+
+        let err = list_with(&server, MAX_LISTING_PAGES).await.unwrap_err();
+        assert!(err.to_string().contains("continuation token"), "{err}");
+        assert_eq!(server.received_requests().await.unwrap().len(), 1, "page 1 must not be re-listed");
+    }
+
+    #[tokio::test]
+    async fn page_limit_aborts_runaway_listing() {
+        let server = MockServer::start().await;
+        mount_first_page(&server, list_page(&["docs/a.pdf"], Some("t1"), true)).await;
+        mount_page_for_token(&server, "t1", list_page(&["docs/b.pdf"], None, false)).await;
+
+        let err = list_with(&server, 1).await.unwrap_err();
+        assert!(err.to_string().contains("exceeded 1 pages"), "{err}");
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    }
+}
