@@ -13,7 +13,7 @@ use aws_sdk_s3::primitives::ByteStream;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
 #[cfg(feature = "s3")]
-use crate::services::s3_listing::{list_objects, ListingContext, MAX_LISTING_PAGES};
+use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, MAX_LISTING_PAGES};
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
@@ -76,7 +76,10 @@ impl S3Service {
         
         #[cfg(feature = "s3")]
         {
-        info!("Scanning S3 bucket: {} prefix: {}", self.config.bucket_name, folder_path);
+        // Object keys are returned in full, so the stored relative path is
+        // exactly what download_file() expects regardless of the prefix.
+        let prefix = listing_prefix(self.config.prefix.as_deref(), folder_path);
+        info!("Scanning S3 bucket: {} prefix: '{}'", self.config.bucket_name, prefix);
 
         let ctx = ListingContext {
             client: &self.client,
@@ -85,9 +88,9 @@ impl S3Service {
             file_extensions: &self.config.file_extensions,
             max_pages: MAX_LISTING_PAGES,
         };
-        let files = list_objects(&ctx, folder_path).await?;
+        let files = list_objects(&ctx, &prefix).await?;
 
-        info!("Found {} files in S3 bucket {} prefix {}", files.len(), self.config.bucket_name, folder_path);
+        info!("Found {} files in S3 bucket {} prefix '{}'", files.len(), self.config.bucket_name, prefix);
         Ok(files)
         }
     }
@@ -835,6 +838,10 @@ impl StorageBackend for S3Service {
         Ok(())
     }
 }
+
+#[cfg(all(test, feature = "s3"))]
+#[path = "s3_service_wiremock_tests.rs"]
+mod wiremock_tests;
 
 #[cfg(test)]
 mod tests {

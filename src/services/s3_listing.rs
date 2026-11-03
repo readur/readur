@@ -25,6 +25,28 @@ use tracing::debug;
 /// that the listing is treated as runaway and aborted.
 pub const MAX_LISTING_PAGES: usize = 100_000;
 
+/// Build the key prefix to list for a watch folder.
+///
+/// The source-level `prefix` (if any) is joined with `folder`; leading
+/// slashes are dropped (S3 keys have none), empty and duplicate separators
+/// are collapsed, and a non-empty result always ends in `/` so that
+/// `documents` does not also match `documents-archive/...`. An empty result
+/// lists the whole bucket.
+pub fn listing_prefix(prefix: Option<&str>, folder: &str) -> String {
+    let segments: Vec<&str> = prefix
+        .unwrap_or("")
+        .split('/')
+        .chain(folder.split('/'))
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    if segments.is_empty() {
+        String::new()
+    } else {
+        format!("{}/", segments.join("/"))
+    }
+}
+
 /// Decide how to proceed after a `ListObjectsV2` page.
 ///
 /// Returns `Ok(Some(token))` to request the next page, `Ok(None)` when the
@@ -167,6 +189,23 @@ fn object_to_file_info(object: aws_sdk_s3::types::Object, ctx: &ListingContext<'
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing_prefix_joins_and_normalises() {
+        assert_eq!(listing_prefix(None, "documents"), "documents/");
+        assert_eq!(listing_prefix(None, "/documents/"), "documents/");
+        assert_eq!(listing_prefix(Some("clients/acme"), "documents"), "clients/acme/documents/");
+        assert_eq!(listing_prefix(Some("/clients//acme/"), "/documents"), "clients/acme/documents/");
+        assert_eq!(listing_prefix(Some("clients/acme"), ""), "clients/acme/");
+        assert_eq!(listing_prefix(Some("  "), " docs "), "docs/");
+    }
+
+    #[test]
+    fn listing_prefix_empty_means_whole_bucket() {
+        assert_eq!(listing_prefix(None, ""), "");
+        assert_eq!(listing_prefix(Some(""), "/"), "");
+        assert_eq!(listing_prefix(Some("//"), "  "), "");
+    }
 
     #[test]
     fn continuation_rules() {
