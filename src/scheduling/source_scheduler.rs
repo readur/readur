@@ -210,9 +210,23 @@ impl SourceScheduler {
                                 error!("Failed to update source sync time: {}", e);
                             }
                             
-                            // Send notification if files were processed
-                            if files_processed > 0 {
-                                let notification = crate::models::CreateNotification {
+                            // A clean run with new files is reported as a success; a run with
+                            // failures is reported as such even when some files were ingested.
+                            let notification = match outcome.failure_summary() {
+                                Some(summary) => Some(crate::models::CreateNotification {
+                                    notification_type: "warning".to_string(),
+                                    title: "Source Sync Finished With Errors".to_string(),
+                                    message: format!("{}: {}", source_clone.name, summary),
+                                    action_url: Some("/sources".to_string()),
+                                    metadata: Some(serde_json::json!({
+                                        "source_type": source_clone.source_type.to_string(),
+                                        "source_id": source_clone.id,
+                                        "files_processed": files_processed,
+                                        "files_failed": outcome.failed,
+                                        "folders_failed": outcome.folders_failed
+                                    })),
+                                }),
+                                None if files_processed > 0 => Some(crate::models::CreateNotification {
                                     notification_type: "success".to_string(),
                                     title: "Source Sync Completed".to_string(),
                                     message: format!("Successfully processed {} files from {}", 
@@ -223,10 +237,12 @@ impl SourceScheduler {
                                         "source_id": source_clone.id,
                                         "files_processed": files_processed
                                     })),
-                                };
-                                
+                                }),
+                                None => None,
+                            };
+                            if let Some(notification) = notification {
                                 if let Err(e) = state_clone.db.create_notification(source_clone.user_id, &notification).await {
-                                    error!("Failed to create success notification: {}", e);
+                                    error!("Failed to create sync notification: {}", e);
                                 }
                             }
                         }

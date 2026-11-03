@@ -48,6 +48,8 @@ pub struct SyncOutcome {
     pub skipped: usize,
     /// Files whose download or ingestion failed; they are retried next run.
     pub failed: usize,
+    /// Watch folders the run tried to list.
+    pub folders: usize,
     /// Watch folders whose listing failed.
     pub folders_failed: usize,
     /// The first folder or file error, for the source's `last_error`.
@@ -67,6 +69,27 @@ impl SyncOutcome {
     /// Files discovered this run that were neither ingested nor skipped.
     pub fn pending(&self) -> i64 {
         self.discovered.saturating_sub(self.processed + self.skipped) as i64
+    }
+
+    /// A one-line account of what failed, for the source's `last_error`;
+    /// `None` when the run was clean.
+    pub fn failure_summary(&self) -> Option<String> {
+        if self.is_clean() {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if self.folders_failed > 0 {
+            parts.push(format!("{} of {} folders could not be listed", self.folders_failed, self.folders));
+        }
+        if self.failed > 0 {
+            parts.push(format!("{} of {} files failed", self.failed, self.discovered));
+        }
+        let mut summary = parts.join("; ");
+        if let Some(first) = &self.first_error {
+            summary.push_str("; first: ");
+            summary.push_str(first);
+        }
+        Some(summary)
     }
 
     fn record_error(&mut self, message: String) {
@@ -148,12 +171,20 @@ impl SourceSyncService {
                     error!("Failed to update source status after cancellation: {}", e);
                 }
             }
-            Ok(outcome) => {
-                info!("Sync completed for source {}: {} files processed", source.name, outcome.processed);
-                if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, None).await {
-                    error!("Failed to update source status after successful sync: {}", e);
+            Ok(outcome) => match outcome.failure_summary() {
+                None => {
+                    info!("Sync completed for source {}: {} files processed", source.name, outcome.processed);
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, None).await {
+                        error!("Failed to update source status after successful sync: {}", e);
+                    }
                 }
-            }
+                Some(summary) => {
+                    warn!("Sync finished with failures for source {}: {}", source.name, summary);
+                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Error, Some(&summary)).await {
+                        error!("Failed to update source status after partial sync: {}", e);
+                    }
+                }
+            },
             Err(e) => {
                 error!("Sync failed for source {}: {}", source.name, e);
                 let error_msg = format!("Sync failed: {}", e);
@@ -343,7 +374,7 @@ impl SourceSyncService {
     {
         let filter = ExtensionFilter::new(file_extensions);
         let max_file_bytes = i64::try_from(self.state.config.max_file_size_mb.saturating_mul(1024 * 1024)).unwrap_or(i64::MAX);
-        let mut outcome = SyncOutcome::default();
+        let mut outcome = SyncOutcome { folders: watch_folders.len(), ..Default::default() };
         let mut files_to_process: Vec<FileIngestionInfo> = Vec::new();
         let mut oversized = 0usize;
 
@@ -682,5 +713,18 @@ mod outcome_tests {
         outcome.record_error("one".into());
         outcome.record_error("two".into());
         assert_eq!(outcome.first_error.as_deref(), Some("one"));
+    }
+
+    #[test]
+    fn failure_summary_counts_folders_and_files() {
+        assert_eq!(SyncOutcome { discovered: 2, processed: 2, ..Default::default() }.failure_summary(), None);
+        let outcome = SyncOutcome {
+            discovered: 120, processed: 117, failed: 3, folders: 2, folders_failed: 1,
+            first_error: Some("folder /b: 500".into()), ..Default::default()
+        };
+        assert_eq!(
+            outcome.failure_summary().as_deref(),
+            Some("1 of 2 folders could not be listed; 3 of 120 files failed; first: folder /b: 500")
+        );
     }
 }
