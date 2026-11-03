@@ -61,9 +61,10 @@ pub enum SyncStartError {
     Db(#[from] anyhow::Error),
 }
 
-/// Owned by the sync task: when the task ends, by return or by panic, the
-/// run's progress entry and registry slot are released. Only the slot that
-/// still belongs to this run is removed, so a later run is never affected.
+/// Owned by the sync task's supervisor: once the task has ended, by return
+/// or by panic, and its end has been recorded, the run's progress entry and
+/// registry slot are released. Only the slot that still belongs to this run
+/// is removed, so a later run is never affected.
 struct SyncRunGuard {
     registry: RunRegistry,
     tracker: Arc<SyncProgressTracker>,
@@ -365,10 +366,12 @@ impl SourceScheduler {
 
     /// Claims the source (registry slot plus `start_sync_atomic`) and spawns
     /// `run` as its sync task, handing it the run's cancellation token and
-    /// progress. The task's guard releases the slot and progress when it
-    /// ends, and a supervisor records a panicking task as a failed sync so
-    /// the source does not stay `syncing`. Refused while a task for the
-    /// source is alive, including one that is still stopping.
+    /// progress. A supervisor task awaits it, records a panicking task as a
+    /// failed sync so the source does not stay `syncing`, and only then
+    /// releases the slot and progress: no new run can claim the source
+    /// while the abnormal end of the previous one is still being written.
+    /// Refused while a task for the source is alive, including one that is
+    /// still stopping.
     pub async fn run_claimed<F, Fut>(&self, source_id: Uuid, run: F) -> Result<(), SyncStartError>
     where
         F: FnOnce(CancellationToken, Arc<SyncProgress>) -> Fut,
@@ -406,14 +409,12 @@ impl SourceScheduler {
             source_id,
             run_id,
         };
-        let task = run(token, progress);
-        let task = tokio::spawn(async move {
-            let _guard = guard;
-            task.await;
-        });
+        let task = tokio::spawn(run(token, progress));
 
         let db = self.state.db.clone();
         tokio::spawn(async move {
+            // Held until the abnormal end, if any, has been recorded.
+            let _guard = guard;
             if let Err(join_error) = task.await {
                 let reason = if join_error.is_panic() { "sync task panicked" } else { "sync task was aborted" };
                 error!("{} for source {}: {}", reason, source_id, join_error);
