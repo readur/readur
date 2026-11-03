@@ -121,17 +121,22 @@ impl DocumentIngestionService {
         (original_created_at, original_modified_at, final_metadata)
     }
 
-    /// Unified document ingestion with configurable deduplication policy
+    /// Unified document ingestion with configurable deduplication policy.
+    ///
+    /// Identity semantics: `file_hash` is always the SHA-256 of the bytes as
+    /// received from the source, so a re-sync of the same remote file is
+    /// recognised as a duplicate even when the stored bytes differ (images
+    /// may be re-encoded by EXIF auto-rotation). `file_size` is the number
+    /// of bytes actually written to storage.
     pub async fn ingest_document(&self, request: DocumentIngestionRequest) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
         let file_hash = self.calculate_file_hash(&request.file_data);
-        let file_size = request.file_data.len() as i64;
         
         // Clone source_type early for error handling
         let source_type_for_error = request.source_type.clone();
 
         debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
-            request.filename, request.user_id, &file_hash[..8], file_size, request.deduplication_policy
+            request.filename, request.user_id, &file_hash[..8], request.file_data.len(), request.deduplication_policy
         );
 
         // Check for existing document with same content
@@ -197,7 +202,9 @@ impl DocumentIngestionService {
             // Not an image, use original data
             request.file_data
         };
-        
+        // Size of what is stored (post-rotation); the hash above is of the source bytes.
+        let file_size = file_data.len() as i64;
+
         // Save file to storage - use S3 if configured, otherwise local storage
         let file_path = match self.file_service
             .save_document_file(request.user_id, document_id, &request.filename, &file_data)
@@ -263,16 +270,20 @@ impl DocumentIngestionService {
             request.source_metadata,
         );
 
+        let stored_document = document.clone();
         let saved_document = match self.db.create_document(document).await {
             Ok(doc) => doc,
             Err(e) => {
                 // Check if this is a unique constraint violation on the hash
                 let error_string = e.to_string();
-                if error_string.contains("duplicate key value violates unique constraint") 
+                if error_string.contains("duplicate key value violates unique constraint")
                    && error_string.contains("idx_documents_user_file_hash") {
-                    warn!("Hash collision detected during concurrent upload for {} (hash: {}), fetching existing document", 
+                    warn!("Hash collision detected during concurrent upload for {} (hash: {}), fetching existing document",
                           request.filename, &file_hash[..8]);
-                    
+
+                    // The row was never created, so the file written above has no owner.
+                    self.remove_orphaned_file(&stored_document).await;
+
                     // Race condition: another request created the document, fetch it
                     match self.db.get_document_by_user_and_hash(request.user_id, &file_hash).await {
                         Ok(Some(existing_doc)) => {
@@ -339,6 +350,18 @@ impl DocumentIngestionService {
     }
 
     /// Calculate SHA256 hash of file content
+    /// Remove the stored file of a document whose database row was not
+    /// created. A failure here leaves an orphan file but no data loss, so it
+    /// is logged rather than propagated.
+    async fn remove_orphaned_file(&self, document: &Document) {
+        if let Err(e) = self.file_service.delete_document_files(document).await {
+            warn!(
+                "Failed to remove stored file {} for uncommitted document {}: {}",
+                document.file_path, document.id, e
+            );
+        }
+    }
+
     fn calculate_file_hash(&self, data: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
