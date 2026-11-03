@@ -120,10 +120,13 @@ async fn oversized_files_are_skipped_not_downloaded() {
 
     let outcome = f.sync().await.unwrap();
 
-    assert_eq!(outcome.discovered, 1, "{outcome:?}");
+    // The oversized file is discovered and skipped, so nothing is left pending.
+    assert_eq!(outcome.discovered, 2, "{outcome:?}");
     assert_eq!(outcome.processed, 1, "{outcome:?}");
     assert_eq!(outcome.skipped, 1, "{outcome:?}");
+    assert_eq!(outcome.oversized, 1, "{outcome:?}");
     assert_eq!(outcome.failed, 0, "{outcome:?}");
+    assert_eq!(outcome.pending(), 0, "{outcome:?}");
     assert_eq!(f.document_count().await, 1);
     assert_eq!(f.source().await.status, SourceStatus::Idle);
 
