@@ -103,9 +103,11 @@ jobs:
           command: pages deploy site --project-name=readur-docs --branch=${{ github.ref_name }}
 
       # Deploy preview for PRs
+      # Forks get no repository secrets and a read-only token, so the preview
+      # deploy and its comment can't succeed there; the build above still runs.
       - name: Deploy Preview to Cloudflare Pages
         id: preview-deployment
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -114,7 +116,7 @@ jobs:
 
       # Post deployment URL as PR comment
       - name: Comment PR with Preview URL
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
