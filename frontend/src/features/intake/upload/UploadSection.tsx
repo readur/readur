@@ -1,7 +1,14 @@
 import { useId } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
-import { BoardTable, Button, EmptyState, StatusMark, type BoardColumn, type StatusState } from '../../../ui';
+import {
+  BoardTable,
+  Button,
+  EmptyState,
+  StatusMark,
+  type BoardColumn,
+  type StatusState,
+} from '../../../ui';
 import LabelSelector from '../../labels/LabelSelector';
 import LanguageSelector from '../../../components/LanguageSelector';
 import { isShownLit, litReason, useLitCount } from '../../board/litStore';
@@ -52,36 +59,70 @@ export function UploadSection() {
       render: (i) => (
         <NameCell
           name={i.file.name}
-          tag={i.status === 'success' && i.documentId && isShownLit('document', i.documentId) ? litReason('document', i.documentId) : null}
+          tag={
+            i.status === 'success' && i.documentId && isShownLit('document', i.documentId)
+              ? litReason('document', i.documentId)
+              : null
+          }
         />
       ),
     },
-    { id: 'size', hideOnNarrow: true, label: t('intake.upload.col.size', 'Size'), align: 'end', width: 100, render: (i) => formatBytes(i.file.size) },
+    {
+      id: 'size',
+      hideOnNarrow: true,
+      label: t('intake.upload.col.size', 'Size'),
+      align: 'end',
+      width: 100,
+      render: (i) => formatBytes(i.file.size),
+    },
     {
       id: 'progress',
       hideOnNarrow: true,
       label: t('intake.upload.col.progress', 'Progress'),
       width: 180,
       render: (i) => (
-        <ProgressCell value={i.progress} label={t('intake.upload.progressOf', 'Upload progress for {{name}}', { name: i.file.name })} />
+        <ProgressCell
+          value={i.progress}
+          label={t('intake.upload.progressOf', 'Upload progress for {{name}}', {
+            name: i.file.name,
+          })}
+        />
       ),
     },
-    { id: 'status', label: t('intake.upload.col.status', 'Status'), width: 120, render: (i) => <StatusMark state={STATE[i.status]} size="sm" /> },
+    {
+      id: 'status',
+      label: t('intake.upload.col.status', 'Status'),
+      width: 120,
+      render: (i) => <StatusMark state={STATE[i.status]} size="sm" />,
+    },
     {
       id: 'actions',
-      label: <span className={sharedStyles.visuallyHidden}>{t('intake.upload.col.actions', 'Actions')}</span>,
+      label: (
+        <span className={sharedStyles.visuallyHidden}>
+          {t('intake.upload.col.actions', 'Actions')}
+        </span>
+      ),
       textValue: t('intake.upload.col.actions', 'Actions'),
       width: 180,
       align: 'end',
       render: (i) => (
         <span className={sharedStyles.rowActions}>
           {i.status === 'error' ? (
-            <Button size="sm" onPress={() => queue.retry(i.id)} aria-label={t('intake.upload.retryFile', 'Retry {{name}}', { name: i.file.name })}>
+            <Button
+              size="sm"
+              onPress={() => queue.retry(i.id)}
+              aria-label={t('intake.upload.retryFile', 'Retry {{name}}', { name: i.file.name })}
+            >
               {t('intake.actions.retry', 'Retry')}
             </Button>
           ) : null}
           {i.status === 'pending' || i.status === 'error' ? (
-            <Button size="sm" variant="ghost" onPress={() => queue.remove(i.id)} aria-label={t('intake.upload.removeFile', 'Remove {{name}}', { name: i.file.name })}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() => queue.remove(i.id)}
+              aria-label={t('intake.upload.removeFile', 'Remove {{name}}', { name: i.file.name })}
+            >
               {t('intake.upload.remove', 'Remove')}
             </Button>
           ) : null}
@@ -98,9 +139,19 @@ export function UploadSection() {
         role="group"
         aria-label={t('intake.upload.dropLabel', 'Drop files to add')}
       >
-        <input {...getInputProps({ 'aria-label': t('intake.upload.chooseFiles', 'Choose files') })} />
+        {/* react-dropzone >= 16 keeps this input in the accessibility tree (zero-size, not
+            display:none). The button below is the control; hide the input from assistive tech
+            so it isn't announced as a second "Choose files". */}
+        <input
+          {...getInputProps({
+            'aria-label': t('intake.upload.chooseFiles', 'Choose files'),
+            'aria-hidden': true,
+          })}
+        />
         <p className={styles.dropTitle}>
-          {isDragActive ? t('intake.upload.dropNow', 'Release to add') : t('intake.upload.dropTitle', 'Drop files to add')}
+          {isDragActive
+            ? t('intake.upload.dropNow', 'Release to add')
+            : t('intake.upload.dropTitle', 'Drop files to add')}
         </p>
         <Button variant="primary" onPress={open}>
           {t('intake.upload.chooseFiles', 'Choose files')}
@@ -108,12 +159,18 @@ export function UploadSection() {
         <p className={styles.accepted}>
           {ACCEPTED_EXTENSIONS.join(' · ')}
           <span aria-hidden="true"> · </span>
-          <span>{t('intake.upload.maxSize', 'max {{size}} MB per file', { size: MAX_FILE_SIZE_MB })}</span>
+          <span>
+            {t('intake.upload.maxSize', 'max {{size}} MB per file', { size: MAX_FILE_SIZE_MB })}
+          </span>
         </p>
       </div>
 
       {queue.rejected ? (
-        <Notice tone="danger" live="alert" title={t('intake.upload.rejected', 'Some files were not added')}>
+        <Notice
+          tone="danger"
+          live="alert"
+          title={t('intake.upload.rejected', 'Some files were not added')}
+        >
           {queue.rejected}
         </Notice>
       ) : null}
@@ -138,7 +195,10 @@ export function UploadSection() {
               availableLabels={options.availableLabels}
               onLabelsChange={options.setSelectedLabels}
               onCreateLabel={options.createLabel}
-              placeholder={t('intake.upload.labelsPlaceholder', 'Add labels to every uploaded file')}
+              placeholder={t(
+                'intake.upload.labelsPlaceholder',
+                'Add labels to every uploaded file',
+              )}
               size="medium"
               disabled={options.labelsLoading}
             />
@@ -148,9 +208,16 @@ export function UploadSection() {
       </section>
 
       <div className={sharedStyles.toolbar}>
-        <Button variant="primary" onPress={() => void queue.uploadAll()} isDisabled={waiting === 0 || queue.isUploading}>
+        <Button
+          variant="primary"
+          onPress={() => void queue.uploadAll()}
+          isDisabled={waiting === 0 || queue.isUploading}
+        >
           {queue.isUploading
-            ? t('intake.upload.uploading', 'Uploading {{done}} of {{total}}', { done: queue.batch.done, total: queue.batch.total })
+            ? t('intake.upload.uploading', 'Uploading {{done}} of {{total}}', {
+                done: queue.batch.done,
+                total: queue.batch.total,
+              })
             : t('intake.upload.uploadAll', 'Upload all ({{count}})', { count: waiting })}
         </Button>
         <Button variant="ghost" onPress={queue.clearCompleted} isDisabled={done === 0}>
@@ -163,17 +230,24 @@ export function UploadSection() {
         columns={columns}
         rows={queue.items}
         getRowId={(i) => i.id}
-        isRowLit={(i) => i.status === 'success' && Boolean(i.documentId) && isShownLit('document', i.documentId!)}
+        isRowLit={(i) =>
+          i.status === 'success' && Boolean(i.documentId) && isShownLit('document', i.documentId!)
+        }
         onRowAction={(id) => {
           const item = queue.items.find((i) => i.id === id);
           if (item?.status === 'success' && item.documentId) drawer.open(item.documentId);
         }}
-        renderRowDetail={(i) => (i.error ? <span className={sharedStyles.dangerText}>{i.error}</span> : null)}
+        renderRowDetail={(i) =>
+          i.error ? <span className={sharedStyles.dangerText}>{i.error}</span> : null
+        }
         emptyState={
           <EmptyState
             headingAs="h3"
             title={t('intake.upload.emptyTitle', 'No files yet')}
-            description={t('intake.upload.emptyBody', 'Drop files above or choose them from your computer.')}
+            description={t(
+              'intake.upload.emptyBody',
+              'Drop files above or choose them from your computer.',
+            )}
           />
         }
       />
