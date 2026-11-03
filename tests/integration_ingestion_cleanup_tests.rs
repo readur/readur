@@ -1,7 +1,7 @@
 //! Ingestion keeps the storage directory consistent with the documents table:
 //! a file written for a row that is then rejected by the per-user hash index
 //! is removed, and the recorded size/hash follow the documented semantics
-//! (hash of the source bytes, size of the stored bytes).
+//! (both of the source bytes, so a sync can compare them with a listing).
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
@@ -104,8 +104,12 @@ async fn hash_collision_removes_the_orphaned_stored_file() -> Result<()> {
     Ok(())
 }
 
+/// `file_size` and `file_hash` both describe the bytes as received from the
+/// source, even when auto-rotation re-encodes the stored image: the
+/// unchanged-file check of source sync compares the listing's size with
+/// `file_size`, so a rotated image must not look changed on every run.
 #[tokio::test]
-async fn file_size_is_of_stored_bytes_and_hash_of_source_bytes() -> Result<()> {
+async fn file_size_and_hash_are_of_the_source_bytes() -> Result<()> {
     let (ctx, dir) = context_with_temp_storage().await;
     let state = ctx.state();
     let user_id = new_user(&ctx).await?;
@@ -130,7 +134,9 @@ async fn file_size_is_of_stored_bytes_and_hash_of_source_bytes() -> Result<()> {
     #[cfg(feature = "ocr")]
     assert_ne!(stored, source, "auto-rotation re-encodes the image");
 
-    assert_eq!(doc.file_size, stored.len() as i64, "file_size is the size of the stored bytes");
+    assert_eq!(doc.file_size, source.len() as i64, "file_size is the size of the source bytes");
+    #[cfg(feature = "ocr")]
+    assert_ne!(doc.file_size, stored.len() as i64, "the stored (rotated) size is not what a listing reports");
     assert_eq!(doc.file_hash.as_deref(), Some(sha256_hex(&source).as_str()), "file_hash is the hash of the source bytes");
 
     Ok(())

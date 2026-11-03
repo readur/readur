@@ -123,20 +123,22 @@ impl DocumentIngestionService {
 
     /// Unified document ingestion with configurable deduplication policy.
     ///
-    /// Identity semantics: `file_hash` is always the SHA-256 of the bytes as
-    /// received from the source, so a re-sync of the same remote file is
-    /// recognised as a duplicate even when the stored bytes differ (images
-    /// may be re-encoded by EXIF auto-rotation). `file_size` is the number
-    /// of bytes actually written to storage.
+    /// Identity semantics: `file_hash` and `file_size` both describe the
+    /// bytes as received from the source. The hash lets a re-sync of the
+    /// same remote file be recognised as a duplicate, and the size is what a
+    /// source listing reports, so the unchanged-file check of source sync can
+    /// compare against it. Both hold even when the stored bytes differ
+    /// (images may be re-encoded by EXIF auto-rotation).
     pub async fn ingest_document(&self, request: DocumentIngestionRequest) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
         let file_hash = self.calculate_file_hash(&request.file_data);
-        
+        let file_size = request.file_data.len() as i64;
+
         // Clone source_type early for error handling
         let source_type_for_error = request.source_type.clone();
 
         debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
-            request.filename, request.user_id, &file_hash[..8], request.file_data.len(), request.deduplication_policy
+            request.filename, request.user_id, &file_hash[..8], file_size, request.deduplication_policy
         );
 
         // Check for existing document with same content
@@ -202,8 +204,6 @@ impl DocumentIngestionService {
             // Not an image, use original data
             request.file_data
         };
-        // Size of what is stored (post-rotation); the hash above is of the source bytes.
-        let file_size = file_data.len() as i64;
 
         // Save file to storage - use S3 if configured, otherwise local storage
         let file_path = match self.file_service
