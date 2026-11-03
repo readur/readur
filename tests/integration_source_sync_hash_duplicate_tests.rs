@@ -17,7 +17,7 @@ fn calculate_file_hash(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
-    format!("{:x}", result)
+    readur::utils::hash::to_hex(&result)
 }
 
 // Helper function to create test file info
@@ -117,9 +117,7 @@ async fn create_test_user(db: &Database, username: &str) -> Result<Uuid> {
 }
 
 async fn create_test_app_state() -> Result<Arc<AppState>> {
-    let database_url = std::env::var("DATABASE_URL")
-        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
 
     let mut config = create_test_config_with_db(&database_url);
     config.server_address = "127.0.0.1:8000".to_string();

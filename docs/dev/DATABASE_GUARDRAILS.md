@@ -14,7 +14,7 @@ This document outlines comprehensive database guardrails to prevent race conditi
 
 ## 🛡️ Implemented Guardrails
 
-### 1. Transaction-Based Operations (`src/db_guardrails.rs`)
+### 1. Transaction-Based Operations (`src/db_guardrails_simple.rs`)
 
 #### `DocumentTransactionManager`
 - **Atomic OCR Updates**: All OCR result updates wrapped in transactions
@@ -35,12 +35,10 @@ let success = transaction_manager.update_ocr_with_validation(
 ).await?;
 ```
 
-#### `DistributedLock`
-- **Named Locks**: PostgreSQL advisory locks for critical sections
-- **Timeout Support**: Prevents indefinite blocking
-- **Resource Protection**: Guards shared resources during concurrent access
+#### Text and JSON sanitization (`src/db/sanitize.rs`)
+PostgreSQL cannot store U+0000: in TEXT it fails with `invalid byte sequence for encoding "UTF8": 0x00`, in JSONB with `unsupported Unicode escape sequence`. Every write of user-, file- or remote-derived text binds through `db::sanitize` (`value.for_db()`, `DbText`, `DbJson`), which strips it at encode time. Do not add per-call-site filters.
 
-### 2. Database Constraints (`migrations/20240615000001_add_database_guardrails.sql`)
+### 2. Database Constraints (`migrations/20250620100013_add_database_guardrails.sql`)
 
 #### Data Integrity Constraints
 ```sql
@@ -94,7 +92,7 @@ CREATE TRIGGER trigger_cleanup_completed_ocr_queue
 - Prevents orphaned queue entries
 - Maintains queue consistency
 
-### 4. Monitoring and Alerting (`src/db_monitoring.rs`)
+### 4. Monitoring and Alerting (`src/monitoring/db_monitoring.rs`)
 
 #### Real-Time Health Monitoring
 - **OCR Processing Health**: Tracks stuck jobs, failure rates, confidence levels
@@ -161,7 +159,7 @@ transaction_manager.update_ocr_with_validation(
 ```
 
 #### Update OCR Queue Service
-Replace direct database updates in `src/ocr_queue.rs:266-285` with transaction-safe operations.
+Replace direct database updates in `src/ocr/queue.rs:266-285` with transaction-safe operations.
 
 ### 2. Configuration Updates
 
@@ -211,14 +209,14 @@ async fn database_health(monitor: Extension<Arc<DatabaseMonitor>>) -> Json<Datab
 ## 🧪 Testing Strategy
 
 ### Integration Tests
-The corruption issue can be reliably reproduced using the tests in `tests/ocr_corruption_tests.rs`:
+The corruption issue can be reliably reproduced using the tests in `tests/integration_ocr_corruption_tests.rs`:
 
 ```bash
 # Test concurrent processing (reproduces corruption)
-cargo test test_high_volume_concurrent_ocr --test ocr_corruption_tests
+cargo test test_high_volume_concurrent_ocr --test integration_ocr_corruption_tests
 
 # Test sequential processing (should pass)
-cargo test test_rapid_sequential_uploads --test ocr_corruption_tests
+cargo test test_rapid_sequential_uploads --test integration_ocr_corruption_tests
 ```
 
 ### Load Testing

@@ -10,6 +10,8 @@ use uuid::Uuid;
 use anyhow::Result;
 use tracing::{warn, error, info};
 
+use crate::db::sanitize::ToDb;
+
 /// Simplified transaction manager focused on preventing OCR corruption
 #[derive(Clone)]
 pub struct DocumentTransactionManager {
@@ -98,7 +100,7 @@ impl DocumentTransactionManager {
             "#
         )
         .bind(document_id)
-        .bind(ocr_text)
+        .bind(ocr_text.for_db())
         .bind(confidence)
         .bind(word_count)
         .bind(processing_time_ms)
@@ -155,7 +157,7 @@ impl DocumentTransactionManager {
             "#
         )
         .bind(document_id)
-        .bind(error_message)
+        .bind(error_message.for_db())
         .execute(&mut *tx)
         .await?;
 

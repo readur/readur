@@ -9,6 +9,7 @@ use super::helpers::{
     OCR_PROGRESS_JOIN,
 };
 use crate::db::Database;
+use crate::db::sanitize::ToDb;
 
 impl Database {
     /// Creates a new document in the database
@@ -24,35 +25,35 @@ impl Database {
 
         let row = sqlx::query(&query_str)
             .bind(document.id)
-            .bind(&document.filename)
-            .bind(&document.original_filename)
-            .bind(&document.file_path)
+            .bind(document.filename.for_db())
+            .bind(document.original_filename.for_db())
+            .bind(document.file_path.for_db())
             .bind(document.file_size)
-            .bind(&document.mime_type)
-            .bind(&document.content)
-            .bind(&document.ocr_text)
+            .bind(document.mime_type.for_db())
+            .bind(document.content.for_db())
+            .bind(document.ocr_text.for_db())
             .bind(document.ocr_confidence)
             .bind(document.ocr_word_count)
             .bind(document.ocr_processing_time_ms)
             .bind(&document.ocr_status)
-            .bind(&document.ocr_error)
+            .bind(document.ocr_error.for_db())
             .bind(document.ocr_completed_at)
             .bind(document.ocr_retry_count)
             .bind(&document.ocr_failure_reason)
-            .bind(&document.tags)
+            .bind(document.tags.for_db())
             .bind(document.created_at)
             .bind(document.updated_at)
             .bind(document.user_id)
             .bind(&document.file_hash)
             .bind(document.original_created_at)
             .bind(document.original_modified_at)
-            .bind(&document.source_path)
+            .bind(document.source_path.for_db())
             .bind(&document.source_type)
             .bind(document.source_id)
             .bind(document.file_permissions)
-            .bind(&document.file_owner)
-            .bind(&document.file_group)
-            .bind(&document.source_metadata)
+            .bind(document.file_owner.for_db())
+            .bind(document.file_group.for_db())
+            .bind(document.source_metadata.for_db())
             .fetch_one(&self.pool)
             .await?;
 
@@ -175,7 +176,7 @@ impl Database {
             "#
         )
         .bind(document_id)
-        .bind(ocr_text)
+        .bind(ocr_text.for_db())
         .bind(ocr_confidence)
         .bind(ocr_word_count)
         .bind(ocr_processing_time_ms)
@@ -219,7 +220,7 @@ impl Database {
             "#
         )
         .bind(document_id)
-        .bind(new_file_path)
+        .bind(new_file_path.for_db())
         .execute(&self.pool)
         .await?;
 

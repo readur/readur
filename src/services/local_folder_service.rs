@@ -297,7 +297,7 @@ impl LocalFolderService {
         
         hasher.update(metadata.len().to_be_bytes());
         let result = hasher.finalize();
-        format!("{:x}", result)[..16].to_string() // Use first 16 chars as ETag
+        crate::utils::hash::to_hex(&result)[..16].to_string() // Use first 16 chars as ETag
     }
 
     /// Get MIME type based on file extension

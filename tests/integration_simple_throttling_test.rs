@@ -21,10 +21,8 @@ use readur::{
 };
 
 // Use the same database URL as the running server
-fn get_test_db_url() -> String {
-    std::env::var("DATABASE_URL")
-        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string())
+async fn get_test_db_url() -> String {
+    readur::test_db::TestDatabase::from_template().await.url().to_string()
 }
 
 async fn create_test_file_service(temp_path: &str) -> FileService {
@@ -40,7 +38,7 @@ struct SimpleThrottleTest {
 
 impl SimpleThrottleTest {
     async fn new() -> Result<Self> {
-        let db_url = get_test_db_url();
+        let db_url = get_test_db_url().await;
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(20)
             .acquire_timeout(Duration::from_secs(10))
