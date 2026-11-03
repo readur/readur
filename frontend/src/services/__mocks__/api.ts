@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi } from 'vitest';
 
 // Mock axios instance
 export const api = {
@@ -7,7 +7,7 @@ export const api = {
   post: vi.fn(),
   put: vi.fn(),
   delete: vi.fn(),
-}
+};
 
 // Mock document service
 export const documentService = {
@@ -30,9 +30,9 @@ export const documentService = {
   getRetryRecommendations: vi.fn(),
   getRetryStats: vi.fn(),
   bulkRetryOcr: vi.fn(),
-}
+};
 
-// Mock WebSocket constants  
+// Mock WebSocket constants
 const WEBSOCKET_CONNECTING = 0;
 const WEBSOCKET_OPEN = 1;
 const WEBSOCKET_CLOSING = 2;
@@ -68,22 +68,22 @@ const createMockWebSocket = () => {
 let currentMockWebSocket = createMockWebSocket();
 
 // Mock the global WebSocket constructor
-global.WebSocket = vi.fn().mockImplementation(() => currentMockWebSocket) as any;
-(global.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
-(global.WebSocket as any).OPEN = WEBSOCKET_OPEN;
-(global.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
-(global.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
+globalThis.WebSocket = vi.fn().mockImplementation(() => currentMockWebSocket) as any;
+(globalThis.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
+(globalThis.WebSocket as any).OPEN = WEBSOCKET_OPEN;
+(globalThis.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
+(globalThis.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
 
 // Mock SyncProgressWebSocket class - also export as the main class name
 export class MockSyncProgressWebSocket {
   private listeners: { [key: string]: ((data: any) => void)[] } = {};
   private ws: any = null; // Mock WebSocket instance
-  
+
   constructor(private sourceId: string) {
     console.log('[MOCK] MockSyncProgressWebSocket created for source:', sourceId);
     // Store reference to current instance for test access
     currentMockSyncProgressWebSocket = this;
-    
+
     // Create a mock WebSocket instance to match the real class structure
     this.ws = {
       close: vi.fn(),
@@ -114,13 +114,13 @@ export class MockSyncProgressWebSocket {
 
   removeEventListener(eventType: string, callback: (data: any) => void): void {
     if (this.listeners[eventType]) {
-      this.listeners[eventType] = this.listeners[eventType].filter(cb => cb !== callback);
+      this.listeners[eventType] = this.listeners[eventType].filter((cb) => cb !== callback);
     }
   }
 
   private emit(eventType: string, data: any): void {
     if (this.listeners[eventType]) {
-      this.listeners[eventType].forEach(callback => callback(data));
+      this.listeners[eventType].forEach((callback) => callback(data));
     }
   }
 
@@ -168,14 +168,14 @@ export const ocrService = {
   getAvailableLanguages: vi.fn(),
   getHealthStatus: vi.fn(),
   retryWithLanguage: vi.fn(),
-}
+};
 
 // Mock queue service
 export const queueService = {
   getQueueStatus: vi.fn(),
   pauseOcr: vi.fn(),
   resumeOcr: vi.fn(),
-}
+};
 
 // Mock sources service
 export const sourcesService = {
@@ -189,14 +189,14 @@ export const sourcesService = {
   createSyncProgressWebSocket: vi.fn((sourceId: string) => {
     return new MockSyncProgressWebSocket(sourceId);
   }),
-}
-export const sourceService = sourcesService
+};
+export const sourceService = sourcesService;
 
 // Mock search service
 export const searchService = {
   enhancedSearch: vi.fn(),
   getTimeline: vi.fn(),
-}
+};
 
 // Export helper functions for tests
 export const getMockWebSocket = () => currentMockWebSocket;
@@ -205,11 +205,11 @@ export const getMockSyncProgressWebSocket = () => currentMockSyncProgressWebSock
 export const resetMockWebSocket = () => {
   currentMockWebSocket = createMockWebSocket();
   // Update global WebSocket mock to return the new instance
-  global.WebSocket = vi.fn(() => currentMockWebSocket) as any;
-  (global.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
-  (global.WebSocket as any).OPEN = WEBSOCKET_OPEN;
-  (global.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
-  (global.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
+  globalThis.WebSocket = vi.fn(() => currentMockWebSocket) as any;
+  (globalThis.WebSocket as any).CONNECTING = WEBSOCKET_CONNECTING;
+  (globalThis.WebSocket as any).OPEN = WEBSOCKET_OPEN;
+  (globalThis.WebSocket as any).CLOSING = WEBSOCKET_CLOSING;
+  (globalThis.WebSocket as any).CLOSED = WEBSOCKET_CLOSED;
   return currentMockWebSocket;
 };
 
@@ -223,93 +223,93 @@ export const SyncProgressWebSocket = MockSyncProgressWebSocket;
 
 // Export the SyncProgressInfo type from the mock
 export interface SyncProgressInfo {
-  source_id: string
-  phase: string
-  phase_description: string
-  elapsed_time_secs: number
-  directories_found: number
-  directories_processed: number
-  files_found: number
-  files_processed: number
-  bytes_processed: number
-  processing_rate_files_per_sec: number
-  files_progress_percent: number
-  estimated_time_remaining_secs?: number
-  current_directory: string
-  current_file?: string
-  errors: number
-  warnings: number
-  is_active: boolean
+  source_id: string;
+  phase: string;
+  phase_description: string;
+  elapsed_time_secs: number;
+  directories_found: number;
+  directories_processed: number;
+  files_found: number;
+  files_processed: number;
+  bytes_processed: number;
+  processing_rate_files_per_sec: number;
+  files_progress_percent: number;
+  estimated_time_remaining_secs?: number;
+  current_directory: string;
+  current_file?: string;
+  errors: number;
+  warnings: number;
+  is_active: boolean;
 }
 
 // Re-export types that components might need
 export interface Document {
-  id: string
-  filename: string
-  original_filename: string
-  file_size: number
-  mime_type: string
-  tags: string[]
-  created_at: string
-  updated_at?: string
-  user_id?: string
-  file_hash?: string
-  has_ocr_text: boolean
-  ocr_confidence?: number
-  ocr_word_count?: number
-  ocr_processing_time_ms?: number
-  ocr_status?: string
+  id: string;
+  filename: string;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  tags: string[];
+  created_at: string;
+  updated_at?: string;
+  user_id?: string;
+  file_hash?: string;
+  has_ocr_text: boolean;
+  ocr_confidence?: number;
+  ocr_word_count?: number;
+  ocr_processing_time_ms?: number;
+  ocr_status?: string;
   // New metadata fields
-  original_created_at?: string
-  original_modified_at?: string
-  source_metadata?: Record<string, any>
+  original_created_at?: string;
+  original_modified_at?: string;
+  source_metadata?: Record<string, any>;
 }
 
 export interface SearchRequest {
-  query: string
-  tags?: string[]
-  mime_types?: string[]
-  limit?: number
-  offset?: number
-  include_snippets?: boolean
-  snippet_length?: number
-  search_mode?: 'simple' | 'phrase' | 'fuzzy' | 'boolean'
+  query: string;
+  tags?: string[];
+  mime_types?: string[];
+  limit?: number;
+  offset?: number;
+  include_snippets?: boolean;
+  snippet_length?: number;
+  search_mode?: 'simple' | 'phrase' | 'fuzzy' | 'boolean';
 }
 
 export interface HighlightRange {
-  start: number
-  end: number
+  start: number;
+  end: number;
 }
 
 export interface SearchSnippet {
-  text: string
-  start_offset: number
-  end_offset: number
-  highlight_ranges: HighlightRange[]
+  text: string;
+  start_offset: number;
+  end_offset: number;
+  highlight_ranges: HighlightRange[];
 }
 
 export interface EnhancedDocument {
-  id: string
-  filename: string
-  original_filename: string
-  file_size: number
-  mime_type: string
-  tags: string[]
-  created_at: string
-  has_ocr_text: boolean
-  ocr_confidence?: number
-  ocr_word_count?: number
-  ocr_processing_time_ms?: number
-  ocr_status?: string
-  search_rank?: number
-  snippets: SearchSnippet[]
+  id: string;
+  filename: string;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  tags: string[];
+  created_at: string;
+  has_ocr_text: boolean;
+  ocr_confidence?: number;
+  ocr_word_count?: number;
+  ocr_processing_time_ms?: number;
+  ocr_status?: string;
+  search_rank?: number;
+  snippets: SearchSnippet[];
 }
 
 export interface SearchResponse {
-  documents: EnhancedDocument[]
-  total: number
-  query_time_ms: number
-  suggestions: string[]
+  documents: EnhancedDocument[];
+  total: number;
+  query_time_ms: number;
+  suggestions: string[];
 }
 
-export default api
+export default api;
