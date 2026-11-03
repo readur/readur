@@ -19,6 +19,12 @@ fn normalize_path(path: &str) -> String {
     path.trim_end_matches('/').to_string()
 }
 
+/// Row key under which a watch folder's own ETag is stored.
+fn root_row_path(folder_path: &str) -> String {
+    let normalized = normalize_path(folder_path);
+    if normalized.is_empty() { "/".to_string() } else { normalized }
+}
+
 /// True when `path` is one of `failed` or lies anywhere beneath one of them.
 fn is_within_failed(path: &str, failed: &[String]) -> bool {
     let path = normalize_path(path);
@@ -98,6 +104,20 @@ pub enum SmartSyncStrategy {
     TargetedScan(Vec<String>),
 }
 
+/// Outcome of evaluating a folder, keeping the shallow root listing when the
+/// folder itself changed so the files directly inside it can be returned.
+struct Evaluation {
+    decision: SmartSyncDecision,
+    root_listing: Option<WebDAVScanResult>,
+    root_changed: bool,
+}
+
+impl Evaluation {
+    fn deep_scan() -> Self {
+        Self { decision: SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan), root_listing: None, root_changed: false }
+    }
+}
+
 /// Complete result from smart sync operation
 #[derive(Debug, Clone)]
 pub struct SmartSyncResult {
@@ -148,6 +168,17 @@ impl SmartSyncService {
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncDecision> {
+        Ok(self.evaluate(user_id, webdav_service, folder_path).await?.decision)
+    }
+
+    /// Compares the folder's own ETag and its immediate subdirectories' ETags
+    /// with the stored ones to decide what, if anything, needs scanning.
+    async fn evaluate(
+        &self,
+        user_id: Uuid,
+        webdav_service: &WebDAVService,
+        folder_path: &str,
+    ) -> Result<Evaluation> {
         let evaluation_start = Instant::now();
         let eval_request_id = Uuid::new_v4();
         
@@ -170,17 +201,28 @@ impl SmartSyncService {
             let eval_elapsed = evaluation_start.elapsed();
             info!("[{}] No known directories for '{}', requires full deep scan (evaluated in {:.2}s)", 
                   eval_request_id, folder_path, eval_elapsed.as_secs_f64());
-            return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+            return Ok(Evaluation::deep_scan());
         }
         
         info!("[{}] Found {} known directories for smart sync comparison", 
               eval_request_id, relevant_dirs.len());
         
         // Do a shallow discovery of the root folder to check immediate changes
-        match webdav_service.discover_files_and_directories(folder_path, false).await {
+        match webdav_service.discover_tree(folder_path, false, None).await {
             Ok(root_discovery) => {
                 let mut changed_directories = Vec::new();
                 let mut new_directories = Vec::new();
+
+                // The folder's own ETag covers the files that live directly in it.
+                let root_changed = match (relevant_dirs.get(&normalized_folder_path), &root_discovery.root) {
+                    (Some(known_etag), Some(root)) => !compare_etags(known_etag, &root.etag),
+                    (None, Some(_)) => true,
+                    (_, None) => false,
+                };
+                if root_changed {
+                    info!("[{}] 🔄 Folder '{}' itself changed; files directly inside it will be listed",
+                          eval_request_id, folder_path);
+                }
                 
                 // Check if any immediate subdirectories have changed ETags
                 for directory in &root_discovery.directories {
@@ -246,11 +288,11 @@ impl SmartSyncService {
                 }
                 
                 // If no changes detected and no deletions, we can skip
-                if changed_directories.is_empty() && new_directories.is_empty() && deleted_directories.is_empty() {
+                if changed_directories.is_empty() && new_directories.is_empty() && deleted_directories.is_empty() && !root_changed {
                     let eval_elapsed = evaluation_start.elapsed();
                     info!("[{}] ✅ Smart sync: No directory changes detected for '{}', sync can be skipped (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::SkipSync);
+                    return Ok(Evaluation { decision: SmartSyncDecision::SkipSync, root_listing: None, root_changed: false });
                 }
                 
                 // Determine strategy based on scope of changes
@@ -264,7 +306,7 @@ impl SmartSyncService {
                     info!("[{}] 📁 Smart sync: Large changes detected for '{}' ({} changed, {} new, {} deleted, {:.1}% change ratio), using full deep scan (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, changed_directories.len(), new_directories.len(), 
                           deleted_directories.len(), change_ratio * 100.0, eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+                    return Ok(Evaluation::deep_scan());
                 } else {
                     // Targeted scan of changed directories
                     let mut targets = changed_directories;
@@ -272,7 +314,11 @@ impl SmartSyncService {
                     info!("[{}] 🎯 Smart sync: Targeted changes detected for '{}', scanning {} directories: {:?} (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, targets.len(), 
                           targets.iter().take(3).collect::<Vec<_>>(), eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::TargetedScan(targets)));
+                    return Ok(Evaluation {
+                        decision: SmartSyncDecision::RequiresSync(SmartSyncStrategy::TargetedScan(targets)),
+                        root_listing: Some(root_discovery),
+                        root_changed,
+                    });
                 }
             }
             Err(e) => {
@@ -306,7 +352,7 @@ impl SmartSyncService {
                 let final_elapsed = evaluation_start.elapsed();
                 info!("[{}] Fallback decision: Full deep scan for '{}' (total evaluation time: {:.2}s)", 
                       eval_request_id, folder_path, final_elapsed.as_secs_f64());
-                return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+                return Ok(Evaluation::deep_scan());
             }
         }
     }
@@ -348,7 +394,8 @@ impl SmartSyncService {
         let eval_and_sync_start = Instant::now();
         let eval_sync_request_id = Uuid::new_v4();
 
-        match self.evaluate_sync_need(user_id, webdav_service, folder_path, _progress).await? {
+        let evaluation = self.evaluate(user_id, webdav_service, folder_path).await?;
+        match evaluation.decision {
             SmartSyncDecision::SkipSync => {
                 let total_elapsed = eval_and_sync_start.elapsed();
                 info!("[{}] ✅ Smart sync: Skipping sync for '{}' - no changes detected (completed in {:.2}s)",
@@ -356,7 +403,12 @@ impl SmartSyncService {
                 Ok(None)
             }
             SmartSyncDecision::RequiresSync(strategy) => {
-                let result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
+                let mut result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
+                if evaluation.root_changed {
+                    if let Some(listing) = evaluation.root_listing {
+                        self.absorb_root_listing(user_id, folder_path, listing, &mut result).await;
+                    }
+                }
                 let total_elapsed = eval_and_sync_start.elapsed();
                 info!("[{}] ✅ Smart sync completed for '{}' - {} files found, {} dirs scanned, {} dirs failed in {:.2}s",
                       eval_sync_request_id, folder_path, result.files.len(),
@@ -384,6 +436,29 @@ impl SmartSyncService {
                 strategy: Some(result.strategy_used),
             },
         })
+    }
+
+    /// Adds the files listed directly in the folder to `result` and records the
+    /// folder's own ETag so they are not listed again until it changes.
+    async fn absorb_root_listing(&self, user_id: Uuid, folder_path: &str, listing: WebDAVScanResult, result: &mut SmartSyncResult) {
+        info!("Folder '{}' changed: adding {} files listed directly in it", folder_path, listing.files.len());
+        result.files.extend(listing.files);
+        if let Some(root) = listing.root {
+            let row = Self::root_row(user_id, folder_path, &root.etag);
+            if let Err(e) = self.state.db.create_or_update_webdav_directory(&row).await {
+                warn!("Failed to save ETag for folder '{}': {}", folder_path, e);
+            }
+        }
+    }
+
+    fn root_row(user_id: Uuid, folder_path: &str, etag: &str) -> CreateWebDAVDirectory {
+        CreateWebDAVDirectory {
+            user_id,
+            directory_path: root_row_path(folder_path),
+            directory_etag: etag.to_string(),
+            file_count: 0,
+            total_size_bytes: 0,
+        }
     }
 
     fn tracking(&self, user_id: Uuid, source_id: Option<Uuid>) -> DiscoveryTracking {
@@ -433,7 +508,10 @@ impl SmartSyncService {
         info!("Deep scan found {} files and {} directories in folder {} ({} directories failed)",
               scan.files.len(), scan.directories.len(), folder_path, scan.failed_directories.len());
 
-        let directories_to_save = Self::directories_to_persist(user_id, &scan);
+        let mut directories_to_save = Self::directories_to_persist(user_id, &scan);
+        if let Some(root) = &scan.root {
+            directories_to_save.push(Self::root_row(user_id, folder_path, &root.etag));
+        }
         let complete = scan.failed_directories.is_empty();
         if !complete {
             warn!("{} directories under '{}' could not be listed; their stored state is kept and nothing is pruned: {:?}",
@@ -582,6 +660,14 @@ mod tests {
         // Similar but different paths (DocumentsBackup is not under Documents)
         assert!(!is_immediate_child("/Documents", "/DocumentsBackup"));
         assert!(!is_immediate_child("/Documents", "/DocumentsBackup/Folder"));
+    }
+
+    #[test]
+    fn test_root_row_path_is_normalized() {
+        assert_eq!(root_row_path("/Documents/"), "/Documents");
+        assert_eq!(root_row_path("/Documents"), "/Documents");
+        assert_eq!(root_row_path("/"), "/");
+        assert_eq!(root_row_path(""), "/");
     }
 
     #[test]
