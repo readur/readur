@@ -215,6 +215,12 @@ pub struct WebDAVService {
 }
 
 impl WebDAVService {
+    /// This service's configuration with the server URL swapped for the one
+    /// a request should go to (a protocol probe or the effective URL).
+    fn config_with_server_url(&self, server_url: String) -> WebDAVConfig {
+        WebDAVConfig { server_url, ..self.config.clone() }
+    }
+
     /// Creates a new WebDAV service with default configurations
     pub fn new(config: WebDAVConfig) -> Result<Self> {
         Self::new_with_configs(config, RetryConfig::default(), ConcurrencyConfig::default())
@@ -233,6 +239,8 @@ impl WebDAVService {
     ) -> Result<Self> {
         // Validate configuration
         config.validate()?;
+        // The configured watch folders are decoded here, exactly once.
+        let config = WebDAVConfig { watch_folders: config.normalized_watch_folders(), ..config };
 
         // The configured server must be a permitted destination. Host names
         // are also filtered on every DNS lookup and redirect by the client.
@@ -356,15 +364,7 @@ impl WebDAVService {
         debug!("🧪 Testing protocol connection to: {}", full_url);
         
         // Create a temporary config with the full URL for testing
-        let temp_config = WebDAVConfig {
-            server_url: full_url.to_string(),
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(full_url.to_string());
 
         // Test basic OPTIONS request
         let webdav_url = temp_config.webdav_url();
@@ -502,15 +502,7 @@ impl WebDAVService {
     async fn test_options_request(&self) -> Result<(Option<String>, Option<String>)> {
         // Create a temporary config with the effective server URL for WebDAV operations
         let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(effective_server_url);
         let webdav_url = temp_config.webdav_url();
         
         let response = self.client
@@ -1527,15 +1519,7 @@ impl WebDAVService {
         
         // Create a temporary config with the effective server URL
         let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(effective_server_url);
         
         let options_response = self.authenticated_request(
             reqwest::Method::OPTIONS,

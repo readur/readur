@@ -123,7 +123,9 @@ async fn perform_sync_internal(
     webdav_source_id: Option<uuid::Uuid>,
     request_id: Uuid,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    
+    // The service holds the watch folders decoded and normalised.
+    let config = WebDAVConfig { watch_folders: webdav_service.get_config().watch_folders.clone(), ..config };
+
     let mut total_files_processed = 0;
     let mut total_directories_scanned = 0;
     let mut total_directories_skipped = 0;

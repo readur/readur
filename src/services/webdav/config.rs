@@ -74,6 +74,14 @@ impl WebDAVConfig {
         }
     }
 
+    /// The watch folders in the form the service works with: percent-escapes
+    /// decoded once, one leading `/` and no trailing one. Configured values
+    /// are decoded exactly once, here; everything after the service is built
+    /// uses these decoded paths and encodes them when it builds a URL.
+    pub fn normalized_watch_folders(&self) -> Vec<String> {
+        self.watch_folders.iter().map(|folder| super::paths::decode_watch_folder(folder)).collect()
+    }
+
     /// Normalizes a server URL by adding protocol if missing
     /// Prefers HTTPS over HTTP for security reasons
     pub fn normalize_server_url(url: &str) -> String {

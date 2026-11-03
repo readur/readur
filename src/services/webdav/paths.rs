@@ -29,23 +29,30 @@ fn encode_segment(segment: &str) -> Cow<'_, str> {
     urlencoding::encode(segment)
 }
 
-/// Canonical form of a configured watch folder: percent-escapes decoded once,
-/// exactly one leading `/` and no trailing one (the server root is `/`).
+/// Canonical slash form of a watch folder: exactly one leading `/` and no
+/// trailing one (the server root is `/`), surrounding whitespace removed.
 ///
-/// Watch folders are compared with the decoded href paths that come back from
-/// PROPFIND (`/Documents`), so a folder configured as `Documents` or
+/// Watch folders are compared with the decoded href paths that come back
+/// from PROPFIND (`/Documents`), so a folder given as `Documents` or
 /// `/Documents/` must name the same path, or the folder's own entry is never
-/// recognised and the root is scanned twice. Decoding is needed because
-/// paths are now percent-encoded when placed in a request URL: a folder that
-/// was configured as `/My%20Docs` to reach a space before that change would
-/// otherwise be requested as `/My%2520Docs`. The cost is that a folder whose
-/// name literally contains a valid escape sequence must be configured
-/// encoded (`%2520` for a literal `%20`). The function is idempotent on its
-/// own output except for that case.
+/// recognised and the root is scanned twice. This does not percent-decode:
+/// it is applied on every hot path and must be idempotent, and decoding is
+/// not (`%2520` would become `%20` and then a space). Decoding happens once,
+/// in [`decode_watch_folder`], when a configuration is turned into a service.
 pub fn normalize_watch_folder(folder: &str) -> String {
-    let decoded = decode_href(folder.trim());
-    let trimmed = decoded.trim_matches('/');
+    let trimmed = folder.trim().trim_matches('/');
     if trimmed.is_empty() { "/".to_string() } else { format!("/{trimmed}") }
+}
+
+/// The decoded, canonical form of a configured watch folder. Decoding is
+/// needed because paths are percent-encoded when placed in a request URL: a
+/// folder that was configured as `/My%20Docs` to reach a space before that
+/// change would otherwise be requested as `/My%2520Docs`. A folder whose name
+/// literally contains a valid escape sequence must therefore be configured
+/// encoded (`%2520` for a literal `%20`). Call this exactly once per
+/// configured folder, at the configuration boundary.
+pub fn decode_watch_folder(folder: &str) -> String {
+    normalize_watch_folder(&decode_href(folder.trim()))
 }
 
 #[cfg(test)]
@@ -86,15 +93,28 @@ mod tests {
     }
 
     #[test]
-    fn watch_folders_are_percent_decoded_once() {
-        assert_eq!(normalize_watch_folder("/My%20Docs"), "/My Docs");
-        assert_eq!(normalize_watch_folder("/My Docs"), "/My Docs");
-        assert_eq!(normalize_watch_folder("/caf%C3%A9"), "/café");
+    fn normalizing_does_not_decode_and_is_idempotent() {
+        for folder in ["/My%20Docs/", "/a%2520b", "/caf%C3%A9", "/My Docs", "Documents//"] {
+            let once = normalize_watch_folder(folder);
+            assert_eq!(normalize_watch_folder(&once), once, "{folder:?}");
+        }
+        assert_eq!(normalize_watch_folder("/My%20Docs"), "/My%20Docs");
+        assert_eq!(normalize_watch_folder("/a%2520b"), "/a%2520b");
+    }
+
+    #[test]
+    fn configured_watch_folders_are_percent_decoded_once() {
+        assert_eq!(decode_watch_folder("/My%20Docs/"), "/My Docs");
+        assert_eq!(decode_watch_folder("/My Docs"), "/My Docs");
+        assert_eq!(decode_watch_folder("/caf%C3%A9"), "/café");
+        assert_eq!(decode_watch_folder("Documents"), "/Documents");
+        // A folder literally named `a%20b` is configured as `a%2520b`.
+        assert_eq!(decode_watch_folder("/a%2520b"), "/a%20b");
         // Invalid escapes are not an error and are kept as typed.
-        assert_eq!(normalize_watch_folder("/100%/done"), "/100%/done");
-        // Already-normalised output is stable.
-        let once = normalize_watch_folder("/My%20Docs/");
-        assert_eq!(normalize_watch_folder(&once), once);
+        assert_eq!(decode_watch_folder("/100%/done"), "/100%/done");
+        // The result is stable under the hot-path normalisation.
+        let decoded = decode_watch_folder("/a%2520b");
+        assert_eq!(normalize_watch_folder(&decoded), decoded);
     }
 
     #[test]

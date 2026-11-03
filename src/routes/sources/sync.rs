@@ -264,13 +264,15 @@ pub async fn trigger_deep_scan(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // The service holds the watch folders decoded and normalised.
+    let watch_folders = webdav_service.get_config().watch_folders.clone();
     let scan = DeepScan {
         state: state.clone(),
         user_id: auth_user.user.id,
         source_id,
         source_name: source.name.clone(),
         webdav_service,
-        watch_folders: config.watch_folders,
+        watch_folders,
         extensions: crate::utils::extension_filter::ExtensionFilter::new(&config.file_extensions),
     };
 

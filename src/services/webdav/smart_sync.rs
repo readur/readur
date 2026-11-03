@@ -689,7 +689,9 @@ mod tests {
         assert_eq!(root_row_path("/Documents/"), "/Documents");
         assert_eq!(root_row_path("/Documents"), "/Documents");
         assert_eq!(root_row_path("Documents"), "/Documents");
-        assert_eq!(root_row_path("/My%20Docs"), "/My Docs");
+        // Decoding happened when the service was built; rows are keyed by what it passes on.
+        assert_eq!(root_row_path("/My Docs/"), "/My Docs");
+        assert_eq!(root_row_path("/a%2520b"), "/a%2520b");
         assert_eq!(root_row_path("/"), "/");
         assert_eq!(root_row_path(""), "/");
     }

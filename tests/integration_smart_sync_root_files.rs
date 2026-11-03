@@ -14,11 +14,15 @@ use wiremock::{
 };
 
 fn service_for(server: &MockServer) -> WebDAVService {
+    service_watching(server, "/Documents")
+}
+
+fn service_watching(server: &MockServer, watch_folder: &str) -> WebDAVService {
     let config = WebDAVConfig {
         server_url: server.uri(),
         username: "testuser".to_string(),
         password: "testpass".to_string(),
-        watch_folders: vec!["/Documents".to_string()],
+        watch_folders: vec![watch_folder.to_string()],
         file_extensions: vec![],
         timeout_seconds: 5,
         server_type: Some("generic".to_string()),
@@ -266,8 +270,9 @@ async fn watch_folder_without_leading_slash_matches_its_own_listing() {
     result.unwrap();
 }
 
-/// A watch folder that was configured percent-encoded keeps working: it is
-/// decoded once, requested encoded once, and stored decoded.
+/// A watch folder that was configured percent-encoded keeps working: the
+/// service decodes it once when it is built, it is requested encoded once,
+/// and stored decoded.
 #[tokio::test]
 async fn percent_encoded_watch_folder_is_decoded_once() {
     let ctx = TestContext::new().await;
@@ -276,9 +281,11 @@ async fn percent_encoded_watch_folder_is_decoded_once() {
         let user_id = create_user(&ctx).await;
         mount_flat_listing(&server, "/My%20Docs", "/My%20Docs", "a.pdf").await;
 
-        let service = service_for(&server);
+        let service = service_watching(&server, "/My%20Docs");
+        let folder = service.get_config().watch_folders[0].clone();
+        assert_eq!(folder, "/My Docs");
         let smart_sync = SmartSyncService::new(ctx.state.clone());
-        let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "/My%20Docs", None).await?;
+        let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, &folder, None).await?;
 
         let names: Vec<&str> = outcome.files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, vec!["a.pdf"]);

@@ -280,9 +280,11 @@ impl SourceSyncService {
             server_type: config.server_type,
         };
 
-        let webdav_service = WebDAVService::new(webdav_config.clone())
+        let webdav_service = WebDAVService::new(webdav_config)
             .map_err(|e| anyhow!("Failed to create WebDAV service: {}", e))?
             .with_cancellation_token(cancellation_token.clone());
+        // The service holds the watch folders decoded and normalised.
+        let webdav_config = webdav_service.get_config().clone();
 
         info!("WebDAV service created successfully, starting sync with {} folders", webdav_config.watch_folders.len());
         let discovery_token = cancellation_token.clone();
