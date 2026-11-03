@@ -7,4 +7,4 @@ mod management;
 mod operations;
 
 // Re-export helper functions for use by other modules if needed
-pub use helpers::*;
+pub use helpers::*;pub mod sync_identity;

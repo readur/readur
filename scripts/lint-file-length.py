@@ -134,7 +134,6 @@ BASELINE: dict[str, int] = {
     "tests/integration_source_sync_cancellation_workflow_tests.rs": 1529,
     "src/ocr/xml_extractor.rs": 1397,
     "src/ocr/queue.rs": 1289,
-    "src/scheduling/source_scheduler.rs": 1153,
     "src/config.rs": 1044,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
 }
