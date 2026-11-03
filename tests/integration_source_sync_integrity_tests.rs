@@ -70,7 +70,7 @@ async fn sync_one(ctx: &TestContext, user_id: Uuid, source_id: Uuid, file: FileI
             &Arc::new(SyncProgress::new()),
             move |_| {
                 let file = file.clone();
-                async move { Ok(vec![file]) }
+                async move { Ok(vec![file].into()) }
             },
             |_| async move { Ok(body.to_vec()) },
         )

@@ -56,6 +56,10 @@ pub struct SyncOutcome {
     pub folders: usize,
     /// Watch folders whose listing failed.
     pub folders_failed: usize,
+    /// Subdirectories inside an otherwise listed watch folder whose own
+    /// listing failed; their files are missing from this run and the
+    /// directory is rescanned next time.
+    pub directories_failed: usize,
     /// The first folder or file error, for the source's `last_error`.
     pub first_error: Option<String>,
     /// Total size of the discovered files.
@@ -67,7 +71,7 @@ pub struct SyncOutcome {
 impl SyncOutcome {
     /// Nothing failed (a cancelled run can still be clean).
     pub fn is_clean(&self) -> bool {
-        self.failed == 0 && self.folders_failed == 0
+        self.failed == 0 && self.folders_failed == 0 && self.directories_failed == 0
     }
 
     /// Files discovered this run that were neither ingested nor skipped.
@@ -85,6 +89,9 @@ impl SyncOutcome {
         if self.folders_failed > 0 {
             parts.push(format!("{} of {} folders could not be listed", self.folders_failed, self.folders));
         }
+        if self.directories_failed > 0 {
+            parts.push(format!("{} subdirectories could not be listed", self.directories_failed));
+        }
         if self.failed > 0 {
             parts.push(format!("{} of {} files failed", self.failed, self.discovered));
         }
@@ -100,6 +107,24 @@ impl SyncOutcome {
         if self.first_error.is_none() {
             self.first_error = Some(message);
         }
+    }
+}
+
+/// What listing one watch folder produced.
+///
+/// `failed_directories` names subdirectories the source could not list this
+/// run (the WebDAV scanner reports them; S3 and local folders never do).
+/// Their files are absent from `files`, and the run is reported as not clean
+/// so the operator sees it, while the files that were listed still sync.
+#[derive(Debug, Default, Clone)]
+pub struct FolderDiscovery {
+    pub files: Vec<FileIngestionInfo>,
+    pub failed_directories: Vec<String>,
+}
+
+impl From<Vec<FileIngestionInfo>> for FolderDiscovery {
+    fn from(files: Vec<FileIngestionInfo>) -> Self {
+        Self { files, failed_directories: Vec::new() }
     }
 }
 
@@ -245,9 +270,11 @@ impl SourceSyncService {
         };
 
         let webdav_service = WebDAVService::new(webdav_config.clone())
-            .map_err(|e| anyhow!("Failed to create WebDAV service: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create WebDAV service: {}", e))?
+            .with_cancellation_token(cancellation_token.clone());
 
         info!("WebDAV service created successfully, starting sync with {} folders", webdav_config.watch_folders.len());
+        let discovery_token = cancellation_token.clone();
 
         self.run_pipeline(
             source.user_id,
@@ -260,24 +287,24 @@ impl SourceSyncService {
             |folder_path| {
                 let service = webdav_service.clone();
                 let state_clone = self.state.clone();
-                let user_id = source.user_id;  // Capture user_id from source
-                let progress = progress.clone(); // Clone progress for the async closure
+                let user_id = source.user_id;
+                let progress = progress.clone();
+                let token = discovery_token.clone();
                 async move {
-                    info!("🧠 Using smart sync for scheduled sync: {}", folder_path);
+                    info!("Using smart sync for scheduled sync: {}", folder_path);
                     progress.set_current_directory(&folder_path);
 
-                    // Use smart sync service for intelligent discovery
-                    let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone);
+                    let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone)
+                        .with_cancellation_token(token);
 
-                    match smart_sync_service.evaluate_and_sync(user_id, Some(source.id), &service, &folder_path, Some(&progress)).await {
-                        Ok(Some(sync_result)) => {
-                            info!("✅ Smart sync completed for {}: {} files found using {:?}",
-                                  folder_path, sync_result.files.len(), sync_result.strategy_used);
-                            Ok(sync_result.files)
-                        },
-                        Ok(None) => {
-                            info!("🔍 Smart sync: No changes detected for {}, skipping", folder_path);
-                            Ok(Vec::new()) // No files to process
+                    match smart_sync_service.evaluate_and_sync_detailed(user_id, Some(source.id), &service, &folder_path, Some(&progress)).await {
+                        Ok(outcome) => {
+                            match outcome.strategy {
+                                Some(strategy) => info!("Smart sync completed for {}: {} files found using {:?}, {} directories failed",
+                                                        folder_path, outcome.files.len(), strategy, outcome.failed_directories.len()),
+                                None => info!("Smart sync: no changes detected for {}", folder_path),
+                            }
+                            Ok(FolderDiscovery { files: outcome.files, failed_directories: outcome.failed_directories })
                         },
                         Err(e) => {
                             error!("Smart sync failed for scheduled sync {}: {}", folder_path, e);
@@ -331,7 +358,7 @@ impl SourceSyncService {
             progress,
             |folder_path| {
                 let service = local_service.clone();
-                async move { service.discover_files_in_folder(&folder_path).await }
+                async move { service.discover_files_in_folder(&folder_path).await.map(FolderDiscovery::from) }
             },
             |file_path| {
                 let service = local_service.clone();
@@ -349,7 +376,8 @@ impl SourceSyncService {
         }
 
         let s3_service = S3Service::new(config.clone()).await
-            .map_err(|e| anyhow!("Failed to create S3 service: {}", e))?;
+            .map_err(|e| anyhow!("Failed to create S3 service: {}", e))?
+            .with_cancellation_token(cancellation_token.clone());
 
         self.run_pipeline(
             source.user_id,
@@ -361,7 +389,7 @@ impl SourceSyncService {
             progress,
             |folder_path| {
                 let service = s3_service.clone();
-                async move { service.discover_files_in_folder(&folder_path).await }
+                async move { service.discover_files_in_folder(&folder_path).await.map(FolderDiscovery::from) }
             },
             |file_path| {
                 let service = s3_service.clone();
@@ -393,7 +421,7 @@ impl SourceSyncService {
     where
         F: Fn(String) -> Fut1,
         D: Fn(String) -> Fut2 + Clone,
-        Fut1: std::future::Future<Output = Result<Vec<FileIngestionInfo>>>,
+        Fut1: std::future::Future<Output = Result<FolderDiscovery>>,
         Fut2: std::future::Future<Output = Result<Vec<u8>>>,
     {
         let filter = ExtensionFilter::new(file_extensions);
@@ -411,9 +439,16 @@ impl SourceSyncService {
             }
 
             match discover_files(folder_path.clone()).await {
-                Ok(files) => {
+                Ok(discovery) => {
+                    for directory in &discovery.failed_directories {
+                        error!("Could not list directory {} under watch folder {}", directory, folder_path);
+                        outcome.directories_failed += 1;
+                        let message = format!("directory {}: could not be listed", directory);
+                        progress.add_error(&message);
+                        outcome.record_error(message);
+                    }
                     let before = files_to_process.len();
-                    for file_info in files {
+                    for file_info in discovery.files {
                         if file_info.is_directory || !filter.matches_name(&file_info.name) {
                             continue;
                         }

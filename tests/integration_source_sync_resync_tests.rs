@@ -85,7 +85,7 @@ impl Harness {
                 &Arc::new(SyncProgress::new()),
                 move |_| {
                     let files = files.clone();
-                    async move { Ok(files) }
+                    async move { Ok(files.into()) }
                 },
                 move |_| {
                     let downloads = downloads.clone();

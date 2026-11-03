@@ -3,7 +3,7 @@
 
 use anyhow::anyhow;
 use readur::models::{CreateSource, FileIngestionInfo, SourceStatus, SourceType};
-use readur::scheduling::source_sync::SourceSyncService;
+use readur::scheduling::source_sync::{FolderDiscovery, SourceSyncService};
 use readur::test_utils::TestContext;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
@@ -79,7 +79,7 @@ async fn listing_failure_in_one_folder_is_counted() {
             CancellationToken::new(),
             &Arc::new(SyncProgress::new()),
             |folder| async move {
-                if folder == "/bad" { Err(anyhow!("listing refused")) } else { Ok(listing_of(&["one.txt"])) }
+                if folder == "/bad" { Err(anyhow!("listing refused")) } else { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) }
             },
             |_| async { Err(anyhow!("download refused")) },
         )
@@ -147,4 +147,39 @@ async fn unreadable_file_marks_the_source_as_failed_with_counts() {
     assert_eq!(source.total_files_pending, 1);
 
     let _ = ctx.cleanup_and_close().await;
+}
+
+#[tokio::test]
+async fn unlisted_subdirectory_marks_the_run_not_clean_but_syncs_listed_files() {
+    let ctx = TestContext::new().await;
+    let service = SourceSyncService::new(ctx.state().clone());
+    let folders = vec!["/docs".to_string()];
+
+    let outcome = service
+        .run_pipeline(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &folders,
+            &["txt".to_string()],
+            false,
+            CancellationToken::new(),
+            &Arc::new(SyncProgress::new()),
+            |_| async move {
+                Ok(FolderDiscovery {
+                    files: listing_of(&["one.txt"]),
+                    failed_directories: vec!["/docs/broken".to_string(), "/docs/broken/deeper".to_string()],
+                })
+            },
+            |_| async { Err(anyhow!("download refused")) },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.directories_failed, 2, "{outcome:?}");
+    assert_eq!(outcome.folders_failed, 0, "{outcome:?}");
+    assert_eq!(outcome.discovered, 1, "{outcome:?}");
+    assert!(!outcome.is_clean());
+    let summary = outcome.failure_summary().unwrap();
+    assert!(summary.contains("2 subdirectories could not be listed"), "{summary}");
+    assert!(summary.contains("directory /docs/broken: could not be listed"), "{summary}");
 }
