@@ -155,6 +155,13 @@ impl S3Service {
         };
         let files = list_objects(&ctx, &prefix).await?;
 
+        if files.is_empty() && self.config.prefix.as_deref().is_some_and(|p| !p.trim().trim_matches('/').is_empty()) {
+            warn!(
+                "No objects found in S3 bucket {} under '{}' (source prefix '{}' joined with watch folder '{}'); \
+                 check that the prefix and the watch folder do not both include the same path",
+                self.config.bucket_name, prefix, self.config.prefix.as_deref().unwrap_or(""), folder_path
+            );
+        }
         info!("Found {} files in S3 bucket {} prefix '{}'", files.len(), self.config.bucket_name, prefix);
         Ok(files)
         }

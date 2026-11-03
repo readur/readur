@@ -38,19 +38,28 @@ pub const MAX_LISTING_PAGES: usize = 100_000;
 /// are collapsed, and a non-empty result always ends in `/` so that
 /// `documents` does not also match `documents-archive/...`. An empty result
 /// lists the whole bucket.
+///
+/// A folder that already starts with the prefix (segment-wise) is used as
+/// is: sources configured before the prefix was applied to listings had to
+/// spell out the full key path in their watch folders, and must keep
+/// listing the same keys.
 pub fn listing_prefix(prefix: Option<&str>, folder: &str) -> String {
-    let segments: Vec<&str> = prefix
-        .unwrap_or("")
-        .split('/')
-        .chain(folder.split('/'))
-        .map(str::trim)
-        .filter(|segment| !segment.is_empty())
-        .collect();
+    let prefix_segments = key_segments(prefix.unwrap_or(""));
+    let folder_segments = key_segments(folder);
+    let segments = if folder_segments.starts_with(&prefix_segments) {
+        folder_segments
+    } else {
+        [prefix_segments, folder_segments].concat()
+    };
     if segments.is_empty() {
         String::new()
     } else {
         format!("{}/", segments.join("/"))
     }
+}
+
+fn key_segments(path: &str) -> Vec<&str> {
+    path.split('/').map(str::trim).filter(|segment| !segment.is_empty()).collect()
 }
 
 /// Decide how to proceed after a `ListObjectsV2` page.
@@ -208,6 +217,16 @@ mod tests {
         assert_eq!(listing_prefix(Some("/clients//acme/"), "/documents"), "clients/acme/documents/");
         assert_eq!(listing_prefix(Some("clients/acme"), ""), "clients/acme/");
         assert_eq!(listing_prefix(Some("  "), " docs "), "docs/");
+    }
+
+    /// A watch folder that already carries the prefix is not prefixed twice,
+    /// but a folder that merely shares its first characters is.
+    #[test]
+    fn listing_prefix_is_not_applied_to_a_folder_that_already_has_it() {
+        assert_eq!(listing_prefix(Some("clients/acme"), "clients/acme/documents"), "clients/acme/documents/");
+        assert_eq!(listing_prefix(Some("/clients/acme/"), "/clients/acme/"), "clients/acme/");
+        assert_eq!(listing_prefix(Some("clients"), "clientsarchive/documents"), "clients/clientsarchive/documents/");
+        assert_eq!(listing_prefix(Some("clients/acme"), "clients"), "clients/acme/clients/");
     }
 
     #[test]
