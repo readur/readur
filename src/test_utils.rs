@@ -16,10 +16,6 @@ use serde_json::json;
 #[cfg(any(test, feature = "test-utils"))]
 use uuid;
 #[cfg(any(test, feature = "test-utils"))]
-use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
-#[cfg(any(test, feature = "test-utils"))]
-use testcontainers_modules::postgres::Postgres;
-#[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
 
 /// Cleanup strategy for database cleanup operations
@@ -168,7 +164,7 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestContext {
     pub app: Router,
-    pub container: ContainerAsync<Postgres>,
+    pub database: crate::test_db::TestDatabase,
     pub state: Arc<AppState>,
     context_id: String,
     cleanup_called: Arc<std::sync::atomic::AtomicBool>,
@@ -179,7 +175,7 @@ pub struct TestContext {
 impl Drop for TestContext {
     fn drop(&mut self) {
         // Simplified drop - no async operations to prevent runtime issues
-        // The pool and container will be cleaned up naturally when dropped
+        // The pool closes when dropped; the database is dropped at process exit
         // For proper cleanup, use cleanup_and_close() explicitly before dropping
     }
 }
@@ -205,64 +201,18 @@ impl TestContext {
             uuid::Uuid::new_v4().simple()
         );
         
-        // Create individual PostgreSQL container for this test
-        let postgres_image = Postgres::default()
-            .with_tag("15")
-            .with_env_var("POSTGRES_USER", "readur")
-            .with_env_var("POSTGRES_PASSWORD", "readur")
-            .with_env_var("POSTGRES_DB", "readur")
-            // Optimize for fast test execution
-            .with_env_var("POSTGRES_MAX_CONNECTIONS", "50")
-            .with_env_var("POSTGRES_SHARED_BUFFERS", "64MB")
-            .with_env_var("POSTGRES_EFFECTIVE_CACHE_SIZE", "128MB")
-            .with_env_var("POSTGRES_MAINTENANCE_WORK_MEM", "32MB")
-            .with_env_var("POSTGRES_WORK_MEM", "4MB")
-            .with_env_var("POSTGRES_FSYNC", "off")
-            .with_env_var("POSTGRES_SYNCHRONOUS_COMMIT", "off")
-            .with_env_var("POSTGRES_WAL_BUFFERS", "16MB")
-            .with_env_var("POSTGRES_CHECKPOINT_SEGMENTS", "32");
-        
-        let container = postgres_image.start().await
-            .expect("Failed to start postgres container");
-        
-        let port = container.get_host_port_ipv4(5432).await
-            .expect("Failed to get postgres port");
-        
-        let database_url = format!("postgresql://readur:readur@localhost:{}/readur", port);
-        
-        // Wait for the database to be ready with fast retry
-        let mut retries = 0;
-        const MAX_RETRIES: u32 = 15;
-        let db = loop {
-            // Use larger pool for error handling tests that need more concurrent connections
-            let (max_connections, min_connections) = if std::env::var("TEST_REQUIRES_LARGER_POOL").is_ok() {
-                (15, 3) // Larger pool for error handling tests
-            } else {
-                (5, 1)  // Standard small pool for regular tests
-            };
-            match crate::db::Database::new_with_pool_config(&database_url, max_connections, min_connections).await {
-                Ok(test_db) => {
-                    // Run migrations
-                    let migrations = sqlx::migrate!("./migrations");
-                    if let Err(e) = migrations.run(&test_db.pool).await {
-                        if retries >= MAX_RETRIES - 1 {
-                            panic!("Migration failed after {} retries: {}", MAX_RETRIES, e);
-                        }
-                        retries += 1;
-                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        continue;
-                    }
-                    break test_db;
-                }
-                Err(e) => {
-                    if retries >= MAX_RETRIES - 1 {
-                        panic!("Failed to connect to database after {} retries: {}", MAX_RETRIES, e);
-                    }
-                    retries += 1;
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                }
-            }
+        // A fresh database cloned from the migrated template (see crate::test_db)
+        let database = crate::test_db::TestDatabase::from_template().await;
+        let database_url = database.url().to_string();
+        // Use larger pool for error handling tests that need more concurrent connections
+        let (max_connections, min_connections) = if std::env::var("TEST_REQUIRES_LARGER_POOL").is_ok() {
+            (15, 3)
+        } else {
+            (5, 1)
         };
+        let db = crate::db::Database::new_with_pool_config(&database_url, max_connections, min_connections)
+            .await
+            .expect("Failed to connect to test database");
         
         let config = config_builder.build(database_url);
         
@@ -315,7 +265,7 @@ impl TestContext {
         
         Self { 
             app, 
-            container, 
+            database, 
             state,
             context_id,
             cleanup_called: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -746,7 +696,12 @@ impl TestContext {
         
         // Then close the connection pool
         self.close_connections().await;
-        
+
+        // The database was this test's alone; drop it rather than leave it to process exit
+        if let Err(e) = self.database.drop_database().await {
+            eprintln!("Warning: could not drop test database {}: {}", self.database.name(), e);
+        }
+
         Ok(())
     }
 }
@@ -862,21 +817,6 @@ impl TestConfigBuilder {
 #[cfg(any(test, feature = "test-utils"))]
 pub fn create_test_app(state: Arc<AppState>) -> Router {
     crate::routes::api_router().with_state(state)
-}
-
-/// Legacy function for backward compatibility - will be deprecated
-#[cfg(any(test, feature = "test-utils"))]
-pub async fn create_test_app_with_container() -> (Router, Arc<ContainerAsync<Postgres>>) {
-    let ctx = TestContext::new().await;
-    let app = ctx.app.clone();
-    // Need to create a new container since we can't move out of ctx.container due to Drop trait
-    let postgres_image = Postgres::default()
-        .with_tag("15")
-        .with_env_var("POSTGRES_USER", "readur")
-        .with_env_var("POSTGRES_PASSWORD", "readur")
-        .with_env_var("POSTGRES_DB", "readur");
-    let container = postgres_image.start().await.expect("Failed to start postgres container");
-    (app, Arc::new(container))
 }
 
 /// Unified test authentication helper that replaces TestClient/AdminTestClient patterns

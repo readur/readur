@@ -29,7 +29,7 @@ fn create_test_user_with_suffix(suffix: &str) -> CreateUser {
     }
 }
 
-/// Test context wrapper that provides access to AppState via testcontainers
+/// Test context wrapper that provides access to AppState via a per-test database (readur::test_db)
 struct AutoRotateTestContext {
     ctx: TestContext,
 }

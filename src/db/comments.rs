@@ -3,6 +3,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use super::Database;
+use super::sanitize::ToDb;
 use crate::models::comment::{CommentWithAuthor, DocumentComment};
 
 impl Database {
@@ -21,7 +22,7 @@ impl Database {
         .bind(document_id)
         .bind(user_id)
         .bind(parent_id)
-        .bind(content)
+        .bind(content.for_db())
         .fetch_one(&self.pool)
         .await?;
 
@@ -93,7 +94,7 @@ impl Database {
                RETURNING *"#,
         )
         .bind(comment_id)
-        .bind(content)
+        .bind(content.for_db())
         .fetch_one(&self.pool)
         .await?;
 

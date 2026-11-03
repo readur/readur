@@ -31,7 +31,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.19"
 base64ct = { version = "=1.8.3", features = ["alloc"] }
-jsonwebtoken = "9"
+# 11.x needs exactly one crypto backend; aws-lc is already built for the AWS SDK.
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -48,7 +49,10 @@ kamadak-exif = { version = "0.6.1", optional = true }
 thiserror = "2.0"
 sysinfo = "0.40"
 raw-cpuid = { version = "11", optional = true }
-reqwest = { version = "0.12", features = ["json", "multipart"] }
+# 0.13 made rustls the default TLS backend; keep native-tls (system OpenSSL) so
+# WebDAV/S3 servers that only speak legacy TLS keep working. `form` (OIDC) is opt-in
+# since 0.13, as is `query`.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "multipart", "form", "query"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
 urlencoding = "2.1"
 url = "2.4"
@@ -71,17 +75,18 @@ aws-smithy-http-client = { version = "1.4", features = ["rustls-aws-lc"], option
 aws-smithy-runtime-api = { version = "1.18", features = ["client"], optional = true }
 sha2 = "0.11"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
-testcontainers = { version = "0.26", optional = true }
-testcontainers-modules = { version = "0.14", features = ["postgres"], optional = true }
+testcontainers = { version = "0.27", optional = true }
+testcontainers-modules = { version = "0.15", features = ["postgres"], optional = true }
+libc = { version = "0.2", optional = true }
 # Office document support - now using XML extraction only
-zip = "8"             # Still needed for other archive handling
+zip = "9"             # Still needed for other archive handling
 rand = "0.10"
 
 [features]
 default = ["ocr", "s3"]
 ocr = ["tesseract", "image", "imageproc", "raw-cpuid", "kamadak-exif"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types", "aws-smithy-http-client", "aws-smithy-runtime-api"]
-test-utils = ["testcontainers", "testcontainers-modules"]
+test-utils = ["testcontainers", "testcontainers-modules", "libc"]
 stress-testing = ["test-utils"]
 
 [dev-dependencies]
@@ -91,8 +96,8 @@ tokio-test = "0.4"
 futures = "0.3"
 rand = "0.10"
 # Database testing dependencies
-testcontainers = "0.26"
-testcontainers-modules = { version = "0.14", features = ["postgres"] }
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
 rust_xlsxwriter = "0.102"  # For creating proper XLSX test files
 # WebDAV server for realistic stress testing

@@ -33,7 +33,7 @@ cargo test
 cargo test --lib
 
 # Run only integration tests (requires running infrastructure)
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # Run with detailed output
 RUST_BACKTRACE=1 cargo test -- --nocapture
@@ -120,23 +120,35 @@ cargo test test_name -- --nocapture
 cargo test -- --test-threads=1
 ```
 
-### Integration Tests (`tests/integration_tests.rs`)
+### Integration Tests (`tests/integration_integration_tests.rs`)
 
 Integration tests run against the complete system and require:
 - ✅ Running PostgreSQL database
 - ✅ Server infrastructure
 - ✅ Full OCR processing pipeline
 
+#### Test databases
+
+Tests that need PostgreSQL get their own database from `readur::test_db::TestDatabase` (used by `TestContext`). Each test process starts one server, runs the migrations once into a template database, and clones it per test with `CREATE DATABASE … TEMPLATE …`, which takes milliseconds. Tests of the migrations themselves use `TestDatabase::empty()`.
+
+The server is a `postgres:18` testcontainer by default (`test_db::POSTGRES_TAG`). To use an existing server instead, for example when Docker cannot run containers, point `READUR_TEST_POSTGRES_URL` at any database on it whose role can `CREATEDB`:
+
+```bash
+export READUR_TEST_POSTGRES_URL=postgresql://readur:readur@localhost:5432/readur
+```
+
+The container, or on an existing server the per-test databases, are removed when the test process exits. The template is kept on an existing server and reused until the migrations change.
+
 #### What Integration Tests Cover
 
 ```bash
 # Complete user workflow tests
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # Specific integration tests
-cargo test --test integration_tests test_complete_ocr_workflow
-cargo test --test integration_tests test_document_list_structure
-cargo test --test integration_tests test_ocr_error_handling
+cargo test --test integration_integration_tests test_complete_ocr_workflow
+cargo test --test integration_integration_tests test_document_list_structure
+cargo test --test integration_integration_tests test_ocr_error_handling
 ```
 
 **Integration Test Features:**
@@ -354,7 +366,7 @@ Common unit test issues:
 
 ```bash
 # Run with full debugging
-RUST_BACKTRACE=full cargo test --test integration_tests -- --nocapture
+RUST_BACKTRACE=full cargo test --test integration_integration_tests -- --nocapture
 
 # Test server health first
 curl http://localhost:8000/api/health
@@ -367,7 +379,7 @@ curl http://localhost:8000/api/health
    # Start the server first
    cargo run
    # Then run tests in another terminal
-   cargo test --test integration_tests
+   cargo test --test integration_integration_tests
    ```
 
 2. **"Registration failed" errors**
@@ -530,7 +542,7 @@ jobs:
         done'
     
     - name: Run Integration Tests  
-      run: cargo test --test integration_tests
+      run: cargo test --test integration_integration_tests
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
         JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
@@ -578,7 +590,7 @@ docker-compose up -d
 timeout 60s bash -c 'until curl -s http://localhost:8000/api/health | grep -q "ok"; do sleep 2; done'
 
 # 4. Integration tests
-cargo test --test integration_tests
+cargo test --test integration_integration_tests
 
 # 5. Frontend tests
 cd frontend && npm test -- --run
@@ -598,7 +610,7 @@ cd frontend && npm test -- --run
    }
    ```
 
-**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_tests.rs`.
+**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_integration_tests.rs`.
    ```rust
    #[tokio::test]
    async fn test_new_endpoint_workflow() {

@@ -20,9 +20,7 @@ use readur::{
 
 /// Create a test app state
 async fn create_test_app_state() -> Arc<AppState> {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
 
     let mut config = create_test_config_with_db(&database_url);
     config.server_address = "127.0.0.1:8080".to_string();
