@@ -37,7 +37,7 @@ pub enum TestHelperError {
 /// Options for creating a test AppState with customizable fields
 #[derive(Debug, Clone)]
 pub struct TestAppStateOptions {
-    /// Custom database URL (defaults to TEST_DATABASE_URL or DATABASE_URL)
+    /// Custom database URL (defaults to a fresh database cloned from the test template)
     pub database_url: Option<String>,
     
     /// Upload path for file storage (defaults to "/tmp/test_uploads")
@@ -323,7 +323,7 @@ pub async fn create_test_file_service(upload_path: Option<&str>) -> Result<Arc<F
 /// Creates a test Database instance with test-optimized pool settings
 /// Uses smaller connection pools and shorter timeouts suitable for testing
 pub async fn create_test_database() -> Result<Database, TestHelperError> {
-    let database_url = default_test_db_url();
+    let database_url = crate::test_db::TestDatabase::from_template().await.url().to_string();
     
     // Use test-optimized pool settings: smaller pools, faster timeouts
     Database::new_with_pool_config(&database_url, 5, 1)
@@ -334,7 +334,7 @@ pub async fn create_test_database() -> Result<Database, TestHelperError> {
 /// Creates a test Database instance with custom pool configuration
 /// This version allows tests to specify their own pool settings
 pub async fn create_test_database_with_pool(max_connections: u32, min_connections: u32) -> Result<Database, TestHelperError> {
-    let database_url = default_test_db_url();
+    let database_url = crate::test_db::TestDatabase::from_template().await.url().to_string();
     Database::new_with_pool_config(&database_url, max_connections, min_connections)
         .await
         .map_err(|e| TestHelperError::DatabaseConnection(e.to_string()))
@@ -342,12 +342,14 @@ pub async fn create_test_database_with_pool(max_connections: u32, min_connection
 
 /// Creates a test Database instance from options
 pub async fn create_test_database_from_options(options: &TestAppStateOptions) -> Result<Database, TestHelperError> {
-    let default_url = default_test_db_url();
-    let database_url = options.database_url.as_deref().unwrap_or(&default_url);
+    let database_url = match &options.database_url {
+        Some(url) => url.clone(),
+        None => crate::test_db::TestDatabase::from_template().await.url().to_string(),
+    };
     let max_connections = options.db_max_connections.unwrap_or(5);
     let min_connections = options.db_min_connections.unwrap_or(1);
     
-    Database::new_with_pool_config(database_url, max_connections, min_connections)
+    Database::new_with_pool_config(&database_url, max_connections, min_connections)
         .await
         .map_err(|e| TestHelperError::DatabaseConnection(e.to_string()))
 }

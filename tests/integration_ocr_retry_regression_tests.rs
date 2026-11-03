@@ -1,65 +1,15 @@
 #[cfg(test)]
 mod ocr_retry_regression_tests {
     use sqlx::{PgPool, Row};
-    use testcontainers::{runners::AsyncRunner, ContainerAsync};
-    use testcontainers_modules::postgres::Postgres;
+    use readur::test_db::TestDatabase;
     use uuid::Uuid;
     use readur::routes::documents_ocr_retry::DocumentInfo;
 
-    async fn setup_test_db() -> (ContainerAsync<Postgres>, PgPool) {
-        let postgres_image = Postgres::default();
-        let container = postgres_image.start().await.expect("Failed to start postgres container");
-        let port = container.get_host_port_ipv4(5432).await.expect("Failed to get postgres port");
-        
-        let connection_string = format!(
-            "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-            port
-        );
-
-        let pool = PgPool::connect(&connection_string).await.expect("Failed to connect to test database");
-        
-        // Skip migrations that require extensions and create minimal schema manually
-        // This avoids needing uuid-ossp or other extensions for testing
-        sqlx::query(r#"
-            CREATE TABLE IF NOT EXISTS users (
-                id UUID PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                role VARCHAR(50) NOT NULL DEFAULT 'user',
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        "#)
-        .execute(&pool)
-        .await
-        .expect("Failed to create users table");
-
-        sqlx::query(r#"
-            CREATE TABLE IF NOT EXISTS documents (
-                id UUID PRIMARY KEY,
-                filename VARCHAR(255) NOT NULL,
-                original_filename VARCHAR(255) NOT NULL,
-                user_id UUID NOT NULL REFERENCES users(id),
-                mime_type VARCHAR(100) NOT NULL,
-                file_size BIGINT NOT NULL,
-                ocr_status VARCHAR(50) DEFAULT 'pending',
-                ocr_text TEXT,
-                ocr_confidence DECIMAL(5,2),
-                ocr_word_count INTEGER,
-                ocr_processing_time_ms INTEGER,
-                ocr_completed_at TIMESTAMPTZ,
-                ocr_error TEXT,
-                ocr_failure_reason VARCHAR(255),
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        "#)
-        .execute(&pool)
-        .await
-        .expect("Failed to create documents table");
-        
-        (container, pool)
+    /// A database cloned from the migrated template, so these run against the real schema.
+    async fn setup_test_db() -> (TestDatabase, PgPool) {
+        let database = TestDatabase::from_template().await;
+        let pool = PgPool::connect(database.url()).await.expect("Failed to connect to test database");
+        (database, pool)
     }
 
     async fn create_test_user(pool: &PgPool) -> Uuid {
@@ -81,9 +31,9 @@ mod ocr_retry_regression_tests {
         
         sqlx::query(r#"
             INSERT INTO documents (
-                id, filename, original_filename, user_id, mime_type, file_size, 
+                id, filename, original_filename, file_path, user_id, mime_type, file_size,
                 ocr_status, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, 'application/pdf', 1024, $5, NOW(), NOW())
+            ) VALUES ($1, $2, $3, '/tmp/test.pdf', $4, 'application/pdf', 1024, $5, NOW(), NOW())
         "#)
             .bind(doc_id)
             .bind(format!("test_{}.pdf", doc_id.simple().to_string()[0..8].to_string()))
@@ -99,7 +49,7 @@ mod ocr_retry_regression_tests {
 
     #[tokio::test]
     async fn test_sql_query_only_returns_failed_documents() {
-        let (_container, pool) = setup_test_db().await;
+        let (_database, pool) = setup_test_db().await;
         let user_id = create_test_user(&pool).await;
         
         // Create documents with different OCR statuses
@@ -137,7 +87,7 @@ mod ocr_retry_regression_tests {
 
     #[tokio::test]
     async fn test_broken_sql_query_returns_all_documents() {
-        let (_container, pool) = setup_test_db().await;
+        let (_database, pool) = setup_test_db().await;
         let user_id = create_test_user(&pool).await;
         
         // Create documents with different OCR statuses
@@ -168,7 +118,7 @@ mod ocr_retry_regression_tests {
 
     #[tokio::test]
     async fn test_admin_vs_user_document_visibility() {
-        let (_container, pool) = setup_test_db().await;
+        let (_database, pool) = setup_test_db().await;
         
         // Create admin and regular users
         let admin_id = Uuid::new_v4();
