@@ -35,7 +35,8 @@ pub const MAX_LISTING_PAGES: usize = 100_000;
 ///
 /// The source-level `prefix` (if any) is joined with `folder`; leading
 /// slashes are dropped (S3 keys have none), empty and duplicate separators
-/// are collapsed, and a non-empty result always ends in `/` so that
+/// are collapsed, segment contents (including spaces) are kept as they are,
+/// and a non-empty result always ends in `/` so that
 /// `documents` does not also match `documents-archive/...`. An empty result
 /// lists the whole bucket.
 ///
@@ -59,7 +60,7 @@ pub fn listing_prefix(prefix: Option<&str>, folder: &str) -> String {
 }
 
 fn key_segments(path: &str) -> Vec<&str> {
-    path.split('/').map(str::trim).filter(|segment| !segment.is_empty()).collect()
+    path.split('/').filter(|segment| !segment.is_empty()).collect()
 }
 
 /// Decide how to proceed after a `ListObjectsV2` page.
@@ -216,7 +217,15 @@ mod tests {
         assert_eq!(listing_prefix(Some("clients/acme"), "documents"), "clients/acme/documents/");
         assert_eq!(listing_prefix(Some("/clients//acme/"), "/documents"), "clients/acme/documents/");
         assert_eq!(listing_prefix(Some("clients/acme"), ""), "clients/acme/");
-        assert_eq!(listing_prefix(Some("  "), " docs "), "docs/");
+    }
+
+    /// Spaces inside a key segment are part of the key, so neither the
+    /// prefix nor the watch folder is trimmed.
+    #[test]
+    fn listing_prefix_keeps_spaces_inside_segments() {
+        assert_eq!(listing_prefix(None, "clients/ acme/docs"), "clients/ acme/docs/");
+        assert_eq!(listing_prefix(Some("clients/ acme"), "docs "), "clients/ acme/docs /");
+        assert_eq!(listing_prefix(Some("clients/ acme"), "clients/ acme/docs"), "clients/ acme/docs/");
     }
 
     /// A watch folder that already carries the prefix is not prefixed twice,
@@ -233,7 +242,7 @@ mod tests {
     fn listing_prefix_empty_means_whole_bucket() {
         assert_eq!(listing_prefix(None, ""), "");
         assert_eq!(listing_prefix(Some(""), "/"), "");
-        assert_eq!(listing_prefix(Some("//"), "  "), "");
+        assert_eq!(listing_prefix(Some("//"), ""), "");
     }
 
     #[test]
