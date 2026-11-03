@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
+    db::sources::{SyncCompletion, SYNC_CANCELLED_MESSAGE},
     models::{FileIngestionInfo, Source, SourceType, SourceStatus, LocalFolderSourceConfig, S3SourceConfig, User, UserRole, WebDAVSourceConfig},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
@@ -121,85 +122,98 @@ impl SourceSyncService {
         Self { state }
     }
 
-    /// Perform sync for any source type
+    /// A complete sync run: claims the source, syncs it and records the
+    /// completion. Fails without running when the source is already syncing.
     pub async fn sync_source(&self, source: &Source, enable_background_ocr: bool) -> Result<SyncOutcome> {
-        // Call the cancellable version with no cancellation token
-        self.sync_source_with_cancellation(source, enable_background_ocr, CancellationToken::new()).await
+        if !self.state.db.start_sync_atomic(source.id).await? {
+            return Err(anyhow!("Sync already running for this source"));
+        }
+        let progress = Arc::new(SyncProgress::new());
+        self.state.sync_progress_tracker.register_sync(source.id, progress.clone());
+        let result = self.sync_claimed_source(source, enable_background_ocr, CancellationToken::new(), &progress).await;
+        self.state.sync_progress_tracker.unregister_sync(source.id);
+        result
     }
 
-    /// Perform sync for any source type with cancellation support
-    pub async fn sync_source_with_cancellation(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<SyncOutcome> {
+    /// Syncs a source the caller has already claimed with `start_sync_atomic`
+    /// and records how the run ended through `finish_sync`, on every path, so
+    /// `last_sync_at` always moves and a failing source is not retried on the
+    /// next scheduler tick. The caller owns the registration of `progress`.
+    pub async fn sync_claimed_source(
+        &self,
+        source: &Source,
+        enable_background_ocr: bool,
+        cancellation_token: CancellationToken,
+        progress: &Arc<SyncProgress>,
+    ) -> Result<SyncOutcome> {
         info!("Starting sync for source {} ({})", source.name, source.source_type);
+        progress.set_phase(SyncPhase::Initializing);
 
-        // Check for cancellation before starting
+        let result = self.run_source(source, enable_background_ocr, cancellation_token.clone(), progress).await;
+
+        match &result {
+            Ok(_) => progress.set_phase(SyncPhase::Completed),
+            Err(e) => progress.set_phase(SyncPhase::Failed(e.to_string())),
+        }
+        let cancelled = cancellation_token.is_cancelled() || result.as_ref().is_ok_and(|o| o.cancelled);
+        self.record_completion(source, &result, cancelled).await;
+        result
+    }
+
+    async fn run_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken, progress: &Arc<SyncProgress>) -> Result<SyncOutcome> {
         if cancellation_token.is_cancelled() {
-            info!("Sync for source {} was cancelled before starting", source.name);
             return Err(anyhow!("Sync cancelled"));
         }
 
         let owner = self.state.db.get_user_by_id(source.user_id).await?;
         if !owner_may_sync(owner.as_ref()) {
             warn!("Skipping sync for source {} ({}): owner account is disabled", source.name, source.id);
-            if let Err(e) = self.update_source_status(source.id, SourceStatus::Error, Some(OWNER_INACTIVE_MESSAGE)).await {
-                error!("Failed to update source status: {}", e);
-            }
             return Err(anyhow!(OWNER_INACTIVE_MESSAGE));
         }
 
-        // Update source status to syncing
-        if let Err(e) = self.update_source_status(source.id, SourceStatus::Syncing, None).await {
-            error!("Failed to update source status: {}", e);
+        match source.source_type {
+            SourceType::WebDAV => self.sync_webdav_source(source, enable_background_ocr, cancellation_token, progress).await,
+            SourceType::LocalFolder => self.sync_local_folder_source(source, enable_background_ocr, cancellation_token).await,
+            SourceType::S3 => self.sync_s3_source(source, enable_background_ocr, cancellation_token).await,
         }
+    }
 
-        let progress = Arc::new(SyncProgress::new());
-        progress.set_phase(SyncPhase::Initializing);
-        self.state.sync_progress_tracker.register_sync(source.id, progress.clone());
-
-        let sync_result = match source.source_type {
-            SourceType::WebDAV => self.sync_webdav_source(source, enable_background_ocr, cancellation_token.clone(), &progress).await,
-            SourceType::LocalFolder => self.sync_local_folder_source(source, enable_background_ocr, cancellation_token.clone()).await,
-            SourceType::S3 => self.sync_s3_source(source, enable_background_ocr, cancellation_token.clone()).await,
-        };
-
-        match &sync_result {
-            Ok(_) => progress.set_phase(SyncPhase::Completed),
-            Err(e) => progress.set_phase(SyncPhase::Failed(e.to_string())),
-        }
-        self.state.sync_progress_tracker.unregister_sync(source.id);
-
-        let cancelled = cancellation_token.is_cancelled() || sync_result.as_ref().is_ok_and(|o| o.cancelled);
-        match &sync_result {
-            _ if cancelled => {
-                info!("Sync for source {} was cancelled", source.name);
-                // Don't overwrite status if it's already been set to cancelled by stop_sync
-                if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, Some("Sync cancelled by user")).await {
-                    error!("Failed to update source status after cancellation: {}", e);
-                }
+    /// Writes the final status, message and counters for a run. A cancelled
+    /// run ends idle with the cancellation message; a run with failures ends
+    /// in the error status with the failure summary and its failed files
+    /// still counted as pending.
+    async fn record_completion(&self, source: &Source, result: &Result<SyncOutcome>, cancelled: bool) {
+        let (status, error, files_synced, files_pending) = match result {
+            Ok(outcome) if cancelled => {
+                info!("Sync for source {} was cancelled after {} files", source.name, outcome.processed);
+                (SourceStatus::Idle, Some(SYNC_CANCELLED_MESSAGE.to_string()), outcome.processed, Some(outcome.pending()))
+            }
+            Err(e) if cancelled => {
+                info!("Sync for source {} was cancelled: {}", source.name, e);
+                (SourceStatus::Idle, Some(SYNC_CANCELLED_MESSAGE.to_string()), 0, None)
             }
             Ok(outcome) => match outcome.failure_summary() {
                 None => {
                     info!("Sync completed for source {}: {} files processed", source.name, outcome.processed);
-                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Idle, None).await {
-                        error!("Failed to update source status after successful sync: {}", e);
-                    }
+                    (SourceStatus::Idle, None, outcome.processed, Some(outcome.pending()))
                 }
                 Some(summary) => {
                     warn!("Sync finished with failures for source {}: {}", source.name, summary);
-                    if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Error, Some(&summary)).await {
-                        error!("Failed to update source status after partial sync: {}", e);
-                    }
+                    (SourceStatus::Error, Some(summary), outcome.processed, Some(outcome.pending()))
                 }
             },
             Err(e) => {
                 error!("Sync failed for source {}: {}", source.name, e);
-                let error_msg = format!("Sync failed: {}", e);
-                if let Err(e) = self.update_source_status_if_not_cancelled(source.id, SourceStatus::Error, Some(&error_msg)).await {
-                    error!("Failed to update source status after error: {}", e);
-                }
+                (SourceStatus::Error, Some(e.to_string()), 0, None)
             }
-        }
+        };
 
-        sync_result
+        let completion = SyncCompletion { status, error: error.as_deref(), files_synced: files_synced as i64, files_pending };
+        match self.state.db.finish_sync(source.id, &completion).await {
+            Ok(true) => {}
+            Ok(false) => warn!("Completion of sync for source {} not recorded: the source was no longer marked as syncing", source.id),
+            Err(e) => error!("Failed to record sync completion for source {}: {}", source.id, e),
+        }
     }
 
     async fn sync_webdav_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken, progress: &Arc<SyncProgress>) -> Result<SyncOutcome> {
@@ -430,7 +444,6 @@ impl SourceSyncService {
         outcome.discovered = files_to_process.len();
         if let Err(e) = self.state.db.update_source_sync_stats(
             source_id,
-            0, // files_synced starts at 0
             outcome.discovered as i64,
             outcome.total_size_bytes,
         ).await {
@@ -469,7 +482,6 @@ impl SourceSyncService {
                     if outcome.processed % 10 == 0 || outcome.discovered <= 10 {
                         if let Err(e) = self.state.db.update_source_sync_stats(
                             source_id,
-                            outcome.processed as i64,
                             outcome.pending(),
                             outcome.total_size_bytes,
                         ).await {
@@ -493,15 +505,6 @@ impl SourceSyncService {
             }
         }
         outcome.cancelled = cancellation_token.is_cancelled();
-
-        if let Err(e) = self.state.db.update_source_sync_stats(
-            source_id,
-            outcome.processed as i64,
-            outcome.pending(),
-            outcome.total_size_bytes,
-        ).await {
-            error!("Failed to update final sync stats: {}", e);
-        }
 
         info!("Source sync finished for {}: {} discovered, {} processed, {} skipped, {} failed, {} folders failed{}",
               source_id, outcome.discovered, outcome.processed, outcome.skipped, outcome.failed, outcome.folders_failed,
@@ -642,65 +645,6 @@ impl SourceSyncService {
             error!("Failed to delete stored files of discarded document {}: {}", document.id, e);
         }
     }
-
-    async fn update_source_status(&self, source_id: Uuid, status: SourceStatus, error_message: Option<&str>) -> Result<()> {
-        let query = if let Some(error) = error_message {
-            sqlx::query(
-                r#"UPDATE sources
-                   SET status = $2, last_error = $3, last_error_at = NOW(), updated_at = NOW()
-                   WHERE id = $1"#
-            )
-            .bind(source_id)
-            .bind(status.to_string())
-            .bind(crate::db::sanitize::DbText(error))
-        } else {
-            sqlx::query(
-                r#"UPDATE sources
-                   SET status = $2, last_error = NULL, last_error_at = NULL, updated_at = NOW()
-                   WHERE id = $1"#
-            )
-            .bind(source_id)
-            .bind(status.to_string())
-        };
-
-        query.execute(self.state.db.get_pool()).await
-            .map_err(|e| anyhow!("Failed to update source status: {}", e))?;
-
-        Ok(())
-    }
-
-    /// Update source status only if it hasn't already been set to cancelled
-    /// This prevents race conditions where stop_sync sets status to idle and sync task overwrites it
-    async fn update_source_status_if_not_cancelled(&self, source_id: Uuid, status: SourceStatus, error_message: Option<&str>) -> Result<()> {
-        let query = if let Some(error) = error_message {
-            sqlx::query(
-                r#"UPDATE sources
-                   SET status = $2, last_error = $3, last_error_at = NOW(), updated_at = NOW()
-                   WHERE id = $1 AND NOT (status = 'idle' AND last_error = 'Sync cancelled by user')"#
-            )
-            .bind(source_id)
-            .bind(status.to_string())
-            .bind(crate::db::sanitize::DbText(error))
-        } else {
-            sqlx::query(
-                r#"UPDATE sources
-                   SET status = $2, last_error = NULL, last_error_at = NULL, updated_at = NOW()
-                   WHERE id = $1 AND NOT (status = 'idle' AND last_error = 'Sync cancelled by user')"#
-            )
-            .bind(source_id)
-            .bind(status.to_string())
-        };
-
-        let result = query.execute(self.state.db.get_pool()).await
-            .map_err(|e| anyhow!("Failed to update source status: {}", e))?;
-
-        if result.rows_affected() == 0 {
-            info!("Source {} status not updated - already cancelled by user", source_id);
-        }
-
-        Ok(())
-    }
-
 }
 
 #[cfg(test)]

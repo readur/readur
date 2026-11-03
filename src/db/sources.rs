@@ -7,6 +7,20 @@ use tracing::{info, warn, error};
 use super::Database;
 use super::sanitize::ToDb;
 
+/// The `last_error` a user-requested stop leaves on a source.
+pub const SYNC_CANCELLED_MESSAGE: &str = "Sync cancelled by user";
+
+/// How a claimed sync run ended; see [`Database::finish_sync`].
+#[derive(Debug, Clone)]
+pub struct SyncCompletion<'a> {
+    pub status: crate::models::SourceStatus,
+    pub error: Option<&'a str>,
+    /// Files this run ingested, added to the cumulative total.
+    pub files_synced: i64,
+    /// Files this run left pending; `None` leaves the stored value as is.
+    pub files_pending: Option<i64>,
+}
+
 impl Database {
     pub async fn create_source(&self, user_id: Uuid, source: &crate::models::CreateSource) -> Result<crate::models::Source> {
         let id = Uuid::new_v4();
@@ -224,14 +238,14 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_source_sync_stats(&self, source_id: Uuid, files_synced: i64, files_pending: i64, size_bytes: i64) -> Result<()> {
+    /// Progress figures written while a sync runs. `total_files_synced` and
+    /// `last_sync_at` are cumulative and belong to [`Self::finish_sync`].
+    pub async fn update_source_sync_stats(&self, source_id: Uuid, files_pending: i64, size_bytes: i64) -> Result<()> {
         sqlx::query(
-            r#"UPDATE sources 
-               SET total_files_synced = $1, total_files_pending = $2, total_size_bytes = $3, 
-                   last_sync_at = NOW(), updated_at = NOW()
-               WHERE id = $4"#
+            r#"UPDATE sources
+               SET total_files_pending = $1, total_size_bytes = $2, updated_at = NOW()
+               WHERE id = $3"#
         )
-        .bind(files_synced)
         .bind(files_pending)
         .bind(size_bytes)
         .bind(source_id)
@@ -239,6 +253,40 @@ impl Database {
         .await?;
 
         Ok(())
+    }
+
+    /// Records the end of a sync run claimed with [`Self::start_sync_atomic`]:
+    /// the final status and message, `last_sync_at` (so a failed source is
+    /// not retried on the next tick), the run's ingested files added to the
+    /// cumulative `total_files_synced`, and the pending count when known.
+    ///
+    /// Only a source still marked `syncing`, or one that a stop request
+    /// already set to idle with [`SYNC_CANCELLED_MESSAGE`], is updated;
+    /// returns whether a row was written.
+    pub async fn finish_sync(&self, source_id: Uuid, completion: &SyncCompletion<'_>) -> Result<bool> {
+        let affected = sqlx::query(
+            r#"UPDATE sources
+               SET status = $2,
+                   last_error = $3,
+                   last_error_at = CASE WHEN $3::text IS NULL THEN NULL ELSE NOW() END,
+                   last_sync_at = NOW(),
+                   total_files_synced = total_files_synced + $4,
+                   total_files_pending = COALESCE($5, total_files_pending),
+                   updated_at = NOW()
+               WHERE id = $1
+                 AND (status = 'syncing' OR (status = 'idle' AND last_error = $6))"#
+        )
+        .bind(source_id)
+        .bind(completion.status.to_string())
+        .bind(completion.error.map(|e| e.for_db()))
+        .bind(completion.files_synced)
+        .bind(completion.files_pending)
+        .bind(SYNC_CANCELLED_MESSAGE)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        Ok(affected > 0)
     }
 
     // Source management operations

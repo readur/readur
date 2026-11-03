@@ -63,7 +63,7 @@ pub async fn trigger_sync(
                 error!("Failed to trigger sync for source {}: {}", source_id, error_msg);
                 
                 // Map specific errors to appropriate HTTP status codes
-                if error_msg.contains("already syncing") || error_msg.contains("already running") {
+                if error_msg.contains("already syncing") || error_msg.contains("already running") || error_msg.contains("is stopping") {
                     return Err(StatusCode::CONFLICT);
                 } else if error_msg.contains("not found") {
                     return Err(StatusCode::NOT_FOUND);
