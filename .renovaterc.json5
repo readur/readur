@@ -71,6 +71,12 @@
       groupSlug: 'github-actions',
     },
     {
+      description: 'testcontainers-modules pins testcontainers to one minor, so the two must move together in one PR',
+      matchPackageNames: ['testcontainers', 'testcontainers-modules'],
+      groupName: 'testcontainers',
+      groupSlug: 'testcontainers',
+    },
+    {
       description: 'Batch mise dev tools; the rust and node runtimes stay separate PRs',
       matchManagers: ['mise'],
       matchUpdateTypes: ['minor', 'patch'],
