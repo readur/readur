@@ -10,7 +10,7 @@ pub mod progress_shim; // Backward compatibility shim for simplified progress tr
 pub use common::build_user_agent;
 pub use config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
 pub use service::{
-    WebDAVService, WebDAVDiscoveryResult, WebDAVDownloadResult, ServerCapabilities, HealthStatus, test_webdav_connection,
+    WebDAVService, WebDAVDiscoveryResult, WebDAVScanResult, DiscoveryTracking, WebDAVDownloadResult, ServerCapabilities, HealthStatus, test_webdav_connection,
     ValidationReport, ValidationIssue, ValidationIssueType, ValidationSeverity, 
     ValidationRecommendation, ValidationAction, ValidationSummary
 };
