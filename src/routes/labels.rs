@@ -13,7 +13,7 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::{auth::AuthUser, errors::label::LabelError, AppState};
+use crate::{auth::AuthUser, db::sanitize::ToDb, errors::label::LabelError, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
 #[ts(export)]
@@ -223,11 +223,11 @@ pub async fn create_label(
         "#,
     )
     .bind(user_id)
-    .bind(&payload.name)
-    .bind(payload.description)
-    .bind(payload.color)
-    .bind(payload.background_color)
-    .bind(payload.icon)
+    .bind(payload.name.for_db())
+    .bind(payload.description.for_db())
+    .bind(payload.color.for_db())
+    .bind(payload.background_color.for_db())
+    .bind(payload.icon.for_db())
     .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {
@@ -380,11 +380,11 @@ pub async fn update_label(
         "#,
     )
     .bind(label_id)
-    .bind(&payload.name)
-    .bind(payload.description)
-    .bind(payload.color)
-    .bind(payload.background_color)
-    .bind(payload.icon)
+    .bind(payload.name.for_db())
+    .bind(payload.description.for_db())
+    .bind(payload.color.for_db())
+    .bind(payload.background_color.for_db())
+    .bind(payload.icon.for_db())
     .fetch_one(state.db.get_pool())
     .await
     .map_err(|e| {

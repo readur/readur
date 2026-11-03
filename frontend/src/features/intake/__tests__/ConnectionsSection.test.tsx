@@ -9,7 +9,14 @@ import { ConnectionsSection } from '../connections/ConnectionsSection';
 import { ignoredFilesHref, sourceTypeLabel } from '../shared/sourceTypes';
 import { acknowledge, isLit } from '../../board/litStore';
 import i18n from 'i18next';
-import { apiError, ok, queueService, serveDefaults, sourceErrorService, sourcesService } from './intakeMocks';
+import {
+  apiError,
+  ok,
+  queueService,
+  serveDefaults,
+  sourceErrorService,
+  sourcesService,
+} from './intakeMocks';
 import { renderIntake, resetIntakeState, source } from './intakeTestUtils';
 
 const SOURCES = [
@@ -17,16 +24,29 @@ const SOURCES = [
   source('s2', {
     name: 'Archive bucket',
     source_type: 's3',
-    config: { bucket_name: 'archive', access_key_id: 'AKIAABCDEFGHWXYZ', secret_access_key: 'x', watch_folders: ['docs/'], auto_sync: false },
+    config: {
+      bucket_name: 'archive',
+      access_key_id: 'AKIAABCDEFGHWXYZ',
+      secret_access_key: 'x',
+      watch_folders: ['docs/'],
+      auto_sync: false,
+    },
     status: 'error',
     last_error: 'Access denied',
     last_error_at: '2026-05-01T10:00:00Z',
   }),
-  source('s3', { name: 'Scanner share', source_type: 'local_folder', config: { watch_folders: ['/scans'] }, enabled: false }),
+  source('s3', {
+    name: 'Scanner share',
+    source_type: 'local_folder',
+    config: { watch_folders: ['/scans'] },
+    enabled: false,
+  }),
 ];
 
 function serveSources(list: unknown = SOURCES) {
-  sourcesService.list.mockImplementation(() => (list instanceof Error ? Promise.reject(list) : ok(list)));
+  sourcesService.list.mockImplementation(() =>
+    list instanceof Error ? Promise.reject(list) : ok(list),
+  );
 }
 
 function BackButton() {
@@ -58,7 +78,9 @@ describe('Connections board', () => {
   it('lists every connection with type, status, last sync, files and next sync', async () => {
     renderIntake(<ConnectionsSection />);
     const grid = await board();
-    const heads = within(grid).getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼]/g, ''));
+    const heads = within(grid)
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent?.replace(/[▲▼]/g, ''));
     expect(heads).toEqual(['Name', 'Type', 'Status', 'Last sync', 'Files', 'Next']);
     const office = within(grid).getByRole('row', { name: /Office cloud/ });
     expect(within(office).getByText('WebDAV')).toBeInTheDocument();
@@ -76,7 +98,9 @@ describe('Connections board', () => {
     expect(row).toHaveAttribute('data-changed', 'true');
     expect(within(row).getByText('Changed')).toBeInTheDocument();
     expect(isLit('source', 's2')).toBe(true);
-    expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveAttribute('data-changed');
+    expect(within(grid).getByRole('row', { name: /Office cloud/ })).not.toHaveAttribute(
+      'data-changed',
+    );
     await openRow(user, 'Archive bucket');
     expect(isLit('source', 's2')).toBe(false);
   });
@@ -95,7 +119,10 @@ describe('Connections board', () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const grid = await board();
-    const names = () => within(grid).getAllByRole('rowheader').map((c) => c.textContent);
+    const names = () =>
+      within(grid)
+        .getAllByRole('rowheader')
+        .map((c) => c.textContent);
     expect(names()).toEqual(['Archive bucketChanged', 'Office cloud', 'Scanner share']);
     await user.click(within(grid).getByRole('columnheader', { name: /Name/ }));
     expect(names()).toEqual(['Scanner share', 'Office cloud', 'Archive bucketChanged']);
@@ -130,7 +157,9 @@ describe('Connections board', () => {
     renderIntake(<ConnectionsSection />, { path: '/sources?section=connections&new=1' });
     expect(await screen.findByRole('dialog', { name: 'Add connection' })).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/sources?section=connections'),
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe(
+        '/sources?section=connections',
+      ),
     );
   });
 
@@ -153,21 +182,40 @@ describe('Connection details panel', () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
-    expect(within(panel).getByRole('group', { name: 'Connection' })).toHaveTextContent('https://cloud.example.com');
-    expect(within(panel).getByRole('group', { name: 'Connection' })).toHaveTextContent('ada · password set');
+    expect(within(panel).getByRole('group', { name: 'Connection' })).toHaveTextContent(
+      'https://cloud.example.com',
+    );
+    expect(within(panel).getByRole('group', { name: 'Connection' })).toHaveTextContent(
+      'ada · password set',
+    );
     expect(panel).not.toHaveTextContent('secret');
-    expect(within(panel).getByRole('group', { name: 'Schedule' })).toHaveTextContent('every 60 min');
+    expect(within(panel).getByRole('group', { name: 'Schedule' })).toHaveTextContent(
+      'every 60 min',
+    );
     expect(within(panel).getByRole('group', { name: 'Counts' })).toHaveTextContent('2 KB');
   });
 
   it('lists every watched folder on its own line, whole', async () => {
-    const folders = ['/Documents/Scans/2024/Receipts/Household', '/Shared/Team/Accounting/Invoices'];
-    serveSources([source('s9', { name: 'Deep tree', source_type: 'local_folder', config: { watch_folders: folders } })]);
+    const folders = [
+      '/Documents/Scans/2024/Receipts/Household',
+      '/Shared/Team/Accounting/Invoices',
+    ];
+    serveSources([
+      source('s9', {
+        name: 'Deep tree',
+        source_type: 'local_folder',
+        config: { watch_folders: folders },
+      }),
+    ]);
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Deep tree');
     const list = within(panel).getByRole('list', { name: 'Folders' });
-    expect(within(list).getAllByRole('listitem').map((el) => el.textContent)).toEqual(folders);
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((el) => el.textContent),
+    ).toEqual(folders);
   });
 
   it('lists recent errors with PascalCase types mapped to words and marks', async () => {
@@ -224,7 +272,10 @@ describe('Connection details panel', () => {
     await user.click(within(panel).getByRole('button', { name: label }));
     await waitFor(() => expect(sourcesService[method]).toHaveBeenCalled());
     if (method === 'testConnection') {
-      expect(sourcesService.testConnection).toHaveBeenCalledWith({ source_type: 'webdav', config: SOURCES[0].config });
+      expect(sourcesService.testConnection).toHaveBeenCalledWith({
+        source_type: 'webdav',
+        config: SOURCES[0].config,
+      });
     } else {
       expect(sourcesService[method]).toHaveBeenCalledWith('s1');
     }
@@ -233,7 +284,12 @@ describe('Connection details panel', () => {
   it('tests a saved connection whose secret the server keeps, by its id', async () => {
     const redacted = source('s1', {
       name: 'Office cloud',
-      config: { server_url: 'https://cloud.example.com', username: 'ada', has_password: true, watch_folders: ['/Documents'] },
+      config: {
+        server_url: 'https://cloud.example.com',
+        username: 'ada',
+        has_password: true,
+        watch_folders: ['/Documents'],
+      },
     });
     serveSources([redacted]);
     const user = userEvent.setup();
@@ -250,12 +306,16 @@ describe('Connection details panel', () => {
   });
 
   it('explains an invalid configuration when testing the saved connection', async () => {
-    sourcesService.testConnection.mockImplementation(() => Promise.reject(apiError(400, 'SOURCE_CONFIG_INVALID', 'bad')));
+    sourcesService.testConnection.mockImplementation(() =>
+      Promise.reject(apiError(400, 'SOURCE_CONFIG_INVALID', 'bad')),
+    );
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
     await user.click(within(panel).getByRole('button', { name: 'Test connection' }));
-    expect(await screen.findByText('Some settings are invalid. Check the values and try again.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Some settings are invalid. Check the values and try again.'),
+    ).toBeInTheDocument();
   });
 
   it('offers Stop sync instead of Sync now while syncing', async () => {
@@ -273,7 +333,9 @@ describe('Connection details panel', () => {
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
     await user.click(within(panel).getByRole('button', { name: 'Disable' }));
-    await waitFor(() => expect(sourcesService.update).toHaveBeenCalledWith('s1', { enabled: false }));
+    await waitFor(() =>
+      expect(sourcesService.update).toHaveBeenCalledWith('s1', { enabled: false }),
+    );
   });
 
   it('opens the form with the connection loaded from Edit', async () => {
@@ -294,9 +356,15 @@ describe('Connection details panel', () => {
     expect(sourcesService.remove).not.toHaveBeenCalled();
     await user.click(within(confirm).getByRole('button', { name: 'Delete connection' }));
     await waitFor(() => expect(sourcesService.remove).toHaveBeenCalledWith('s1'));
-    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Delete “Office cloud”?' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('alertdialog', { name: 'Delete “Office cloud”?' }),
+      ).not.toBeInTheDocument(),
+    );
     // Closing goes back a history step (the drawer lives in ?source=), which settles a tick later.
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Office cloud' })).not.toBeInTheDocument(),
+    );
   });
 
   it('cancels a delete without calling the server', async () => {
@@ -304,18 +372,30 @@ describe('Connection details panel', () => {
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
     await user.click(within(panel).getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('alertdialog', { name: /Delete/ })).getByRole('button', { name: 'Cancel' }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: /Delete/ })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
     expect(sourcesService.remove).not.toHaveBeenCalled();
   });
 
   it('explains why a delete failed while syncing', async () => {
-    sourcesService.remove.mockImplementation(() => Promise.reject(apiError(409, 'SOURCE_SYNC_IN_PROGRESS', 'busy')));
+    sourcesService.remove.mockImplementation(() =>
+      Promise.reject(apiError(409, 'SOURCE_SYNC_IN_PROGRESS', 'busy')),
+    );
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
     await user.click(within(panel).getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('alertdialog', { name: /Delete/ })).getByRole('button', { name: 'Delete connection' }));
-    expect(await screen.findByText('Stop the sync before deleting this connection.')).toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: /Delete/ })).getByRole('button', {
+        name: 'Delete connection',
+      }),
+    );
+    expect(
+      await screen.findByText('Stop the sync before deleting this connection.'),
+    ).toBeInTheDocument();
   });
 });
 
@@ -329,7 +409,13 @@ describe('Sync options (ported from SourcesPage.sync-functionality)', () => {
   });
 
   it('allows deep scan for WebDAV only and explains why elsewhere', async () => {
-    serveSources([source('s9', { name: 'Local scans', source_type: 'local_folder', config: { watch_folders: ['/scans'] } })]);
+    serveSources([
+      source('s9', {
+        name: 'Local scans',
+        source_type: 'local_folder',
+        config: { watch_folders: ['/scans'] },
+      }),
+    ]);
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Local scans');
@@ -374,7 +460,11 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
   const params = (href: string) => new URL(href, 'http://x').searchParams;
 
   it('builds the Ignored section link for each source type', () => {
-    for (const [type, name, id] of [['webdav', 'WebDAV Server', 'source-1'], ['s3', 'S3 Bucket', 'source-2'], ['local_folder', 'Local Documents', 'source-3']]) {
+    for (const [type, name, id] of [
+      ['webdav', 'WebDAV Server', 'source-1'],
+      ['s3', 'S3 Bucket', 'source-2'],
+      ['local_folder', 'Local Documents', 'source-3'],
+    ]) {
       const p = params(ignoredFilesHref({ id, name, source_type: type }));
       expect(p.get('section')).toBe('ignored');
       expect(p.get('sourceType')).toBe(type);
@@ -387,12 +477,17 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
     const href = ignoredFilesHref({ id: 's', name: 'My WebDAV & More!', source_type: 'webdav' });
     expect(href).not.toContain('& More');
     expect(params(href).get('sourceName')).toBe('My WebDAV & More!');
-    expect(params(ignoredFilesHref({ id: 's', name: 'Документы', source_type: 'local_folder' })).get('sourceName')).toBe('Документы');
+    expect(
+      params(ignoredFilesHref({ id: 's', name: 'Документы', source_type: 'local_folder' })).get(
+        'sourceName',
+      ),
+    ).toBe('Документы');
   });
 
   it('includes all three source parameters', () => {
     const href = ignoredFilesHref({ id: 'source-123', name: 'Test Source', source_type: 'webdav' });
-    for (const key of ['sourceType', 'sourceName', 'sourceId']) expect(params(href).has(key)).toBe(true);
+    for (const key of ['sourceType', 'sourceName', 'sourceId'])
+      expect(params(href).has(key)).toBe(true);
   });
 
   it('labels the known source types and falls back for unknown or missing ones', () => {
@@ -414,7 +509,9 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />);
     const panel = await openRow(user, 'Office cloud');
-    const names = within(panel).getAllByRole('button').map((b) => b.textContent);
+    const names = within(panel)
+      .getAllByRole('button')
+      .map((b) => b.textContent);
     const edit = names.indexOf('Edit');
     const ignored = names.indexOf('Ignored files');
     const del = names.indexOf('Delete');
@@ -464,7 +561,9 @@ describe('Ignored files link (ported from SourcesPage.ignored-files)', () => {
     const panel = await openRow(user, 'Office cloud');
     within(panel).getByRole('button', { name: 'Ignored files' }).focus();
     await user.keyboard('{Enter}');
-    expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toContain('section=ignored');
+    expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toContain(
+      'section=ignored',
+    );
   });
 });
 
@@ -478,7 +577,11 @@ describe('Connections health and deep links', () => {
     await user.click(document.body); // a pointer interaction first, as React Aria tooltips expect
     await user.hover(row.querySelector('[data-reason]') as HTMLElement);
     expect(await screen.findByRole('tooltip')).toHaveTextContent(/server refused the sign-in/i);
-    expect(within(grid).getByRole('row', { name: /Office cloud/ }).querySelector('[data-reason]')).toBeNull();
+    expect(
+      within(grid)
+        .getByRole('row', { name: /Office cloud/ })
+        .querySelector('[data-reason]'),
+    ).toBeNull();
   });
 
   it('lists a health warning under the name and its recommendation in the panel', async () => {
@@ -488,7 +591,11 @@ describe('Connections health and deep links', () => {
         name: 'Office cloud',
         validation_status: 'warning',
         validation_issues: JSON.stringify([
-          { message: 'The server host could not be resolved', recommendation: 'Check server URL and network', severity: 'warning' },
+          {
+            message: 'The server host could not be resolved',
+            recommendation: 'Check server URL and network',
+            severity: 'warning',
+          },
         ]),
       }),
     ]);
@@ -508,10 +615,14 @@ describe('Connections health and deep links', () => {
     const user = userEvent.setup();
     renderIntake(<ConnectionsSection />, { path: '/intake?section=connections&source=s2' });
     const dialog = await screen.findByRole('dialog', { name: 'Archive bucket' });
-    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('source=s2');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent(
+      'source=s2',
+    );
     await user.click(within(dialog).getByRole('button', { name: /close/i }));
     await waitFor(() =>
-      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).not.toContain('source='),
+      expect(
+        screen.getByRole('status', { name: 'location', hidden: true }).textContent,
+      ).not.toContain('source='),
     );
   });
 
@@ -520,7 +631,9 @@ describe('Connections health and deep links', () => {
     await board();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe('/intake?section=connections'),
+      expect(screen.getByRole('status', { name: 'location', hidden: true }).textContent).toBe(
+        '/intake?section=connections',
+      ),
     );
   });
 
@@ -539,14 +652,19 @@ describe('Connections health and deep links', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'browser back', hidden: true }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent('/sources?section=connections');
+    expect(screen.getByRole('status', { name: 'location', hidden: true })).toHaveTextContent(
+      '/sources?section=connections',
+    );
   });
 });
 
 describe('closing the details panel', () => {
   it('keeps the connection on screen while the panel slides out', async () => {
     // Pretend the exit animation is still running, as it does in a browser.
-    const running = [{ finished: new Promise(() => {}) }] as unknown as Animation[];
+    // react-aria only waits on animations whose playState is 'running'.
+    const running = [
+      { playState: 'running', finished: new Promise(() => {}) },
+    ] as unknown as Animation[];
     const original = Element.prototype.getAnimations;
     Element.prototype.getAnimations = function getAnimations(this: Element) {
       return this.hasAttribute('data-exiting') ? running : [];
@@ -557,7 +675,9 @@ describe('closing the details panel', () => {
       const panel = await openRow(user, 'Archive bucket');
       await user.click(within(panel).getByRole('button', { name: /close/i }));
       await waitFor(() => expect(document.querySelector('[data-exiting]')).not.toBeNull());
-      expect(within(document.querySelector('[data-exiting]') as HTMLElement).getByText('Archive bucket')).toBeInTheDocument();
+      expect(
+        within(document.querySelector('[data-exiting]') as HTMLElement).getByText('Archive bucket'),
+      ).toBeInTheDocument();
     } finally {
       Element.prototype.getAnimations = original;
     }
