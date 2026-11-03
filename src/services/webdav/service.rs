@@ -23,7 +23,7 @@ use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
-use super::common::build_user_agent;
+use super::common::{build_user_agent, verify_download};
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -232,9 +232,11 @@ impl WebDAVService {
             check_url_without_dns(&url).map_err(|e| anyhow!("{}", e))?;
         }
 
-        // Create HTTP client with timeout
+        // Bound connection setup and idle time between received bytes rather
+        // than the whole transfer, so large files are not cut off and retried.
         let client = outbound::client_builder()
-            .timeout(config.timeout())
+            .connect_timeout(config.timeout().min(Duration::from_secs(30)))
+            .read_timeout(config.timeout())
             .build()?;
 
         // Create semaphores for concurrency control
@@ -1418,64 +1420,46 @@ impl WebDAVService {
 
     /// Downloads a file from WebDAV server by path
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
-        debug!("⬇️ Downloading file: {}", file_path);
-        
         // Convert full WebDAV paths to relative paths to prevent double path construction
         let relative_path = self.convert_to_relative_path(file_path);
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_path,
-                response.status()
-            ));
-        }
-
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_path);
-        
-        Ok(content.to_vec())
+        let file_name = relative_path.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string();
+        Ok(self.fetch_file(&relative_path, &file_name).await?.0)
     }
 
     /// Downloads a file from WebDAV server using FileIngestionInfo
     pub async fn download_file_info(&self, file_info: &FileIngestionInfo) -> Result<Vec<u8>> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
-        debug!("⬇️ Downloading file: {}", file_info.relative_path);
-        
-        // Use the relative path directly since it's already processed
-        let relative_path = &file_info.relative_path;
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
+        Ok(self.fetch_file(&file_info.relative_path, &file_info.name).await?.0)
+    }
 
+    /// GETs `relative_path` and returns the body with the server's media type,
+    /// after checking the body is complete and is not an HTML page standing in
+    /// for the file.
+    async fn fetch_file(&self, relative_path: &str, file_name: &str) -> Result<(Vec<u8>, Option<String>)> {
+        let _permit = self.download_semaphore.acquire().await?;
+        debug!("⬇️ Downloading file: {}", relative_path);
+
+        let url = self.get_url_for_path(relative_path);
+        let response = self.authenticated_request(reqwest::Method::GET, &url, None, None).await?;
         if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_info.relative_path,
-                response.status()
-            ));
+            return Err(anyhow!("Failed to download file '{}': HTTP {}", relative_path, response.status()));
         }
 
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
-        
-        Ok(content.to_vec())
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|header| header.to_str().ok())
+            .map(|s| s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase());
+        let content_length = response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|header| header.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok());
+
+        let content = response.bytes().await
+            .map_err(|e| anyhow!("Failed to read body of '{}': {}", relative_path, e))?;
+        verify_download(relative_path, file_name, &content, content_length, content_type.as_deref())?;
+        debug!("✅ Downloaded {} bytes for file: {}", content.len(), relative_path);
+        Ok((content.to_vec(), content_type))
     }
 
     /// Downloads multiple files concurrently
@@ -1514,39 +1498,9 @@ impl WebDAVService {
     /// # Returns
     /// A `WebDAVDownloadResult` containing the file content, updated file info, and MIME detection details
     pub async fn download_file_with_mime_detection(&self, file_info: &FileIngestionInfo) -> Result<WebDAVDownloadResult> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
         debug!("⬇️🔍 Downloading file with MIME detection: {}", file_info.relative_path);
-        
-        // Use the relative path directly since it's already processed
-        let relative_path = &file_info.relative_path;
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
+        let (content, server_content_type) = self.fetch_file(&file_info.relative_path, &file_info.name).await?;
 
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_info.relative_path,
-                response.status()
-            ));
-        }
-
-        // Get server-provided content type from response headers
-        let server_content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|header| header.to_str().ok())
-            .map(|s| s.split(';').next().unwrap_or(s).trim().to_string()); // Remove charset info and convert to owned
-
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
-        
         // Perform content-based MIME type detection
         let mime_detection_result = detect_mime_from_content(
             &content,
@@ -1582,7 +1536,7 @@ impl WebDAVService {
         };
 
         Ok(WebDAVDownloadResult {
-            content: content.to_vec(),
+            content,
             file_info: updated_file_info,
             mime_detection: mime_detection_result,
             mime_type_updated,
