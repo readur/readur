@@ -7,6 +7,8 @@ use readur::scheduling::source_sync::SourceSyncService;
 use readur::test_utils::TestContext;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
+use readur::services::webdav::SyncProgress;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -49,6 +51,7 @@ async fn listing_failure_in_every_folder_fails_the_run() {
             &["txt".to_string()],
             false,
             CancellationToken::new(),
+            &Arc::new(SyncProgress::new()),
             |folder| async move { Err(anyhow!("listing {folder} refused")) },
             |_| async { Ok(Vec::new()) },
         )
@@ -74,6 +77,7 @@ async fn listing_failure_in_one_folder_is_counted() {
             &["txt".to_string()],
             false,
             CancellationToken::new(),
+            &Arc::new(SyncProgress::new()),
             |folder| async move {
                 if folder == "/bad" { Err(anyhow!("listing refused")) } else { Ok(listing_of(&["one.txt"])) }
             },

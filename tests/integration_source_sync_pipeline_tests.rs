@@ -98,6 +98,15 @@ async fn nested_local_folder_files_are_ingested() {
     assert_eq!(source.last_error, None);
     assert_eq!(source.total_files_pending, 0);
 
+    // The progress the run reported is kept as its final statistics.
+    let progress = f.ctx.state().sync_progress_tracker.get_progress(f.source_id).expect("final sync stats");
+    assert!(!progress.is_active);
+    assert_eq!(progress.phase, "completed");
+    assert_eq!(progress.files_found, 3);
+    assert_eq!(progress.files_processed, 3);
+    assert_eq!(progress.files_progress_percent, 100.0);
+    assert_eq!(progress.errors, 0);
+
     let _ = f.ctx.cleanup_and_close().await;
 }
 

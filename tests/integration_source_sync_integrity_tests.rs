@@ -8,6 +8,8 @@ use readur::models::{CreateSource, FileIngestionInfo, SourceType};
 use readur::scheduling::source_sync::{SourceSyncService, SyncOutcome};
 use readur::test_utils::TestContext;
 use serde_json::json;
+use readur::services::webdav::SyncProgress;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -65,6 +67,7 @@ async fn sync_one(ctx: &TestContext, user_id: Uuid, source_id: Uuid, file: FileI
             &["txt".to_string()],
             false,
             CancellationToken::new(),
+            &Arc::new(SyncProgress::new()),
             move |_| {
                 let file = file.clone();
                 async move { Ok(vec![file]) }

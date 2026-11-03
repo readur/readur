@@ -173,8 +173,8 @@ impl SourceSyncService {
 
         match source.source_type {
             SourceType::WebDAV => self.sync_webdav_source(source, enable_background_ocr, cancellation_token, progress).await,
-            SourceType::LocalFolder => self.sync_local_folder_source(source, enable_background_ocr, cancellation_token).await,
-            SourceType::S3 => self.sync_s3_source(source, enable_background_ocr, cancellation_token).await,
+            SourceType::LocalFolder => self.sync_local_folder_source(source, enable_background_ocr, cancellation_token, progress).await,
+            SourceType::S3 => self.sync_s3_source(source, enable_background_ocr, cancellation_token, progress).await,
         }
     }
 
@@ -256,6 +256,7 @@ impl SourceSyncService {
             &webdav_config.file_extensions,
             enable_background_ocr,
             cancellation_token,
+            progress,
             |folder_path| {
                 let service = webdav_service.clone();
                 let state_clone = self.state.clone();
@@ -302,7 +303,7 @@ impl SourceSyncService {
         ).await
     }
 
-    async fn sync_local_folder_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<SyncOutcome> {
+    async fn sync_local_folder_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken, progress: &Arc<SyncProgress>) -> Result<SyncOutcome> {
         let config: LocalFolderSourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid LocalFolder config: {}", e))?;
 
@@ -327,6 +328,7 @@ impl SourceSyncService {
             &config.file_extensions,
             enable_background_ocr,
             cancellation_token,
+            progress,
             |folder_path| {
                 let service = local_service.clone();
                 async move { service.discover_files_in_folder(&folder_path).await }
@@ -338,7 +340,7 @@ impl SourceSyncService {
         ).await
     }
 
-    async fn sync_s3_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken) -> Result<SyncOutcome> {
+    async fn sync_s3_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken, progress: &Arc<SyncProgress>) -> Result<SyncOutcome> {
         let config: S3SourceConfig = serde_json::from_value(source.config.clone())
             .map_err(|e| anyhow!("Invalid S3 config: {}", e))?;
 
@@ -356,6 +358,7 @@ impl SourceSyncService {
             &config.file_extensions,
             enable_background_ocr,
             cancellation_token,
+            progress,
             |folder_path| {
                 let service = s3_service.clone();
                 async move { service.discover_files_in_folder(&folder_path).await }
@@ -373,7 +376,8 @@ impl SourceSyncService {
     ///
     /// Listing failures are counted per folder; the run only fails outright
     /// when no folder could be listed. File failures are counted and the run
-    /// carries on, so one bad file does not block the rest.
+    /// carries on, so one bad file does not block the rest. `progress` is fed
+    /// the phase, the file counts and the errors as the run goes.
     pub async fn run_pipeline<F, D, Fut1, Fut2>(
         &self,
         user_id: Uuid,
@@ -382,6 +386,7 @@ impl SourceSyncService {
         file_extensions: &[String],
         enable_background_ocr: bool,
         cancellation_token: CancellationToken,
+        progress: &Arc<SyncProgress>,
         discover_files: F,
         download_file: D,
     ) -> Result<SyncOutcome>
@@ -397,6 +402,7 @@ impl SourceSyncService {
         let mut files_to_process: Vec<FileIngestionInfo> = Vec::new();
         let mut oversized = 0usize;
 
+        progress.set_phase(SyncPhase::DiscoveringFiles);
         for folder_path in watch_folders {
             if cancellation_token.is_cancelled() {
                 info!("Sync cancelled during folder discovery");
@@ -423,7 +429,9 @@ impl SourceSyncService {
                 Err(e) => {
                     error!("Failed to discover files in folder {}: {}", folder_path, e);
                     outcome.folders_failed += 1;
-                    outcome.record_error(format!("folder {}: {}", folder_path, e));
+                    let message = format!("folder {}: {}", folder_path, e);
+                    progress.add_error(&message);
+                    outcome.record_error(message);
                 }
             }
         }
@@ -442,6 +450,8 @@ impl SourceSyncService {
         }
 
         outcome.discovered = files_to_process.len();
+        progress.add_files_found(outcome.discovered);
+        progress.set_phase(SyncPhase::ProcessingFiles);
         if let Err(e) = self.state.db.update_source_sync_stats(
             source_id,
             outcome.discovered as i64,
@@ -475,6 +485,13 @@ impl SourceSyncService {
         // Every future checks the token before doing any work, so after a
         // cancellation the remaining ones return promptly without downloading.
         while let Some((file_info, result)) = file_futures.next().await {
+            // Progress counts every file the run is done with, so the percent
+            // reaches 100 on a run that mostly skips; bytes count ingested ones.
+            match &result {
+                Ok(FileOutcome::Ingested) => progress.add_files_processed(1, file_info.size.max(0) as u64),
+                Ok(_) => progress.add_files_processed(1, 0),
+                Err(_) => {}
+            }
             match result {
                 Ok(FileOutcome::Ingested) => {
                     outcome.processed += 1;
@@ -500,7 +517,9 @@ impl SourceSyncService {
                 Err(e) => {
                     error!("File processing error for {}: {}", file_info.relative_path, e);
                     outcome.failed += 1;
-                    outcome.record_error(format!("{}: {}", file_info.relative_path, e));
+                    let message = format!("{}: {}", file_info.relative_path, e);
+                    progress.add_error(&message);
+                    outcome.record_error(message);
                 }
             }
         }

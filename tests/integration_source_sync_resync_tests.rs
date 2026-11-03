@@ -9,6 +9,7 @@ use readur::test_utils::TestContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use readur::services::webdav::SyncProgress;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -81,6 +82,7 @@ impl Harness {
                 &["txt".to_string()],
                 false,
                 CancellationToken::new(),
+                &Arc::new(SyncProgress::new()),
                 move |_| {
                     let files = files.clone();
                     async move { Ok(files) }
