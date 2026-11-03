@@ -4,6 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+use tokio_util::sync::CancellationToken;
 
 use crate::{AppState, models::{FileIngestionInfo}};
 use crate::models::source::{CreateWebDAVDirectory};
@@ -11,11 +12,27 @@ use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
+use super::service::{DiscoveryTracking, WebDAVScanResult};
 
 /// Normalize a path by removing trailing slashes for consistent comparison
 /// This handles inconsistencies where WebDAV servers may return paths with or without trailing slashes
 fn normalize_path(path: &str) -> String {
     path.trim_end_matches('/').to_string()
+}
+
+/// Row key under which a watch folder's own ETag is stored.
+fn root_row_path(folder_path: &str) -> String {
+    let normalized = normalize_path(folder_path);
+    if normalized.is_empty() { "/".to_string() } else { normalized }
+}
+
+/// True when `path` is one of `failed` or lies anywhere beneath one of them.
+fn is_within_failed(path: &str, failed: &[String]) -> bool {
+    let path = normalize_path(path);
+    failed.iter().any(|f| {
+        let f = normalize_path(f);
+        path == f || path.starts_with(&format!("{}/", f))
+    })
 }
 
 /// Check if a path is an immediate child of a parent path
@@ -68,6 +85,7 @@ fn is_immediate_child(parent_path: &str, child_path: &str) -> bool {
 pub struct SmartSyncService {
     state: Arc<AppState>,
     error_tracker: SourceErrorTracker,
+    cancellation: Option<CancellationToken>,
 }
 
 /// Result of smart sync evaluation
@@ -88,6 +106,20 @@ pub enum SmartSyncStrategy {
     TargetedScan(Vec<String>),
 }
 
+/// Outcome of evaluating a folder, keeping the shallow root listing when the
+/// folder itself changed so the files directly inside it can be returned.
+struct Evaluation {
+    decision: SmartSyncDecision,
+    root_listing: Option<WebDAVScanResult>,
+    root_changed: bool,
+}
+
+impl Evaluation {
+    fn deep_scan() -> Self {
+        Self { decision: SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan), root_listing: None, root_changed: false }
+    }
+}
+
 /// Complete result from smart sync operation
 #[derive(Debug, Clone)]
 pub struct SmartSyncResult {
@@ -96,12 +128,38 @@ pub struct SmartSyncResult {
     pub strategy_used: SmartSyncStrategy,
     pub directories_scanned: usize,
     pub directories_skipped: usize,
+    /// Directories whose listing failed; their subtrees were not scanned and
+    /// their stored state was left untouched.
+    pub failed_directories: Vec<String>,
+}
+
+/// What a folder sync produced, including whether any part of it was skipped
+/// because a directory could not be listed. `strategy` is `None` when the
+/// evaluation found nothing to do.
+#[derive(Debug, Clone)]
+pub struct SmartSyncOutcome {
+    pub files: Vec<FileIngestionInfo>,
+    pub failed_directories: Vec<String>,
+    pub strategy: Option<SmartSyncStrategy>,
 }
 
 impl SmartSyncService {
     pub fn new(state: Arc<AppState>) -> Self {
         let error_tracker = SourceErrorTracker::new(state.db.clone());
-        Self { state, error_tracker }
+        Self { state, error_tracker, cancellation: None }
+    }
+
+    /// Makes evaluation and scanning stop (with an error) once `token` is cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation = Some(token);
+        self
+    }
+
+    fn check_cancelled(&self) -> Result<()> {
+        match &self.cancellation {
+            Some(token) if token.is_cancelled() => Err(anyhow::anyhow!("Smart sync cancelled")),
+            _ => Ok(()),
+        }
     }
 
     /// Get access to the application state (primarily for testing)
@@ -125,6 +183,18 @@ impl SmartSyncService {
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncDecision> {
+        Ok(self.evaluate(user_id, webdav_service, folder_path).await?.decision)
+    }
+
+    /// Compares the folder's own ETag and its immediate subdirectories' ETags
+    /// with the stored ones to decide what, if anything, needs scanning.
+    async fn evaluate(
+        &self,
+        user_id: Uuid,
+        webdav_service: &WebDAVService,
+        folder_path: &str,
+    ) -> Result<Evaluation> {
+        self.check_cancelled()?;
         let evaluation_start = Instant::now();
         let eval_request_id = Uuid::new_v4();
         
@@ -147,17 +217,28 @@ impl SmartSyncService {
             let eval_elapsed = evaluation_start.elapsed();
             info!("[{}] No known directories for '{}', requires full deep scan (evaluated in {:.2}s)", 
                   eval_request_id, folder_path, eval_elapsed.as_secs_f64());
-            return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+            return Ok(Evaluation::deep_scan());
         }
         
         info!("[{}] Found {} known directories for smart sync comparison", 
               eval_request_id, relevant_dirs.len());
         
         // Do a shallow discovery of the root folder to check immediate changes
-        match webdav_service.discover_files_and_directories(folder_path, false).await {
+        match webdav_service.discover_tree(folder_path, false, None).await {
             Ok(root_discovery) => {
                 let mut changed_directories = Vec::new();
                 let mut new_directories = Vec::new();
+
+                // The folder's own ETag covers the files that live directly in it.
+                let root_changed = match (relevant_dirs.get(&normalized_folder_path), &root_discovery.root) {
+                    (Some(known_etag), Some(root)) => !compare_etags(known_etag, &root.etag),
+                    (None, Some(_)) => true,
+                    (_, None) => false,
+                };
+                if root_changed {
+                    info!("[{}] 🔄 Folder '{}' itself changed; files directly inside it will be listed",
+                          eval_request_id, folder_path);
+                }
                 
                 // Check if any immediate subdirectories have changed ETags
                 for directory in &root_discovery.directories {
@@ -223,11 +304,11 @@ impl SmartSyncService {
                 }
                 
                 // If no changes detected and no deletions, we can skip
-                if changed_directories.is_empty() && new_directories.is_empty() && deleted_directories.is_empty() {
+                if changed_directories.is_empty() && new_directories.is_empty() && deleted_directories.is_empty() && !root_changed {
                     let eval_elapsed = evaluation_start.elapsed();
                     info!("[{}] ✅ Smart sync: No directory changes detected for '{}', sync can be skipped (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::SkipSync);
+                    return Ok(Evaluation { decision: SmartSyncDecision::SkipSync, root_listing: None, root_changed: false });
                 }
                 
                 // Determine strategy based on scope of changes
@@ -241,7 +322,7 @@ impl SmartSyncService {
                     info!("[{}] 📁 Smart sync: Large changes detected for '{}' ({} changed, {} new, {} deleted, {:.1}% change ratio), using full deep scan (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, changed_directories.len(), new_directories.len(), 
                           deleted_directories.len(), change_ratio * 100.0, eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+                    return Ok(Evaluation::deep_scan());
                 } else {
                     // Targeted scan of changed directories
                     let mut targets = changed_directories;
@@ -249,7 +330,11 @@ impl SmartSyncService {
                     info!("[{}] 🎯 Smart sync: Targeted changes detected for '{}', scanning {} directories: {:?} (evaluated in {:.2}s)", 
                           eval_request_id, folder_path, targets.len(), 
                           targets.iter().take(3).collect::<Vec<_>>(), eval_elapsed.as_secs_f64());
-                    return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::TargetedScan(targets)));
+                    return Ok(Evaluation {
+                        decision: SmartSyncDecision::RequiresSync(SmartSyncStrategy::TargetedScan(targets)),
+                        root_listing: Some(root_discovery),
+                        root_changed,
+                    });
                 }
             }
             Err(e) => {
@@ -283,7 +368,7 @@ impl SmartSyncService {
                 let final_elapsed = evaluation_start.elapsed();
                 info!("[{}] Fallback decision: Full deep scan for '{}' (total evaluation time: {:.2}s)", 
                       eval_request_id, folder_path, final_elapsed.as_secs_f64());
-                return Ok(SmartSyncDecision::RequiresSync(SmartSyncStrategy::FullDeepScan));
+                return Ok(Evaluation::deep_scan());
             }
         }
     }
@@ -298,6 +383,7 @@ impl SmartSyncService {
         strategy: SmartSyncStrategy,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
     ) -> Result<SmartSyncResult> {
+        self.check_cancelled()?;
         let sync_request_id = Uuid::new_v4();
         match strategy {
             SmartSyncStrategy::FullDeepScan => {
@@ -324,23 +410,104 @@ impl SmartSyncService {
     ) -> Result<Option<SmartSyncResult>> {
         let eval_and_sync_start = Instant::now();
         let eval_sync_request_id = Uuid::new_v4();
-        
-        match self.evaluate_sync_need(user_id, webdav_service, folder_path, _progress).await? {
+
+        let evaluation = self.evaluate(user_id, webdav_service, folder_path).await?;
+        match evaluation.decision {
             SmartSyncDecision::SkipSync => {
                 let total_elapsed = eval_and_sync_start.elapsed();
-                info!("[{}] ✅ Smart sync: Skipping sync for '{}' - no changes detected (completed in {:.2}s)", 
+                info!("[{}] ✅ Smart sync: Skipping sync for '{}' - no changes detected (completed in {:.2}s)",
                       eval_sync_request_id, folder_path, total_elapsed.as_secs_f64());
                 Ok(None)
             }
             SmartSyncDecision::RequiresSync(strategy) => {
-                let result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
+                let mut result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
+                if evaluation.root_changed {
+                    if let Some(listing) = evaluation.root_listing {
+                        self.absorb_root_listing(user_id, folder_path, listing, &mut result).await;
+                    }
+                }
                 let total_elapsed = eval_and_sync_start.elapsed();
-                info!("[{}] ✅ Smart sync completed for '{}' - {} files found, {} dirs scanned in {:.2}s", 
-                      eval_sync_request_id, folder_path, result.files.len(), 
-                      result.directories_scanned, total_elapsed.as_secs_f64());
+                info!("[{}] ✅ Smart sync completed for '{}' - {} files found, {} dirs scanned, {} dirs failed in {:.2}s",
+                      eval_sync_request_id, folder_path, result.files.len(),
+                      result.directories_scanned, result.failed_directories.len(), total_elapsed.as_secs_f64());
                 Ok(Some(result))
             }
         }
+    }
+
+    /// Like `evaluate_and_sync`, but also reports the directories whose listing
+    /// failed so the caller can treat the sync as incomplete rather than successful.
+    pub async fn evaluate_and_sync_detailed(
+        &self,
+        user_id: Uuid,
+        source_id: Option<Uuid>,
+        webdav_service: &WebDAVService,
+        folder_path: &str,
+        progress: Option<&SyncProgress>,
+    ) -> Result<SmartSyncOutcome> {
+        Ok(match self.evaluate_and_sync(user_id, source_id, webdav_service, folder_path, progress).await? {
+            None => SmartSyncOutcome { files: Vec::new(), failed_directories: Vec::new(), strategy: None },
+            Some(result) => SmartSyncOutcome {
+                files: result.files,
+                failed_directories: result.failed_directories,
+                strategy: Some(result.strategy_used),
+            },
+        })
+    }
+
+    /// Adds the files listed directly in the folder to `result` and records the
+    /// folder's own ETag so they are not listed again until it changes.
+    async fn absorb_root_listing(&self, user_id: Uuid, folder_path: &str, listing: WebDAVScanResult, result: &mut SmartSyncResult) {
+        info!("Folder '{}' changed: adding {} files listed directly in it", folder_path, listing.files.len());
+        result.files.extend(listing.files);
+        if let Some(root) = listing.root {
+            let row = Self::root_row(user_id, folder_path, &root.etag);
+            if let Err(e) = self.state.db.create_or_update_webdav_directory(&row).await {
+                warn!("Failed to save ETag for folder '{}': {}", folder_path, e);
+            }
+        }
+    }
+
+    fn root_row(user_id: Uuid, folder_path: &str, etag: &str) -> CreateWebDAVDirectory {
+        CreateWebDAVDirectory {
+            user_id,
+            directory_path: root_row_path(folder_path),
+            directory_etag: etag.to_string(),
+            file_count: 0,
+            total_size_bytes: 0,
+        }
+    }
+
+    fn tracking(&self, user_id: Uuid, source_id: Option<Uuid>) -> DiscoveryTracking {
+        DiscoveryTracking { user_id, source_id, tracker: self.error_tracker.clone() }
+    }
+
+    /// Directory rows to persist from a scan: every listed directory except those
+    /// inside a subtree that could not be fully listed, whose stored state must
+    /// stay as it was so they are rescanned next time.
+    fn directories_to_persist(user_id: Uuid, scan: &WebDAVScanResult) -> Vec<CreateWebDAVDirectory> {
+        scan.directories
+            .iter()
+            .filter(|d| !is_within_failed(&d.relative_path, &scan.failed_directories))
+            .map(|d| CreateWebDAVDirectory {
+                user_id,
+                directory_path: d.relative_path.clone(),
+                directory_etag: d.etag.clone(),
+                file_count: 0, // Will be updated by stats
+                total_size_bytes: 0, // Will be updated by stats
+            })
+            .collect()
+    }
+
+    async fn save_directories_individually(&self, directories: &[CreateWebDAVDirectory]) {
+        let mut saved = 0;
+        for directory in directories {
+            match self.state.db.create_or_update_webdav_directory(directory).await {
+                Ok(_) => saved += 1,
+                Err(e) => warn!("Failed to save directory ETag for {}: {}", directory.directory_path, e),
+            }
+        }
+        info!("Fallback: Saved ETags for {}/{} directories", saved, directories.len());
     }
 
     /// Performs a full deep scan and saves all directory ETags
@@ -351,71 +518,42 @@ impl SmartSyncService {
         webdav_service: &WebDAVService,
         folder_path: &str,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
-        request_id: Uuid,
+        _request_id: Uuid,
     ) -> Result<SmartSyncResult> {
-        // Use the enhanced discovery method with error tracking from WebDAVService
-        let discovery_result = webdav_service.discover_files_and_directories_with_error_tracking(
-            folder_path, 
-            true, // recursive
-            user_id, 
-            &self.error_tracker, 
-            source_id, // Pass the actual source_id
-        ).await?;
-        
-        info!("Deep scan found {} files and {} directories in folder {}", 
-              discovery_result.files.len(), discovery_result.directories.len(), folder_path);
-        
-        // Simplified: basic logging instead of complex progress tracking
-        info!("Saving metadata for scan results");
-        
-        // Save all discovered directories atomically using bulk operations
-        let directories_to_save: Vec<CreateWebDAVDirectory> = discovery_result.directories
-            .iter()
-            .map(|directory_info| CreateWebDAVDirectory {
-                user_id,
-                directory_path: directory_info.relative_path.clone(),
-                directory_etag: directory_info.etag.clone(),
-                file_count: 0, // Will be updated by stats
-                total_size_bytes: 0, // Will be updated by stats
-            })
-            .collect();
+        let tracking = self.tracking(user_id, source_id);
+        let scan = webdav_service.discover_tree(folder_path, true, Some(&tracking)).await?;
+        info!("Deep scan found {} files and {} directories in folder {} ({} directories failed)",
+              scan.files.len(), scan.directories.len(), folder_path, scan.failed_directories.len());
 
-        match self.state.db.sync_webdav_directories(user_id, &directories_to_save).await {
+        let mut directories_to_save = Self::directories_to_persist(user_id, &scan);
+        if let Some(root) = &scan.root {
+            directories_to_save.push(Self::root_row(user_id, folder_path, &root.etag));
+        }
+        let complete = scan.failed_directories.is_empty();
+        if !complete {
+            warn!("{} directories under '{}' could not be listed; their stored state is kept and nothing is pruned: {:?}",
+                  scan.failed_directories.len(), folder_path, scan.failed_directories.iter().take(5).collect::<Vec<_>>());
+        }
+
+        match self.state.db.sync_webdav_directories(user_id, folder_path, &directories_to_save, complete).await {
             Ok((saved_directories, deleted_count)) => {
-                info!("✅ Atomic sync completed: {} directories updated/created, {} deleted", 
+                info!("✅ Atomic sync completed: {} directories updated/created, {} deleted",
                       saved_directories.len(), deleted_count);
-                
-                if deleted_count > 0 {
-                    info!("🗑️ Cleaned up {} orphaned directory records", deleted_count);
-                }
             }
             Err(e) => {
                 warn!("Failed to perform atomic directory sync: {}", e);
-                // Fallback to individual saves if atomic operation fails
-                let mut directories_saved = 0;
-                for directory_info in &discovery_result.directories {
-                    let webdav_directory = CreateWebDAVDirectory {
-                        user_id,
-                        directory_path: directory_info.relative_path.clone(),
-                        directory_etag: directory_info.etag.clone(),
-                        file_count: 0,
-                        total_size_bytes: 0,
-                    };
-                    
-                    if let Ok(_) = self.state.db.create_or_update_webdav_directory(&webdav_directory).await {
-                        directories_saved += 1;
-                    }
-                }
-                info!("Fallback: Saved ETags for {}/{} directories", directories_saved, discovery_result.directories.len());
+                self.save_directories_individually(&directories_to_save).await;
             }
         }
-        
+
+        let directories_scanned = scan.directories.len();
         Ok(SmartSyncResult {
-            files: discovery_result.files,
-            directories: discovery_result.directories.clone(),
+            files: scan.files,
+            directories: scan.directories,
             strategy_used: SmartSyncStrategy::FullDeepScan,
-            directories_scanned: discovery_result.directories.len(),
+            directories_scanned,
             directories_skipped: 0,
+            failed_directories: scan.failed_directories,
         })
     }
 
@@ -429,78 +567,43 @@ impl SmartSyncService {
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
         request_id: Uuid,
     ) -> Result<SmartSyncResult> {
+        let tracking = self.tracking(user_id, source_id);
         let mut all_files = Vec::new();
         let mut all_directories = Vec::new();
+        let mut failed_directories = Vec::new();
         let mut directories_scanned = 0;
 
-        // Scan each target directory recursively
         for target_dir in &target_directories {
-            // Simplified: basic logging instead of complex progress tracking
+            self.check_cancelled()?;
             info!("Scanning target directory: {}", target_dir);
-            
-            // Use the enhanced discovery method with error tracking from WebDAVService
-            match webdav_service.discover_files_and_directories_with_error_tracking(
-                target_dir, 
-                true, // recursive
-                user_id, 
-                &self.error_tracker, 
-                source_id, // Pass the actual source_id
-            ).await {
-                Ok(discovery_result) => {
-                    all_files.extend(discovery_result.files);
-                    
-                    // Collect directory info for bulk update later
-                    let directories_to_save: Vec<CreateWebDAVDirectory> = discovery_result.directories
-                        .iter()
-                        .map(|directory_info| CreateWebDAVDirectory {
-                            user_id,
-                            directory_path: directory_info.relative_path.clone(),
-                            directory_etag: directory_info.etag.clone(),
-                            file_count: 0,
-                            total_size_bytes: 0,
-                        })
-                        .collect();
-
-                    // Save directories using bulk operation
-                    if !directories_to_save.is_empty() {
-                        match self.state.db.bulk_create_or_update_webdav_directories(&directories_to_save).await {
-                            Ok(saved_directories) => {
-                                debug!("Bulk updated {} directory ETags for target scan", saved_directories.len());
-                            }
-                            Err(e) => {
-                                warn!("Failed bulk update for target scan, falling back to individual saves: {}", e);
-                                // Fallback to individual saves
-                                for directory_info in &discovery_result.directories {
-                                    let webdav_directory = CreateWebDAVDirectory {
-                                        user_id,
-                                        directory_path: directory_info.relative_path.clone(),
-                                        directory_etag: directory_info.etag.clone(),
-                                        file_count: 0,
-                                        total_size_bytes: 0,
-                                    };
-                                    
-                                    if let Err(e) = self.state.db.create_or_update_webdav_directory(&webdav_directory).await {
-                                        warn!("Failed to save directory ETag for {}: {}", directory_info.relative_path, e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    all_directories.extend(discovery_result.directories);
-                    directories_scanned += 1;
-                    
-                    // Error tracking for success/failure is already handled by the enhanced discovery method
-                }
+            let scan = match webdav_service.discover_tree(target_dir, true, Some(&tracking)).await {
+                Ok(scan) => scan,
                 Err(e) => {
-                    warn!("Failed to scan target directory {}: {} (error tracking handled by WebDAVService)", target_dir, e);
-                    // Error tracking is already handled by the enhanced discovery method
+                    warn!("Failed to scan target directory {}: {}", target_dir, e);
+                    failed_directories.push(target_dir.clone());
+                    continue;
+                }
+            };
+
+            let directories_to_save = Self::directories_to_persist(user_id, &scan);
+            if !directories_to_save.is_empty() {
+                match self.state.db.bulk_create_or_update_webdav_directories(&directories_to_save).await {
+                    Ok(saved) => debug!("Bulk updated {} directory ETags for target scan", saved.len()),
+                    Err(e) => {
+                        warn!("Failed bulk update for target scan, falling back to individual saves: {}", e);
+                        self.save_directories_individually(&directories_to_save).await;
+                    }
                 }
             }
+
+            all_files.extend(scan.files);
+            all_directories.extend(scan.directories);
+            failed_directories.extend(scan.failed_directories);
+            directories_scanned += 1;
         }
 
-        info!("[{}] ✅ Targeted scan completed: {} directories scanned, {} files found", 
-              request_id, directories_scanned, all_files.len());
+        info!("[{}] ✅ Targeted scan completed: {} directories scanned, {} files found, {} directories failed",
+              request_id, directories_scanned, all_files.len(), failed_directories.len());
 
         Ok(SmartSyncResult {
             files: all_files,
@@ -508,6 +611,7 @@ impl SmartSyncService {
             strategy_used: SmartSyncStrategy::TargetedScan(target_directories),
             directories_scanned,
             directories_skipped: 0, // TODO: Could track this if needed
+            failed_directories,
         })
     }
 }
@@ -574,6 +678,26 @@ mod tests {
         // Similar but different paths (DocumentsBackup is not under Documents)
         assert!(!is_immediate_child("/Documents", "/DocumentsBackup"));
         assert!(!is_immediate_child("/Documents", "/DocumentsBackup/Folder"));
+    }
+
+    #[test]
+    fn test_root_row_path_is_normalized() {
+        assert_eq!(root_row_path("/Documents/"), "/Documents");
+        assert_eq!(root_row_path("/Documents"), "/Documents");
+        assert_eq!(root_row_path("/"), "/");
+        assert_eq!(root_row_path(""), "/");
+    }
+
+    #[test]
+    fn test_is_within_failed_matches_self_and_descendants_only() {
+        let failed = vec!["/Docs/Broken/".to_string()];
+        assert!(is_within_failed("/Docs/Broken", &failed));
+        assert!(is_within_failed("/Docs/Broken/", &failed));
+        assert!(is_within_failed("/Docs/Broken/deep/er/", &failed));
+        assert!(!is_within_failed("/Docs/BrokenToo", &failed));
+        assert!(!is_within_failed("/Docs", &failed));
+        assert!(!is_within_failed("/Docs/Ok/x", &failed));
+        assert!(!is_within_failed("/Docs/Ok/x", &[]));
     }
 
     #[test]

@@ -58,22 +58,43 @@ async fn test_nextcloud_path_conversion_nested() {
 async fn test_nextcloud_path_conversion_with_spaces() {
     let service = create_nextcloud_webdav_service();
     
-    // Test path with URL-encoded spaces (the actual bug scenario)
-    let full_webdav_path = "/remote.php/dav/files/testuser/Documents/Melanie%20Martinez%20June%207%202023/";
-    let relative_path = service.convert_to_relative_path(full_webdav_path);
-    
-    assert_eq!(relative_path, "/Documents/Melanie%20Martinez%20June%207%202023/");
+    // An href with percent-encoded spaces is decoded once on the way in.
+    let href = "/remote.php/dav/files/testuser/Documents/Melanie%20Martinez%20June%207%202023/";
+    let relative_path = service.href_to_relative_path(href);
+    assert_eq!(relative_path, "/Documents/Melanie Martinez June 7 2023/");
+
+    // The decoded path is re-encoded exactly once when it goes back into a URL.
+    assert_eq!(
+        service.get_url_for_path(&relative_path),
+        "https://nas.example.com/remote.php/dav/files/testuser/Documents/Melanie%20Martinez%20June%207%202023/"
+    );
 }
 
 #[tokio::test]
 async fn test_nextcloud_path_conversion_with_special_chars() {
     let service = create_nextcloud_webdav_service();
     
-    // Test path with various special characters
-    let full_webdav_path = "/remote.php/dav/files/testuser/Documents/Maranatha%20Work/";
-    let relative_path = service.convert_to_relative_path(full_webdav_path);
-    
-    assert_eq!(relative_path, "/Documents/Maranatha%20Work/");
+    // Spaces, unicode, '#', '?', '+' and a literal '%' all survive the round trip.
+    let href = "/remote.php/dav/files/testuser/Documents/caf%C3%A9%20%23notes%2B1%3F%20100%25.pdf";
+    let relative_path = service.href_to_relative_path(href);
+    assert_eq!(relative_path, "/Documents/café #notes+1? 100%.pdf");
+    assert_eq!(
+        service.get_url_for_path(&relative_path),
+        "https://nas.example.com/remote.php/dav/files/testuser/Documents/caf%C3%A9%20%23notes%2B1%3F%20100%25.pdf"
+    );
+
+    // A username the server had to encode still matches the prefix once decoded.
+    let config = WebDAVConfig {
+        server_url: "https://nas.example.com".to_string(),
+        username: "jörg".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec![],
+        timeout_seconds: 30,
+        server_type: Some("nextcloud".to_string()),
+    };
+    let unicode_user = WebDAVService::new(config).unwrap();
+    assert_eq!(unicode_user.href_to_relative_path("/remote.php/dav/files/j%C3%B6rg/Documents/a.pdf"), "/Documents/a.pdf");
 }
 
 #[tokio::test]
@@ -506,7 +527,7 @@ async fn test_service_download_file_url_construction() {
     
     for (xml_path, expected_url) in xml_parser_paths.iter().zip(expected_urls.iter()) {
         // Test the conversion from full XML path to relative path (the correct approach)
-        let relative_path = service.convert_to_relative_path(xml_path);
+        let relative_path = service.href_to_relative_path(xml_path);
         let constructed_url = service.relative_path_to_url(&relative_path);
         
         println!("XML path: {}", xml_path);
@@ -609,11 +630,13 @@ async fn test_file_fetch_real_world_error_scenario() {
     // This is the exact path from the error message
     let problematic_path = "/remote.php/dav/files/Alex/Photos/PC%20Screenshots/zjoQcWqldv.png";
     
-    // Test the CORRECT approach: convert to relative path first
-    let relative_path = service.convert_to_relative_path(problematic_path);
+    // Test the CORRECT approach: decode the href to a relative path, then let the
+    // service build (and encode) the request URL.
+    let relative_path = service.href_to_relative_path(problematic_path);
+    assert_eq!(relative_path, "/Photos/PC Screenshots/zjoQcWqldv.png");
     let base_url = service.get_config().webdav_url();
-    let corrected_url = format!("{}{}", base_url, relative_path);
-    
+    let corrected_url = service.get_url_for_path(&relative_path);
+
     // Also test using connection with relative path
     let connection_url = service.relative_path_to_url(&relative_path);
     

@@ -83,7 +83,7 @@ async fn test_race_condition_fix_atomic_updates() {
                 ];
 
                 // Use the atomic sync operation
-                db_clone.sync_webdav_directories(user_id, &updated_directories).await
+                db_clone.sync_webdav_directories(user_id, "/", &updated_directories, true).await
             });
             handles.push(handle);
         }
@@ -188,7 +188,7 @@ async fn test_deletion_detection_fix() {
         ];
 
         // Use atomic sync which should detect and remove deleted directories
-        let (updated_directories, deleted_count) = db.sync_webdav_directories(user_id, &current_directories).await.unwrap();
+        let (updated_directories, deleted_count) = db.sync_webdav_directories(user_id, "/", &current_directories, true).await.unwrap();
 
         // Should have 1 updated directory and 2 deletions
         assert_eq!(updated_directories.len(), 1);
@@ -426,7 +426,7 @@ async fn test_full_sync_integration() {
             },
         ];
 
-        let (saved_dirs, _) = app_state.db.sync_webdav_directories(user_id, &initial_directories).await.unwrap();
+        let (saved_dirs, _) = app_state.db.sync_webdav_directories(user_id, "/", &initial_directories, true).await.unwrap();
         assert_eq!(saved_dirs.len(), 2);
 
         // Simulate second sync with changes
@@ -448,7 +448,7 @@ async fn test_full_sync_integration() {
             // /pictures directory was deleted from server
         ];
 
-        let (updated_dirs, deleted_count) = app_state.db.sync_webdav_directories(user_id, &updated_directories).await.unwrap();
+        let (updated_dirs, deleted_count) = app_state.db.sync_webdav_directories(user_id, "/", &updated_directories, true).await.unwrap();
 
         // Should have 2 directories (updated documents + new videos) and 1 deletion (pictures)
         assert_eq!(updated_dirs.len(), 2);
