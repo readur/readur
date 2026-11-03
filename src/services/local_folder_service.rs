@@ -103,6 +103,18 @@ pub struct LocalFolderService {
 }
 
 impl LocalFolderService {
+    /// [`Self::new`] on a blocking thread. The constructor touches every watch
+    /// folder (`exists`, `is_dir`, `canonicalize`), which on a stalled network
+    /// mount can block for the mount's full timeout; async callers use this
+    /// so that time is not spent on a runtime worker.
+    pub async fn open(config: LocalFolderSourceConfig) -> Result<Self> {
+        tokio::task::spawn_blocking(move || Self::new(config))
+            .await
+            .map_err(|e| anyhow!("Watch folder validation task failed: {}", e))?
+    }
+
+    /// Validates the watch folders with blocking filesystem calls; see
+    /// [`Self::open`] for use from async code.
     pub fn new(config: LocalFolderSourceConfig) -> Result<Self> {
         // Validate that watch folders exist and are accessible
         let mut canonical_roots = Vec::with_capacity(config.watch_folders.len());
@@ -447,6 +459,18 @@ mod tests {
             .collect();
         names.sort();
         names
+    }
+
+    /// `open` validates like `new`, off the runtime thread.
+    #[tokio::test]
+    async fn open_validates_watch_folders_like_new() {
+        let dir = TempDir::new().unwrap();
+        assert!(LocalFolderService::open(config_with_extensions(&dir, &["txt"])).await.is_ok());
+
+        let mut missing = config_with_extensions(&dir, &["txt"]);
+        missing.watch_folders = vec![path_string(&dir.path().join("missing"))];
+        let err = LocalFolderService::open(missing).await.unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
     }
 
     #[tokio::test]

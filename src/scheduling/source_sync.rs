@@ -356,7 +356,8 @@ impl SourceSyncService {
         )
         .map_err(|e| anyhow!("Local folder source is not permitted: {}", e))?;
 
-        let local_service = LocalFolderService::new(config.clone())
+        let local_service = LocalFolderService::open(config.clone())
+            .await
             .map_err(|e| anyhow!("Failed to create LocalFolder service: {}", e))?;
 
         self.run_pipeline(

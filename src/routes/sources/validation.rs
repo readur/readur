@@ -158,7 +158,7 @@ async fn run_connection_test(
             let config: crate::models::LocalFolderSourceConfig = serde_json::from_value(config)
                 .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-            match crate::services::local_folder_service::LocalFolderService::new(config) {
+            match crate::services::local_folder_service::LocalFolderService::open(config).await {
                 Ok(service) => match service.test_connection().await {
                     Ok(message) => Ok(test_result(true, message)),
                     Err(e) => Ok(test_result(false, format!("Local folder test failed: {}", e))),
