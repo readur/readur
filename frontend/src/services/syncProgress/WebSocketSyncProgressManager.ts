@@ -8,7 +8,7 @@ import { SyncProgressWebSocket, SyncProgressInfo, sourcesService } from '../api'
 export class WebSocketSyncProgressManager extends SyncProgressManager {
   private ws: SyncProgressWebSocket | null = null;
   private sourceId: string | null = null;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private readonly maxReconnectAttempts = 5;
   private readonly reconnectDelay = 1000; // Start with 1 second
@@ -45,7 +45,7 @@ export class WebSocketSyncProgressManager extends SyncProgressManager {
     this.cleanup();
     this.updateState({
       connectionStatus: 'disconnected',
-      progressInfo: null
+      progressInfo: null,
     });
   }
 
@@ -61,7 +61,7 @@ export class WebSocketSyncProgressManager extends SyncProgressManager {
     // Use setTimeout to ensure cleanup is complete
     setTimeout(() => {
       if (this.sourceId) {
-        this.connect(this.sourceId).catch(error => {
+        this.connect(this.sourceId).catch((error) => {
           console.error('Reconnection failed:', error);
         });
       }
@@ -80,7 +80,7 @@ export class WebSocketSyncProgressManager extends SyncProgressManager {
     // Heartbeat messages
     this.ws.addEventListener('heartbeat', (data: any) => {
       console.log('Received heartbeat:', data);
-      
+
       // Clear progress info if sync is not active
       if (data && !data.is_active) {
         this.updateState({ progressInfo: null });
