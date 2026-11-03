@@ -2,6 +2,7 @@
 
 pub mod common; // Common utilities and shared functions
 pub mod config;
+pub mod directory_commit;
 pub mod fallback_etag;
 pub mod paths;
 pub mod service; 
@@ -17,6 +18,7 @@ pub use service::{
     ValidationRecommendation, ValidationAction, ValidationSummary
 };
 pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult, SmartSyncOutcome};
+pub use directory_commit::PendingDirectoryCommit;
 
 // Backward compatibility exports for progress tracking (simplified)
 pub use progress_shim::{SyncProgress, SyncPhase, ProgressStats};

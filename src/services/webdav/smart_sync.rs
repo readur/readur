@@ -13,6 +13,7 @@ use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
 use super::{WebDAVService, SyncProgress};
 use super::paths::normalize_watch_folder;
+use super::directory_commit::PendingDirectoryCommit;
 use super::service::{DiscoveryTracking, WebDAVScanResult};
 
 /// Normalize a path by removing trailing slashes for consistent comparison
@@ -121,7 +122,9 @@ impl Evaluation {
     }
 }
 
-/// Complete result from smart sync operation
+/// Complete result from smart sync operation. Nothing has been written to
+/// the directory table: `directory_commit` holds the rows the scan would
+/// record, for the caller to commit once the files have been processed.
 #[derive(Debug, Clone)]
 pub struct SmartSyncResult {
     pub files: Vec<FileIngestionInfo>,
@@ -132,16 +135,20 @@ pub struct SmartSyncResult {
     /// Directories whose listing failed; their subtrees were not scanned and
     /// their stored state was left untouched.
     pub failed_directories: Vec<String>,
+    pub directory_commit: PendingDirectoryCommit,
 }
 
 /// What a folder sync produced, including whether any part of it was skipped
 /// because a directory could not be listed. `strategy` is `None` when the
-/// evaluation found nothing to do.
+/// evaluation found nothing to do. `directory_commit` is the directory state
+/// to record after the files have been processed; it is empty when nothing
+/// was scanned.
 #[derive(Debug, Clone)]
 pub struct SmartSyncOutcome {
     pub files: Vec<FileIngestionInfo>,
     pub failed_directories: Vec<String>,
     pub strategy: Option<SmartSyncStrategy>,
+    pub directory_commit: PendingDirectoryCommit,
 }
 
 impl SmartSyncService {
@@ -397,12 +404,14 @@ impl SmartSyncService {
                 info!("[{}] 🎯 Performing targeted scan of {} directories: {:?}", 
                       sync_request_id, target_dirs.len(), 
                       target_dirs.iter().take(3).collect::<Vec<_>>());
-                self.perform_targeted_scan(user_id, source_id, webdav_service, target_dirs, _progress, sync_request_id).await
+                self.perform_targeted_scan(user_id, source_id, webdav_service, folder_path, target_dirs, _progress, sync_request_id).await
             }
         }
     }
 
-    /// Combined evaluation and execution for convenience
+    /// Combined evaluation and execution for convenience. Like every other
+    /// entry point this records nothing: the returned result carries the
+    /// directory rows to commit after the files have been processed.
     pub async fn evaluate_and_sync(
         &self,
         user_id: Uuid,
@@ -427,9 +436,11 @@ impl SmartSyncService {
                 let mut result = self.perform_smart_sync(user_id, source_id, webdav_service, folder_path, strategy, _progress).await?;
                 if evaluation.root_changed {
                     if let Some(listing) = evaluation.root_listing {
-                        self.absorb_root_listing(user_id, folder_path, listing, &mut result).await;
+                        Self::absorb_root_listing(folder_path, listing, &mut result);
                     }
                 }
+                // The root row joined after the scan; a failed subdirectory invalidates it too.
+                result.directory_commit.exclude_failures(&[], &result.failed_directories);
                 let total_elapsed = eval_and_sync_start.elapsed();
                 info!("[{}] ✅ Smart sync completed for '{}' - {} files found, {} dirs scanned, {} dirs failed in {:.2}s",
                       eval_sync_request_id, folder_path, result.files.len(),
@@ -449,26 +460,31 @@ impl SmartSyncService {
         folder_path: &str,
         progress: Option<&SyncProgress>,
     ) -> Result<SmartSyncOutcome> {
+        let folder_path = &normalize_watch_folder(folder_path);
         Ok(match self.evaluate_and_sync(user_id, source_id, webdav_service, folder_path, progress).await? {
-            None => SmartSyncOutcome { files: Vec::new(), failed_directories: Vec::new(), strategy: None },
+            None => SmartSyncOutcome {
+                files: Vec::new(),
+                failed_directories: Vec::new(),
+                strategy: None,
+                directory_commit: PendingDirectoryCommit::new(user_id, folder_path),
+            },
             Some(result) => SmartSyncOutcome {
                 files: result.files,
                 failed_directories: result.failed_directories,
                 strategy: Some(result.strategy_used),
+                directory_commit: result.directory_commit,
             },
         })
     }
 
-    /// Adds the files listed directly in the folder to `result` and records the
+    /// Adds the files listed directly in the folder to `result` and queues the
     /// folder's own ETag so they are not listed again until it changes.
-    async fn absorb_root_listing(&self, user_id: Uuid, folder_path: &str, listing: WebDAVScanResult, result: &mut SmartSyncResult) {
+    fn absorb_root_listing(folder_path: &str, listing: WebDAVScanResult, result: &mut SmartSyncResult) {
         info!("Folder '{}' changed: adding {} files listed directly in it", folder_path, listing.files.len());
         result.files.extend(listing.files);
         if let Some(root) = listing.root {
-            let row = Self::root_row(user_id, folder_path, &root.etag);
-            if let Err(e) = self.state.db.create_or_update_webdav_directory(&row).await {
-                warn!("Failed to save ETag for folder '{}': {}", folder_path, e);
-            }
+            let user_id = result.directory_commit.user_id;
+            result.directory_commit.directory_rows.push(Self::root_row(user_id, folder_path, &root.etag));
         }
     }
 
@@ -503,18 +519,8 @@ impl SmartSyncService {
             .collect()
     }
 
-    async fn save_directories_individually(&self, directories: &[CreateWebDAVDirectory]) {
-        let mut saved = 0;
-        for directory in directories {
-            match self.state.db.create_or_update_webdav_directory(directory).await {
-                Ok(_) => saved += 1,
-                Err(e) => warn!("Failed to save directory ETag for {}: {}", directory.directory_path, e),
-            }
-        }
-        info!("Fallback: Saved ETags for {}/{} directories", saved, directories.len());
-    }
-
-    /// Performs a full deep scan and saves all directory ETags
+    /// Performs a full deep scan and collects every directory ETag for the
+    /// caller to commit; a complete scan may also prune stale rows then.
     async fn perform_full_deep_scan(
         &self,
         user_id: Uuid,
@@ -529,25 +535,16 @@ impl SmartSyncService {
         info!("Deep scan found {} files and {} directories in folder {} ({} directories failed)",
               scan.files.len(), scan.directories.len(), folder_path, scan.failed_directories.len());
 
-        let mut directories_to_save = Self::directories_to_persist(user_id, &scan);
+        let mut commit = PendingDirectoryCommit::new(user_id, folder_path);
+        commit.directory_rows = Self::directories_to_persist(user_id, &scan);
         if let Some(root) = &scan.root {
-            directories_to_save.push(Self::root_row(user_id, folder_path, &root.etag));
+            commit.directory_rows.push(Self::root_row(user_id, folder_path, &root.etag));
         }
-        let complete = scan.failed_directories.is_empty();
-        if !complete {
+        commit.prune_missing = scan.failed_directories.is_empty();
+        commit.exclude_failures(&[], &scan.failed_directories);
+        if !commit.prune_missing {
             warn!("{} directories under '{}' could not be listed; their stored state is kept and nothing is pruned: {:?}",
                   scan.failed_directories.len(), folder_path, scan.failed_directories.iter().take(5).collect::<Vec<_>>());
-        }
-
-        match self.state.db.sync_webdav_directories(user_id, folder_path, &directories_to_save, complete).await {
-            Ok((saved_directories, deleted_count)) => {
-                info!("✅ Atomic sync completed: {} directories updated/created, {} deleted",
-                      saved_directories.len(), deleted_count);
-            }
-            Err(e) => {
-                warn!("Failed to perform atomic directory sync: {}", e);
-                self.save_directories_individually(&directories_to_save).await;
-            }
         }
 
         let directories_scanned = scan.directories.len();
@@ -558,15 +555,18 @@ impl SmartSyncService {
             directories_scanned,
             directories_skipped: 0,
             failed_directories: scan.failed_directories,
+            directory_commit: commit,
         })
     }
 
-    /// Performs targeted scans of specific directories
+    /// Performs targeted scans of specific directories, collecting their
+    /// directory ETags for the caller to commit (never pruning).
     async fn perform_targeted_scan(
         &self,
         user_id: Uuid,
         source_id: Option<Uuid>,
         webdav_service: &WebDAVService,
+        folder_path: &str,
         target_directories: Vec<String>,
         _progress: Option<&SyncProgress>, // Simplified: no complex progress tracking
         request_id: Uuid,
@@ -576,6 +576,7 @@ impl SmartSyncService {
         let mut all_directories = Vec::new();
         let mut failed_directories = Vec::new();
         let mut directories_scanned = 0;
+        let mut commit = PendingDirectoryCommit::new(user_id, folder_path);
 
         for target_dir in &target_directories {
             self.check_cancelled()?;
@@ -589,23 +590,14 @@ impl SmartSyncService {
                 }
             };
 
-            let directories_to_save = Self::directories_to_persist(user_id, &scan);
-            if !directories_to_save.is_empty() {
-                match self.state.db.bulk_create_or_update_webdav_directories(&directories_to_save).await {
-                    Ok(saved) => debug!("Bulk updated {} directory ETags for target scan", saved.len()),
-                    Err(e) => {
-                        warn!("Failed bulk update for target scan, falling back to individual saves: {}", e);
-                        self.save_directories_individually(&directories_to_save).await;
-                    }
-                }
-            }
-
+            commit.directory_rows.extend(Self::directories_to_persist(user_id, &scan));
             all_files.extend(scan.files);
             all_directories.extend(scan.directories);
             failed_directories.extend(scan.failed_directories);
             directories_scanned += 1;
         }
 
+        commit.exclude_failures(&[], &failed_directories);
         info!("[{}] ✅ Targeted scan completed: {} directories scanned, {} files found, {} directories failed",
               request_id, directories_scanned, all_files.len(), failed_directories.len());
 
@@ -616,6 +608,7 @@ impl SmartSyncService {
             directories_scanned,
             directories_skipped: 0, // TODO: Could track this if needed
             failed_directories,
+            directory_commit: commit,
         })
     }
 }

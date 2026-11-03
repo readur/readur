@@ -13,7 +13,7 @@ use crate::{
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderService},
     services::s3_service::S3Service,
-    services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase},
+    services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase, PendingDirectoryCommit},
     utils::extension_filter::ExtensionFilter,
     utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
 };
@@ -127,15 +127,20 @@ impl SyncOutcome {
 /// run (the WebDAV scanner reports them; S3 and local folders never do).
 /// Their files are absent from `files`, and the run is reported as not clean
 /// so the operator sees it, while the files that were listed still sync.
+///
+/// `directory_commit` is the directory state a WebDAV scan wants recorded;
+/// the pipeline commits it after the folder's files are done, minus what the
+/// failed files invalidate, and not at all when the run was cancelled.
 #[derive(Debug, Default, Clone)]
 pub struct FolderDiscovery {
     pub files: Vec<FileIngestionInfo>,
     pub failed_directories: Vec<String>,
+    pub directory_commit: Option<PendingDirectoryCommit>,
 }
 
 impl From<Vec<FileIngestionInfo>> for FolderDiscovery {
     fn from(files: Vec<FileIngestionInfo>) -> Self {
-        Self { files, failed_directories: Vec::new() }
+        Self { files, failed_directories: Vec::new(), directory_commit: None }
     }
 }
 
@@ -317,7 +322,11 @@ impl SourceSyncService {
                                                         folder_path, outcome.files.len(), strategy, outcome.failed_directories.len()),
                                 None => info!("Smart sync: no changes detected for {}", folder_path),
                             }
-                            Ok(FolderDiscovery { files: outcome.files, failed_directories: outcome.failed_directories })
+                            Ok(FolderDiscovery {
+                                files: outcome.files,
+                                failed_directories: outcome.failed_directories,
+                                directory_commit: Some(outcome.directory_commit),
+                            })
                         },
                         Err(e) => {
                             error!("Smart sync failed for scheduled sync {}: {}", folder_path, e);
@@ -442,6 +451,8 @@ impl SourceSyncService {
         let max_file_bytes = i64::try_from(self.state.config.max_file_size_mb.saturating_mul(1024 * 1024)).unwrap_or(i64::MAX);
         let mut outcome = SyncOutcome { folders: watch_folders.len(), ..Default::default() };
         let mut files_to_process: Vec<FileIngestionInfo> = Vec::new();
+        let mut pending_commits: Vec<PendingDirectoryCommit> = Vec::new();
+        let mut failed_files: Vec<String> = Vec::new();
 
         progress.set_phase(SyncPhase::DiscoveringFiles);
         for folder_path in watch_folders {
@@ -453,6 +464,10 @@ impl SourceSyncService {
 
             match discover_files(folder_path.clone()).await {
                 Ok(discovery) => {
+                    if let Some(mut commit) = discovery.directory_commit {
+                        commit.exclude_failures(&[], &discovery.failed_directories);
+                        pending_commits.push(commit);
+                    }
                     for directory in &discovery.failed_directories {
                         error!("Could not list directory {} under watch folder {}", directory, folder_path);
                         outcome.directories_failed += 1;
@@ -567,10 +582,16 @@ impl SourceSyncService {
                     let message = format!("{}: {}", file_info.relative_path, e);
                     progress.add_error(&message);
                     outcome.record_error(message);
+                    failed_files.push(file_info.relative_path.clone());
                 }
             }
         }
         outcome.cancelled = cancellation_token.is_cancelled();
+        if outcome.cancelled {
+            info!("Sync cancelled: directory state of {} folders is not recorded, they are scanned again next run", pending_commits.len());
+        } else {
+            PendingDirectoryCommit::commit_all(&self.state.db, pending_commits, &failed_files).await;
+        }
 
         info!("Source sync finished for {}: {} discovered, {} processed, {} skipped, {} failed, {} folders failed{}",
               source_id, outcome.discovered, outcome.processed, outcome.skipped, outcome.failed, outcome.folders_failed,

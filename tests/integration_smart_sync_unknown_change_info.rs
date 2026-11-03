@@ -91,8 +91,9 @@ async fn folders_without_change_information_are_scanned_every_time() {
         let mut names: Vec<&str> = first.files.iter().map(|f| f.name.as_str()).collect();
         names.sort();
         assert_eq!(names, vec!["nested.pdf", "root.pdf"]);
+        first.directory_commit.commit(&ctx.state.db).await?;
 
-        // The rows written by the first run carry no usable change information.
+        // The rows the first run recorded carry no usable change information.
         let stored = ctx.state.db.list_webdav_directories(user_id).await?;
         assert!(!stored.is_empty());
         for row in &stored {
@@ -105,6 +106,7 @@ async fn folders_without_change_information_are_scanned_every_time() {
             let mut names: Vec<&str> = again.files.iter().map(|f| f.name.as_str()).collect();
             names.sort();
             assert_eq!(names, vec!["nested.pdf", "root.pdf"]);
+            again.directory_commit.commit(&ctx.state.db).await?;
         }
         Ok(())
     }

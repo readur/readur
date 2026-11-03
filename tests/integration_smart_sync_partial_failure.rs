@@ -1,6 +1,8 @@
 //! A subdirectory whose listing fails must not be recorded as scanned: its
 //! stored state is kept, healthy siblings are still returned, and the failure
-//! is reported to the caller. A failing root listing is an error.
+//! is reported to the caller. A failing root listing is an error. Smart sync
+//! records nothing itself; the test commits the returned rows as the sync
+//! pipeline does once the files are processed.
 
 use anyhow::Result;
 use readur::{
@@ -103,6 +105,7 @@ async fn failed_subdirectory_is_reported_and_not_recorded_as_scanned() {
         names.sort();
         assert_eq!(names, vec!["a.pdf", "root.txt"]);
 
+        outcome.directory_commit.commit(db).await?;
         let stored: std::collections::HashMap<String, String> = db
             .list_webdav_directories(user_id)
             .await?
@@ -111,6 +114,7 @@ async fn failed_subdirectory_is_reported_and_not_recorded_as_scanned() {
             .collect();
         assert_eq!(stored.get("/Documents/Sub1/").map(String::as_str), Some("sub1-v1"));
         assert!(!stored.contains_key("/Documents/Sub2/"), "failed directory must not be recorded: {stored:?}");
+        assert!(!stored.contains_key("/Documents"), "parent of a failed directory must not be recorded: {stored:?}");
         assert_eq!(stored.get("/Documents/Sub2/old/").map(String::as_str), Some("stale-old"));
         assert_eq!(stored.get("/Documents/Gone/").map(String::as_str), Some("stale-gone"));
         Ok(())

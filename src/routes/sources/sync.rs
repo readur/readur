@@ -320,13 +320,14 @@ impl DeepScan {
         let scan = DeepScan { webdav_service: self.webdav_service.with_cancellation_token(token.clone()), ..self };
         let this = &scan;
 
-        let (files, directories_tracked) = this.discover(&token, &progress).await;
+        let (files, directories_tracked, pending) = this.discover(&token, &progress).await;
         if token.is_cancelled() {
             this.finish_cancelled(0).await;
             return;
         }
 
         if files.is_empty() {
+            crate::services::webdav::PendingDirectoryCommit::commit_all(&this.state.db, pending, &[]).await;
             info!("Deep scan found no files but tracked {} directories for source {}", directories_tracked, this.source_id);
             progress.set_phase(SyncPhase::Completed);
             let message = format!("Smart deep scan completed: {} directories tracked, no files found", directories_tracked);
@@ -344,10 +345,14 @@ impl DeepScan {
             Some(this.source_id),
             &token,
         ).await {
-            Ok(files_processed) if token.is_cancelled() => {
-                this.finish_cancelled(files_processed as i64).await;
+            Ok(processed) if token.is_cancelled() => {
+                this.finish_cancelled(processed.ingested as i64).await;
             }
-            Ok(files_processed) => {
+            Ok(processed) => {
+                // The directory state is recorded only now that the files are
+                // done, minus the directories of files that failed.
+                crate::services::webdav::PendingDirectoryCommit::commit_all(&this.state.db, pending, &processed.failed_files).await;
+                let files_processed = processed.ingested;
                 let duration = chrono::Utc::now() - start_time;
                 info!("Deep scan completed for source {}: {} files processed in {:?}", this.source_id, files_processed, duration);
                 progress.set_phase(SyncPhase::Completed);
@@ -377,16 +382,19 @@ impl DeepScan {
     }
 
     /// Rescans every watch folder; a folder that fails is logged and skipped.
-    /// Stops between folders once `token` is cancelled.
+    /// Stops between folders once `token` is cancelled. The directory rows
+    /// each folder wants recorded are returned for committing after the files
+    /// have been processed.
     async fn discover(
         &self,
         token: &tokio_util::sync::CancellationToken,
         progress: &Arc<SyncProgress>,
-    ) -> (Vec<crate::models::FileIngestionInfo>, usize) {
+    ) -> (Vec<crate::models::FileIngestionInfo>, usize, Vec<crate::services::webdav::PendingDirectoryCommit>) {
         let smart_sync_service = crate::services::webdav::SmartSyncService::new(self.state.clone())
             .with_cancellation_token(token.clone());
         let mut files = Vec::new();
         let mut directories_tracked = 0;
+        let mut pending = Vec::new();
         for watch_folder in &self.watch_folders {
             if token.is_cancelled() {
                 break;
@@ -405,6 +413,7 @@ impl DeepScan {
                     info!("Deep scan found {} files and {} directories in {}", result.files.len(), result.directories.len(), watch_folder);
                     files.extend(result.files.into_iter().filter(|f| self.extensions.matches_name(&f.name)));
                     directories_tracked += result.directories.len();
+                    pending.push(result.directory_commit);
                 }
                 // A scan interrupted by the stop request is not a folder failure.
                 Err(_) if token.is_cancelled() => break,
@@ -415,7 +424,7 @@ impl DeepScan {
                 }
             }
         }
-        (files, directories_tracked)
+        (files, directories_tracked, pending)
     }
 
     /// Records a stopped scan: idle with the cancelled message, the files

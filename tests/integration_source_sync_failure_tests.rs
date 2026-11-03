@@ -168,6 +168,7 @@ async fn unlisted_subdirectory_marks_the_run_not_clean_but_syncs_listed_files() 
                 Ok(FolderDiscovery {
                     files: listing_of(&["one.txt"]),
                     failed_directories: vec!["/docs/broken".to_string(), "/docs/broken/deeper".to_string()],
+                    directory_commit: None,
                 })
             },
             |_| async { Err(anyhow!("download refused")) },

@@ -1,5 +1,7 @@
 //! Files that live directly inside a watch folder are detected through the
-//! folder's own ETag, not only through its subdirectories' ETags.
+//! folder's own ETag, not only through its subdirectories' ETags. Smart sync
+//! records nothing itself: each test commits the returned directory rows,
+//! as the sync pipeline does once the folder's files are processed.
 
 use anyhow::Result;
 use readur::{
@@ -106,7 +108,8 @@ async fn changed_folder_etag_returns_files_directly_inside_it() {
         assert_eq!(names, vec!["new.pdf"]);
         assert!(outcome.failed_directories.is_empty());
 
-        // The folder's new ETag is recorded, so the next evaluation has nothing to do.
+        // Once committed, the folder's new ETag means the next evaluation has nothing to do.
+        outcome.directory_commit.commit(db).await?;
         let stored = db.list_webdav_directories(user_id).await?;
         let root = stored.iter().find(|d| d.directory_path == "/Documents").expect("root row");
         assert_eq!(root.directory_etag, "root-v2");
@@ -141,6 +144,7 @@ async fn unknown_folder_etag_lists_root_files_once() {
         let smart_sync = SmartSyncService::new(ctx.state.clone());
         let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "/Documents", None).await?;
         assert_eq!(outcome.files.len(), 1);
+        outcome.directory_commit.commit(&ctx.state.db).await?;
 
         let again = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "/Documents", None).await?;
         assert!(again.strategy.is_none(), "{:?}", again.strategy);
@@ -208,6 +212,7 @@ async fn deep_scan_records_the_folder_etag() {
         let smart_sync = SmartSyncService::new(ctx.state.clone());
         let first = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "/Documents", None).await?;
         assert!(matches!(first.strategy, Some(SmartSyncStrategy::FullDeepScan)));
+        first.directory_commit.commit(&ctx.state.db).await?;
 
         let stored = ctx.state.db.list_webdav_directories(user_id).await?;
         let root = stored.iter().find(|d| d.directory_path == "/Documents").expect("root row after deep scan");
@@ -252,6 +257,7 @@ async fn watch_folder_without_leading_slash_matches_its_own_listing() {
         let service = service_for(&server);
         let smart_sync = SmartSyncService::new(ctx.state.clone());
         let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, "Documents", None).await?;
+        outcome.directory_commit.commit(&ctx.state.db).await?;
 
         let names: Vec<&str> = outcome.files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, vec!["new.pdf"], "the root must be listed exactly once");
@@ -286,6 +292,7 @@ async fn percent_encoded_watch_folder_is_decoded_once() {
         assert_eq!(folder, "/My Docs");
         let smart_sync = SmartSyncService::new(ctx.state.clone());
         let outcome = smart_sync.evaluate_and_sync_detailed(user_id, None, &service, &folder, None).await?;
+        outcome.directory_commit.commit(&ctx.state.db).await?;
 
         let names: Vec<&str> = outcome.files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, vec!["a.pdf"]);

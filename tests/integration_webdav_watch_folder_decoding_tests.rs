@@ -110,6 +110,7 @@ async fn encoded_watch_folder_is_requested_as_configured_on_every_run() {
         let mut paths: Vec<&str> = first.files.iter().map(|f| f.relative_path.as_str()).collect();
         paths.sort();
         assert_eq!(paths, vec!["/a%20b/Sub/y.pdf", "/a%20b/x.pdf"]);
+        first.directory_commit.commit(&ctx.state.db).await?;
 
         // Later runs go through evaluation and discovery again with the same
         // folder string and must still request the same wire path.
