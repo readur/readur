@@ -23,7 +23,10 @@ use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
-use super::common::{build_user_agent, verify_download};
+use super::common::{build_user_agent, retry_after_delay, verify_download};
+
+/// Longest wait a server-supplied Retry-After header can impose.
+const MAX_RETRY_AFTER: Duration = Duration::from_secs(120);
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
@@ -785,10 +788,23 @@ impl WebDAVService {
                         return Ok(response);
                     }
 
-                    // Handle rate limiting
-                    if status.as_u16() == 429 {
-                        warn!("Rate limited, backing off for {}ms", self.retry_config.rate_limit_backoff_ms);
-                        sleep(Duration::from_millis(self.retry_config.rate_limit_backoff_ms)).await;
+                    // Rate limited or temporarily unavailable: wait as the server
+                    // asks (bounded), and give up after max_retries like any other retry.
+                    if status.as_u16() == 429 || status.as_u16() == 503 {
+                        if attempt >= self.retry_config.max_retries {
+                            return Err(anyhow!("Request failed: {} after {} attempts - {}", status, attempt + 1,
+                                response.text().await.unwrap_or_default()));
+                        }
+                        let fallback_ms = if status.as_u16() == 429 {
+                            self.retry_config.rate_limit_backoff_ms
+                        } else {
+                            self.calculate_retry_delay_with_jitter(attempt, self.retry_config.initial_delay_ms)
+                        };
+                        let wait = Self::retry_after_wait(&response).unwrap_or(Duration::from_millis(fallback_ms));
+                        warn!("{} from {} {}, waiting {:?} before retry (attempt {}/{})",
+                              status, method, url, wait, attempt + 1, self.retry_config.max_retries);
+                        sleep(wait).await;
+                        attempt += 1;
                         continue;
                     }
 
@@ -850,42 +866,27 @@ impl WebDAVService {
         }
     }
 
+    /// Wait requested by a response's Retry-After header, if present and parseable.
+    fn retry_after_wait(response: &reqwest::Response) -> Option<Duration> {
+        let value = response.headers().get(reqwest::header::RETRY_AFTER)?.to_str().ok()?;
+        retry_after_delay(value, chrono::Utc::now(), MAX_RETRY_AFTER)
+    }
+
     // ============================================================================
     // URL Management Helper Methods (Previously separate module)
     // ============================================================================
 
+    /// Base WebDAV URL built from the protocol that was detected to work.
+    fn effective_webdav_url(&self) -> String {
+        let mut config = self.config.clone();
+        config.server_url = self.get_effective_server_url();
+        config.webdav_url()
+    }
+
     /// Gets the WebDAV URL for a specific path
     pub fn get_url_for_path(&self, path: &str) -> String {
-        // Create a temporary config with the effective server URL
-        let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
-        let base_url = temp_config.webdav_url();
-        let clean_path = path.trim_start_matches('/');
-        
-        let final_url = if clean_path.is_empty() {
-            base_url.clone()
-        } else {
-            // Ensure no double slashes by normalizing the base URL
-            let normalized_base = base_url.trim_end_matches('/');
-            format!("{}/{}", normalized_base, clean_path)
-        };
-        
-        debug!("🔗 URL Construction:");
-        debug!("   Input path: '{}'", path);
-        debug!("   Clean path: '{}'", clean_path);
-        debug!("   Base WebDAV URL: '{}'", base_url);
-        debug!("   Final URL: '{}'", final_url);
-        debug!("   Server type: {:?}", self.config.server_type);
-        debug!("   Server base URL: '{}'", self.config.server_url);
-        
+        let final_url = join_url(&self.effective_webdav_url(), path);
+        debug!("🔗 URL for path '{}' (server type {:?}): '{}'", path, self.config.server_type, final_url);
         final_url
     }
 
@@ -926,25 +927,7 @@ impl WebDAVService {
 
     /// Convert file paths to the proper URL format for the server
     pub fn path_to_url(&self, relative_path: &str) -> String {
-        let clean_path = relative_path.trim_start_matches('/');
-        // Create a temporary config with the effective server URL
-        let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
-        let base_url = temp_config.webdav_url();
-        
-        if clean_path.is_empty() {
-            base_url
-        } else {
-            format!("{}/{}", base_url.trim_end_matches('/'), clean_path)
-        }
+        self.get_url_for_path(relative_path)
     }
 
     /// Converts a full WebDAV path to a relative path by removing server-specific prefixes

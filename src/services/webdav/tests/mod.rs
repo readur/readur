@@ -1,3 +1,4 @@
 pub mod etag_comparison_tests;
 pub mod path_processing_tests;
 pub mod download_tests;
+pub mod retry_tests;
