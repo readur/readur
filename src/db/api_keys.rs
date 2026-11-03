@@ -2,6 +2,7 @@ use anyhow::Result;
 use uuid::Uuid;
 
 use super::Database;
+use super::sanitize::ToDb;
 use crate::models::api_key::ApiKey;
 
 impl Database {
@@ -19,7 +20,7 @@ impl Database {
                RETURNING *"#,
         )
         .bind(user_id)
-        .bind(name)
+        .bind(name.for_db())
         .bind(key_hash)
         .bind(key_prefix)
         .bind(expires_at)

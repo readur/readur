@@ -2,6 +2,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 use crate::models::{IgnoredFile, IgnoredFileResponse, CreateIgnoredFile, IgnoredFilesQuery};
 use anyhow::{Result, Context};
+use crate::db::sanitize::ToDb;
 
 pub async fn create_ignored_file(
     pool: &PgPool,
@@ -19,16 +20,16 @@ pub async fn create_ignored_file(
         "#
     )
     .bind(&ignored_file.file_hash)
-    .bind(&ignored_file.filename)
-    .bind(&ignored_file.original_filename)
-    .bind(&ignored_file.file_path)
+    .bind(ignored_file.filename.for_db())
+    .bind(ignored_file.original_filename.for_db())
+    .bind(ignored_file.file_path.for_db())
     .bind(ignored_file.file_size)
-    .bind(&ignored_file.mime_type)
-    .bind(&ignored_file.source_type)
-    .bind(&ignored_file.source_path)
-    .bind(&ignored_file.source_identifier)
+    .bind(ignored_file.mime_type.for_db())
+    .bind(ignored_file.source_type.for_db())
+    .bind(ignored_file.source_path.for_db())
+    .bind(ignored_file.source_identifier.for_db())
     .bind(ignored_file.ignored_by)
-    .bind(&ignored_file.reason)
+    .bind(ignored_file.reason.for_db())
     .fetch_one(pool)
     .await
     .context("Failed to create ignored file record")?;
@@ -80,9 +81,9 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_type)
-            .bind(source_identifier)
-            .bind(&pattern)
+            .bind(source_type.for_db())
+            .bind(source_identifier.for_db())
+            .bind(pattern.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -104,8 +105,8 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_type)
-            .bind(source_identifier)
+            .bind(source_type.for_db())
+            .bind(source_identifier.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -130,8 +131,8 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_type)
-            .bind(&pattern)
+            .bind(source_type.for_db())
+            .bind(pattern.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -153,7 +154,7 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_type)
+            .bind(source_type.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -178,8 +179,8 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_identifier)
-            .bind(&pattern)
+            .bind(source_identifier.for_db())
+            .bind(pattern.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -201,7 +202,7 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(source_identifier)
+            .bind(source_identifier.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -224,7 +225,7 @@ pub async fn list_ignored_files(
                 "#
             )
             .bind(user_id)
-            .bind(&pattern)
+            .bind(pattern.for_db())
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -349,8 +350,8 @@ pub async fn is_file_ignored(
     let result = if let (Some(source_type), Some(source_path)) = (source_type, source_path) {
         sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE file_hash = $1 AND source_type = $2 AND source_path = $3")
             .bind(file_hash)
-            .bind(source_type)
-            .bind(source_path)
+            .bind(source_type.for_db())
+            .bind(source_path.for_db())
             .fetch_one(pool)
             .await
     } else {
@@ -379,9 +380,9 @@ pub async fn count_ignored_files(
             let pattern = format!("%{}%", filename);
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND source_identifier = $3 AND (filename ILIKE $4 OR original_filename ILIKE $4)")
                 .bind(user_id)
-                .bind(source_type)
-                .bind(source_identifier)
-                .bind(&pattern)
+                .bind(source_type.for_db())
+                .bind(source_identifier.for_db())
+                .bind(pattern.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -389,8 +390,8 @@ pub async fn count_ignored_files(
         (Some(source_type), Some(source_identifier), None) => {
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND source_identifier = $3")
                 .bind(user_id)
-                .bind(source_type)
-                .bind(source_identifier)
+                .bind(source_type.for_db())
+                .bind(source_identifier.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -399,8 +400,8 @@ pub async fn count_ignored_files(
             let pattern = format!("%{}%", filename);
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2 AND (filename ILIKE $3 OR original_filename ILIKE $3)")
                 .bind(user_id)
-                .bind(source_type)
-                .bind(&pattern)
+                .bind(source_type.for_db())
+                .bind(pattern.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -408,7 +409,7 @@ pub async fn count_ignored_files(
         (Some(source_type), None, None) => {
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_type = $2")
                 .bind(user_id)
-                .bind(source_type)
+                .bind(source_type.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -417,8 +418,8 @@ pub async fn count_ignored_files(
             let pattern = format!("%{}%", filename);
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_identifier = $2 AND (filename ILIKE $3 OR original_filename ILIKE $3)")
                 .bind(user_id)
-                .bind(source_identifier)
-                .bind(&pattern)
+                .bind(source_identifier.for_db())
+                .bind(pattern.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -426,7 +427,7 @@ pub async fn count_ignored_files(
         (None, Some(source_identifier), None) => {
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND source_identifier = $2")
                 .bind(user_id)
-                .bind(source_identifier)
+                .bind(source_identifier.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?
@@ -435,7 +436,7 @@ pub async fn count_ignored_files(
             let pattern = format!("%{}%", filename);
             sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE ignored_by = $1 AND (filename ILIKE $2 OR original_filename ILIKE $2)")
                 .bind(user_id)
-                .bind(&pattern)
+                .bind(pattern.for_db())
                 .fetch_one(pool)
                 .await
                 .context("Failed to count ignored files")?

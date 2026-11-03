@@ -14,7 +14,7 @@ This document outlines comprehensive database guardrails to prevent race conditi
 
 ## 🛡️ Implemented Guardrails
 
-### 1. Transaction-Based Operations (`src/db_guardrails.rs`)
+### 1. Transaction-Based Operations (`src/db_guardrails_simple.rs`)
 
 #### `DocumentTransactionManager`
 - **Atomic OCR Updates**: All OCR result updates wrapped in transactions
@@ -35,10 +35,8 @@ let success = transaction_manager.update_ocr_with_validation(
 ).await?;
 ```
 
-#### `DistributedLock`
-- **Named Locks**: PostgreSQL advisory locks for critical sections
-- **Timeout Support**: Prevents indefinite blocking
-- **Resource Protection**: Guards shared resources during concurrent access
+#### Text and JSON sanitization (`src/db/sanitize.rs`)
+PostgreSQL cannot store U+0000: in TEXT it fails with `invalid byte sequence for encoding "UTF8": 0x00`, in JSONB with `unsupported Unicode escape sequence`. Every write of user-, file- or remote-derived text binds through `db::sanitize` (`value.for_db()`, `DbText`, `DbJson`), which strips it at encode time. Do not add per-call-site filters.
 
 ### 2. Database Constraints (`migrations/20250620100013_add_database_guardrails.sql`)
 

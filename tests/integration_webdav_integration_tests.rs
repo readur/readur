@@ -80,9 +80,7 @@ fn create_empty_update_settings() -> UpdateSettings {
 }
 
 async fn setup_test_app() -> (Router, Arc<AppState>) {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://readur:readur@localhost:5432/readur".to_string());
+    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
 
     // Create test configuration with custom database URL
     let mut config = create_test_config_with_db(&database_url);
