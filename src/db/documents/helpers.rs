@@ -238,7 +238,7 @@ mod tests {
     fn order_by_sql(sort: Option<DocumentSortField>, order: Option<SortOrder>, has_rank: bool) -> String {
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_sort(&mut query, sort, order, has_rank);
-        query.sql()[BASE.len()..].to_string()
+        query.sql().as_str()[BASE.len()..].to_string()
     }
 
     #[test]
@@ -294,7 +294,7 @@ mod tests {
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
         apply_sort(&mut query, Some(DocumentSortField::MimeType), Some(SortOrder::Asc), false);
-        let sql = query.sql();
+        let sql = query.sql().as_str().to_owned();
 
         assert!(!sql.contains("DROP"), "user input reached SQL text: {}", sql);
         assert!(!sql.contains('\''), "unexpected literal in SQL text: {}", sql);
@@ -318,7 +318,7 @@ mod tests {
         let filters = DocumentFilters { ocr_status: Some("pending".to_string()), ..Default::default() };
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
-        assert!(query.sql().contains("AND (ocr_status IS NULL OR ocr_status = $1)"));
+        assert!(query.sql().as_str().contains("AND (ocr_status IS NULL OR ocr_status = $1)"));
     }
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
         let filters = DocumentFilters { source_types: Some(vec!["webdav".to_string()]), ..Default::default() };
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
-        let sql = query.sql();
+        let sql = query.sql().as_str().to_owned();
         assert!(sql.contains("AND (source_type = ANY($1))"));
         assert!(!sql.contains("source_id IS NULL"));
     }
