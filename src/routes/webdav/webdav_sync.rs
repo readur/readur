@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, error, info, warn};
 use chrono::Utc;
@@ -12,6 +11,7 @@ use crate::{
     models::source::{CreateWebDAVFile, UpdateWebDAVSyncState},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
     services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase, PendingDirectoryCommit},
+    utils::extension_filter::ExtensionFilter,
     utils::outbound::validate_outbound_url,
 };
 
@@ -125,6 +125,7 @@ async fn perform_sync_internal(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     // The service holds the watch folders decoded and normalised.
     let config = WebDAVConfig { watch_folders: webdav_service.get_config().watch_folders.clone(), ..config };
+    let extension_filter = ExtensionFilter::new(&config.file_extensions);
 
     let mut total_files_processed = 0;
     let mut total_directories_scanned = 0;
@@ -195,19 +196,8 @@ async fn perform_sync_internal(
                            request_id, folder_path, sync_result.directories_skipped);
                 }
                 
-                // Filter files for processing (directories already handled by smart sync service)
-                let files_to_process: Vec<_> = sync_result.files.into_iter()
-                    .filter(|file_info| {
-                        // Check if file extension is supported
-                        let file_extension = Path::new(&file_info.name)
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .unwrap_or("")
-                            .to_lowercase();
-                        
-                        config.file_extensions.contains(&file_extension)
-                    })
-                    .collect();
+                // Directories were already handled by the smart sync service.
+                let files_to_process = supported_files(&extension_filter, sync_result.files);
                 
                 info!("[{}] 📄 Processing {} files from folder '{}'", 
                       request_id, files_to_process.len(), folder_path);
@@ -704,3 +694,51 @@ pub struct ProcessedFiles {
 }
 
 
+
+/// The listed files whose names pass the source's extension filter.
+fn supported_files(filter: &ExtensionFilter, files: Vec<crate::models::FileIngestionInfo>) -> Vec<crate::models::FileIngestionInfo> {
+    files.into_iter().filter(|file| filter.matches_name(&file.name)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::FileIngestionInfo;
+
+    fn listed(name: &str) -> FileIngestionInfo {
+        FileIngestionInfo {
+            relative_path: format!("/Documents/{name}"),
+            full_path: format!("/Documents/{name}"),
+            #[allow(deprecated)]
+            path: format!("/Documents/{name}"),
+            name: name.to_string(),
+            size: 9,
+            mime_type: "application/octet-stream".into(),
+            last_modified: None,
+            etag: name.to_string(),
+            is_directory: false,
+            created_at: None,
+            permissions: None,
+            owner: None,
+            group: None,
+            metadata: None,
+        }
+    }
+
+    /// The configured extensions are matched the way every other sync path
+    /// matches them: case-insensitively and with or without a leading dot.
+    #[test]
+    fn configured_extensions_match_regardless_of_case_and_dot() {
+        let filter = ExtensionFilter::new(&["PDF".to_string(), ".Txt".to_string()]);
+        let kept = supported_files(&filter, vec![listed("report.pdf"), listed("SCAN.PDF"), listed("notes.txt"), listed("photo.jpg")]);
+        let names: Vec<&str> = kept.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["report.pdf", "SCAN.PDF", "notes.txt"]);
+    }
+
+    /// No configured extension means every file is kept.
+    #[test]
+    fn an_empty_extension_list_keeps_every_file() {
+        let filter = ExtensionFilter::new(&[] as &[String]);
+        assert_eq!(supported_files(&filter, vec![listed("a.pdf"), listed("b")]).len(), 2);
+    }
+}
