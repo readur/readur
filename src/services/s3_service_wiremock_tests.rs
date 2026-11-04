@@ -136,3 +136,34 @@ async fn discovery_lists_under_joined_prefix() {
     assert_eq!(files[0].full_path, "s3://b/clients/acme/documents/a.pdf");
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
+
+/// A stop request during the wait between two attempts ends the download
+/// right away instead of waiting out the backoff.
+#[tokio::test]
+async fn cancellation_during_a_retry_wait_returns_promptly() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/b/docs/a.pdf"))
+        .respond_with(ResponseTemplate::new(403).set_body_raw(ACCESS_DENIED_XML, "application/xml"))
+        .mount(&server)
+        .await;
+    let token = tokio_util::sync::CancellationToken::new();
+    let service = S3Service::new(config_for(&server))
+        .await
+        .unwrap()
+        .with_cancellation_token(token.clone())
+        .with_retry_base_delay(std::time::Duration::from_secs(60));
+    let canceller = token.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        canceller.cancel();
+    });
+
+    let started = std::time::Instant::now();
+    let err = tokio::time::timeout(std::time::Duration::from_secs(5), service.download_file("docs/a.pdf"))
+        .await
+        .expect("the download must not wait out the retry delay")
+        .unwrap_err();
+    assert!(crate::utils::sync_cancelled::is_cancelled(&err), "{err}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}

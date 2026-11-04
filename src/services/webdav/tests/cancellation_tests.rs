@@ -106,3 +106,40 @@ async fn cancellation_during_recursive_discovery_stops_between_batches() {
     let received = server.received_requests().await.unwrap_or_default().len();
     assert!(received <= 2, "expected the scan to stop after the in-flight batch, saw {received} requests");
 }
+
+/// A stop request during a Retry-After wait ends the request right away
+/// instead of waiting out the server's delay.
+#[tokio::test]
+async fn cancellation_during_a_retry_after_wait_returns_promptly() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "60"))
+        .mount(&server)
+        .await;
+    let config = WebDAVConfig {
+        server_url: server.uri(),
+        username: "testuser".to_string(),
+        password: "testpass".to_string(),
+        watch_folders: vec!["/Documents".to_string()],
+        file_extensions: vec![],
+        timeout_seconds: 5,
+        server_type: Some("generic".to_string()),
+    };
+    let retry = RetryConfig { max_retries: 2, ..RetryConfig::default() };
+    let token = CancellationToken::new();
+    let service = WebDAVService::new_with_retry(config, retry).expect("service").with_cancellation_token(token.clone());
+    let canceller = token.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        canceller.cancel();
+    });
+
+    let started = Instant::now();
+    let err = tokio::time::timeout(Duration::from_secs(5), service.download_file("/Documents/a.pdf"))
+        .await
+        .expect("the download must not wait out the Retry-After delay")
+        .unwrap_err();
+    assert!(crate::utils::sync_cancelled::is_cancelled(&err), "{err}");
+    assert!(started.elapsed() < Duration::from_secs(1), "took {:?}", started.elapsed());
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}

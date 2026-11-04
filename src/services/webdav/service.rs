@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::HashSet;
 use tokio::sync::Semaphore;
-use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 // futures_util::stream import removed as unused
 use tracing::{debug, error, info, warn};
@@ -22,7 +21,7 @@ use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
-use crate::utils::sync_cancelled::cancelled;
+use crate::utils::sync_cancelled::{cancelled, sleep_unless_cancelled};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
@@ -816,7 +815,7 @@ impl WebDAVService {
                         let wait = Self::retry_after_wait(&response).unwrap_or(Duration::from_millis(fallback_ms));
                         warn!("{} from {} {}, waiting {:?} before retry (attempt {}/{})",
                               status, method, url, wait, attempt + 1, self.retry_config.max_retries);
-                        sleep(wait).await;
+                        self.wait_before_retry(wait).await?;
                         attempt += 1;
                         continue;
                     }
@@ -845,7 +844,7 @@ impl WebDAVService {
                         warn!("Server error {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
                             status, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(jittered_delay)).await;
+                        self.wait_before_retry(Duration::from_millis(jittered_delay)).await?;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -863,7 +862,7 @@ impl WebDAVService {
                         warn!("Request error: {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
                             e, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(jittered_delay)).await;
+                        self.wait_before_retry(Duration::from_millis(jittered_delay)).await?;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -877,6 +876,11 @@ impl WebDAVService {
                 }
             }
         }
+    }
+
+    /// Waits before the next attempt, unless the cancellation token fires first.
+    async fn wait_before_retry(&self, wait: Duration) -> Result<()> {
+        sleep_unless_cancelled(wait, self.cancellation.as_ref(), "WebDAV operation").await
     }
 
     /// Wait requested by a response's Retry-After header, if present and parseable.

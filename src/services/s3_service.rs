@@ -21,7 +21,7 @@ use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
 use crate::utils::extension_filter::ExtensionFilter;
-use crate::utils::sync_cancelled::cancelled;
+use crate::utils::sync_cancelled::{cancelled, sleep_unless_cancelled};
 
 /// Threshold for using streaming multipart uploads (100MB)
 const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
@@ -32,6 +32,9 @@ const MULTIPART_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 /// Upper bound on reading one object's body. The SDK's attempt timeout ends
 /// once the response headers arrive; the streamed body is read here.
 const DOWNLOAD_BODY_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Wait before the second attempt of a retried S3 operation; doubled per attempt.
+const RETRY_BASE_DELAY_MS: u64 = 100;
 
 /// Check that a downloaded body matches the Content-Length the server sent.
 pub fn verify_content_length(key: &str, expected: Option<i64>, actual: usize) -> Result<()> {
@@ -76,6 +79,8 @@ pub struct S3Service {
     extension_filter: ExtensionFilter,
     /// Checked before each listing page and each download attempt.
     cancellation_token: Option<CancellationToken>,
+    /// Wait before the second attempt of an operation; doubled per attempt.
+    retry_base_delay: Duration,
 }
 
 impl S3Service {
@@ -107,6 +112,7 @@ impl S3Service {
             config,
             extension_filter,
             cancellation_token: None,
+            retry_base_delay: Duration::from_millis(RETRY_BASE_DELAY_MS),
         })
         }
     }
@@ -115,6 +121,13 @@ impl S3Service {
     /// (before each attempt) once cancelled.
     pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
         self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Overrides the retry wait so a test can observe it being cut short.
+    #[cfg(test)]
+    fn with_retry_base_delay(mut self, delay: Duration) -> Self {
+        self.retry_base_delay = delay;
         self
     }
 
@@ -601,7 +614,6 @@ impl S3Service {
         Fut: std::future::Future<Output = Result<T>>,
     {
         const MAX_RETRIES: u32 = 3;
-        const BASE_DELAY_MS: u64 = 100;
         
         let mut last_error = None;
         
@@ -618,10 +630,11 @@ impl S3Service {
                     last_error = Some(e);
                     
                     if attempt < MAX_RETRIES {
-                        let delay_ms = BASE_DELAY_MS * 2u64.pow(attempt);
-                        warn!("S3 operation '{}' failed (attempt {}/{}), retrying in {}ms: {}", 
-                              operation_name, attempt + 1, MAX_RETRIES + 1, delay_ms, last_error.as_ref().unwrap());
-                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        let delay = self.retry_base_delay * 2u32.pow(attempt);
+                        warn!("S3 operation '{}' failed (attempt {}/{}), retrying in {:?}: {}", 
+                              operation_name, attempt + 1, MAX_RETRIES + 1, delay, last_error.as_ref().unwrap());
+                        // A stop request ends the wait, and the operation, right away.
+                        sleep_unless_cancelled(delay, self.cancellation_token.as_ref(), &format!("S3 {operation_name}")).await?;
                     }
                 }
             }
