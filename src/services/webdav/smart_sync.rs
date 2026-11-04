@@ -11,7 +11,7 @@ use crate::models::source::{CreateWebDAVDirectory};
 use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
-use crate::utils::sync_cancelled::cancelled;
+use crate::utils::sync_cancelled::{cancelled, is_cancelled};
 use super::{WebDAVService, SyncProgress};
 use super::paths::normalize_watch_folder;
 use super::directory_commit::PendingDirectoryCommit;
@@ -347,6 +347,8 @@ impl SmartSyncService {
                     });
                 }
             }
+            // A stop request is not an evaluation failure to track or to fall back from.
+            Err(e) if is_cancelled(&e) => return Err(e),
             Err(e) => {
                 let eval_elapsed = evaluation_start.elapsed();
                 warn!("[{}] Smart sync evaluation failed for '{}' after {:.2}s, falling back to deep scan: {}", 

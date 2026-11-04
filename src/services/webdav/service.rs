@@ -21,7 +21,7 @@ use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
-use crate::utils::sync_cancelled::{cancelled, sleep_unless_cancelled};
+use crate::utils::sync_cancelled::{cancelled, is_cancelled, sleep_unless_cancelled};
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
@@ -1081,7 +1081,7 @@ impl WebDAVService {
                         info!("⏭️ Skipping directory '{}' due to previous failures; its subtree is not scanned", scanned_dir);
                         result.failed_directories.push(scanned_dir);
                     }
-                    Err(e) if is_root => return Err(e),
+                    Err(e) if is_root || is_cancelled(&e) => return Err(e),
                     Err(e) => {
                         warn!("Failed to scan directory '{}': {}; its subtree is not scanned", scanned_dir, e);
                         result.failed_directories.push(scanned_dir);
@@ -1124,6 +1124,9 @@ impl WebDAVService {
                     debug!("Failed to mark directory scan as successful: {}", e);
                 }
             }
+            // A stop request is not a failure of the directory: nothing is
+            // recorded, so it is not put in cooldown for the next run.
+            Err(e) if is_cancelled(e) => {}
             Err(e) => {
                 let context = ErrorContext {
                     resource_path: directory_path.to_string(),
