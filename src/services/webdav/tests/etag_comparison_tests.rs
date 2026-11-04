@@ -1,6 +1,6 @@
 use crate::webdav_xml_parser::{
     compare_etags, weak_compare_etags, strong_compare_etags, 
-    ParsedETag, normalize_etag
+    ParsedETag, normalize_etag, parse_propfind_response_with_directories
 };
 
 #[cfg(test)]
@@ -134,5 +134,41 @@ mod tests {
         // Should handle internal quotes safely
         assert!(!comparison_str.contains('"'));
         assert!(!comparison_str.contains("\\"));
+    }
+
+    fn listing_without_etags(last_modified: &str) -> String {
+        format!(r#"<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">
+            <d:response><d:href>/dav/Docs/</d:href><d:propstat><d:prop>
+                <d:getlastmodified>{last_modified}</d:getlastmodified>
+                <d:resourcetype><d:collection/></d:resourcetype>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+            <d:response><d:href>/dav/Docs/a.txt</d:href><d:propstat><d:prop>
+                <d:getlastmodified>{last_modified}</d:getlastmodified>
+                <d:getcontentlength>42</d:getcontentlength>
+                <d:resourcetype/>
+            </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>"#)
+    }
+
+    #[test]
+    fn test_missing_getetag_yields_a_stable_fallback() {
+        let first = parse_propfind_response_with_directories(&listing_without_etags("Tue, 29 Jul 2025 01:34:17 GMT")).unwrap();
+        let second = parse_propfind_response_with_directories(&listing_without_etags("Tue, 29 Jul 2025 01:34:17 GMT")).unwrap();
+        assert_eq!(first.len(), 2);
+        for (a, b) in first.iter().zip(second.iter()) {
+            assert_eq!(a.etag, b.etag, "unchanged entry {} must compare equal across scans", a.name);
+            assert!(compare_etags(&a.etag, &b.etag));
+        }
+
+        let changed = parse_propfind_response_with_directories(&listing_without_etags("Wed, 30 Jul 2025 09:00:00 GMT")).unwrap();
+        assert_ne!(first[0].etag, changed[0].etag, "a modified entry must get a different fallback");
+        assert!(!compare_etags(&first[1].etag, &changed[1].etag));
+    }
+
+    #[test]
+    fn test_missing_getetag_fallback_includes_size_for_files() {
+        let listing = parse_propfind_response_with_directories(&listing_without_etags("Tue, 29 Jul 2025 01:34:17 GMT")).unwrap();
+        let file = listing.iter().find(|f| !f.is_directory).unwrap();
+        assert!(file.etag.contains("42"), "{}", file.etag);
     }
 }

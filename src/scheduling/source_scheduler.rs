@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::collections::HashMap;
+use std::future::Future;
 use tokio::time::interval;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use chrono::Utc;
@@ -11,12 +11,13 @@ use sqlx::Row;
 
 use crate::{
     AppState,
-    models::{SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
-    services::webdav::WebDAVConfig,
-    utils::outbound::validate_outbound_url,
+    db::sources::{SyncCompletion, SYNC_CANCELLED_MESSAGE},
+    models::{Source, SourceStatus, SourceType, LocalFolderSourceConfig, S3SourceConfig, WebDAVSourceConfig},
+    services::sync_progress_tracker::SyncProgressTracker,
+    services::webdav::SyncProgress,
 };
 use super::source_connectivity;
-use super::source_sync::SourceSyncService;
+use super::source_sync::{SourceSyncService, SyncOutcome};
 
 struct SyncHealthAnalysis {
     score_penalty: i32,
@@ -28,23 +29,77 @@ struct ErrorAnalysis {
     issues: Vec<serde_json::Value>,
 }
 
+/// A sync task the scheduler started and has not yet seen exit.
+#[derive(Debug, Clone)]
+struct RunningSync {
+    run_id: Uuid,
+    token: CancellationToken,
+    /// A stop was requested and the task is still winding down.
+    stopping: bool,
+}
+
+type RunRegistry = Arc<Mutex<HashMap<Uuid, RunningSync>>>;
+
+fn lock_registry(registry: &RunRegistry) -> std::sync::MutexGuard<'_, HashMap<Uuid, RunningSync>> {
+    registry.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Why a sync could not be started.
+#[derive(Debug, thiserror::Error)]
+pub enum SyncStartError {
+    #[error("Sync already running for this source")]
+    AlreadyRunning,
+    #[error("Sync is stopping for this source; try again once it has exited")]
+    Stopping,
+    #[error("Could not start sync - source is already syncing")]
+    NotClaimed,
+    #[error("Source not found")]
+    NotFound,
+    #[error("Configuration error: {0}")]
+    Configuration(String),
+    #[error("Database error: {0}")]
+    Db(#[from] anyhow::Error),
+}
+
+/// Owned by the sync task's supervisor: once the task has ended, by return
+/// or by panic, and its end has been recorded, the run's progress entry and
+/// registry slot are released. Only the slot that still belongs to this run
+/// is removed, so a later run is never affected.
+struct SyncRunGuard {
+    registry: RunRegistry,
+    tracker: Arc<SyncProgressTracker>,
+    source_id: Uuid,
+    run_id: Uuid,
+}
+
+impl Drop for SyncRunGuard {
+    fn drop(&mut self) {
+        // Progress first: a new run can only register once the slot is free.
+        self.tracker.unregister_sync(self.source_id);
+        let mut registry = lock_registry(&self.registry);
+        if registry.get(&self.source_id).is_some_and(|run| run.run_id == self.run_id) {
+            registry.remove(&self.source_id);
+        }
+    }
+}
+
 pub struct SourceScheduler {
     state: Arc<AppState>,
     sync_service: SourceSyncService,
     check_interval: Duration,
-    // Track running sync tasks and their cancellation tokens
-    running_syncs: Arc<RwLock<HashMap<Uuid, CancellationToken>>>,
+    /// One entry per source with a sync task alive, whatever its state.
+    running_syncs: RunRegistry,
 }
 
 impl SourceScheduler {
     pub fn new(state: Arc<AppState>) -> Self {
         let sync_service = SourceSyncService::new(state.clone());
-        
+
         Self {
             state,
             sync_service,
             check_interval: Duration::from_secs(60), // Check every minute for due syncs
-            running_syncs: Arc::new(RwLock::new(HashMap::new())),
+            running_syncs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -122,25 +177,25 @@ impl SourceScheduler {
     async fn check_and_sync_sources(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all sources that might need syncing
         let sources = self.state.db.get_sources_for_sync().await?;
-        
+
         for source in sources {
             // Skip sources that are already in error status due to configuration issues
             if source.status == crate::models::SourceStatus::Error &&
                source.last_error.as_ref().map(|e| e.contains("Configuration error")).unwrap_or(false) {
                 // Only log this once every hour to reduce spam
                 if source.last_error_at.map(|t| chrono::Utc::now() - t > chrono::Duration::hours(1)).unwrap_or(true) {
-                    warn!("⚠️ Skipping source '{}' (ID: {}) due to persistent configuration error: {}", 
+                    warn!("⚠️ Skipping source '{}' (ID: {}) due to persistent configuration error: {}",
                           source.name, source.id, source.last_error.as_ref().unwrap_or(&"Unknown error".to_string()));
                 }
                 continue;
             }
-            
+
             // Validate source configuration before checking if sync is due
             if let Err(e) = self.validate_source_config(&source) {
-                error!("❌ CONFIGURATION ERROR during background sync check for source '{}' (ID: {}): {}", 
+                error!("❌ CONFIGURATION ERROR during background sync check for source '{}' (ID: {}): {}",
                        source.name, source.id, e);
                 error!("Source config JSON: {}", serde_json::to_string_pretty(&source.config).unwrap_or_else(|_| "Invalid JSON".to_string()));
-                
+
                 // Update source with error status
                 if let Err(update_err) = sqlx::query(
                     r#"UPDATE sources SET status = 'error', last_error = $1, last_error_at = NOW(), updated_at = NOW() WHERE id = $2"#
@@ -151,113 +206,19 @@ impl SourceScheduler {
                 .await {
                     error!("Failed to update source error status: {}", update_err);
                 }
-                
+
                 continue;
             }
-            
-            // Check if sync is due for this source
+
             if self.is_sync_due(&source).await? {
                 info!("Starting background sync for source: {} ({})", source.name, source.source_type);
-                
-                let sync_service = self.sync_service.clone();
-                let source_clone = source.clone();
-                let state_clone = self.state.clone();
-                let running_syncs_clone = self.running_syncs.clone();
-                
-                // Create cancellation token for this sync
-                let cancellation_token = CancellationToken::new();
-                
-                // Register the sync task
-                {
-                    let mut running_syncs = running_syncs_clone.write().await;
-                    running_syncs.insert(source.id, cancellation_token.clone());
+                match self.launch_sync(source).await {
+                    Ok(()) => {}
+                    Err(e @ (SyncStartError::AlreadyRunning | SyncStartError::Stopping | SyncStartError::NotClaimed)) => {
+                        info!("Background sync not started: {}", e);
+                    }
+                    Err(e) => error!("Background sync could not be started: {}", e),
                 }
-                
-                // Start sync in background task
-                let sync_handle = tokio::spawn(async move {
-                    // Get user's OCR setting - simplified, you might want to store this in source config  
-                    let enable_background_ocr = true; // Default to true, could be made configurable per source
-                    
-                    // Create progress tracker for this sync and register it
-                    let progress = Arc::new(crate::services::webdav::SyncProgress::new());
-                    progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
-                    state_clone.sync_progress_tracker.register_sync(source.id, progress.clone());
-                    
-                    // Pass cancellation token to sync service
-                    match sync_service.sync_source_with_cancellation(&source_clone, enable_background_ocr, cancellation_token.clone()).await {
-                        Ok(files_processed) => {
-                            info!("Background sync completed for source {}: {} files processed", 
-                                  source_clone.name, files_processed);
-                            
-                            // Perform automatic validation check after sync completion
-                            if let Err(e) = Self::validate_source_health(&source_clone, &state_clone).await {
-                                error!("Failed to perform validation check: {}", e);
-                            }
-                            
-                            // Update last sync time
-                            if let Err(e) = sqlx::query(
-                                r#"UPDATE sources 
-                                   SET last_sync_at = NOW(), 
-                                       total_files_synced = total_files_synced + $2,
-                                       updated_at = NOW()
-                                   WHERE id = $1"#
-                            )
-                            .bind(source_clone.id)
-                            .bind(files_processed as i64)
-                            .execute(state_clone.db.get_pool())
-                            .await {
-                                error!("Failed to update source sync time: {}", e);
-                            }
-                            
-                            // Send notification if files were processed
-                            if files_processed > 0 {
-                                let notification = crate::models::CreateNotification {
-                                    notification_type: "success".to_string(),
-                                    title: "Source Sync Completed".to_string(),
-                                    message: format!("Successfully processed {} files from {}", 
-                                                   files_processed, source_clone.name),
-                                    action_url: Some("/documents".to_string()),
-                                    metadata: Some(serde_json::json!({
-                                        "source_type": source_clone.source_type.to_string(),
-                                        "source_id": source_clone.id,
-                                        "files_processed": files_processed
-                                    })),
-                                };
-                                
-                                if let Err(e) = state_clone.db.create_notification(source_clone.user_id, &notification).await {
-                                    error!("Failed to create success notification: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Background sync failed for source {}: {}", source_clone.name, e);
-                            
-                            // Send error notification
-                            let notification = crate::models::CreateNotification {
-                                notification_type: "error".to_string(),
-                                title: "Source Sync Failed".to_string(),
-                                message: format!("Sync failed for {}: {}", source_clone.name, e),
-                                action_url: Some("/sources".to_string()),
-                                metadata: Some(serde_json::json!({
-                                    "source_type": source_clone.source_type.to_string(),
-                                    "source_id": source_clone.id,
-                                    "error": e.to_string()
-                                })),
-                            };
-                            
-                            if let Err(e) = state_clone.db.create_notification(source_clone.user_id, &notification).await {
-                                error!("Failed to create error notification: {}", e);
-                            }
-                        }
-                    }
-                    
-                    // Cleanup: Remove the sync from running list and unregister progress tracker
-                    {
-                        let mut running_syncs = running_syncs_clone.write().await;
-                        running_syncs.remove(&source_clone.id);
-                    }
-                    state_clone.sync_progress_tracker.unregister_sync(source_clone.id);
-                });
             }
         }
 
@@ -319,198 +280,227 @@ impl SourceScheduler {
         Ok(true)
     }
 
-    pub async fn trigger_sync(&self, source_id: uuid::Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn trigger_sync(&self, source_id: uuid::Uuid) -> Result<(), SyncStartError> {
         info!("Triggering manual sync for source {}", source_id);
-        
-        // Check if sync is already running
-        {
-            let running_syncs = self.running_syncs.read().await;
-            if running_syncs.contains_key(&source_id) {
-                return Err("Sync already running for this source".into());
-            }
-        }
-        
-        // First check if the source exists
-        let source = match self.state.db.get_source_by_id(source_id).await? {
-            Some(s) => s,
-            None => return Err("Source not found".into()),
-        };
-        
-        // Validate source configuration before attempting sync
-        if let Err(e) = self.validate_source_config(&source) {
-            return Err(format!("Configuration error: {}", e).into());
-        }
-        
-        // Atomically start the sync - this prevents race conditions
-        if !self.state.db.start_sync_atomic(source_id).await? {
-            return Err("Could not start sync - source is already syncing".into());
-        }
-        
+
+        let source = self.state.db.get_source_by_id(source_id).await?.ok_or(SyncStartError::NotFound)?;
+        self.validate_source_config(&source).map_err(SyncStartError::Configuration)?;
+        self.launch_sync(source).await
+    }
+
+    /// Claims `source` and runs a full sync for it in the background. The
+    /// scheduled and the manual path both come through here, so they behave
+    /// the same: no wall-clock limit (the protocol clients bound each request),
+    /// one completion record, notifications only for what actually happened.
+    async fn launch_sync(&self, source: Source) -> Result<(), SyncStartError> {
         let sync_service = self.sync_service.clone();
-        let state_clone = self.state.clone();
-        let running_syncs_clone = self.running_syncs.clone();
-        
-        // Create cancellation token for this sync
-        let cancellation_token = CancellationToken::new();
-        
-        // Register the sync task
-        {
-            let mut running_syncs = running_syncs_clone.write().await;
-            running_syncs.insert(source_id, cancellation_token.clone());
-        }
-        
-        tokio::spawn(async move {
-            let enable_background_ocr = true; // Could be made configurable
-            
-            // Create progress tracker for this sync and register it
-            let progress = Arc::new(crate::services::webdav::SyncProgress::new());
-            progress.set_phase(crate::services::webdav::SyncPhase::Initializing);
-            state_clone.sync_progress_tracker.register_sync(source_id, progress.clone());
-            
-            // Ensure cleanup happens regardless of what happens in the sync operation
-            let cleanup = || async {
-                // Cleanup: Remove the sync from running list and unregister progress tracker
-                {
-                    let mut running_syncs = running_syncs_clone.write().await;
-                    running_syncs.remove(&source_id);
+        let state = self.state.clone();
+        self.run_claimed(source.id, move |token, progress| async move {
+            let enable_background_ocr = true; // Could be made configurable per source
+            let result = sync_service.sync_claimed_source(&source, enable_background_ocr, token, &progress).await;
+            Self::report_sync_result(&state, &source, &result).await;
+        })
+        .await
+    }
+
+    /// Post-run follow-up: a health check and a notification. A cancelled run
+    /// is only logged; a run with failures gets a warning, a clean run with
+    /// new files a success.
+    async fn report_sync_result(state: &Arc<AppState>, source: &Source, result: &anyhow::Result<SyncOutcome>) {
+        let notification = match result {
+            Ok(outcome) if outcome.cancelled => {
+                info!("Sync for source {} was cancelled after {} files", source.name, outcome.processed);
+                None
+            }
+            Ok(outcome) => {
+                if let Err(e) = Self::validate_source_health(source, state).await {
+                    error!("Failed to perform validation check: {}", e);
                 }
-                state_clone.sync_progress_tracker.unregister_sync(source_id);
-            };
-            
-            // Execute the sync operation with a timeout to prevent hanging
-            let sync_result = tokio::time::timeout(
-                std::time::Duration::from_secs(300), // 5 minute timeout for sync operations
-                sync_service.sync_source_with_cancellation(&source, enable_background_ocr, cancellation_token)
-            ).await;
-            
-            match sync_result {
-                Ok(Ok(files_processed)) => {
-                    info!("Manual sync completed for source {}: {} files processed", 
-                          source.name, files_processed);
-                    
-                    // Atomically complete the sync
-                    if let Err(e) = state_clone.db.complete_sync_atomic(
-                        source_id, 
-                        true, 
-                        Some(files_processed as i64), 
-                        None
-                    ).await {
-                        error!("Failed to atomically complete sync: {}", e);
-                        // Fallback to manual status update - force to idle
-                        let _ = sqlx::query(
-                            "UPDATE sources SET status = 'idle', last_error = NULL, last_error_at = NULL, updated_at = NOW() WHERE id = $1"
-                        )
-                        .bind(source_id)
-                        .execute(state_clone.db.get_pool())
-                        .await;
-                    }
-                }
-                Ok(Err(e)) => {
-                    error!("Manual sync failed for source {}: {}", source.name, e);
-                    
-                    // Atomically mark sync as failed
-                    if let Err(complete_err) = state_clone.db.complete_sync_atomic(
-                        source_id, 
-                        false, 
-                        None, 
-                        Some(&format!("Sync failed: {}", e))
-                    ).await {
-                        error!("Failed to atomically mark sync as failed: {}", complete_err);
-                        // Fallback to manual status update - force to error state
-                        let error_msg = format!("Sync failed: {}", e);
-                        let _ = sqlx::query(
-                            "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
-                        )
-                        .bind(source_id)
-                        .bind(crate::db::sanitize::DbText(&error_msg))
-                        .execute(state_clone.db.get_pool())
-                        .await;
-                    }
-                }
-                Err(_timeout) => {
-                    error!("Manual sync timed out for source {}", source.name);
-                    
-                    // Handle timeout by resetting to error state
-                    let error_msg = "Sync operation timed out";
-                    if let Err(complete_err) = state_clone.db.complete_sync_atomic(
-                        source_id, 
-                        false, 
-                        None, 
-                        Some(error_msg)
-                    ).await {
-                        error!("Failed to atomically mark sync as timed out: {}", complete_err);
-                        // Fallback to manual status update - force to error state
-                        let _ = sqlx::query(
-                            "UPDATE sources SET status = 'error', last_error = $2, last_error_at = NOW(), updated_at = NOW() WHERE id = $1"
-                        )
-                        .bind(source_id)
-                        .bind(crate::db::sanitize::DbText(&error_msg))
-                        .execute(state_clone.db.get_pool())
-                        .await;
-                    }
+                let metadata = serde_json::json!({
+                    "source_type": source.source_type.to_string(),
+                    "source_id": source.id,
+                    "files_processed": outcome.processed,
+                    "files_failed": outcome.failed,
+                    "folders_failed": outcome.folders_failed
+                });
+                match outcome.failure_summary() {
+                    Some(summary) => Some(crate::models::CreateNotification {
+                        notification_type: "warning".to_string(),
+                        title: "Source Sync Finished With Errors".to_string(),
+                        message: format!("{}: {}", source.name, summary),
+                        action_url: Some("/sources".to_string()),
+                        metadata: Some(metadata),
+                    }),
+                    None if outcome.processed > 0 => Some(crate::models::CreateNotification {
+                        notification_type: "success".to_string(),
+                        title: "Source Sync Completed".to_string(),
+                        message: format!("Successfully processed {} files from {}", outcome.processed, source.name),
+                        action_url: Some("/documents".to_string()),
+                        metadata: Some(metadata),
+                    }),
+                    None => None,
                 }
             }
-            
-            cleanup().await;
+            Err(e) => {
+                error!("Sync failed for source {}: {}", source.name, e);
+                Some(crate::models::CreateNotification {
+                    notification_type: "error".to_string(),
+                    title: "Source Sync Failed".to_string(),
+                    message: format!("Sync failed for {}: {}", source.name, e),
+                    action_url: Some("/sources".to_string()),
+                    metadata: Some(serde_json::json!({
+                        "source_type": source.source_type.to_string(),
+                        "source_id": source.id,
+                        "error": e.to_string()
+                    })),
+                })
+            }
+        };
+        if let Some(notification) = notification {
+            if let Err(e) = state.db.create_notification(source.user_id, &notification).await {
+                error!("Failed to create sync notification: {}", e);
+            }
+        }
+    }
+
+    /// Claims the source (registry slot plus `start_sync_atomic`) and spawns
+    /// `run` as its sync task, handing it the run's cancellation token and
+    /// progress. A supervisor task awaits it, records a panicking task as a
+    /// failed sync so the source does not stay `syncing`, and only then
+    /// releases the slot and progress: no new run can claim the source
+    /// while the abnormal end of the previous one is still being written.
+    /// Refused while a task for the source is alive, including one that is
+    /// still stopping.
+    pub async fn run_claimed<F, Fut>(&self, source_id: Uuid, run: F) -> Result<(), SyncStartError>
+    where
+        F: FnOnce(CancellationToken, Arc<SyncProgress>) -> Fut,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let run_id = Uuid::new_v4();
+        let token = CancellationToken::new();
+
+        // Reserve the slot before writing the claim, so a stop request that
+        // arrives in between already finds the token.
+        {
+            let mut registry = lock_registry(&self.running_syncs);
+            if let Some(existing) = registry.get(&source_id) {
+                return Err(if existing.stopping { SyncStartError::Stopping } else { SyncStartError::AlreadyRunning });
+            }
+            registry.insert(source_id, RunningSync { run_id, token: token.clone(), stopping: false });
+        }
+        let claimed = match self.state.db.start_sync_atomic(source_id).await {
+            Ok(claimed) => claimed,
+            Err(e) => {
+                self.release_run(source_id, run_id);
+                return Err(SyncStartError::Db(e));
+            }
+        };
+        if !claimed {
+            self.release_run(source_id, run_id);
+            return Err(SyncStartError::NotClaimed);
+        }
+
+        let progress = Arc::new(SyncProgress::new());
+        self.state.sync_progress_tracker.register_sync(source_id, progress.clone());
+        let guard = SyncRunGuard {
+            registry: self.running_syncs.clone(),
+            tracker: self.state.sync_progress_tracker.clone(),
+            source_id,
+            run_id,
+        };
+        let task = tokio::spawn(run(token, progress));
+
+        let db = self.state.db.clone();
+        tokio::spawn(async move {
+            // Held until the abnormal end, if any, has been recorded.
+            let _guard = guard;
+            if let Err(join_error) = task.await {
+                let reason = if join_error.is_panic() { "sync task panicked" } else { "sync task was aborted" };
+                error!("{} for source {}: {}", reason, source_id, join_error);
+                let message = format!("{}: {}", reason, join_error);
+                let completion = SyncCompletion { status: SourceStatus::Error, error: Some(&message), files_synced: 0, files_pending: None };
+                match db.finish_sync(source_id, &completion).await {
+                    Ok(true) => {}
+                    Ok(false) => warn!("Source {} was no longer marked as syncing after its task ended abnormally", source_id),
+                    Err(e) => error!("Failed to record the abnormal end of sync for source {}: {}", source_id, e),
+                }
+            }
         });
-        
+
         Ok(())
     }
 
+    fn release_run(&self, source_id: Uuid, run_id: Uuid) {
+        let mut registry = lock_registry(&self.running_syncs);
+        if registry.get(&source_id).is_some_and(|run| run.run_id == run_id) {
+            registry.remove(&source_id);
+        }
+    }
+
+    /// Whether a sync task for the source is alive (running or stopping).
+    pub fn is_running(&self, source_id: Uuid) -> bool {
+        lock_registry(&self.running_syncs).contains_key(&source_id)
+    }
+
+    /// Asks the running sync to stop. The task keeps its registry slot until
+    /// it has actually exited, so a new sync cannot start underneath it; the
+    /// status and progress are updated right away for the UI, and the task
+    /// records its own counters when it ends.
     pub async fn stop_sync(&self, source_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Stopping sync for source {}", source_id);
-        
-        // Get the cancellation token for this sync
-        let cancellation_token = {
-            let running_syncs = self.running_syncs.read().await;
-            running_syncs.get(&source_id).cloned()
+
+        let token = {
+            let mut registry = lock_registry(&self.running_syncs);
+            registry.get_mut(&source_id).map(|run| {
+                run.stopping = true;
+                run.token.clone()
+            })
         };
-        
-        if let Some(token) = cancellation_token {
-            // Cancel the sync operation
-            token.cancel();
-            info!("Cancellation signal sent for source {}", source_id);
-            
-            // Atomically update status to cancelled
-            if let Err(e) = self.state.db.update_source_status_atomic(
-                source_id,
-                Some(crate::models::SourceStatus::Syncing),
-                crate::models::SourceStatus::Idle,
-                Some("Sync cancelled by user")
-            ).await {
-                error!("Failed to update source status after cancellation: {}", e);
-            }
-            
-            // Immediately unregister from progress tracker to update UI
-            self.state.sync_progress_tracker.unregister_sync(source_id);
-            
-            // Remove from running syncs list
-            {
-                let mut running_syncs = self.running_syncs.write().await;
-                running_syncs.remove(&source_id);
-            }
-            
-            info!("Sync cancellation completed for source {}", source_id);
-            Ok(())
-        } else {
-            Err("No running sync found for this source".into())
+        let Some(token) = token else {
+            return Err("No running sync found for this source".into());
+        };
+
+        token.cancel();
+        info!("Cancellation signal sent for source {}", source_id);
+
+        if let Err(e) = self.state.db.update_source_status_atomic(
+            source_id,
+            Some(SourceStatus::Syncing),
+            SourceStatus::Idle,
+            Some(SYNC_CANCELLED_MESSAGE),
+        ).await {
+            error!("Failed to update source status after cancellation: {}", e);
         }
+        self.state.sync_progress_tracker.unregister_sync(source_id);
+
+        Ok(())
+    }
+
+    /// Stops the running sync, if any, and waits up to `timeout` for its task
+    /// to exit. Returns whether no task is alive at the end.
+    pub async fn stop_sync_and_wait(&self, source_id: Uuid, timeout: Duration) -> bool {
+        if self.stop_sync(source_id).await.is_err() {
+            return !self.is_running(source_id);
+        }
+        let deadline = tokio::time::Instant::now() + timeout;
+        while self.is_running(source_id) {
+            if tokio::time::Instant::now() >= deadline {
+                warn!("Sync task for source {} is still running {:?} after the stop request", source_id, timeout);
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        true
     }
 
     /// Force reset a source that may be stuck in syncing state
     /// This is used as a fail-safe mechanism for race conditions
     pub async fn force_reset_source(&self, source_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Force resetting potentially stuck source {}", source_id);
-        
-        // Remove from running syncs list
-        {
-            let mut running_syncs = self.running_syncs.write().await;
-            running_syncs.remove(&source_id);
-        }
-        
-        // Unregister from progress tracker
+
+        lock_registry(&self.running_syncs).remove(&source_id);
         self.state.sync_progress_tracker.unregister_sync(source_id);
-        
+
         // Force reset database status to idle
         if let Err(e) = sqlx::query(
             "UPDATE sources SET status = 'idle', last_error = 'Force reset due to stuck sync', last_error_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'syncing'"
@@ -521,7 +511,7 @@ impl SourceScheduler {
             error!("Failed to force reset source status: {}", e);
             return Err(e.into());
         }
-        
+
         info!("Source {} force reset completed", source_id);
         Ok(())
     }
@@ -612,246 +602,6 @@ impl SourceScheduler {
                 ))
             }
         }
-    }
-
-    /// Check if a deep scan should be triggered based on sync results
-    async fn check_and_trigger_deep_scan(
-        source: &crate::models::Source,
-        files_processed: usize,
-        state: &Arc<AppState>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get sync history for intelligent decision making
-        let recent_syncs = sqlx::query(
-            r#"
-            SELECT 
-                COUNT(*) as sync_count,
-                SUM(CASE WHEN total_files_synced = 0 THEN 1 ELSE 0 END) as empty_sync_count,
-                MAX(last_sync_at) as last_sync,
-                MIN(last_sync_at) as first_sync
-            FROM (
-                SELECT total_files_synced, last_sync_at 
-                FROM sources 
-                WHERE id = $1 
-                ORDER BY last_sync_at DESC 
-                LIMIT 10
-            ) recent_syncs
-            "#
-        )
-        .bind(source.id)
-        .fetch_one(state.db.get_pool())
-        .await?;
-
-        // Get last deep scan time
-        let last_deep_scan = sqlx::query(
-            r#"
-            SELECT MAX(created_at) as last_deep_scan
-            FROM notifications
-            WHERE user_id = $1 
-            AND metadata->>'source_id' = $2
-            AND metadata->>'scan_type' = 'deep_scan'
-            AND notification_type = 'success'
-            "#
-        )
-        .bind(source.user_id)
-        .bind(source.id.to_string())
-        .fetch_one(state.db.get_pool())
-        .await?;
-
-        let mut should_trigger_deep_scan = false;
-        let mut reason = String::new();
-
-        // Trigger conditions:
-        
-        // 1. If the last 5+ syncs found no files, something might be wrong
-        let empty_sync_count: i64 = recent_syncs.try_get("empty_sync_count").unwrap_or(0);
-        if empty_sync_count >= 5 {
-            should_trigger_deep_scan = true;
-            reason = "Multiple consecutive syncs found no files - deep scan needed to verify directory structure".to_string();
-        }
-        
-        // 2. If we haven't done a deep scan in over 7 days
-        let last_deep_time: Option<chrono::DateTime<chrono::Utc>> = last_deep_scan.try_get("last_deep_scan").ok();
-        if let Some(last_deep) = last_deep_time {
-            let days_since_deep_scan = (chrono::Utc::now() - last_deep).num_days();
-            if days_since_deep_scan > 7 {
-                should_trigger_deep_scan = true;
-                reason = format!("No deep scan in {} days - periodic verification needed", days_since_deep_scan);
-            }
-        }
-        
-        // 3. If this is the first sync ever (no deep scan history)
-        let sync_count: i64 = recent_syncs.try_get("sync_count").unwrap_or(0);
-        if last_deep_time.is_none() && sync_count <= 1 {
-            should_trigger_deep_scan = true;
-            reason = "First sync completed - deep scan recommended for initial directory discovery".to_string();
-        }
-        
-        // 4. If sync found files but we've been getting inconsistent results
-        else if files_processed > 0 {
-            // Check for erratic sync patterns (alternating between finding files and not)
-            let erratic_check = sqlx::query(
-                r#"
-                SELECT 
-                    COUNT(DISTINCT CASE WHEN total_files_synced > 0 THEN 1 ELSE 0 END) as distinct_states
-                FROM (
-                    SELECT total_files_synced 
-                    FROM sources 
-                    WHERE id = $1 
-                    ORDER BY last_sync_at DESC 
-                    LIMIT 5
-                ) recent
-                "#
-            )
-            .bind(source.id)
-            .fetch_one(state.db.get_pool())
-            .await?;
-            
-            let distinct_states: i64 = erratic_check.try_get("distinct_states").unwrap_or(0);
-            if distinct_states > 1 {
-                should_trigger_deep_scan = true;
-                reason = "Inconsistent sync results detected - deep scan needed for stability".to_string();
-            }
-        }
-
-        if should_trigger_deep_scan {
-            info!("🎯 Intelligent deep scan trigger activated for source {}: {}", source.name, reason);
-
-            let webdav_config: WebDAVSourceConfig = serde_json::from_value(source.config.clone())?;
-            if let Err(e) = validate_outbound_url(&WebDAVConfig::normalize_server_url(&webdav_config.server_url)).await {
-                warn!("Automatic deep scan for source {} not started: {}", source.name, e);
-                if let Err(db_err) = state
-                    .db
-                    .update_source_status(source.id, crate::models::SourceStatus::Error, Some(e.to_string()))
-                    .await
-                {
-                    error!("Failed to update source status: {}", db_err);
-                }
-                return Ok(());
-            }
-            
-            // Create notification about automatic deep scan
-            let notification = crate::models::CreateNotification {
-                notification_type: "info".to_string(),
-                title: "Automatic Deep Scan Triggered".to_string(),
-                message: format!("Starting deep scan for {}: {}", source.name, reason),
-                action_url: Some("/sources".to_string()),
-                metadata: Some(serde_json::json!({
-                    "source_type": source.source_type.to_string(),
-                    "source_id": source.id,
-                    "scan_type": "deep_scan",
-                    "trigger_reason": reason,
-                    "automatic": true
-                })),
-            };
-            
-            if let Err(e) = state.db.create_notification(source.user_id, &notification).await {
-                error!("Failed to create deep scan notification: {}", e);
-            }
-            
-            // Trigger the deep scan via the API endpoint
-            // We'll reuse the existing deep scan logic from the sources route
-            let webdav_service = crate::services::webdav::WebDAVService::new(
-                crate::services::webdav::WebDAVConfig {
-                    server_url: webdav_config.server_url.clone(),
-                    username: webdav_config.username.clone(),
-                    password: webdav_config.password.clone(),
-                    watch_folders: webdav_config.watch_folders.clone(),
-                    file_extensions: webdav_config.file_extensions.clone(),
-                    timeout_seconds: 600, // 10 minutes for deep scan
-                    server_type: webdav_config.server_type.clone(),
-                }
-            )?;
-            
-            // Run smart deep scan in background
-            let source_clone = source.clone();
-            let state_clone = state.clone();
-            tokio::spawn(async move {
-                // Use smart sync service for automatic deep scans
-                let smart_sync_service = crate::services::webdav::SmartSyncService::new(state_clone.clone());
-                let mut all_files_to_process = Vec::new();
-                let mut total_directories_tracked = 0;
-                
-                // Process all watch folders using smart deep scan
-                for watch_folder in &webdav_config.watch_folders {
-                    match smart_sync_service.perform_smart_sync(
-                        source_clone.user_id, 
-                        Some(source_clone.id),
-                        &webdav_service, 
-                        watch_folder, 
-                        crate::services::webdav::SmartSyncStrategy::FullDeepScan, // Force deep scan for automatic triggers
-                        None // No progress tracking for automatic syncs
-                    ).await {
-                        Ok(sync_result) => {
-                            all_files_to_process.extend(sync_result.files);
-                            total_directories_tracked += sync_result.directories.len();
-                        }
-                        Err(e) => {
-                            error!("Automatic smart deep scan failed for watch folder {}: {}", watch_folder, e);
-                        }
-                    }
-                }
-                
-                info!("🎉 Automatic smart deep scan completed for {}: {} files found, {} directories tracked", 
-                      source_clone.name, all_files_to_process.len(), total_directories_tracked);
-                
-                // Process the files if any were found
-                let files_processed = if !all_files_to_process.is_empty() {
-                            let total_files = all_files_to_process.len();
-                            // Filter and process files as in the manual deep scan
-                            let files_to_process: Vec<_> = all_files_to_process.into_iter()
-                                .filter(|file_info| {
-                                    if file_info.is_directory {
-                                        return false;
-                                    }
-                                    let file_extension = std::path::Path::new(&file_info.name)
-                                        .extension()
-                                        .and_then(|ext| ext.to_str())
-                                        .unwrap_or("")
-                                        .to_lowercase();
-                                    webdav_config.file_extensions.contains(&file_extension)
-                                })
-                                .collect();
-                            
-                            let processed_count = files_to_process.len();
-                            
-                            if let Err(e) = crate::routes::webdav::webdav_sync::process_files_for_deep_scan(
-                                state_clone.clone(),
-                                source_clone.user_id,
-                                &webdav_service,
-                                &files_to_process,
-                                true, // enable background OCR
-                                Some(source_clone.id)
-                            ).await {
-                                error!("Failed to process files from automatic deep scan: {}", e);
-                            }
-                            
-                            processed_count
-                        } else {
-                            0
-                        };
-                        
-                        // Success notification
-                        let notification = crate::models::CreateNotification {
-                            notification_type: "success".to_string(),
-                            title: "Automatic Deep Scan Completed".to_string(),
-                            message: format!("Deep scan of {} completed successfully", source_clone.name),
-                            action_url: Some("/documents".to_string()),
-                            metadata: Some(serde_json::json!({
-                                "source_type": source_clone.source_type.to_string(),
-                                "source_id": source_clone.id,
-                                "scan_type": "deep_scan",
-                                "automatic": true,
-                                "files_found": files_processed
-                            })),
-                        };
-                        
-                        if let Err(e) = state_clone.db.create_notification(source_clone.user_id, &notification).await {
-                            error!("Failed to create success notification: {}", e);
-                        }
-            });
-        }
-        
-        Ok(())
     }
 
     /// Perform automatic validation of source health and connectivity

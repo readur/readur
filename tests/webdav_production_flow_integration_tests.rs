@@ -425,10 +425,10 @@ async fn test_production_concurrent_user_actions() {
             // Create scheduler instance for this task
             let scheduler_local = SourceScheduler::new(state_clone);
             
-            let result = match action.as_str() {
+            let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = match action.as_str() {
                 "trigger" => {
                     println!("🎯 User action: trigger sync for source {}", source_id);
-                    scheduler_local.trigger_sync(source_id).await
+                    scheduler_local.trigger_sync(source_id).await.map_err(Into::into)
                 }
                 "stop" => {
                     println!("🛑 User action: stop sync for source {}", source_id);

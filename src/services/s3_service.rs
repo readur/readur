@@ -1,13 +1,11 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike};
+use chrono::Datelike;
 use tracing::{debug, info, warn, error};
-use serde_json;
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-use futures::stream::StreamExt;
-use tokio::io::AsyncReadExt;
 
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
@@ -15,9 +13,15 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::ByteStream;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::types::{CompletedPart, CompletedMultipartUpload};
+#[cfg(feature = "s3")]
+use crate::services::s3_client::describe_error;
+#[cfg(feature = "s3")]
+use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, MAX_LISTING_PAGES};
 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
+use crate::utils::extension_filter::ExtensionFilter;
+use crate::utils::sync_cancelled::{cancelled, sleep_unless_cancelled};
 
 /// Threshold for using streaming multipart uploads (100MB)
 const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
@@ -25,11 +29,58 @@ const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
 /// Multipart upload chunk size (16MB - AWS minimum is 5MB, we use 16MB for better performance)
 const MULTIPART_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
+/// Upper bound on reading one object's body. The SDK's attempt timeout ends
+/// once the response headers arrive; the streamed body is read here.
+const DOWNLOAD_BODY_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Wait before the second attempt of a retried S3 operation; doubled per attempt.
+const RETRY_BASE_DELAY_MS: u64 = 100;
+
+/// Check that a downloaded body matches the Content-Length the server sent.
+pub fn verify_content_length(key: &str, expected: Option<i64>, actual: usize) -> Result<()> {
+    match expected {
+        Some(expected) if expected >= 0 && expected as u64 != actual as u64 => Err(anyhow!(
+            "S3 object {} download incomplete: expected {} bytes, received {}",
+            key, expected, actual
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// One GetObject attempt: fetch, read the body within a bound, and verify
+/// the length. Retrying is the caller's job.
+#[cfg(feature = "s3")]
+async fn fetch_object(client: &Client, bucket: &str, key: &str) -> Result<Vec<u8>> {
+    let response = client
+        .get_object()
+        .bucket(bucket)
+        .key(key)
+        .send()
+        .await
+        .map_err(|e| anyhow!("Failed to download S3 object {}: {}", key, describe_error(&e)))?;
+
+    let expected = response.content_length();
+    let body = tokio::time::timeout(DOWNLOAD_BODY_TIMEOUT, response.body.collect())
+        .await
+        .map_err(|_| anyhow!("Timed out reading S3 object {} after {:?}", key, DOWNLOAD_BODY_TIMEOUT))?
+        .map_err(|e| anyhow!("Failed to read S3 object body {}: {}", key, describe_error(&e)))?;
+
+    let bytes = body.into_bytes().to_vec();
+    verify_content_length(key, expected, bytes.len())?;
+    Ok(bytes)
+}
+
 #[derive(Debug, Clone)]
 pub struct S3Service {
     #[cfg(feature = "s3")]
     client: Client,
     config: S3SourceConfig,
+    /// Normalised form of `config.file_extensions`; empty allows every key.
+    extension_filter: ExtensionFilter,
+    /// Checked before each listing page and each download attempt.
+    cancellation_token: Option<CancellationToken>,
+    /// Wait before the second attempt of an operation; doubled per attempt.
+    retry_base_delay: Duration,
 }
 
 impl S3Service {
@@ -54,11 +105,37 @@ impl S3Service {
 
         let client = crate::services::s3_client::build_client(&config).await;
 
+        let extension_filter = ExtensionFilter::new(&config.file_extensions);
         Ok(Self {
             #[cfg(feature = "s3")]
             client,
-            config
+            config,
+            extension_filter,
+            cancellation_token: None,
+            retry_base_delay: Duration::from_millis(RETRY_BASE_DELAY_MS),
         })
+        }
+    }
+
+    /// Attach a token that stops listing (between pages) and downloads
+    /// (before each attempt) once cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Overrides the retry wait so a test can observe it being cut short.
+    #[cfg(test)]
+    fn with_retry_base_delay(mut self, delay: Duration) -> Self {
+        self.retry_base_delay = delay;
+        self
+    }
+
+    /// Error when the attached token (if any) has been cancelled.
+    fn check_cancelled(&self, what: &str) -> Result<()> {
+        match &self.cancellation_token {
+            Some(token) if token.is_cancelled() => Err(cancelled(format!("S3 {what}"))),
+            _ => Ok(()),
         }
     }
 
@@ -77,130 +154,29 @@ impl S3Service {
         
         #[cfg(feature = "s3")]
         {
-        info!("Scanning S3 bucket: {} prefix: {}", self.config.bucket_name, folder_path);
+        // Object keys are returned in full, so the stored relative path is
+        // exactly what download_file() expects regardless of the prefix.
+        let prefix = listing_prefix(self.config.prefix.as_deref(), folder_path);
+        info!("Scanning S3 bucket: {} prefix: '{}'", self.config.bucket_name, prefix);
 
-        let mut files = Vec::new();
-        let mut continuation_token: Option<String> = None;
+        let ctx = ListingContext {
+            client: &self.client,
+            bucket: &self.config.bucket_name,
+            region: &self.config.region,
+            filter: &self.extension_filter,
+            cancellation: self.cancellation_token.as_ref(),
+            max_pages: MAX_LISTING_PAGES,
+        };
+        let files = list_objects(&ctx, &prefix).await?;
 
-        loop {
-            let mut list_request = self.client
-                .list_objects_v2()
-                .bucket(&self.config.bucket_name)
-                .prefix(folder_path);
-
-            if let Some(token) = &continuation_token {
-                list_request = list_request.continuation_token(token);
-            }
-
-            match list_request.send().await {
-                Ok(response) => {
-                    if let Some(contents) = response.contents {
-                        for object in contents {
-                            if let Some(key) = object.key {
-                                // Skip "directories" (keys ending with /)
-                                if key.ends_with('/') {
-                                    continue;
-                                }
-
-                                // Check file extension
-                                let extension = std::path::Path::new(&key)
-                                    .extension()
-                                    .and_then(|ext| ext.to_str())
-                                    .unwrap_or("")
-                                    .to_lowercase();
-
-                                if !self.config.file_extensions.contains(&extension) {
-                                    debug!("Skipping S3 object with unsupported extension: {}", key);
-                                    continue;
-                                }
-
-                                let file_name = std::path::Path::new(&key)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&key)
-                                    .to_string();
-
-                                let size = object.size.unwrap_or(0);
-                                let last_modified = object.last_modified
-                                    .and_then(|dt| {
-                                        // Convert AWS DateTime to chrono DateTime
-                                        let timestamp = dt.secs();
-                                        DateTime::from_timestamp(timestamp, 0)
-                                    });
-
-                                let etag = object.e_tag.unwrap_or_else(|| {
-                                    // Generate a fallback ETag if none provided
-                                    format!("fallback-{}", &key.chars().take(16).collect::<String>())
-                                });
-
-                                // Remove quotes from ETag if present
-                                let etag = etag.trim_matches('"').to_string();
-
-                                let mime_type = Self::get_mime_type(&extension);
-
-                                // Build additional metadata from S3 object properties
-                                let mut metadata_map = serde_json::Map::new();
-                                
-                                // Add S3-specific metadata
-                                if let Some(storage_class) = &object.storage_class {
-                                    metadata_map.insert("storage_class".to_string(), serde_json::Value::String(storage_class.as_str().to_string()));
-                                }
-                                
-                                if let Some(owner) = &object.owner {
-                                    if let Some(display_name) = &owner.display_name {
-                                        metadata_map.insert("owner_display_name".to_string(), serde_json::Value::String(display_name.clone()));
-                                    }
-                                    if let Some(id) = &owner.id {
-                                        metadata_map.insert("owner_id".to_string(), serde_json::Value::String(id.clone()));
-                                    }
-                                }
-                                
-                                // Store the S3 key for reference
-                                metadata_map.insert("s3_key".to_string(), serde_json::Value::String(key.clone()));
-                                
-                                // Add bucket name for reference
-                                metadata_map.insert("s3_bucket".to_string(), serde_json::Value::String(self.config.bucket_name.clone()));
-                                
-                                // If we have region info, add it
-                                metadata_map.insert("s3_region".to_string(), serde_json::Value::String(self.config.region.clone()));
-                                
-                                let file_info = FileIngestionInfo {
-                                    relative_path: key.clone(),
-                                    full_path: format!("s3://{}/{}", self.config.bucket_name, key), // S3 full path includes bucket
-                                    #[allow(deprecated)]
-                                    path: key.clone(),
-                                    name: file_name,
-                                    size,
-                                    mime_type,
-                                    last_modified,
-                                    etag,
-                                    is_directory: false,
-                                    created_at: None, // S3 doesn't provide creation time, only last modified
-                                    permissions: None, // S3 uses different permission model (ACLs/policies)
-                                    owner: object.owner.as_ref().and_then(|o| o.display_name.clone()),
-                                    group: None, // S3 doesn't have Unix-style groups
-                                    metadata: if metadata_map.is_empty() { None } else { Some(serde_json::Value::Object(metadata_map)) },
-                                };
-
-                                files.push(file_info);
-                            }
-                        }
-                    }
-
-                    // Check if there are more results
-                    if response.is_truncated == Some(true) {
-                        continuation_token = response.next_continuation_token;
-                    } else {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    return Err(anyhow!("Failed to list S3 objects: {}", e));
-                }
-            }
+        if files.is_empty() && self.config.prefix.as_deref().is_some_and(|p| !p.trim().trim_matches('/').is_empty()) {
+            warn!(
+                "No objects found in S3 bucket {} under '{}' (source prefix '{}' joined with watch folder '{}'); \
+                 check that the prefix and the watch folder do not both include the same path",
+                self.config.bucket_name, prefix, self.config.prefix.as_deref().unwrap_or(""), folder_path
+            );
         }
-
-        info!("Found {} files in S3 bucket {} prefix {}", files.len(), self.config.bucket_name, folder_path);
+        info!("Found {} files in S3 bucket {} prefix '{}'", files.len(), self.config.bucket_name, prefix);
         Ok(files)
         }
     }
@@ -215,23 +191,28 @@ impl S3Service {
         #[cfg(feature = "s3")]
         {
         info!("Downloading S3 object: {}/{}", self.config.bucket_name, object_key);
-
-        let response = self.client
-            .get_object()
-            .bucket(&self.config.bucket_name)
-            .key(object_key)
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to download S3 object {}: {}", object_key, e))?;
-
-        let body = response.body.collect().await
-            .map_err(|e| anyhow!("Failed to read S3 object body: {}", e))?;
-
-        let bytes = body.into_bytes().to_vec();
+        let bytes = self.fetch_object_with_retry("download_file", object_key).await?;
         info!("Downloaded S3 object {} ({} bytes)", object_key, bytes.len());
-        
         Ok(bytes)
         }
+    }
+
+    /// GetObject with the service's retry policy, a bounded body read and a
+    /// Content-Length check. Used by both the sync download path and the
+    /// storage-backend read path.
+    #[cfg(feature = "s3")]
+    async fn fetch_object_with_retry(&self, operation: &str, key: &str) -> Result<Vec<u8>> {
+        let key_owned = key.to_string();
+        let bucket_name = self.config.bucket_name.clone();
+        let client = self.client.clone();
+
+        self.retry_operation(&format!("{}: {}", operation, key), || {
+            let key = key_owned.clone();
+            let bucket_name = bucket_name.clone();
+            let client = client.clone();
+            async move { fetch_object(&client, &bucket_name, &key).await }
+        })
+        .await
     }
 
     /// Test S3 connection and access to bucket
@@ -252,7 +233,7 @@ impl S3Service {
                 .max_keys(1)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Failed to access S3 bucket {}: {}", self.config.bucket_name, e))?;
+                .map_err(|e| anyhow!("Failed to access S3 bucket {}: {}", self.config.bucket_name, describe_error(&e)))?;
 
             // Test if we can get bucket region (additional validation)
             let _head_bucket_response = self.client
@@ -260,7 +241,7 @@ impl S3Service {
                 .bucket(&self.config.bucket_name)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Cannot access bucket {}: {}", self.config.bucket_name, e))?;
+                .map_err(|e| anyhow!("Cannot access bucket {}: {}", self.config.bucket_name, describe_error(&e)))?;
 
             let object_count = response.key_count.unwrap_or(0);
             
@@ -292,7 +273,7 @@ impl S3Service {
     }
 
     /// Get MIME type based on file extension
-    fn get_mime_type(extension: &str) -> String {
+    pub(crate) fn get_mime_type(extension: &str) -> String {
         match extension {
             "pdf" => "application/pdf",
             "txt" => "text/plain",
@@ -418,7 +399,7 @@ impl S3Service {
                     }
 
                     put_request.send().await
-                        .map_err(|e| anyhow!("Failed to store file {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to store file {}: {}", key, describe_error(&e)))?;
 
                     Ok(())
                 }
@@ -474,7 +455,7 @@ impl S3Service {
                     }
 
                     let create_response = create_request.send().await
-                        .map_err(|e| anyhow!("Failed to initiate multipart upload for {}: {}", key, e))?;
+                        .map_err(|e| anyhow!("Failed to initiate multipart upload for {}: {}", key, describe_error(&e)))?;
                     
                     let upload_id = create_response.upload_id()
                         .ok_or_else(|| anyhow!("Missing upload ID in multipart upload response"))?;
@@ -500,7 +481,7 @@ impl S3Service {
                             .body(ByteStream::from(chunk.to_vec()))
                             .send()
                             .await
-                            .map_err(|e| anyhow!("Failed to upload part {} for {}: {}", part_number, key, e))?;
+                            .map_err(|e| anyhow!("Failed to upload part {} for {}: {}", part_number, key, describe_error(&e)))?;
 
                         let etag = upload_part_response.e_tag()
                             .ok_or_else(|| anyhow!("Missing ETag in upload part response"))?;
@@ -544,11 +525,11 @@ impl S3Service {
                                     .send()
                                     .await
                                 {
-                                    error!("Failed to abort multipart upload: {}", abort_err);
+                                    error!("Failed to abort multipart upload: {}", describe_error(&abort_err));
                                 }
                             });
                             
-                            anyhow!("Failed to complete multipart upload for {}: {}", key, e)
+                            anyhow!("Failed to complete multipart upload for {}: {}", key, describe_error(&e))
                         })?;
 
                     info!("Successfully completed multipart upload for {}", key);
@@ -557,47 +538,6 @@ impl S3Service {
             }).await?;
 
             Ok(())
-        }
-    }
-
-    /// Retrieve a file from S3
-    pub async fn retrieve_file(&self, key: &str) -> Result<Vec<u8>> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
-
-            let key_owned = key.to_string();
-            let bucket_name = self.config.bucket_name.clone();
-            let client = self.client.clone();
-
-            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
-                let key = key_owned.clone();
-                let bucket_name = bucket_name.clone();
-                let client = client.clone();
-
-                async move {
-                    let response = client
-                        .get_object()
-                        .bucket(&bucket_name)
-                        .key(&key)
-                        .send()
-                        .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
-
-                    let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
-
-                    Ok(body.into_bytes().to_vec())
-                }
-            }).await?;
-
-            info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
-            Ok(bytes)
         }
     }
 
@@ -618,83 +558,9 @@ impl S3Service {
                 .key(key)
                 .send()
                 .await
-                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, e))?;
+                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, describe_error(&e)))?;
 
             info!("Successfully deleted file: {}", key);
-            Ok(())
-        }
-    }
-
-    /// Check if a file exists in S3
-    pub async fn file_exists(&self, key: &str) -> Result<bool> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            match self.client
-                .head_object()
-                .bucket(&self.config.bucket_name)
-                .key(key)
-                .send()
-                .await
-            {
-                Ok(_) => Ok(true),
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("NotFound") || error_msg.contains("404") {
-                        Ok(false)
-                    } else {
-                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
-                    }
-                }
-            }
-        }
-    }
-
-    /// Delete all files for a document (document, thumbnail, processed image)
-    pub async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
-        }
-        
-        #[cfg(feature = "s3")]
-        {
-            let document_key = self.generate_document_key(user_id, document_id, filename);
-            let thumbnail_key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
-            let processed_key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
-
-            let mut errors = Vec::new();
-
-            // Delete document file
-            if let Err(e) = self.delete_file(&document_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Document: {}", e));
-                }
-            }
-
-            // Delete thumbnail
-            if let Err(e) = self.delete_file(&thumbnail_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Thumbnail: {}", e));
-                }
-            }
-
-            // Delete processed image
-            if let Err(e) = self.delete_file(&processed_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Processed image: {}", e));
-                }
-            }
-
-            if !errors.is_empty() {
-                return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
-            }
-
-            info!("Successfully deleted all files for document {}", document_id);
             Ok(())
         }
     }
@@ -748,11 +614,11 @@ impl S3Service {
         Fut: std::future::Future<Output = Result<T>>,
     {
         const MAX_RETRIES: u32 = 3;
-        const BASE_DELAY_MS: u64 = 100;
         
         let mut last_error = None;
         
         for attempt in 0..=MAX_RETRIES {
+            self.check_cancelled(operation_name)?;
             match operation().await {
                 Ok(result) => {
                     if attempt > 0 {
@@ -764,10 +630,11 @@ impl S3Service {
                     last_error = Some(e);
                     
                     if attempt < MAX_RETRIES {
-                        let delay_ms = BASE_DELAY_MS * 2u64.pow(attempt);
-                        warn!("S3 operation '{}' failed (attempt {}/{}), retrying in {}ms: {}", 
-                              operation_name, attempt + 1, MAX_RETRIES + 1, delay_ms, last_error.as_ref().unwrap());
-                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        let delay = self.retry_base_delay * 2u32.pow(attempt);
+                        warn!("S3 operation '{}' failed (attempt {}/{}), retrying in {:?}: {}", 
+                              operation_name, attempt + 1, MAX_RETRIES + 1, delay, last_error.as_ref().unwrap());
+                        // A stop request ends the wait, and the operation, right away.
+                        sleep_unless_cancelled(delay, self.cancellation_token.as_ref(), &format!("S3 {operation_name}")).await?;
                     }
                 }
             }
@@ -828,32 +695,7 @@ impl StorageBackend for S3Service {
         #[cfg(feature = "s3")]
         {
             info!("Retrieving file from S3: {}/{}", self.config.bucket_name, key);
-
-            let key_owned = key.to_string();
-            let bucket_name = self.config.bucket_name.clone();
-            let client = self.client.clone();
-
-            let bytes = self.retry_operation(&format!("retrieve_file: {}", key), || {
-                let key = key_owned.clone();
-                let bucket_name = bucket_name.clone();
-                let client = client.clone();
-
-                async move {
-                    let response = client
-                        .get_object()
-                        .bucket(&bucket_name)
-                        .key(&key)
-                        .send()
-                        .await
-                        .map_err(|e| anyhow!("Failed to retrieve file {}: {}", key, e))?;
-
-                    let body = response.body.collect().await
-                        .map_err(|e| anyhow!("Failed to read file body: {}", e))?;
-
-                    Ok(body.into_bytes().to_vec())
-                }
-            }).await?;
-
+            let bytes = self.fetch_object_with_retry("retrieve_file", key).await?;
             info!("Successfully retrieved file: {} ({} bytes)", key, bytes.len());
             Ok(bytes)
         }
@@ -926,14 +768,9 @@ impl StorageBackend for S3Service {
                 .await
             {
                 Ok(_) => Ok(true),
-                Err(e) => {
-                    let error_msg = e.to_string();
-                    if error_msg.contains("NotFound") || error_msg.contains("404") {
-                        Ok(false)
-                    } else {
-                        Err(anyhow!("Failed to check file existence {}: {}", key, e))
-                    }
-                }
+                // HeadObject reports a missing key as a NotFound service error.
+                Err(e) if e.as_service_error().map(|s| s.is_not_found()) == Some(true) => Ok(false),
+                Err(e) => Err(anyhow!("Failed to check file existence {}: {}", key, describe_error(&e))),
             }
         }
     }
@@ -948,6 +785,10 @@ impl StorageBackend for S3Service {
         Ok(())
     }
 }
+
+#[cfg(all(test, feature = "s3"))]
+#[path = "s3_service_wiremock_tests.rs"]
+mod wiremock_tests;
 
 #[cfg(test)]
 mod tests {
@@ -975,6 +816,15 @@ mod tests {
         assert!(service.is_ok());
         #[cfg(not(feature = "s3"))]
         assert!(service.is_err());
+    }
+
+    #[test]
+    fn content_length_mismatch_is_an_error() {
+        assert!(verify_content_length("k", None, 5).is_ok());
+        assert!(verify_content_length("k", Some(5), 5).is_ok());
+        assert!(verify_content_length("k", Some(-1), 5).is_ok(), "unknown length is not checked");
+        let err = verify_content_length("k", Some(100), 5).unwrap_err().to_string();
+        assert!(err.contains("expected 100 bytes, received 5"), "{err}");
     }
 
     #[test]

@@ -2,6 +2,9 @@
 
 pub mod common; // Common utilities and shared functions
 pub mod config;
+pub mod directory_commit;
+pub mod fallback_etag;
+pub mod paths;
 pub mod service; 
 pub mod smart_sync;
 pub mod progress_shim; // Backward compatibility shim for simplified progress tracking
@@ -10,11 +13,12 @@ pub mod progress_shim; // Backward compatibility shim for simplified progress tr
 pub use common::build_user_agent;
 pub use config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
 pub use service::{
-    WebDAVService, WebDAVDiscoveryResult, WebDAVDownloadResult, ServerCapabilities, HealthStatus, test_webdav_connection,
+    WebDAVService, WebDAVDiscoveryResult, WebDAVScanResult, DiscoveryTracking, WebDAVDownloadResult, ServerCapabilities, HealthStatus, test_webdav_connection,
     ValidationReport, ValidationIssue, ValidationIssueType, ValidationSeverity, 
     ValidationRecommendation, ValidationAction, ValidationSummary
 };
-pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult};
+pub use smart_sync::{SmartSyncService, SmartSyncDecision, SmartSyncStrategy, SmartSyncResult, SmartSyncOutcome};
+pub use directory_commit::PendingDirectoryCommit;
 
 // Backward compatibility exports for progress tracking (simplified)
 pub use progress_shim::{SyncProgress, SyncPhase, ProgressStats};

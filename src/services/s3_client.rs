@@ -19,6 +19,15 @@ use aws_types::region::Region as AwsRegion;
 #[cfg(feature = "s3")]
 use tracing::{debug, info, warn};
 
+/// Render an SDK error with its full source chain, including the service
+/// error code and message. `SdkError`'s own `Display` is only the variant
+/// name ("service error"), which hides the cause from logs, from
+/// `sources.last_error`, and from the string-based error categorisation.
+#[cfg(feature = "s3")]
+pub(crate) fn describe_error<E: std::error::Error>(err: &E) -> String {
+    aws_sdk_s3::error::DisplayErrorContext(err).to_string()
+}
+
 fn custom_endpoint(config: &S3SourceConfig) -> Option<&str> {
     config.endpoint_url.as_deref().map(str::trim).filter(|u| !u.is_empty())
 }
@@ -71,6 +80,22 @@ fn filtering_http_client() -> aws_sdk_s3::config::SharedHttpClient {
         .build_with_resolver(FilteringResolver)
 }
 
+/// Connect / time-to-first-byte / per-attempt limits. Without these the SDK
+/// only bounds the connect phase, so a server that accepts the connection
+/// and then stalls would hold a sync slot indefinitely: there is no
+/// wall-clock limit on a sync as a whole, so these per-attempt timeouts are
+/// the only bound. The attempt limit is generous so large objects still
+/// complete.
+#[cfg(feature = "s3")]
+pub(crate) fn timeout_config() -> aws_sdk_s3::config::timeout::TimeoutConfig {
+    use std::time::Duration;
+    aws_sdk_s3::config::timeout::TimeoutConfig::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .read_timeout(Duration::from_secs(60))
+        .operation_attempt_timeout(Duration::from_secs(600))
+        .build()
+}
+
 #[cfg(feature = "s3")]
 fn client_for_style(config: &S3SourceConfig, force_path_style: bool) -> Client {
     let credentials = Credentials::new(
@@ -87,6 +112,7 @@ fn client_for_style(config: &S3SourceConfig, force_path_style: bool) -> Client {
         .credentials_provider(credentials)
         .behavior_version_latest()
         .http_client(filtering_http_client())
+        .timeout_config(timeout_config())
         .force_path_style(force_path_style);
     if let Some(endpoint_url) = custom_endpoint(config) {
         builder = builder.endpoint_url(endpoint_url);
@@ -219,6 +245,19 @@ mod tests {
         cfg.force_path_style = Some(true);
         let client = build_client(&cfg).await;
         assert!(client.config().http_client().is_some());
+    }
+
+    #[cfg(feature = "s3")]
+    #[tokio::test]
+    async fn clients_have_connect_read_and_attempt_timeouts() {
+        use std::time::Duration;
+        let mut cfg = base_config();
+        cfg.force_path_style = Some(true);
+        let client = build_client(&cfg).await;
+        let timeouts = client.config().timeout_config().expect("timeout config is set");
+        assert_eq!(timeouts.connect_timeout(), Some(Duration::from_secs(10)));
+        assert_eq!(timeouts.read_timeout(), Some(Duration::from_secs(60)));
+        assert_eq!(timeouts.operation_attempt_timeout(), Some(Duration::from_secs(600)));
     }
 
     /// Requests go through the filtering HTTP client to a host name that

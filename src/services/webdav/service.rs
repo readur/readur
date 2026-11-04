@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::HashSet;
 use tokio::sync::Semaphore;
-use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 // futures_util::stream import removed as unused
 use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -21,15 +21,71 @@ use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
+use crate::utils::sync_cancelled::{cancelled, is_cancelled, sleep_unless_cancelled};
 
-use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
-use super::common::build_user_agent;
+use super::config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
+use super::common::{build_user_agent, retry_after_delay, verify_download};
+use super::paths::{decode_href, encode_path, normalize_watch_folder};
+
+/// Longest wait a server-supplied Retry-After header can impose.
+const MAX_RETRY_AFTER: Duration = Duration::from_secs(120);
 
 /// Results from WebDAV discovery including both files and directories
 #[derive(Debug, Clone)]
 pub struct WebDAVDiscoveryResult {
     pub files: Vec<FileIngestionInfo>,
     pub directories: Vec<FileIngestionInfo>,
+}
+
+/// Result of a directory scan that also reports which subdirectories could not
+/// be listed, so callers never treat an incompletely scanned subtree as current.
+#[derive(Debug, Clone, Default)]
+pub struct WebDAVScanResult {
+    pub files: Vec<FileIngestionInfo>,
+    pub directories: Vec<FileIngestionInfo>,
+    /// The scanned directory's own entry from its listing (carries its ETag).
+    pub root: Option<FileIngestionInfo>,
+    /// Directories whose listing failed or was skipped; their descendants are absent.
+    pub failed_directories: Vec<String>,
+}
+
+impl From<WebDAVScanResult> for WebDAVDiscoveryResult {
+    fn from(scan: WebDAVScanResult) -> Self {
+        Self { files: scan.files, directories: scan.directories }
+    }
+}
+
+/// Error-tracker context for discovery: records per-directory outcomes and
+/// skips directories that are in failure cooldown.
+#[derive(Clone)]
+pub struct DiscoveryTracking {
+    pub user_id: uuid::Uuid,
+    pub source_id: Option<uuid::Uuid>,
+    pub tracker: SourceErrorTracker,
+}
+
+/// PROPFIND body requesting the properties needed for directory listings.
+const PROPFIND_LISTING_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:displayname/>
+                    <D:getcontentlength/>
+                    <D:getlastmodified/>
+                    <D:getetag/>
+                    <D:resourcetype/>
+                    <D:creationdate/>
+                </D:prop>
+            </D:propfind>"#;
+
+/// Joins a base URL and a decoded relative path with exactly one slash between
+/// them, percent-encoding the path's segments for the request line.
+fn join_url(base_url: &str, path: &str) -> String {
+    let clean_path = path.trim_start_matches('/');
+    if clean_path.is_empty() {
+        base_url.trim_end_matches('/').to_string()
+    } else {
+        format!("{}/{}", base_url.trim_end_matches('/'), encode_path(clean_path))
+    }
 }
 
 /// Result of downloading a file with MIME type detection
@@ -154,9 +210,17 @@ pub struct WebDAVService {
     download_semaphore: Arc<Semaphore>,
     /// Stores the working protocol (updated after successful protocol detection)
     working_protocol: Arc<std::sync::RwLock<Option<String>>>,
+    /// When set, discovery and downloads stop at the next check once it is cancelled.
+    cancellation: Option<CancellationToken>,
 }
 
 impl WebDAVService {
+    /// This service's configuration with the server URL swapped for the one
+    /// a request should go to (a protocol probe or the effective URL).
+    fn config_with_server_url(&self, server_url: String) -> WebDAVConfig {
+        WebDAVConfig { server_url, ..self.config.clone() }
+    }
+
     /// Creates a new WebDAV service with default configurations
     pub fn new(config: WebDAVConfig) -> Result<Self> {
         Self::new_with_configs(config, RetryConfig::default(), ConcurrencyConfig::default())
@@ -175,6 +239,8 @@ impl WebDAVService {
     ) -> Result<Self> {
         // Validate configuration
         config.validate()?;
+        // The configured watch folders are decoded here, exactly once.
+        let config = WebDAVConfig { watch_folders: config.normalized_watch_folders(), ..config };
 
         // The configured server must be a permitted destination. Host names
         // are also filtered on every DNS lookup and redirect by the client.
@@ -182,9 +248,11 @@ impl WebDAVService {
             check_url_without_dns(&url).map_err(|e| anyhow!("{}", e))?;
         }
 
-        // Create HTTP client with timeout
+        // Bound connection setup and idle time between received bytes rather
+        // than the whole transfer, so large files are not cut off and retried.
         let client = outbound::client_builder()
-            .timeout(config.timeout())
+            .connect_timeout(config.timeout().min(Duration::from_secs(30)))
+            .read_timeout(config.timeout())
             .build()?;
 
         // Create semaphores for concurrency control
@@ -199,9 +267,23 @@ impl WebDAVService {
             scan_semaphore,
             download_semaphore,
             working_protocol: Arc::new(std::sync::RwLock::new(None)),
+            cancellation: None,
         })
     }
 
+    /// Makes discovery and downloads stop (with an error) once `token` is cancelled.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation = Some(token);
+        self
+    }
+
+    /// Fails fast when the cancellation token, if any, has been triggered.
+    fn check_cancelled(&self) -> Result<()> {
+        match &self.cancellation {
+            Some(token) if token.is_cancelled() => Err(cancelled("WebDAV operation")),
+            _ => Ok(()),
+        }
+    }
 
     // ============================================================================
     // Protocol Detection Methods
@@ -282,15 +364,7 @@ impl WebDAVService {
         debug!("🧪 Testing protocol connection to: {}", full_url);
         
         // Create a temporary config with the full URL for testing
-        let temp_config = WebDAVConfig {
-            server_url: full_url.to_string(),
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(full_url.to_string());
 
         // Test basic OPTIONS request
         let webdav_url = temp_config.webdav_url();
@@ -428,15 +502,7 @@ impl WebDAVService {
     async fn test_options_request(&self) -> Result<(Option<String>, Option<String>)> {
         // Create a temporary config with the effective server URL for WebDAV operations
         let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(effective_server_url);
         let webdav_url = temp_config.webdav_url();
         
         let response = self.client
@@ -698,6 +764,7 @@ impl WebDAVService {
         }
 
         loop {
+            self.check_cancelled()?;
             let mut request = self.client
                 .request(method.clone(), url)
                 .basic_auth(&self.config.username, Some(&self.config.password))
@@ -733,10 +800,23 @@ impl WebDAVService {
                         return Ok(response);
                     }
 
-                    // Handle rate limiting
-                    if status.as_u16() == 429 {
-                        warn!("Rate limited, backing off for {}ms", self.retry_config.rate_limit_backoff_ms);
-                        sleep(Duration::from_millis(self.retry_config.rate_limit_backoff_ms)).await;
+                    // Rate limited or temporarily unavailable: wait as the server
+                    // asks (bounded), and give up after max_retries like any other retry.
+                    if status.as_u16() == 429 || status.as_u16() == 503 {
+                        if attempt >= self.retry_config.max_retries {
+                            return Err(anyhow!("Request failed: {} after {} attempts - {}", status, attempt + 1,
+                                response.text().await.unwrap_or_default()));
+                        }
+                        let fallback_ms = if status.as_u16() == 429 {
+                            self.retry_config.rate_limit_backoff_ms
+                        } else {
+                            self.calculate_retry_delay_with_jitter(attempt, self.retry_config.initial_delay_ms)
+                        };
+                        let wait = Self::retry_after_wait(&response).unwrap_or(Duration::from_millis(fallback_ms));
+                        warn!("{} from {} {}, waiting {:?} before retry (attempt {}/{})",
+                              status, method, url, wait, attempt + 1, self.retry_config.max_retries);
+                        self.wait_before_retry(wait).await?;
+                        attempt += 1;
                         continue;
                     }
 
@@ -744,30 +824,10 @@ impl WebDAVService {
                     if status.is_client_error() && status.as_u16() != 429 {
                         let error_body = response.text().await.unwrap_or_default();
                         
-                        // Provide specific guidance for 405 Method Not Allowed errors
                         if status.as_u16() == 405 {
-                            error!("🚫 HTTP 405 Method Not Allowed for {} {}", method, url);
-                            error!("🔍 Request Details:");
-                            error!("   Method: {}", method);
-                            error!("   URL: {}", url);
-                            error!("   Server type: {:?}", self.config.server_type);
-                            error!("   Username: {}", self.config.username);
-                            error!("   Server base URL: {}", self.config.server_url);
-                            error!("   WebDAV base URL: {}", self.config.webdav_url());
-                            if let Some(ref headers_list) = headers {
-                                error!("   Request headers: {:?}", headers_list);
-                            }
-                            error!("📝 This usually indicates:");
-                            error!("   1. WebDAV is not enabled on the server");
-                            error!("   2. The URL endpoint doesn't support {} method", method);
-                            error!("   3. Incorrect WebDAV endpoint URL");
-                            error!("   4. Authentication issues or insufficient permissions");
-                            error!("💡 Troubleshooting steps:");
-                            error!("   - Verify WebDAV is enabled in your server settings");
-                            error!("   - Check if the WebDAV endpoint URL is correct");
-                            error!("   - Try testing with a WebDAV client like Cyberduck");
-                            error!("   - Verify your user has WebDAV access permissions");
-                            
+                            error!("🚫 HTTP 405 Method Not Allowed for {} {} (server type: {:?}, WebDAV base URL: {}). \
+                                    WebDAV may not be enabled on the server or the endpoint URL may be wrong.",
+                                   method, url, self.config.server_type, self.config.webdav_url());
                             return Err(anyhow!(
                                 "WebDAV {} method not allowed (405) at URL: {}. This typically means WebDAV is not properly enabled on the server or the URL is incorrect. \
                                 Server type: {:?}, Base URL: {}, WebDAV URL: {}. Error details: {}", 
@@ -784,7 +844,7 @@ impl WebDAVService {
                         warn!("Server error {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
                             status, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(jittered_delay)).await;
+                        self.wait_before_retry(Duration::from_millis(jittered_delay)).await?;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -802,7 +862,7 @@ impl WebDAVService {
                         warn!("Request error: {}, retrying in {}ms with jitter (attempt {}/{}, base exponential: {}ms)", 
                             e, jittered_delay, attempt + 1, self.retry_config.max_retries, delay);
                         
-                        sleep(Duration::from_millis(jittered_delay)).await;
+                        self.wait_before_retry(Duration::from_millis(jittered_delay)).await?;
                         delay = std::cmp::min(
                             (delay as f64 * self.retry_config.backoff_multiplier) as u64,
                             self.retry_config.max_delay_ms
@@ -818,104 +878,51 @@ impl WebDAVService {
         }
     }
 
+    /// Waits before the next attempt, unless the cancellation token fires first.
+    async fn wait_before_retry(&self, wait: Duration) -> Result<()> {
+        sleep_unless_cancelled(wait, self.cancellation.as_ref(), "WebDAV operation").await
+    }
+
+    /// Wait requested by a response's Retry-After header, if present and parseable.
+    fn retry_after_wait(response: &reqwest::Response) -> Option<Duration> {
+        let value = response.headers().get(reqwest::header::RETRY_AFTER)?.to_str().ok()?;
+        retry_after_delay(value, chrono::Utc::now(), MAX_RETRY_AFTER)
+    }
+
     // ============================================================================
     // URL Management Helper Methods (Previously separate module)
     // ============================================================================
 
+    /// Base WebDAV URL built from the protocol that was detected to work.
+    fn effective_webdav_url(&self) -> String {
+        let mut config = self.config.clone();
+        config.server_url = self.get_effective_server_url();
+        config.webdav_url()
+    }
+
     /// Gets the WebDAV URL for a specific path
     pub fn get_url_for_path(&self, path: &str) -> String {
-        // Create a temporary config with the effective server URL
-        let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
-        let base_url = temp_config.webdav_url();
-        let clean_path = path.trim_start_matches('/');
-        
-        let final_url = if clean_path.is_empty() {
-            base_url.clone()
-        } else {
-            // Ensure no double slashes by normalizing the base URL
-            let normalized_base = base_url.trim_end_matches('/');
-            format!("{}/{}", normalized_base, clean_path)
-        };
-        
-        debug!("🔗 URL Construction:");
-        debug!("   Input path: '{}'", path);
-        debug!("   Clean path: '{}'", clean_path);
-        debug!("   Base WebDAV URL: '{}'", base_url);
-        debug!("   Final URL: '{}'", final_url);
-        debug!("   Server type: {:?}", self.config.server_type);
-        debug!("   Server base URL: '{}'", self.config.server_url);
-        
+        let final_url = join_url(&self.effective_webdav_url(), path);
+        debug!("🔗 URL for path '{}' (server type {:?}): '{}'", path, self.config.server_type, final_url);
         final_url
     }
 
-    /// Convert full WebDAV href (from XML response) to relative path
-    /// 
-    /// Input:  "/remote.php/dav/files/username/Photos/image.jpg"
-    /// Output: "/Photos/image.jpg"
+    /// Converts a percent-encoded href from a PROPFIND response into the decoded
+    /// relative path used internally.
+    ///
+    /// Input:  "/remote.php/dav/files/username/My%20Photos/image.jpg"
+    /// Output: "/My Photos/image.jpg"
     pub fn href_to_relative_path(&self, href: &str) -> String {
-        match self.config.server_type.as_deref() {
-            Some("nextcloud") => {
-                let prefix = format!("/remote.php/dav/files/{}", self.config.username);
-                if href.starts_with(&prefix) {
-                    let relative = &href[prefix.len()..];
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            Some("owncloud") => {
-                if href.starts_with("/remote.php/webdav") {
-                    let relative = &href[18..]; // Remove "/remote.php/webdav"
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            Some("generic") => {
-                if href.starts_with("/webdav") {
-                    let relative = &href[7..]; // Remove "/webdav"
-                    if relative.is_empty() { "/" } else { relative }.to_string()
-                } else {
-                    href.to_string()
-                }
-            }
-            _ => href.to_string()
-        }
+        self.convert_to_relative_path(&decode_href(href))
     }
 
     /// Convert file paths to the proper URL format for the server
     pub fn path_to_url(&self, relative_path: &str) -> String {
-        let clean_path = relative_path.trim_start_matches('/');
-        // Create a temporary config with the effective server URL
-        let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
-        let base_url = temp_config.webdav_url();
-        
-        if clean_path.is_empty() {
-            base_url
-        } else {
-            format!("{}/{}", base_url.trim_end_matches('/'), clean_path)
-        }
+        self.get_url_for_path(relative_path)
     }
 
-    /// Converts a full WebDAV path to a relative path by removing server-specific prefixes
+    /// Removes the server-specific prefix from an already-decoded WebDAV path.
+    /// Paths without the prefix are returned unchanged.
     pub fn convert_to_relative_path(&self, full_webdav_path: &str) -> String {
         // For Nextcloud/ownCloud, remove the server-specific prefixes
         if let Some(server_type) = &self.config.server_type {
@@ -950,234 +957,211 @@ impl WebDAVService {
     // File Discovery Methods (Previously separate discovery module)
     // ============================================================================
 
-    /// Discovers files in a directory with support for pagination and filtering
+
+    /// Discovers files in a directory (optionally recursive); directory entries are dropped.
     pub async fn discover_files(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileIngestionInfo>> {
-        info!("🔍 Discovering files in directory: {}", directory_path);
-        
-        if recursive {
-            self.discover_files_recursive(directory_path).await
-        } else {
-            self.discover_files_single_directory(directory_path).await
-        }
+        Ok(self.discover_tree(directory_path, recursive, None).await?.files)
     }
 
     /// Discovers both files and directories with their ETags for directory tracking
     pub async fn discover_files_and_directories(&self, directory_path: &str, recursive: bool) -> Result<WebDAVDiscoveryResult> {
-        let discovery_request_id = uuid::Uuid::new_v4();
-        info!("[{}] 🔍 Discovering files and directories in: '{}' (recursive: {}, user_agent: '{}')", 
-              discovery_request_id, directory_path, recursive, build_user_agent());
-        
-        let start_time = std::time::Instant::now();
-        let result = if recursive {
-            self.discover_files_and_directories_recursive(directory_path).await
-        } else {
-            self.discover_files_and_directories_single(directory_path).await
-        };
-        
-        let elapsed = start_time.elapsed();
-        match &result {
-            Ok(discovery_result) => {
-                info!("[{}] ✅ Discovery completed for '{}': {} files, {} directories in {:.2}s", 
-                      discovery_request_id, directory_path, discovery_result.files.len(), 
-                      discovery_result.directories.len(), elapsed.as_secs_f64());
-            }
-            Err(e) => {
-                error!("[{}] ❌ Discovery failed for '{}' after {:.2}s: {}", 
-                       discovery_request_id, directory_path, elapsed.as_secs_f64(), e);
-            }
-        }
-        
-        result
+        self.discover_tree(directory_path, recursive, None).await.map(Into::into)
     }
 
-    /// Discovers both files and directories with basic progress tracking (simplified)
-    pub async fn discover_files_and_directories_with_progress(
-        &self, 
-        directory_path: &str, 
-        recursive: bool, 
-        _progress: Option<&SyncProgress> // Simplified: just placeholder for API compatibility
+    /// Discovery that records per-directory outcomes in the `SourceErrorTracker` so
+    /// directories in failure cooldown are skipped and new failures are tracked.
+    pub async fn discover_files_and_directories_with_error_tracking(
+        &self,
+        directory_path: &str,
+        recursive: bool,
+        user_id: uuid::Uuid,
+        error_tracker: &SourceErrorTracker,
+        source_id: Option<uuid::Uuid>,
     ) -> Result<WebDAVDiscoveryResult> {
-        let discovery_request_id = uuid::Uuid::new_v4();
-        info!("[{}] 🔍 Discovering files and directories in: '{}' (progress tracking simplified, recursive: {}, user_agent: '{}')", 
-              discovery_request_id, directory_path, recursive, build_user_agent());
-        
-        let start_time = std::time::Instant::now();
+        let tracking = DiscoveryTracking { user_id, source_id, tracker: error_tracker.clone() };
+        self.discover_tree(directory_path, recursive, Some(&tracking)).await.map(Into::into)
+    }
+
+    /// Scans `directory_path` (recursively when requested) and reports which
+    /// subdirectories could not be listed. The root directory itself failing to
+    /// list is an error; a failing subdirectory is recorded in
+    /// `failed_directories` and the rest of the tree is still returned.
+    pub async fn discover_tree(
+        &self,
+        directory_path: &str,
+        recursive: bool,
+        tracking: Option<&DiscoveryTracking>,
+    ) -> Result<WebDAVScanResult> {
+        self.check_cancelled()?;
+        let directory_path = &normalize_watch_folder(directory_path);
+        let request_id = uuid::Uuid::new_v4();
+        let start_time = Instant::now();
+        info!("[{}] 🔍 Discovering '{}' (recursive: {}, tracked: {}, user_agent: '{}')",
+              request_id, directory_path, recursive, tracking.is_some(), build_user_agent());
+
         let result = if recursive {
-            self.discover_files_and_directories_recursive(directory_path).await
+            self.scan_tree(directory_path, tracking).await
         } else {
-            self.discover_files_and_directories_single(directory_path).await
+            match self.scan_directory_tracked(directory_path, tracking).await {
+                Ok(Some(scan)) => Ok(scan),
+                Ok(None) => Err(anyhow!("Directory '{}' is skipped due to previous failures", directory_path)),
+                Err(e) => Err(e),
+            }
         };
-        
-        let elapsed = start_time.elapsed();
+
         match &result {
-            Ok(discovery_result) => {
-                info!("[{}] ✅ Progress-tracked discovery completed for '{}': {} files, {} directories in {:.2}s", 
-                      discovery_request_id, directory_path, discovery_result.files.len(), 
-                      discovery_result.directories.len(), elapsed.as_secs_f64());
-            }
-            Err(e) => {
-                error!("[{}] ❌ Progress-tracked discovery failed for '{}' after {:.2}s: {}", 
-                       discovery_request_id, directory_path, elapsed.as_secs_f64(), e);
-            }
+            Ok(scan) => info!("[{}] ✅ Discovery completed for '{}': {} files, {} directories, {} failed directories in {:.2}s",
+                              request_id, directory_path, scan.files.len(), scan.directories.len(),
+                              scan.failed_directories.len(), start_time.elapsed().as_secs_f64()),
+            Err(e) => error!("[{}] ❌ Discovery failed for '{}' after {:.2}s: {}",
+                             request_id, directory_path, start_time.elapsed().as_secs_f64(), e),
         }
-        
         result
     }
 
-    /// Discovers files in a single directory (non-recursive)
-    async fn discover_files_single_directory(&self, directory_path: &str) -> Result<Vec<FileIngestionInfo>> {
-        let url = self.get_url_for_path(directory_path);
-        
-        let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
-            <D:propfind xmlns:D="DAV:">
-                <D:prop>
-                    <D:displayname/>
-                    <D:getcontentlength/>
-                    <D:getlastmodified/>
-                    <D:getetag/>
-                    <D:resourcetype/>
-                    <D:creationdate/>
-                </D:prop>
-            </D:propfind>"#;
-
-        let response = self.authenticated_request(
-            Method::from_bytes(b"PROPFIND")?,
-            &url,
-            Some(propfind_body.to_string()),
-            Some(vec![
-                ("Depth", "1"),
-                ("Content-Type", "application/xml"),
-            ]),
-        ).await?;
-
-        let body = response.text().await?;
-        let files = parse_propfind_response(&body)?;
-        
-        // Filter out the directory itself and only return files
-        let filtered_files: Vec<FileIngestionInfo> = files
-            .into_iter()
-            .filter(|file| !file.is_directory && file.relative_path != directory_path)
-            .collect();
-
-        debug!("Found {} files in directory: {}", filtered_files.len(), directory_path);
-        Ok(filtered_files)
-    }
-
-    /// Discovers files recursively in all subdirectories
-    async fn discover_files_recursive(&self, directory_path: &str) -> Result<Vec<FileIngestionInfo>> {
-        let mut all_files = Vec::new();
+    /// Breadth-first walk of `directory_path` in bounded concurrent batches.
+    async fn scan_tree(&self, directory_path: &str, tracking: Option<&DiscoveryTracking>) -> Result<WebDAVScanResult> {
+        let mut result = WebDAVScanResult::default();
         let mut directories_to_scan = vec![directory_path.to_string()];
-        let mut scanned_directories = std::collections::HashSet::new();
+        let mut scanned_directories: HashSet<String> = HashSet::new();
         let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
-        
-        debug!("Starting recursive file scan from: {}", directory_path);
-        
+
         while !directories_to_scan.is_empty() {
-            // Take a batch of directories to process
+            self.check_cancelled()?;
             let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
             let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
-            
-            debug!("Processing batch of {} directories, {} remaining in queue", 
+            debug!("Processing batch of {} directories, {} remaining in queue",
                    current_batch.len(), directories_to_scan.len());
 
-            // Process directories concurrently
             let tasks = current_batch.into_iter().filter_map(|dir| {
-                // Skip if already scanned
-                if scanned_directories.contains(&dir) {
-                    debug!("Skipping already scanned directory: {}", dir);
+                if !scanned_directories.insert(dir.clone()) {
                     return None;
                 }
-                scanned_directories.insert(dir.clone());
-                
                 let permit = semaphore.clone();
                 let service = self.clone();
-                
+                let tracking = tracking.cloned();
                 Some(async move {
                     let _permit = permit.acquire().await.unwrap();
-                    let result = service.discover_files_and_directories_single(&dir).await;
-                    (dir, result)
+                    let outcome = service.scan_directory_tracked(&dir, tracking.as_ref()).await;
+                    (dir, outcome)
                 })
             });
 
-            let results = futures_util::future::join_all(tasks).await;
-
-            for (scanned_dir, result) in results {
-                match result {
-                    Ok(discovery_result) => {
-                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
-                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
-                        
-                        all_files.extend(discovery_result.files);
-                        
-                        // Add subdirectories to the queue for the next iteration
-                        for dir in discovery_result.directories {
-                            if dir.is_directory && !scanned_directories.contains(&dir.relative_path) {
+            for (scanned_dir, outcome) in futures_util::future::join_all(tasks).await {
+                let is_root = scanned_dir == directory_path;
+                match outcome {
+                    Ok(Some(scan)) => {
+                        debug!("Directory '{}' scan complete: {} files, {} subdirectories",
+                               scanned_dir, scan.files.len(), scan.directories.len());
+                        result.files.extend(scan.files);
+                        for dir in scan.directories {
+                            if !scanned_directories.contains(&dir.relative_path) {
                                 directories_to_scan.push(dir.relative_path.clone());
-                                debug!("Added subdirectory to scan queue: {}", dir.relative_path);
                             }
+                            result.directories.push(dir);
+                        }
+                        if is_root {
+                            result.root = scan.root;
                         }
                     }
+                    Ok(None) if is_root => {
+                        return Err(anyhow!("Directory '{}' is skipped due to previous failures", scanned_dir));
+                    }
+                    Ok(None) => {
+                        info!("⏭️ Skipping directory '{}' due to previous failures; its subtree is not scanned", scanned_dir);
+                        result.failed_directories.push(scanned_dir);
+                    }
+                    Err(e) if is_root || is_cancelled(&e) => return Err(e),
                     Err(e) => {
-                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
+                        warn!("Failed to scan directory '{}': {}; its subtree is not scanned", scanned_dir, e);
+                        result.failed_directories.push(scanned_dir);
                     }
                 }
             }
-            
-            debug!("Batch complete. Total files found: {}. Queue size: {}", 
-                   all_files.len(), directories_to_scan.len());
         }
 
-        info!("Recursive scan completed. Found {} files total", all_files.len());
-        Ok(all_files)
+        info!("Recursive scan completed. Found {} files and {} directories ({} directories failed)",
+              result.files.len(), result.directories.len(), result.failed_directories.len());
+        Ok(result)
     }
 
-    /// Discovers both files and directories in a single directory
-    async fn discover_files_and_directories_single(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
-        
-        let result = async {
-            // Try the primary URL first, then fallback URLs if we get a 405 error
-            match self.discover_files_and_directories_single_with_url(directory_path, &self.get_url_for_path(directory_path)).await {
-                Ok(result) => Ok(result),
-                Err(e) => {
-                    // Check if this is a 405 Method Not Allowed error
-                    if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
-                        warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
-                        self.try_fallback_discovery(directory_path).await
-                    } else {
-                        Err(e)
-                    }
+    /// Scans one directory, consulting and updating the error tracker when present.
+    /// Returns `Ok(None)` when the tracker says the directory is in failure cooldown.
+    async fn scan_directory_tracked(
+        &self,
+        directory_path: &str,
+        tracking: Option<&DiscoveryTracking>,
+    ) -> Result<Option<WebDAVScanResult>> {
+        let Some(tracking) = tracking else {
+            return self.scan_directory(directory_path).await.map(Some);
+        };
+
+        match tracking.tracker.should_skip_resource(
+            tracking.user_id, ErrorSourceType::WebDAV, tracking.source_id, directory_path,
+        ).await {
+            Ok(true) => return Ok(None),
+            Ok(false) => {}
+            Err(e) => warn!("Failed to check failure status for directory '{}': {}", directory_path, e),
+        }
+
+        let started = Instant::now();
+        let result = self.scan_directory(directory_path).await;
+        match &result {
+            Ok(_) => {
+                if let Err(e) = tracking.tracker.mark_success(
+                    tracking.user_id, ErrorSourceType::WebDAV, tracking.source_id, directory_path,
+                ).await {
+                    debug!("Failed to mark directory scan as successful: {}", e);
                 }
             }
-        }.await;
-        
-        result
+            // A stop request is not a failure of the directory: nothing is
+            // recorded, so it is not put in cooldown for the next run.
+            Err(e) if is_cancelled(e) => {}
+            Err(e) => {
+                let context = ErrorContext {
+                    resource_path: directory_path.to_string(),
+                    source_id: tracking.source_id,
+                    operation: "discover_directory".to_string(),
+                    response_time: Some(started.elapsed()),
+                    response_size: None,
+                    server_type: self.config.server_type.clone(),
+                    server_version: None,
+                    additional_context: std::collections::HashMap::new(),
+                };
+                if let Err(track_error) = tracking.tracker.track_error(
+                    tracking.user_id, ErrorSourceType::WebDAV, tracking.source_id, directory_path, e, context,
+                ).await {
+                    warn!("Failed to track error for directory '{}': {}", directory_path, track_error);
+                }
+            }
+        }
+        result.map(Some)
     }
 
-    /// Tries fallback URLs when the primary WebDAV URL fails with 405
-    async fn try_fallback_discovery(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
+    /// Lists one directory (Depth: 1), trying the fallback base URLs on 405.
+    async fn scan_directory(&self, directory_path: &str) -> Result<WebDAVScanResult> {
+        let primary_url = self.get_url_for_path(directory_path);
+        let primary_error = match self.scan_directory_at_url(directory_path, &primary_url).await {
+            Ok(result) => return Ok(result),
+            Err(e) if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") => e,
+            Err(e) => return Err(e),
+        };
+        warn!("🔄 Primary WebDAV URL failed with 405 ({}), trying fallback URLs...", primary_error);
+
         let fallback_urls = self.config.webdav_fallback_urls();
-        
         for (i, fallback_base_url) in fallback_urls.iter().enumerate() {
-            let fallback_url = if directory_path == "/" || directory_path.is_empty() {
-                fallback_base_url.clone()
-            } else {
-                format!("{}/{}", fallback_base_url.trim_end_matches('/'), directory_path.trim_start_matches('/'))
-            };
-            
+            let fallback_url = join_url(fallback_base_url, directory_path);
             info!("🔄 Trying fallback URL #{}: {}", i + 1, fallback_url);
-            
-            match self.discover_files_and_directories_single_with_url(directory_path, &fallback_url).await {
+            match self.scan_directory_at_url(directory_path, &fallback_url).await {
                 Ok(result) => {
                     info!("✅ Fallback URL #{} succeeded: {}", i + 1, fallback_url);
                     warn!("💡 Consider updating your server type configuration to use this URL pattern");
                     return Ok(result);
                 }
-                Err(e) => {
-                    warn!("❌ Fallback URL #{} failed: {} - {}", i + 1, fallback_url, e);
-                }
+                Err(e) => warn!("❌ Fallback URL #{} failed: {} - {}", i + 1, fallback_url, e),
             }
         }
-        
+
         Err(anyhow!(
             "All WebDAV URLs failed for directory '{}'. Primary URL and {} fallback URLs were tried. \
             This suggests WebDAV is not properly configured on the server or the server type is incorrect.",
@@ -1185,150 +1169,39 @@ impl WebDAVService {
         ))
     }
 
-    /// Performs the actual discovery with a specific URL
-    async fn discover_files_and_directories_single_with_url(&self, directory_path: &str, url: &str) -> Result<WebDAVDiscoveryResult> {
-        // Enhanced debug logging for WebDAV URL construction
-        debug!("🔍 WebDAV directory scan - Path: '{}', URL: '{}', Server type: {:?}", 
+    /// PROPFIND Depth: 1 at `url`; splits the response into the directory's own
+    /// entry, its subdirectories and its files.
+    async fn scan_directory_at_url(&self, directory_path: &str, url: &str) -> Result<WebDAVScanResult> {
+        debug!("🔍 WebDAV directory scan - Path: '{}', URL: '{}', Server type: {:?}",
                directory_path, url, self.config.server_type);
-        debug!("🔧 WebDAV config - Server URL: '{}', Username: '{}', WebDAV base URL: '{}'", 
-               self.config.server_url, self.config.username, self.config.webdav_url());
-        
-        let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
-            <D:propfind xmlns:D="DAV:">
-                <D:prop>
-                    <D:displayname/>
-                    <D:getcontentlength/>
-                    <D:getlastmodified/>
-                    <D:getetag/>
-                    <D:resourcetype/>
-                    <D:creationdate/>
-                </D:prop>
-            </D:propfind>"#;
-
-        debug!("📤 Sending PROPFIND request to URL: {}", url);
-        debug!("📋 PROPFIND body length: {} bytes", propfind_body.len());
 
         let response = self.authenticated_request(
             Method::from_bytes(b"PROPFIND")?,
             url,
-            Some(propfind_body.to_string()),
-            Some(vec![
-                ("Depth", "1"),
-                ("Content-Type", "application/xml"),
-            ]),
+            Some(PROPFIND_LISTING_BODY.to_string()),
+            Some(vec![("Depth", "1"), ("Content-Type", "application/xml")]),
         ).await.map_err(|e| {
-            error!("❌ PROPFIND request failed for directory '{}' at URL '{}': {}", 
-                   directory_path, url, e);
+            error!("❌ PROPFIND request failed for directory '{}' at URL '{}': {}", directory_path, url, e);
             e
         })?;
 
         let body = response.text().await?;
-        let all_items = parse_propfind_response_with_directories(&body)?;
-        
-        // Process the items to convert href to relative paths
-        let processed_items = self.process_file_infos(all_items);
-        
-        // Separate files and directories, excluding the parent directory itself
-        let mut files = Vec::new();
-        let mut directories = Vec::new();
-        
-        for item in processed_items {
-            // Skip the directory itself (handle both with and without trailing slash)
-            let normalized_item_path = item.relative_path.trim_end_matches('/');
-            let normalized_directory_path = directory_path.trim_end_matches('/');
-            
-            if normalized_item_path == normalized_directory_path {
-                continue; // Skip the directory itself
-            }
-            
-            if item.is_directory {
-                directories.push(item);
+        let items = self.process_file_infos(parse_propfind_response_with_directories(&body)?);
+
+        let mut result = WebDAVScanResult::default();
+        let normalized_directory_path = directory_path.trim_end_matches('/');
+        for item in items {
+            if item.relative_path.trim_end_matches('/') == normalized_directory_path {
+                result.root = Some(item);
+            } else if item.is_directory {
+                result.directories.push(item);
             } else {
-                files.push(item);
+                result.files.push(item);
             }
         }
 
-        debug!("Found {} files and {} directories in: {}", files.len(), directories.len(), directory_path);
-        Ok(WebDAVDiscoveryResult { files, directories })
-    }
-
-    /// Discovers files and directories recursively
-    async fn discover_files_and_directories_recursive(&self, directory_path: &str) -> Result<WebDAVDiscoveryResult> {
-        
-        let mut all_files = Vec::new();
-        let mut all_directories = Vec::new();
-        let mut directories_to_scan = vec![directory_path.to_string()];
-        let mut scanned_directories = std::collections::HashSet::new();
-        let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
-        
-        debug!("Starting recursive scan from: {}", directory_path);
-        
-        while !directories_to_scan.is_empty() {
-            // Take a batch of directories to process (limit batch size for better progress tracking)
-            let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
-            let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
-            
-            debug!("Processing batch of {} directories, {} remaining in queue", 
-                   current_batch.len(), directories_to_scan.len());
-
-            // Process directories concurrently
-            let tasks = current_batch.into_iter().filter_map(|dir| {
-                // Skip if already scanned (prevent infinite loops)
-                if scanned_directories.contains(&dir) {
-                    debug!("Skipping already scanned directory: {}", dir);
-                    return None;
-                }
-                scanned_directories.insert(dir.clone());
-                
-                let permit = semaphore.clone();
-                let service = self.clone();
-                
-                Some(async move {
-                    let _permit = permit.acquire().await.unwrap();
-                    let result = service.discover_files_and_directories_single(&dir).await;
-                    (dir, result)
-                })
-            });
-
-            let results = futures_util::future::join_all(tasks).await;
-
-            for (scanned_dir, result) in results {
-                match result {
-                    Ok(discovery_result) => {
-                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
-                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
-                        
-                        all_files.extend(discovery_result.files);
-                        
-                        // Add directories to our results and to the scan queue
-                        for dir in discovery_result.directories {
-                            // Only add to scan queue if not already scanned
-                            if !scanned_directories.contains(&dir.relative_path) {
-                                directories_to_scan.push(dir.relative_path.clone());
-                                debug!("Added subdirectory to scan queue: {} (scanned set size: {})", 
-                                       dir.relative_path, scanned_directories.len());
-                            } else {
-                                debug!("Skipping already scanned directory: {} (already in scanned set)", dir.relative_path);
-                            }
-                            all_directories.push(dir);
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
-                    }
-                }
-            }
-            
-            debug!("Batch complete. Total progress: {} files, {} directories found. Queue size: {}", 
-                   all_files.len(), all_directories.len(), directories_to_scan.len());
-        }
-
-        info!("Recursive scan completed. Found {} files and {} directories", all_files.len(), all_directories.len());
-        
-        Ok(WebDAVDiscoveryResult { 
-            files: all_files, 
-            directories: all_directories 
-        })
+        debug!("Found {} files and {} directories in: {}", result.files.len(), result.directories.len(), directory_path);
+        Ok(result)
     }
 
     /// Estimates crawl time and resource requirements
@@ -1393,548 +1266,6 @@ impl WebDAVService {
     }
 
     // ============================================================================
-    // Enhanced Discovery Methods with Error Tracking
-    // ============================================================================
-
-    /// Enhanced version of discover_files_and_directories that includes error tracking
-    /// This method integrates with SourceErrorTracker to prevent repeated scanning of problematic directories
-    pub async fn discover_files_and_directories_with_error_tracking(
-        &self, 
-        directory_path: &str, 
-        recursive: bool,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-    ) -> Result<WebDAVDiscoveryResult> {
-        let start_time = std::time::Instant::now();
-        let discovery_request_id = uuid::Uuid::new_v4();
-        
-        info!("[{}] 🔍 Starting WebDAV discovery for '{}' (user: {}, source: {:?}, recursive: {}, user_agent: '{}')", 
-              discovery_request_id, directory_path, user_id, source_id, recursive, build_user_agent());
-        
-        // Check if we should skip this directory due to previous failures
-        let error_check_start = std::time::Instant::now();
-        match error_tracker.should_skip_resource(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-        ).await {
-            Ok(should_skip) => {
-                let error_check_elapsed = error_check_start.elapsed();
-                if should_skip {
-                    info!("[{}] ⏭️ Skipping directory '{}' due to previous failures (error check: {:.2}ms)", 
-                          discovery_request_id, directory_path, error_check_elapsed.as_millis());
-                    
-                    // Log skip reason details if available
-                    debug!("[{}] Skip reason: Directory has previous failures tracked in error system", 
-                           discovery_request_id);
-                    
-                    return Ok(WebDAVDiscoveryResult {
-                        files: Vec::new(),
-                        directories: Vec::new(),
-                    });
-                } else {
-                    debug!("[{}] ✅ Directory '{}' cleared for discovery (error check: {:.2}ms)", 
-                           discovery_request_id, directory_path, error_check_elapsed.as_millis());
-                }
-            }
-            Err(e) => {
-                let error_check_elapsed = error_check_start.elapsed();
-                warn!("[{}] Failed to check failure status for directory '{}' after {:.2}ms: {}", 
-                      discovery_request_id, directory_path, error_check_elapsed.as_millis(), e);
-                // Continue with the operation if we can't check
-            }
-        }
-
-        // Perform the discovery operation
-        let discovery_start = std::time::Instant::now();
-        debug!("[{}] 🔍 Performing {} discovery for '{}'", 
-               discovery_request_id, if recursive { "recursive" } else { "single" }, directory_path);
-        
-        let result = if recursive {
-            self.discover_files_and_directories_recursive_with_error_tracking(
-                directory_path, user_id, error_tracker, source_id, start_time
-            ).await
-        } else {
-            self.discover_files_and_directories_single_with_error_tracking(
-                directory_path, user_id, error_tracker, source_id, start_time
-            ).await
-        };
-        
-        let discovery_elapsed = discovery_start.elapsed();
-
-        match &result {
-            Ok(discovery_result) => {
-                let total_elapsed = start_time.elapsed();
-                info!("[{}] ✅ WebDAV discovery completed for '{}': {} files, {} directories found in {:.2}s (discovery: {:.2}s)", 
-                      discovery_request_id, directory_path, discovery_result.files.len(), 
-                      discovery_result.directories.len(), total_elapsed.as_secs_f64(), discovery_elapsed.as_secs_f64());
-                
-                // Mark successful operation
-                if let Err(e) = error_tracker.mark_success(
-                    user_id,
-                    ErrorSourceType::WebDAV,
-                    source_id,
-                    directory_path,
-                ).await {
-                    debug!("[{}] Failed to mark operation as successful: {}", discovery_request_id, e);
-                }
-                
-                // Log performance metrics for large operations
-                if discovery_result.files.len() > 100 || discovery_elapsed.as_secs() > 5 {
-                    let throughput = discovery_result.files.len() as f64 / discovery_elapsed.as_secs_f64();
-                    info!("[{}] 📊 Performance: {:.1} files/sec, {} total items discovered", 
-                          discovery_request_id, throughput, 
-                          discovery_result.files.len() + discovery_result.directories.len());
-                }
-            }
-            Err(e) => {
-                let total_elapsed = start_time.elapsed();
-                error!("[{}] ❌ WebDAV discovery failed for '{}' after {:.2}s: {}", 
-                       discovery_request_id, directory_path, total_elapsed.as_secs_f64(), e);
-                
-                // Track the error with enhanced context
-                let mut additional_context = std::collections::HashMap::new();
-                additional_context.insert("request_id".to_string(), serde_json::Value::String(discovery_request_id.to_string()));
-                additional_context.insert("user_agent".to_string(), serde_json::Value::String(build_user_agent()));
-                additional_context.insert("recursive".to_string(), serde_json::Value::Bool(recursive));
-                
-                let context = ErrorContext {
-                    resource_path: directory_path.to_string(),
-                    source_id,
-                    operation: if recursive { "discover_recursive" } else { "discover_single" }.to_string(),
-                    response_time: Some(total_elapsed),
-                    response_size: None,
-                    server_type: self.config.server_type.clone(),
-                    server_version: None,
-                    additional_context,
-                };
-
-                if let Err(track_error) = error_tracker.track_error(
-                    user_id,
-                    ErrorSourceType::WebDAV,
-                    source_id,
-                    directory_path,
-                    e,
-                    context,
-                ).await {
-                    warn!("[{}] Failed to track discovery error: {}", discovery_request_id, track_error);
-                } else {
-                    debug!("[{}] Error tracked for future skip logic", discovery_request_id);
-                }
-            }
-        }
-
-        result
-    }
-
-    /// Enhanced recursive discovery with error tracking
-    async fn discover_files_and_directories_recursive_with_error_tracking(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        start_time: std::time::Instant,
-    ) -> Result<WebDAVDiscoveryResult> {
-        let mut all_files = Vec::new();
-        let mut all_directories = Vec::new();
-        let mut directories_to_scan = vec![directory_path.to_string()];
-        let mut scanned_directories = std::collections::HashSet::new();
-        let semaphore = Arc::new(Semaphore::new(self.concurrency_config.max_concurrent_scans));
-        
-        debug!("Starting recursive scan with error tracking from: {}", directory_path);
-        
-        while !directories_to_scan.is_empty() {
-            // Take a batch of directories to process
-            let batch_size = std::cmp::min(directories_to_scan.len(), self.concurrency_config.max_concurrent_scans);
-            let current_batch: Vec<String> = directories_to_scan.drain(..batch_size).collect();
-            
-            debug!("Processing batch of {} directories, {} remaining in queue", 
-                   current_batch.len(), directories_to_scan.len());
-
-            // Process directories concurrently
-            let tasks = current_batch.into_iter().filter_map(|dir| {
-                // Skip if already scanned
-                if scanned_directories.contains(&dir) {
-                    debug!("Skipping already scanned directory: {}", dir);
-                    return None;
-                }
-                scanned_directories.insert(dir.clone());
-                
-                let permit = semaphore.clone();
-                let service = self.clone();
-                let error_tracker = error_tracker.clone();
-                
-                Some(async move {
-                    let _permit = permit.acquire().await.unwrap();
-                    
-                    // Check if we should skip this specific directory
-                    match error_tracker.should_skip_resource(
-                        user_id,
-                        ErrorSourceType::WebDAV,
-                        source_id,
-                        &dir,
-                    ).await {
-                        Ok(should_skip) => {
-                            if should_skip {
-                                debug!("⏭️ Skipping directory '{}' due to previous failures", dir);
-                                return (dir, Ok(WebDAVDiscoveryResult {
-                                    files: Vec::new(),
-                                    directories: Vec::new(),
-                                }));
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to check failure status for directory '{}': {}", dir, e);
-                            // Continue with the operation if we can't check
-                        }
-                    }
-                    
-                    let dir_start_time = std::time::Instant::now();
-                    let result = service.discover_files_and_directories_single(&dir).await;
-                    
-                    // Track success or failure for this specific directory
-                    match &result {
-                        Ok(_) => {
-                            if let Err(e) = error_tracker.mark_success(
-                                user_id,
-                                ErrorSourceType::WebDAV,
-                                source_id,
-                                &dir,
-                            ).await {
-                                debug!("Failed to mark directory scan as successful: {}", e);
-                            }
-                        }
-                        Err(e) => {
-                            let duration = dir_start_time.elapsed();
-                            let context = ErrorContext {
-                                resource_path: dir.clone(),
-                                source_id,
-                                operation: "discover_directory".to_string(),
-                                response_time: Some(duration),
-                                response_size: None,
-                                server_type: service.config.server_type.clone(),
-                                server_version: None,
-                                additional_context: std::collections::HashMap::new(),
-                            };
-
-                            if let Err(track_error) = error_tracker.track_error(
-                                user_id,
-                                ErrorSourceType::WebDAV,
-                                source_id,
-                                &dir,
-                                e,
-                                context,
-                            ).await {
-                                warn!("Failed to track error for directory '{}': {}", dir, track_error);
-                            }
-                        }
-                    }
-                    
-                    (dir, result)
-                })
-            });
-
-            let results = futures_util::future::join_all(tasks).await;
-
-            for (scanned_dir, result) in results {
-                match result {
-                    Ok(discovery_result) => {
-                        debug!("Directory '{}' scan complete: {} files, {} subdirectories", 
-                               scanned_dir, discovery_result.files.len(), discovery_result.directories.len());
-                        
-                        all_files.extend(discovery_result.files);
-                        
-                        // Add subdirectories to the queue for the next iteration
-                        for dir in discovery_result.directories {
-                            if dir.is_directory && !scanned_directories.contains(&dir.relative_path) {
-                                directories_to_scan.push(dir.relative_path.clone());
-                                debug!("Added subdirectory to scan queue: {}", dir.relative_path);
-                            }
-                            all_directories.push(dir);
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to scan directory '{}': {}", scanned_dir, e);
-                        // Error already tracked in the task above
-                    }
-                }
-            }
-            
-            debug!("Batch complete. Total progress: {} files, {} directories found. Queue size: {}", 
-                   all_files.len(), all_directories.len(), directories_to_scan.len());
-        }
-
-        info!("Recursive scan with error tracking completed. Found {} files and {} directories", all_files.len(), all_directories.len());
-        Ok(WebDAVDiscoveryResult { 
-            files: all_files, 
-            directories: all_directories 
-        })
-    }
-
-    /// Enhanced single directory discovery with error tracking
-    async fn discover_files_and_directories_single_with_error_tracking(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        start_time: std::time::Instant,
-    ) -> Result<WebDAVDiscoveryResult> {
-        // Try the primary URL first, then fallback URLs if we get a 405 error
-        let primary_url = self.get_url_for_path(directory_path);
-        
-        match self.discover_files_and_directories_single_with_url_and_error_tracking(
-            directory_path, &primary_url, user_id, error_tracker, source_id, start_time
-        ).await {
-            Ok(result) => Ok(result),
-            Err(e) => {
-                // Check if this is a 405 Method Not Allowed error
-                if e.to_string().contains("405") || e.to_string().contains("Method Not Allowed") {
-                    warn!("🔄 Primary WebDAV URL failed with 405 error, trying fallback URLs...");
-                    self.try_fallback_discovery_with_error_tracking(directory_path, user_id, error_tracker, source_id, start_time).await
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    }
-
-    /// Enhanced PROPFIND request with detailed error tracking
-    async fn discover_files_and_directories_single_with_url_and_error_tracking(
-        &self, 
-        directory_path: &str, 
-        url: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        start_time: std::time::Instant,
-    ) -> Result<WebDAVDiscoveryResult> {
-        // Enhanced debug logging for WebDAV URL construction
-        debug!("🔍 WebDAV directory scan with error tracking - Path: '{}', URL: '{}', Server type: {:?}", 
-               directory_path, url, self.config.server_type);
-        debug!("🔧 WebDAV config - Server URL: '{}', Username: '{}', WebDAV base URL: '{}'", 
-               self.config.server_url, self.config.username, self.config.webdav_url());
-        
-        let propfind_body = r#"<?xml version="1.0" encoding="utf-8"?>
-            <D:propfind xmlns:D="DAV:">
-                <D:prop>
-                    <D:displayname/>
-                    <D:getcontentlength/>
-                    <D:getlastmodified/>
-                    <D:getetag/>
-                    <D:resourcetype/>
-                    <D:creationdate/>
-                </D:prop>
-            </D:propfind>"#;
-
-        debug!("📤 Sending PROPFIND request to URL: {}", url);
-        debug!("📋 PROPFIND body length: {} bytes", propfind_body.len());
-
-        let request_start_time = std::time::Instant::now();
-        let response = self.authenticated_request(
-            Method::from_bytes(b"PROPFIND")?,
-            url,
-            Some(propfind_body.to_string()),
-            Some(vec![
-                ("Depth", "1"),
-                ("Content-Type", "application/xml"),
-            ]),
-        ).await.map_err(|e| {
-            let request_duration = request_start_time.elapsed();
-            error!("❌ PROPFIND request failed for directory '{}' at URL '{}': {} (duration: {}ms)", 
-                   directory_path, url, e, request_duration.as_millis());
-            
-            // Track the PROPFIND request failure
-            let context = ErrorContext {
-                resource_path: directory_path.to_string(),
-                source_id,
-                operation: "propfind_request".to_string(),
-                response_time: Some(request_duration),
-                response_size: None,
-                server_type: self.config.server_type.clone(),
-                server_version: None,
-                additional_context: {
-                    let mut ctx = std::collections::HashMap::new();
-                    ctx.insert("url".to_string(), serde_json::Value::String(url.to_string()));
-                    ctx.insert("method".to_string(), serde_json::Value::String("PROPFIND".to_string()));
-                    ctx
-                },
-            };
-
-            tokio::spawn({
-                let error_tracker = error_tracker.clone();
-                let error_clone = anyhow::anyhow!("{}", e);
-                let directory_path = directory_path.to_string();
-                async move {
-                    if let Err(track_error) = error_tracker.track_error(
-                        user_id,
-                        ErrorSourceType::WebDAV,
-                        source_id,
-                        &directory_path,
-                        &error_clone,
-                        context,
-                    ).await {
-                        warn!("Failed to track PROPFIND error: {}", track_error);
-                    }
-                }
-            });
-            
-            e
-        })?;
-
-        let body = response.text().await?;
-        let all_items = parse_propfind_response_with_directories(&body)?;
-        
-        // Process the items to convert href to relative paths
-        let processed_items = self.process_file_infos(all_items);
-        
-        // Separate files and directories, excluding the parent directory itself
-        let mut files = Vec::new();
-        let mut directories = Vec::new();
-        
-        for item in processed_items {
-            // Skip the directory itself (handle both with and without trailing slash)
-            let normalized_item_path = item.relative_path.trim_end_matches('/');
-            let normalized_directory_path = directory_path.trim_end_matches('/');
-            
-            if normalized_item_path == normalized_directory_path {
-                continue; // Skip the directory itself
-            }
-            
-            if item.is_directory {
-                directories.push(item);
-            } else {
-                files.push(item);
-            }
-        }
-
-        debug!("Found {} files and {} directories in: {}", files.len(), directories.len(), directory_path);
-        Ok(WebDAVDiscoveryResult { files, directories })
-    }
-
-    /// Tries fallback URLs with error tracking when the primary WebDAV URL fails with 405
-    async fn try_fallback_discovery_with_error_tracking(
-        &self, 
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        start_time: std::time::Instant,
-    ) -> Result<WebDAVDiscoveryResult> {
-        let fallback_urls = self.config.webdav_fallback_urls();
-        
-        for (i, fallback_base_url) in fallback_urls.iter().enumerate() {
-            let fallback_url = if directory_path == "/" || directory_path.is_empty() {
-                fallback_base_url.clone()
-            } else {
-                format!("{}/{}", fallback_base_url.trim_end_matches('/'), directory_path.trim_start_matches('/'))
-            };
-            
-            info!("🔄 Trying fallback URL #{}: {}", i + 1, fallback_url);
-            
-            match self.discover_files_and_directories_single_with_url_and_error_tracking(
-                directory_path, &fallback_url, user_id, error_tracker, source_id, start_time
-            ).await {
-                Ok(result) => {
-                    info!("✅ Fallback URL #{} succeeded: {}", i + 1, fallback_url);
-                    warn!("💡 Consider updating your server type configuration to use this URL pattern");
-                    return Ok(result);
-                }
-                Err(e) => {
-                    warn!("❌ Fallback URL #{} failed: {} - {}", i + 1, fallback_url, e);
-                    // Error tracking is already handled in the single_with_url method
-                }
-            }
-        }
-        
-        Err(anyhow::anyhow!(
-            "All WebDAV URLs failed for directory '{}'. Primary URL and {} fallback URLs were tried. \
-            This suggests WebDAV is not properly configured on the server or the server type is incorrect.",
-            directory_path, fallback_urls.len()
-        ))
-    }
-
-    // ============================================================================
-    // Error Tracking Helper Methods
-    // ============================================================================
-
-    /// Creates a SourceErrorTracker for use with enhanced discovery methods
-    /// This is a convenience method to create properly configured error trackers
-    pub fn create_error_tracker(&self, db: crate::db::Database) -> SourceErrorTracker {
-        SourceErrorTracker::new(db)
-    }
-
-    /// Helper method to check if a directory should be skipped due to previous failures
-    /// This is useful for individual operations that want to integrate error tracking
-    pub async fn should_skip_directory_for_failures(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-    ) -> Result<bool> {
-        error_tracker.should_skip_resource(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-        ).await
-    }
-
-    /// Helper method to mark a directory operation as successful
-    /// This resolves any previous failure tracking for the directory
-    pub async fn mark_directory_operation_success(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-    ) -> Result<()> {
-        error_tracker.mark_success(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-        ).await
-    }
-
-    /// Helper method to track a directory operation failure
-    /// This records the error and applies appropriate retry logic
-    pub async fn mark_directory_operation_failure(
-        &self,
-        directory_path: &str,
-        user_id: uuid::Uuid,
-        error_tracker: &SourceErrorTracker,
-        source_id: Option<uuid::Uuid>,
-        error: &anyhow::Error,
-        operation: &str,
-        duration: std::time::Duration,
-    ) -> Result<uuid::Uuid> {
-        let context = ErrorContext {
-            resource_path: directory_path.to_string(),
-            source_id,
-            operation: operation.to_string(),
-            response_time: Some(duration),
-            response_size: None,
-            server_type: self.config.server_type.clone(),
-            server_version: None,
-            additional_context: std::collections::HashMap::new(),
-        };
-
-        error_tracker.track_error(
-            user_id,
-            ErrorSourceType::WebDAV,
-            source_id,
-            directory_path,
-            error,
-            context,
-        ).await
-    }
-
-    // ============================================================================
     // File Operations
     // ============================================================================
 
@@ -1965,83 +1296,50 @@ impl WebDAVService {
         Ok(deduplicated_files)
     }
 
-    /// Discovers files changed since a specific date (for incremental syncs)
-    pub async fn discover_changed_files(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<FileIngestionInfo>> {
-        info!("🔍 Discovering files changed since: {}", since);
-        
-        let all_files = self.discover_all_files().await?;
-        let changed_files = self.filter_files_by_date(all_files, since);
-        
-        info!("📈 Found {} files changed since {}", changed_files.len(), since);
-        Ok(changed_files)
-    }
-
-    /// Discovers files in a specific directory
-    pub async fn discover_files_in_directory(&self, directory_path: &str, recursive: bool) -> Result<Vec<FileIngestionInfo>> {
-        info!("🔍 Discovering files in directory: {} (recursive: {})", directory_path, recursive);
-        self.discover_files(directory_path, recursive).await
-    }
-
     /// Downloads a file from WebDAV server by path
     pub async fn download_file(&self, file_path: &str) -> Result<Vec<u8>> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
-        debug!("⬇️ Downloading file: {}", file_path);
-        
         // Convert full WebDAV paths to relative paths to prevent double path construction
         let relative_path = self.convert_to_relative_path(file_path);
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_path,
-                response.status()
-            ));
-        }
-
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_path);
-        
-        Ok(content.to_vec())
+        let file_name = relative_path.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string();
+        Ok(self.fetch_file(&relative_path, &file_name).await?.0)
     }
 
     /// Downloads a file from WebDAV server using FileIngestionInfo
     pub async fn download_file_info(&self, file_info: &FileIngestionInfo) -> Result<Vec<u8>> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
-        debug!("⬇️ Downloading file: {}", file_info.relative_path);
-        
-        // Use the relative path directly since it's already processed
-        let relative_path = &file_info.relative_path;
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
+        Ok(self.fetch_file(&file_info.relative_path, &file_info.name).await?.0)
+    }
 
+    /// GETs `relative_path` and returns the body with the server's media type,
+    /// after checking the body is complete and is not an HTML page standing in
+    /// for the file.
+    async fn fetch_file(&self, relative_path: &str, file_name: &str) -> Result<(Vec<u8>, Option<String>)> {
+        self.check_cancelled()?;
+        let _permit = self.download_semaphore.acquire().await?;
+        self.check_cancelled()?;
+        debug!("⬇️ Downloading file: {}", relative_path);
+
+        let url = self.get_url_for_path(relative_path);
+        let response = self.authenticated_request(reqwest::Method::GET, &url, None, None).await?;
         if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_info.relative_path,
-                response.status()
-            ));
+            return Err(anyhow!("Failed to download file '{}': HTTP {}", relative_path, response.status()));
         }
 
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
-        
-        Ok(content.to_vec())
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|header| header.to_str().ok())
+            .map(|s| s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase());
+        let content_length = response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|header| header.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok());
+
+        let content = response.bytes().await
+            .map_err(|e| anyhow!("Failed to read body of '{}': {}", relative_path, e))?;
+        verify_download(relative_path, file_name, &content, content_length, content_type.as_deref())?;
+        debug!("✅ Downloaded {} bytes for file: {}", content.len(), relative_path);
+        Ok((content.to_vec(), content_type))
     }
 
     /// Downloads multiple files concurrently
@@ -2080,39 +1378,9 @@ impl WebDAVService {
     /// # Returns
     /// A `WebDAVDownloadResult` containing the file content, updated file info, and MIME detection details
     pub async fn download_file_with_mime_detection(&self, file_info: &FileIngestionInfo) -> Result<WebDAVDownloadResult> {
-        let _permit = self.download_semaphore.acquire().await?;
-        
         debug!("⬇️🔍 Downloading file with MIME detection: {}", file_info.relative_path);
-        
-        // Use the relative path directly since it's already processed
-        let relative_path = &file_info.relative_path;
-        let url = self.get_url_for_path(&relative_path);
-        
-        let response = self.authenticated_request(
-            reqwest::Method::GET,
-            &url,
-            None,
-            None,
-        ).await?;
+        let (content, server_content_type) = self.fetch_file(&file_info.relative_path, &file_info.name).await?;
 
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file '{}': HTTP {}",
-                file_info.relative_path,
-                response.status()
-            ));
-        }
-
-        // Get server-provided content type from response headers
-        let server_content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|header| header.to_str().ok())
-            .map(|s| s.split(';').next().unwrap_or(s).trim().to_string()); // Remove charset info and convert to owned
-
-        let content = response.bytes().await?;
-        debug!("✅ Downloaded {} bytes for file: {}", content.len(), file_info.relative_path);
-        
         // Perform content-based MIME type detection
         let mime_detection_result = detect_mime_from_content(
             &content,
@@ -2148,7 +1416,7 @@ impl WebDAVService {
         };
 
         Ok(WebDAVDownloadResult {
-            content: content.to_vec(),
+            content,
             file_info: updated_file_info,
             mime_detection: mime_detection_result,
             mime_type_updated,
@@ -2249,15 +1517,7 @@ impl WebDAVService {
         
         // Create a temporary config with the effective server URL
         let effective_server_url = self.get_effective_server_url();
-        let temp_config = WebDAVConfig {
-            server_url: effective_server_url,
-            username: self.config.username.clone(),
-            password: self.config.password.clone(),
-            watch_folders: self.config.watch_folders.clone(),
-            file_extensions: self.config.file_extensions.clone(),
-            timeout_seconds: self.config.timeout_seconds,
-            server_type: self.config.server_type.clone(),
-        };
+        let temp_config = self.config_with_server_url(effective_server_url);
         
         let options_response = self.authenticated_request(
             reqwest::Method::OPTIONS,
@@ -2595,6 +1855,7 @@ impl Clone for WebDAVService {
             scan_semaphore: Arc::clone(&self.scan_semaphore),
             download_semaphore: Arc::clone(&self.download_semaphore),
             working_protocol: Arc::clone(&self.working_protocol),
+            cancellation: self.cancellation.clone(),
         }
     }
 }

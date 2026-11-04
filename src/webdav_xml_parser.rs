@@ -3,11 +3,11 @@ use chrono::{DateTime, Utc};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use std::str;
-use serde_json;
 
 use crate::models::FileIngestionInfo;
 use crate::utils::xml_text::MergedTextReader;
 use crate::mime_detection::{detect_mime_for_discovery, DetectionStrategy};
+use crate::services::webdav::fallback_etag::fallback_etag;
 
 #[derive(Debug, Default)]
 struct PropFindResponse {
@@ -201,6 +201,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                     });
                                 
                                 // Use the metadata collected during parsing
+                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(resp.last_modified.as_deref(), resp.content_length));
                                 let metadata = resp.metadata;
                                 
                                 // Determine MIME type using improved detection
@@ -220,7 +221,7 @@ pub fn parse_propfind_response(xml_text: &str) -> Result<Vec<FileIngestionInfo>>
                                     size: resp.content_length.unwrap_or(0),
                                     mime_type,
                                     last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
-                                    etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
+                                    etag,
                                     is_directory: false,
                                     created_at,
                                     permissions: permissions_int,
@@ -442,6 +443,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                     mime_detection_result.mime_type
                                 };
 
+                                let etag = resp.etag.clone().unwrap_or_else(|| fallback_etag(resp.last_modified.as_deref(), resp.content_length));
                                 let file_info = FileIngestionInfo {
                                     relative_path: "TEMP".to_string(), // Will be set by discovery layer
                                     full_path: resp.href.clone(),
@@ -451,7 +453,7 @@ pub fn parse_propfind_response_with_directories(xml_text: &str) -> Result<Vec<Fi
                                     size: resp.content_length.unwrap_or(0),
                                     mime_type,
                                     last_modified: parse_http_date(&resp.last_modified.unwrap_or_default()),
-                                    etag: resp.etag.unwrap_or_else(|| format!("\"{}\"", uuid::Uuid::new_v4())),
+                                    etag,
                                     is_directory: resp.is_collection,
                                     created_at,
                                     permissions: permissions_int,

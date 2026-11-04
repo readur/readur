@@ -4,8 +4,9 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use std::sync::Arc;
+use std::time::Duration;
 use uuid::Uuid;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::{
     auth::AuthUser,
@@ -20,6 +21,9 @@ use crate::{
     utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
     AppState,
 };
+
+/// How long a delete waits for a stopped sync task to exit.
+const SYNC_STOP_WAIT: Duration = Duration::from_secs(5);
 
 /// List all sources for the authenticated user
 #[utoipa::path(
@@ -259,6 +263,15 @@ pub async fn update_source(
         update_data.config = Some(config);
     }
 
+    // A disabled source must not keep syncing; a stop with nothing running is fine.
+    if update_data.enabled == Some(false) {
+        if let Some(scheduler) = &state.source_scheduler {
+            if scheduler.stop_sync(source_id).await.is_ok() {
+                info!("Stopped the running sync of source {} because it is being disabled", source_id);
+            }
+        }
+    }
+
     let source = state
         .db
         .update_source(auth_user.user.id, source_id, &update_data)
@@ -298,6 +311,7 @@ pub async fn update_source(
         (status = 204, description = "Source deleted successfully"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
+        (status = 409, description = "A sync for the source is still stopping; retry shortly"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -306,6 +320,22 @@ pub async fn delete_source(
     Path(source_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<StatusCode, StatusCode> {
+    state
+        .db
+        .get_source(auth_user.user.id, source_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Stop a running sync and let its task exit before the row goes away;
+    // otherwise its remaining files would fail against a missing source.
+    if let Some(scheduler) = &state.source_scheduler {
+        if !scheduler.stop_sync_and_wait(source_id, SYNC_STOP_WAIT).await {
+            warn!("Not deleting source {}: its sync task is still running", source_id);
+            return Err(StatusCode::CONFLICT);
+        }
+    }
+
     let deleted = state
         .db
         .delete_source(auth_user.user.id, source_id)

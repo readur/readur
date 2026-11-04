@@ -77,7 +77,7 @@ sha2 = "0.11"
 utoipa-swagger-ui = { version = "10", features = ["axum"] }
 testcontainers = { version = "0.27", optional = true }
 testcontainers-modules = { version = "0.15", features = ["postgres"], optional = true }
-libc = { version = "0.2", optional = true }
+libc = "0.2"
 # Office document support - now using XML extraction only
 zip = "9"             # Still needed for other archive handling
 rand = "0.10"
@@ -86,7 +86,7 @@ rand = "0.10"
 default = ["ocr", "s3"]
 ocr = ["tesseract", "image", "imageproc", "raw-cpuid", "kamadak-exif"]
 s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types", "aws-smithy-http-client", "aws-smithy-runtime-api"]
-test-utils = ["testcontainers", "testcontainers-modules", "libc"]
+test-utils = ["testcontainers", "testcontainers-modules"]
 stress-testing = ["test-utils"]
 
 [dev-dependencies]

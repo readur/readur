@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::path::Path;
 use std::time::Instant;
 use tracing::{debug, error, info, warn};
 use chrono::Utc;
@@ -11,7 +10,8 @@ use crate::{
     AppState,
     models::source::{CreateWebDAVFile, UpdateWebDAVSyncState},
     ingestion::document_ingestion::{DocumentIngestionService, IngestionResult},
-    services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase},
+    services::webdav::{WebDAVConfig, WebDAVService, SmartSyncService, SyncProgress, SyncPhase, PendingDirectoryCommit},
+    utils::extension_filter::ExtensionFilter,
     utils::outbound::validate_outbound_url,
 };
 
@@ -123,7 +123,10 @@ async fn perform_sync_internal(
     webdav_source_id: Option<uuid::Uuid>,
     request_id: Uuid,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    
+    // The service holds the watch folders decoded and normalised.
+    let config = WebDAVConfig { watch_folders: webdav_service.get_config().watch_folders.clone(), ..config };
+    let extension_filter = ExtensionFilter::new(&config.file_extensions);
+
     let mut total_files_processed = 0;
     let mut total_directories_scanned = 0;
     let mut total_directories_skipped = 0;
@@ -193,19 +196,8 @@ async fn perform_sync_internal(
                            request_id, folder_path, sync_result.directories_skipped);
                 }
                 
-                // Filter files for processing (directories already handled by smart sync service)
-                let files_to_process: Vec<_> = sync_result.files.into_iter()
-                    .filter(|file_info| {
-                        // Check if file extension is supported
-                        let file_extension = Path::new(&file_info.name)
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .unwrap_or("")
-                            .to_lowercase();
-                        
-                        config.file_extensions.contains(&file_extension)
-                    })
-                    .collect();
+                // Directories were already handled by the smart sync service.
+                let files_to_process = supported_files(&extension_filter, sync_result.files);
                 
                 info!("[{}] 📄 Processing {} files from folder '{}'", 
                       request_id, files_to_process.len(), folder_path);
@@ -223,6 +215,8 @@ async fn perform_sync_internal(
                 progress.add_files_found(files_to_process.len());
                 let semaphore = Arc::new(Semaphore::new(concurrent_limit));
                 let mut folder_files_processed = 0;
+                let mut failed_files: Vec<String> = Vec::new();
+                let mut cancelled_during_files = false;
                 
                 // Create futures for processing each file concurrently
                 let mut file_futures = FuturesUnordered::new();
@@ -235,7 +229,7 @@ async fn perform_sync_internal(
                     
                     // Create a future for processing this file
                     let future = async move {
-                        process_single_file(
+                        let result = process_single_file(
                             state_clone,
                             user_id,
                             &webdav_service_clone,
@@ -243,14 +237,16 @@ async fn perform_sync_internal(
                             enable_background_ocr,
                             semaphore_clone,
                             webdav_source_id,
-                        ).await
+                            None,
+                        ).await;
+                        (file_info_clone.relative_path, result)
                     };
                     
                     file_futures.push(future);
                 }
                 
                 // Process files concurrently and collect results
-                while let Some(result) = file_futures.next().await {
+                while let Some((file_path, result)) = file_futures.next().await {
                     // Check if sync has been cancelled
                     if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
                         if !sync_state.is_running {
@@ -259,6 +255,7 @@ async fn perform_sync_internal(
                             // Cancel remaining futures
                             file_futures.clear();
                             sync_errors.push("Sync cancelled by user during file processing".to_string());
+                            cancelled_during_files = true;
                             break;
                         }
                     }
@@ -281,6 +278,7 @@ async fn perform_sync_internal(
                                    request_id, folder_path, error);
                             sync_errors.push(format!("Folder '{}': {}", folder_path, error));
                             progress.add_error(&error);
+                            failed_files.push(file_path);
                         }
                     }
                     
@@ -301,6 +299,14 @@ async fn perform_sync_internal(
                 }
                 
                 total_files_processed += folder_files_processed;
+
+                // The folder's directory state is recorded only now that its
+                // files are done, and not at all when the run was stopped.
+                if cancelled_during_files {
+                    info!("[{}] Directory state of '{}' not recorded: sync was cancelled", request_id, folder_path);
+                } else {
+                    PendingDirectoryCommit::commit_all(&state.db, vec![sync_result.directory_commit], &failed_files).await;
+                }
                 
                 let folder_throughput = if folder_elapsed.as_secs_f64() > 0.0 {
                     folder_files_processed as f64 / folder_elapsed.as_secs_f64()
@@ -368,6 +374,7 @@ async fn process_single_file(
     enable_background_ocr: bool,
     semaphore: Arc<Semaphore>,
     webdav_source_id: Option<uuid::Uuid>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<bool, String> {
     let file_start_time = Instant::now();
     let file_request_id = Uuid::new_v4();
@@ -378,6 +385,13 @@ async fn process_single_file(
                file_request_id, file_info.path, e);
         format!("Semaphore error: {}", e)
     })?;
+
+    // Checked after the permit, so files queued behind the concurrency
+    // limit are not started once the run has been stopped.
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        debug!("[{}] Run cancelled, not starting file: '{}'", file_request_id, file_info.path);
+        return Ok(false);
+    }
     
     // Check if sync has been cancelled before processing this file
     if let Ok(Some(sync_state)) = state.db.get_webdav_sync_state(user_id).await {
@@ -571,7 +585,10 @@ async fn process_single_file(
     Ok(true) // Successfully processed
 }
 
-/// Process files for deep scan - similar to regular sync but forces processing
+/// Process files for deep scan - similar to regular sync but forces processing.
+/// Once `cancellation` is triggered no further file is started and the
+/// count of files processed so far is returned; the caller decides how to
+/// record the interrupted run.
 pub async fn process_files_for_deep_scan(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
@@ -579,7 +596,8 @@ pub async fn process_files_for_deep_scan(
     files_to_process: &[crate::models::FileIngestionInfo],
     enable_background_ocr: bool,
     webdav_source_id: Option<uuid::Uuid>,
-) -> Result<usize, anyhow::Error> {
+    cancellation: &tokio_util::sync::CancellationToken,
+) -> Result<ProcessedFiles, anyhow::Error> {
     let deep_scan_start = Instant::now();
     let deep_scan_request_id = Uuid::new_v4();
     
@@ -590,6 +608,7 @@ pub async fn process_files_for_deep_scan(
     let semaphore = Arc::new(Semaphore::new(concurrent_limit));
     let mut files_processed = 0;
     let mut sync_errors = Vec::new();
+    let mut failed_files = Vec::new();
     
     if files_to_process.len() > 20 {
         info!("[{}] Large deep scan batch ({} files), using concurrency limit of {}", 
@@ -604,10 +623,11 @@ pub async fn process_files_for_deep_scan(
         let webdav_service_clone = webdav_service.clone();
         let file_info_clone = file_info.clone();
         let semaphore_clone = semaphore.clone();
+        let cancellation = cancellation.clone();
         
         // Create a future for processing this file
         let future = async move {
-            process_single_file(
+            let result = process_single_file(
                 state_clone,
                 user_id,
                 &webdav_service_clone,
@@ -615,14 +635,16 @@ pub async fn process_files_for_deep_scan(
                 enable_background_ocr,
                 semaphore_clone,
                 webdav_source_id,
-            ).await
+                Some(&cancellation),
+            ).await;
+            (file_info_clone.relative_path, result)
         };
         
         file_futures.push(future);
     }
     
     // Process files concurrently and collect results
-    while let Some(result) = file_futures.next().await {
+    while let Some((file_path, result)) = file_futures.next().await {
         match result {
             Ok(processed) => {
                 if processed {
@@ -638,6 +660,7 @@ pub async fn process_files_for_deep_scan(
             Err(error) => {
                 error!("[{}] Deep scan file processing error: {}", deep_scan_request_id, error);
                 sync_errors.push(error);
+                failed_files.push(file_path);
             }
         }
     }
@@ -658,7 +681,64 @@ pub async fn process_files_for_deep_scan(
     info!("[{}] ✅ Deep scan processing completed: {} files processed successfully in {:.2}s ({:.1} files/sec)", 
           deep_scan_request_id, files_processed, deep_scan_elapsed.as_secs_f64(), deep_scan_throughput);
     
-    Ok(files_processed)
+    Ok(ProcessedFiles { ingested: files_processed, failed_files })
+}
+
+/// What processing a batch of discovered files produced.
+#[derive(Debug, Default)]
+pub struct ProcessedFiles {
+    /// Files that were downloaded and ingested.
+    pub ingested: usize,
+    /// Paths of files that failed, so their directories are not recorded as done.
+    pub failed_files: Vec<String>,
 }
 
 
+
+/// The listed files whose names pass the source's extension filter.
+fn supported_files(filter: &ExtensionFilter, files: Vec<crate::models::FileIngestionInfo>) -> Vec<crate::models::FileIngestionInfo> {
+    files.into_iter().filter(|file| filter.matches_name(&file.name)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::FileIngestionInfo;
+
+    fn listed(name: &str) -> FileIngestionInfo {
+        FileIngestionInfo {
+            relative_path: format!("/Documents/{name}"),
+            full_path: format!("/Documents/{name}"),
+            #[allow(deprecated)]
+            path: format!("/Documents/{name}"),
+            name: name.to_string(),
+            size: 9,
+            mime_type: "application/octet-stream".into(),
+            last_modified: None,
+            etag: name.to_string(),
+            is_directory: false,
+            created_at: None,
+            permissions: None,
+            owner: None,
+            group: None,
+            metadata: None,
+        }
+    }
+
+    /// The configured extensions are matched the way every other sync path
+    /// matches them: case-insensitively and with or without a leading dot.
+    #[test]
+    fn configured_extensions_match_regardless_of_case_and_dot() {
+        let filter = ExtensionFilter::new(&["PDF".to_string(), ".Txt".to_string()]);
+        let kept = supported_files(&filter, vec![listed("report.pdf"), listed("SCAN.PDF"), listed("notes.txt"), listed("photo.jpg")]);
+        let names: Vec<&str> = kept.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["report.pdf", "SCAN.PDF", "notes.txt"]);
+    }
+
+    /// No configured extension means every file is kept.
+    #[test]
+    fn an_empty_extension_list_keeps_every_file() {
+        let filter = ExtensionFilter::new(&[] as &[String]);
+        assert_eq!(supported_files(&filter, vec![listed("a.pdf"), listed("b")]).len(), 2);
+    }
+}
