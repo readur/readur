@@ -259,3 +259,40 @@ async fn the_cancellation_error_itself_is_not_a_failure() {
     assert!(outcome.first_error.is_none(), "{outcome:?}");
     let _ = ctx.cleanup_and_close().await;
 }
+
+/// A stop request that arrives while a folder is being listed ends the run
+/// as cancelled, not as a run in which every folder failed.
+#[tokio::test]
+async fn a_stop_request_during_listing_is_a_cancelled_run_not_a_failed_one() {
+    let ctx = TestContext::new().await;
+    let service = SourceSyncService::new(ctx.state().clone());
+    let folders = vec!["/docs".to_string()];
+    let token = CancellationToken::new();
+    let cancel = token.clone();
+
+    let outcome = service
+        .run_pipeline(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &folders,
+            &["txt".to_string()],
+            false,
+            token,
+            &Arc::new(SyncProgress::new()),
+            move |folder| {
+                let cancel = cancel.clone();
+                async move {
+                    cancel.cancel();
+                    Err(anyhow!("listing {folder} aborted"))
+                }
+            },
+            |_| async { Ok(Vec::new()) },
+        )
+        .await
+        .expect("a stopped run is not a failed run");
+
+    assert!(outcome.cancelled, "{outcome:?}");
+    assert_eq!(outcome.folders_failed, 0, "{outcome:?}");
+    assert!(outcome.first_error.is_none(), "{outcome:?}");
+    let _ = ctx.cleanup_and_close().await;
+}

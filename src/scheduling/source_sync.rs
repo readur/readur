@@ -491,6 +491,14 @@ impl SourceSyncService {
                     }
                     info!("Found {} files to process in folder {}", files_to_process.len() - before, folder_path);
                 }
+                // A listing interrupted by the stop request is not a folder failure.
+                // The token is consulted too: a listing that fails for any reason
+                // while the stop lands is simply listed again next run.
+                Err(e) if is_cancelled(&e) || cancellation_token.is_cancelled() => {
+                    info!("Sync cancelled while listing folder {}", folder_path);
+                    outcome.cancelled = true;
+                    return Ok(outcome);
+                }
                 Err(e) => {
                     error!("Failed to discover files in folder {}: {}", folder_path, e);
                     outcome.folders_failed += 1;
@@ -504,6 +512,11 @@ impl SourceSyncService {
         if outcome.oversized > 0 {
             warn!("Skipped {} files larger than the {} MiB limit (max_file_size_mb) for source {}",
                   outcome.oversized, self.state.config.max_file_size_mb, source_id);
+        }
+        if cancellation_token.is_cancelled() {
+            info!("Sync cancelled after folder discovery");
+            outcome.cancelled = true;
+            return Ok(outcome);
         }
         if !watch_folders.is_empty() && outcome.folders_failed == watch_folders.len() {
             return Err(anyhow!(
