@@ -82,8 +82,10 @@ fn filtering_http_client() -> aws_sdk_s3::config::SharedHttpClient {
 
 /// Connect / time-to-first-byte / per-attempt limits. Without these the SDK
 /// only bounds the connect phase, so a server that accepts the connection
-/// and then stalls holds a sync slot until the scheduler kills the whole
-/// sync. The attempt limit is generous so large objects still complete.
+/// and then stalls would hold a sync slot indefinitely: there is no
+/// wall-clock limit on a sync as a whole, so these per-attempt timeouts are
+/// the only bound. The attempt limit is generous so large objects still
+/// complete.
 #[cfg(feature = "s3")]
 pub(crate) fn timeout_config() -> aws_sdk_s3::config::timeout::TimeoutConfig {
     use std::time::Duration;
