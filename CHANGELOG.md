@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.2](https://github.com/readur/readur/compare/v3.1.1...v3.1.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **sync:** harden remote-source synchronization (WebDAV/Nextcloud, S3, local folder) ([#1016](https://github.com/readur/readur/issues/1016)) ([91e68d6](https://github.com/readur/readur/commit/91e68d6cd5f3740b4ecdd0f8cfc24929ba248249))
+
+
+### Miscellaneous Chores
+
+* **github-action:** Update github-actions ([#1014](https://github.com/readur/readur/issues/1014)) ([89e8fb1](https://github.com/readur/readur/commit/89e8fb1786d7c59dfdcc75b4fde2383c1402b672))
+* **renovate-config:** Update config home-operations/renovate-presets (10.0.1 ➔ 11.0.0) ([#1015](https://github.com/readur/readur/issues/1015)) ([1aa24da](https://github.com/readur/readur/commit/1aa24da9f899617523dfee7f4d512083ef7de1a5))
+
 ## [3.1.1](https://github.com/readur/readur/compare/v3.1.0...v3.1.1) (2026-11-03)
 
 
