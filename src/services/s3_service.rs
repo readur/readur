@@ -21,6 +21,7 @@ use crate::services::s3_listing::{list_objects, listing_prefix, ListingContext, 
 use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
 use crate::utils::extension_filter::ExtensionFilter;
+use crate::utils::sync_cancelled::cancelled;
 
 /// Threshold for using streaming multipart uploads (100MB)
 const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
@@ -120,7 +121,7 @@ impl S3Service {
     /// Error when the attached token (if any) has been cancelled.
     fn check_cancelled(&self, what: &str) -> Result<()> {
         match &self.cancellation_token {
-            Some(token) if token.is_cancelled() => Err(anyhow!("S3 {} cancelled", what)),
+            Some(token) if token.is_cancelled() => Err(cancelled(format!("S3 {what}"))),
             _ => Ok(()),
         }
     }

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -16,6 +16,7 @@ use crate::{
     services::webdav::{WebDAVService, WebDAVConfig, SyncProgress, SyncPhase, PendingDirectoryCommit},
     utils::extension_filter::ExtensionFilter,
     utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
+    utils::sync_cancelled::{cancelled, is_cancelled},
 };
 
 /// Status message recorded on a source whose owner cannot sync it.
@@ -203,7 +204,7 @@ impl SourceSyncService {
 
     async fn run_source(&self, source: &Source, enable_background_ocr: bool, cancellation_token: CancellationToken, progress: &Arc<SyncProgress>) -> Result<SyncOutcome> {
         if cancellation_token.is_cancelled() {
-            return Err(anyhow!("Sync cancelled"));
+            return Err(cancelled("Sync"));
         }
 
         let owner = self.state.db.get_user_by_id(source.user_id).await?;
@@ -573,13 +574,13 @@ impl SourceSyncService {
                     outcome.skipped += 1;
                     outcome.unchanged += 1;
                 }
-                Err(_) if cancellation_token.is_cancelled() => {
+                Err(e) if is_cancelled(&e) => {
                     debug!("File {} not processed: sync cancelled", file_info.relative_path);
                 }
                 Err(e) => {
-                    error!("File processing error for {}: {}", file_info.relative_path, e);
+                    error!("File processing error for {}: {:#}", file_info.relative_path, e);
                     outcome.failed += 1;
-                    let message = format!("{}: {}", file_info.relative_path, e);
+                    let message = format!("{}: {:#}", file_info.relative_path, e);
                     progress.add_error(&message);
                     outcome.record_error(message);
                     failed_files.push(file_info.relative_path.clone());
@@ -615,7 +616,7 @@ impl SourceSyncService {
     {
         // Check for cancellation before starting file processing
         if cancellation_token.is_cancelled() {
-            return Err(anyhow!("Processing cancelled"));
+            return Err(cancelled("Processing"));
         }
 
         let _permit = semaphore.acquire().await
@@ -625,7 +626,7 @@ impl SourceSyncService {
 
         // Check for cancellation again after acquiring semaphore
         if cancellation_token.is_cancelled() {
-            return Err(anyhow!("Processing cancelled"));
+            return Err(cancelled("Processing"));
         }
 
         // A document already stored for this path with the same size and
@@ -642,11 +643,11 @@ impl SourceSyncService {
 
         // Download the file
         let file_data = download_file(file_info.relative_path.clone()).await
-            .map_err(|e| anyhow!("Failed to download {}: {}", file_info.relative_path, e))?;
+            .with_context(|| format!("Failed to download {}", file_info.relative_path))?;
 
         // Check for cancellation after download, before ingestion
         if cancellation_token.is_cancelled() {
-            return Err(anyhow!("Processing cancelled"));
+            return Err(cancelled("Processing"));
         }
 
         debug!("Downloaded file: {} ({} bytes)", file_info.name, file_data.len());

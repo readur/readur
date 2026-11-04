@@ -22,6 +22,7 @@ use crate::services::source_error_tracker::SourceErrorTracker;
 use crate::webdav_xml_parser::{parse_propfind_response, parse_propfind_response_with_directories};
 use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
+use crate::utils::sync_cancelled::cancelled;
 
 use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
@@ -280,7 +281,7 @@ impl WebDAVService {
     /// Fails fast when the cancellation token, if any, has been triggered.
     fn check_cancelled(&self) -> Result<()> {
         match &self.cancellation {
-            Some(token) if token.is_cancelled() => Err(anyhow!("WebDAV operation cancelled")),
+            Some(token) if token.is_cancelled() => Err(cancelled("WebDAV operation")),
             _ => Ok(()),
         }
     }

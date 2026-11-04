@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use readur::models::{CreateSource, FileIngestionInfo, SourceStatus, SourceType};
 use readur::scheduling::source_sync::{FolderDiscovery, SourceSyncService};
 use readur::test_utils::TestContext;
+use readur::utils::sync_cancelled::cancelled;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 use readur::services::webdav::SyncProgress;
@@ -183,4 +184,78 @@ async fn unlisted_subdirectory_marks_the_run_not_clean_but_syncs_listed_files() 
     let summary = outcome.failure_summary().unwrap();
     assert!(summary.contains("2 subdirectories could not be listed"), "{summary}");
     assert!(summary.contains("directory /docs/broken: could not be listed"), "{summary}");
+}
+
+/// A download that fails for a real reason while the stop request arrives is
+/// still a failed file; only the cancellation error itself is not counted.
+#[tokio::test]
+async fn a_real_failure_during_cancellation_is_still_counted() {
+    let ctx = TestContext::new().await;
+    let service = SourceSyncService::new(ctx.state().clone());
+    let folders = vec!["/docs".to_string()];
+    let token = CancellationToken::new();
+    let cancel = token.clone();
+
+    let outcome = service
+        .run_pipeline(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &folders,
+            &["txt".to_string()],
+            false,
+            token,
+            &Arc::new(SyncProgress::new()),
+            |_| async move { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) },
+            move |_| {
+                let cancel = cancel.clone();
+                async move {
+                    cancel.cancel();
+                    Err(anyhow!("download refused"))
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(outcome.cancelled, "{outcome:?}");
+    assert_eq!(outcome.failed, 1, "{outcome:?}");
+    assert!(outcome.first_error.as_deref().unwrap().contains("download refused"), "{outcome:?}");
+    let _ = ctx.cleanup_and_close().await;
+}
+
+/// The cancellation error a download returns once the token fires is not a
+/// file failure.
+#[tokio::test]
+async fn the_cancellation_error_itself_is_not_a_failure() {
+    let ctx = TestContext::new().await;
+    let service = SourceSyncService::new(ctx.state().clone());
+    let folders = vec!["/docs".to_string()];
+    let token = CancellationToken::new();
+    let cancel = token.clone();
+
+    let outcome = service
+        .run_pipeline(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &folders,
+            &["txt".to_string()],
+            false,
+            token,
+            &Arc::new(SyncProgress::new()),
+            |_| async move { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) },
+            move |_| {
+                let cancel = cancel.clone();
+                async move {
+                    cancel.cancel();
+                    Err(cancelled("WebDAV operation"))
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(outcome.cancelled, "{outcome:?}");
+    assert_eq!(outcome.failed, 0, "{outcome:?}");
+    assert!(outcome.first_error.is_none(), "{outcome:?}");
+    let _ = ctx.cleanup_and_close().await;
 }

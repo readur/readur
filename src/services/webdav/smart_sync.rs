@@ -11,6 +11,7 @@ use crate::models::source::{CreateWebDAVDirectory};
 use crate::models::source_error::{ErrorSourceType, ErrorContext};
 use crate::webdav_xml_parser::compare_etags;
 use crate::services::source_error_tracker::SourceErrorTracker;
+use crate::utils::sync_cancelled::cancelled;
 use super::{WebDAVService, SyncProgress};
 use super::paths::normalize_watch_folder;
 use super::directory_commit::PendingDirectoryCommit;
@@ -165,7 +166,7 @@ impl SmartSyncService {
 
     fn check_cancelled(&self) -> Result<()> {
         match &self.cancellation {
-            Some(token) if token.is_cancelled() => Err(anyhow::anyhow!("Smart sync cancelled")),
+            Some(token) if token.is_cancelled() => Err(cancelled("Smart sync")),
             _ => Ok(()),
         }
     }

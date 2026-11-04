@@ -5,4 +5,5 @@ pub mod hash;
 pub mod outbound;
 pub mod pdftoppm;
 pub mod security;
+pub mod sync_cancelled;
 pub mod xml_text;

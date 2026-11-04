@@ -17,6 +17,7 @@ use crate::models::FileIngestionInfo;
 use crate::services::s3_client::describe_error;
 #[cfg(feature = "s3")]
 use crate::utils::extension_filter::ExtensionFilter;
+use crate::utils::sync_cancelled::cancelled;
 #[cfg(feature = "s3")]
 use aws_sdk_s3::Client;
 #[cfg(feature = "s3")]
@@ -96,7 +97,7 @@ pub(crate) async fn list_objects(ctx: &ListingContext<'_>, prefix: &str) -> Resu
 
     loop {
         if ctx.cancellation.is_some_and(|token| token.is_cancelled()) {
-            return Err(anyhow!("Listing of S3 prefix '{}' cancelled after {} pages", prefix, pages));
+            return Err(cancelled(format!("Listing of S3 prefix '{}' ({} pages read)", prefix, pages)));
         }
         if pages >= ctx.max_pages {
             return Err(anyhow!(
