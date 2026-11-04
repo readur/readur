@@ -23,7 +23,7 @@ use crate::mime_detection::{detect_mime_from_content, MimeDetectionResult};
 use crate::utils::outbound::{self, check_url_without_dns};
 use crate::utils::sync_cancelled::{cancelled, is_cancelled, sleep_unless_cancelled};
 
-use super::{config::{WebDAVConfig, RetryConfig, ConcurrencyConfig}, SyncProgress};
+use super::config::{WebDAVConfig, RetryConfig, ConcurrencyConfig};
 use super::common::{build_user_agent, retry_after_delay, verify_download};
 use super::paths::{decode_href, encode_path, normalize_watch_folder};
 
@@ -966,16 +966,6 @@ impl WebDAVService {
     /// Discovers both files and directories with their ETags for directory tracking
     pub async fn discover_files_and_directories(&self, directory_path: &str, recursive: bool) -> Result<WebDAVDiscoveryResult> {
         self.discover_tree(directory_path, recursive, None).await.map(Into::into)
-    }
-
-    /// Discovers both files and directories with basic progress tracking (simplified)
-    pub async fn discover_files_and_directories_with_progress(
-        &self,
-        directory_path: &str,
-        recursive: bool,
-        _progress: Option<&SyncProgress> // Simplified: just placeholder for API compatibility
-    ) -> Result<WebDAVDiscoveryResult> {
-        self.discover_files_and_directories(directory_path, recursive).await
     }
 
     /// Discovery that records per-directory outcomes in the `SourceErrorTracker` so

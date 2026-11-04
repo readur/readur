@@ -59,7 +59,7 @@ pub async fn sleep_unless_cancelled(wait: Duration, token: Option<&CancellationT
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::{anyhow, Context};
+    use anyhow::anyhow;
 
     #[test]
     fn the_marker_is_recognised_through_context_layers() {
