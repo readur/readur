@@ -352,20 +352,8 @@ impl DeepScan {
                 // The directory state is recorded only now that the files are
                 // done, minus the directories of files that failed.
                 crate::services::webdav::PendingDirectoryCommit::commit_all(&this.state.db, pending, &processed.failed_files).await;
-                let files_processed = processed.ingested;
-                let duration = chrono::Utc::now() - start_time;
-                info!("Deep scan completed for source {}: {} files processed in {:?}", this.source_id, files_processed, duration);
                 progress.set_phase(SyncPhase::Completed);
-                this.finish(SourceStatus::Idle, &format!("Deep scan completed: {} files processed", files_processed), files_processed as i64, Some(0)).await;
-                this.notify("success", "Deep Scan Completed", format!(
-                    "Smart deep scan of {} completed successfully. {} files processed, {} directories tracked in {:.1} minutes.",
-                    this.source_name, files_processed, directories_tracked, duration.num_seconds() as f64 / 60.0
-                ), serde_json::json!({
-                    "source_id": this.source_id,
-                    "scan_type": "deep_scan",
-                    "files_processed": files_processed,
-                    "duration_seconds": duration.num_seconds()
-                })).await;
+                this.finish_processed(&processed, files.len(), directories_tracked, chrono::Utc::now() - start_time, &progress).await;
             }
             Err(e) => {
                 error!("Deep scan file processing failed for source {}: {}", this.source_id, e);
@@ -425,6 +413,42 @@ impl DeepScan {
             }
         }
         (files, directories_tracked, pending)
+    }
+
+    /// Records a finished scan the way a scheduled sync is recorded: idle
+    /// with a success notification when every file went through, otherwise
+    /// the error status with a summary and the failed files counted as
+    /// pending.
+    async fn finish_processed(
+        &self,
+        processed: &crate::routes::webdav::webdav_sync::ProcessedFiles,
+        files_total: usize,
+        directories_tracked: usize,
+        duration: chrono::Duration,
+        progress: &Arc<SyncProgress>,
+    ) {
+        let files_processed = processed.ingested;
+        let metadata = serde_json::json!({
+            "source_id": self.source_id,
+            "scan_type": "deep_scan",
+            "files_processed": files_processed,
+            "files_failed": processed.failed_files.len(),
+            "duration_seconds": duration.num_seconds()
+        });
+        if let Some(first_failed) = processed.failed_files.first() {
+            let summary = format!("{} of {} files failed; first: {}", processed.failed_files.len(), files_total, first_failed);
+            warn!("Deep scan finished with failures for source {}: {}", self.source_id, summary);
+            progress.add_error(&summary);
+            self.finish(SourceStatus::Error, &summary, files_processed as i64, Some(processed.failed_files.len() as i64)).await;
+            self.notify("warning", "Deep Scan Finished With Errors", format!("Deep scan of {}: {}", self.source_name, summary), metadata).await;
+            return;
+        }
+        info!("Deep scan completed for source {}: {} files processed in {:?}", self.source_id, files_processed, duration);
+        self.finish(SourceStatus::Idle, &format!("Deep scan completed: {} files processed", files_processed), files_processed as i64, Some(0)).await;
+        self.notify("success", "Deep Scan Completed", format!(
+            "Smart deep scan of {} completed successfully. {} files processed, {} directories tracked in {:.1} minutes.",
+            self.source_name, files_processed, directories_tracked, duration.num_seconds() as f64 / 60.0
+        ), metadata).await;
     }
 
     /// Records a stopped scan: idle with the cancelled message, the files

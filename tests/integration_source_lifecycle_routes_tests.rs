@@ -329,3 +329,52 @@ async fn sync_of_a_misconfigured_source_is_a_bad_request() {
     assert!(!h.scheduler.is_running(id));
     let _ = h.ctx.cleanup_and_close().await;
 }
+
+/// A deep scan in which a file could not be downloaded ends in the error
+/// status with that file counted as pending, not as a completed scan.
+#[tokio::test]
+async fn deep_scan_with_a_failed_download_ends_in_the_error_status() {
+    let h = harness().await;
+    let server = MockServer::start().await;
+    let listing = format!(
+        r#"<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">{}{}{}</d:multistatus>"#,
+        entry("/Documents/", "root-v1", true),
+        entry("/Documents/ok.pdf", "f-ok", false),
+        entry("/Documents/broken.pdf", "f-broken", false),
+    );
+    Mock::given(method("PROPFIND"))
+        .and(path("/Documents"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(listing))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Documents/ok.pdf"))
+        .respond_with(ResponseTemplate::new(200).insert_header("content-type", "application/pdf").set_body_bytes(b"%PDF-1.4\n".to_vec()))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/Documents/broken.pdf"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    let id = h.webdav_source(&server.uri()).await;
+
+    let (status, body) = h.send("POST", &format!("/api/sources/{id}/scan/deep"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["success"], json!(true), "{body}");
+    h.wait_until_not_running(id).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while h.source(id).await.unwrap().status == SourceStatus::Syncing {
+        assert!(tokio::time::Instant::now() < deadline, "source stayed syncing after the deep scan");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+
+    let source = h.source(id).await.unwrap();
+    assert_eq!(source.status, SourceStatus::Error, "{:?}", source.last_error);
+    let last_error = source.last_error.clone().unwrap_or_default();
+    assert!(last_error.contains("1 of 2 files failed"), "{last_error}");
+    assert!(last_error.contains("broken.pdf"), "{last_error}");
+    assert_eq!(source.total_files_pending, 1);
+    assert_eq!(source.total_files_synced, 1);
+    let _ = h.ctx.cleanup_and_close().await;
+}
