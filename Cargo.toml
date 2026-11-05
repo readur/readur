@@ -75,7 +75,7 @@ aws-smithy-http-client = { version = "1.4", features = ["rustls-aws-lc"], option
 aws-smithy-runtime-api = { version = "1.18", features = ["client"], optional = true }
 sha2 = "0.11"
 utoipa-swagger-ui = { version = "10", features = ["axum"] }
-testcontainers = { version = "0.27", optional = true }
+testcontainers = { version = "0.28", optional = true }
 testcontainers-modules = { version = "0.15", features = ["postgres"], optional = true }
 libc = "0.2"
 # Office document support - now using XML extraction only
@@ -96,7 +96,7 @@ tokio-test = "0.4"
 futures = "0.3"
 rand = "0.10"
 # Database testing dependencies
-testcontainers = "0.27"
+testcontainers = "0.28"
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
 rust_xlsxwriter = "0.102"  # For creating proper XLSX test files
