@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.1.3](https://github.com/readur/readur/compare/v3.1.2...v3.1.3) (2026-11-06)
+
+
+### Miscellaneous Chores
+
+* **github-action:** Update action github/codeql-action (v4.39.1 ➔ v4.39.2) ([#1024](https://github.com/readur/readur/issues/1024)) ([64900a8](https://github.com/readur/readur/commit/64900a82bf6df71d670043081d7cc1a22e996c69))
+* **github-action:** Update action jdx/mise-action (v5.2.5 ➔ v5.2.6) ([#1020](https://github.com/readur/readur/issues/1020)) ([ea5c95a](https://github.com/readur/readur/commit/ea5c95a00d374c1fa00a06e950e5a1d63f1c6b7f))
+* **mise:** Update tool aqua:zizmorcore/zizmor (1.31.1 ➔ 1.32.0) ([#1023](https://github.com/readur/readur/issues/1023)) ([58cb945](https://github.com/readur/readur/commit/58cb94537f09abad7f6e6370f83bb2daa5e8f9c7))
+* **npm:** Update dependency i18next-browser-languagedetector (8.3.0 ➔ 8.3.0) ([#1018](https://github.com/readur/readur/issues/1018)) ([dbb0f1c](https://github.com/readur/readur/commit/dbb0f1c21015f3b4d94daa75b117e1c2847302de))
+* **npm:** Update dependency i18next-http-backend (4.0.9 ➔ 4.0.10) ([#1026](https://github.com/readur/readur/issues/1026)) ([e5aa3ff](https://github.com/readur/readur/commit/e5aa3ffe5a6d22f55632c04aa6c259297fe16eaf))
+* **npm:** Update dependency lucide-react (1.66.0 ➔ 1.67.0) ([#1025](https://github.com/readur/readur/issues/1025)) ([518bee7](https://github.com/readur/readur/commit/518bee71a1d88293b28cc2cbf137d23e47fb6398))
+* **npm:** Update dependency react-i18next (17.1.11 ➔ 17.1.12) ([#1027](https://github.com/readur/readur/issues/1027)) ([c5d90b6](https://github.com/readur/readur/commit/c5d90b6ddf1be4aa3883c72e8df795beca329227))
+* **rust:** Update crate zip (9.2.2 ➔ 9.3.0) ([#1022](https://github.com/readur/readur/issues/1022)) ([48bb727](https://github.com/readur/readur/commit/48bb727ac0129b781fa261be19713f34eb419f70))
+
 ## [3.1.2](https://github.com/readur/readur/compare/v3.1.1...v3.1.2) (2026-11-04)
 
 
