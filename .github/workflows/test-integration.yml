@@ -129,7 +129,7 @@ jobs:
           # Install pinned ocrmypdf from PyPI instead of stale apt version.
           # Pinned so upstream releases can't break unrelated PRs (e.g. 17.8.0
           # moved --help/--version to stderr); Renovate bumps this pin.
-          pip3 install --no-cache-dir 'ocrmypdf==17.14.0'
+          pip3 install --no-cache-dir 'ocrmypdf==17.14.1'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
