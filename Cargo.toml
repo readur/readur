@@ -32,7 +32,7 @@ chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.19"
 base64ct = { version = "=1.8.3", features = ["alloc"] }
 # 11.x needs exactly one crypto backend; aws-lc is already built for the AWS SDK.
-jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "12", features = ["aws_lc_rs"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
