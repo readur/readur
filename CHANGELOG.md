@@ -1,5 +1,53 @@
 # Changelog
 
+## [3.1.3](https://github.com/readur/readur/compare/v3.1.2...v3.1.3) (2026-11-14)
+
+
+### Miscellaneous Chores
+
+* **deps:** Update dependency ocrmypdf (17.13.0 ➔ 17.14.0) ([#1048](https://github.com/readur/readur/issues/1048)) ([89d74de](https://github.com/readur/readur/commit/89d74de0db53388af9cef45c1dbd889eb936f80f))
+* **deps:** Update dependency ocrmypdf (17.14.0 ➔ 17.14.1) ([#1055](https://github.com/readur/readur/issues/1055)) ([b386377](https://github.com/readur/readur/commit/b386377f9171662021fde71d3d48129b689ed00c))
+* **github-action:** Update action docker/login-action (v4.7.0 ➔ v4.8.0) ([#1033](https://github.com/readur/readur/issues/1033)) ([8c00c27](https://github.com/readur/readur/commit/8c00c276fecfd6757110240b90c06f314eaf26cd))
+* **github-action:** Update action github/codeql-action (v4.39.1 ➔ v4.39.2) ([#1024](https://github.com/readur/readur/issues/1024)) ([64900a8](https://github.com/readur/readur/commit/64900a82bf6df71d670043081d7cc1a22e996c69))
+* **github-action:** Update action github/codeql-action (v4.39.2 ➔ v4.39.3) ([#1030](https://github.com/readur/readur/issues/1030)) ([cc5f9e5](https://github.com/readur/readur/commit/cc5f9e53a710ab1f5775c1e240de5f9d014c3c3c))
+* **github-action:** Update action jdx/mise-action (v5.2.5 ➔ v5.2.6) ([#1020](https://github.com/readur/readur/issues/1020)) ([ea5c95a](https://github.com/readur/readur/commit/ea5c95a00d374c1fa00a06e950e5a1d63f1c6b7f))
+* **github-action:** Update github-actions ([#1042](https://github.com/readur/readur/issues/1042)) ([f73d1bd](https://github.com/readur/readur/commit/f73d1bdbc439d3ce9d0f10f61e262eb1d309ee2f))
+* **mise:** Update tool aqua:zizmorcore/zizmor (1.31.1 ➔ 1.32.0) ([#1023](https://github.com/readur/readur/issues/1023)) ([58cb945](https://github.com/readur/readur/commit/58cb94537f09abad7f6e6370f83bb2daa5e8f9c7))
+* **mise:** Update tool node (26.13.0 ➔ v26.13.1) ([#1056](https://github.com/readur/readur/issues/1056)) ([b4448b9](https://github.com/readur/readur/commit/b4448b99a8198d8e04f47349cf0554715fe09141))
+* **npm:** Update dependency @playwright/test (1.64.1 ➔ 1.65.0) ([#1039](https://github.com/readur/readur/issues/1039)) ([513cfad](https://github.com/readur/readur/commit/513cfad2638782c49ad37a685abbdc3b4663d4f4))
+* **npm:** Update dependency @testing-library/user-event (14.6.8 ➔ 14.6.9) ([#1058](https://github.com/readur/readur/issues/1058)) ([8b97121](https://github.com/readur/readur/commit/8b9712149f1ac7b17111c0c2196b87e7a58e7345))
+* **npm:** Update dependency @vitejs/plugin-react (6.2.1 ➔ 6.3.0) ([#1052](https://github.com/readur/readur/issues/1052)) ([9e98bc0](https://github.com/readur/readur/commit/9e98bc0fc4bf4be0ae6f209d56428a79116b795e))
+* **npm:** Update dependency axios (1.21.0 ➔ 1.21.1) ([#1053](https://github.com/readur/readur/issues/1053)) ([1672660](https://github.com/readur/readur/commit/16726601526695c8200434494ee6dd928321caf0))
+* **npm:** Update dependency i18next (26.7.1 ➔ 26.7.2) ([#1035](https://github.com/readur/readur/issues/1035)) ([233654c](https://github.com/readur/readur/commit/233654c6965176febe972523942882c1ed98f2f1))
+* **npm:** Update dependency i18next-browser-languagedetector (8.3.0 ➔ 8.3.0) ([#1018](https://github.com/readur/readur/issues/1018)) ([dbb0f1c](https://github.com/readur/readur/commit/dbb0f1c21015f3b4d94daa75b117e1c2847302de))
+* **npm:** Update dependency i18next-http-backend (4.0.9 ➔ 4.0.10) ([#1026](https://github.com/readur/readur/issues/1026)) ([e5aa3ff](https://github.com/readur/readur/commit/e5aa3ffe5a6d22f55632c04aa6c259297fe16eaf))
+* **npm:** Update dependency lucide-react (1.66.0 ➔ 1.67.0) ([#1025](https://github.com/readur/readur/issues/1025)) ([518bee7](https://github.com/readur/readur/commit/518bee71a1d88293b28cc2cbf137d23e47fb6398))
+* **npm:** Update dependency lucide-react (1.67.0 ➔ 1.68.0) ([#1028](https://github.com/readur/readur/issues/1028)) ([beb1e1c](https://github.com/readur/readur/commit/beb1e1c556a2c58c76d0208404cbfbbefaa86d02))
+* **npm:** Update dependency lucide-react (1.68.0 ➔ 1.69.0) ([#1034](https://github.com/readur/readur/issues/1034)) ([52d8142](https://github.com/readur/readur/commit/52d8142f1a5e86146196fcc2326ac6cdf37ead73))
+* **npm:** Update dependency lucide-react (1.69.0 ➔ 1.70.0) ([#1041](https://github.com/readur/readur/issues/1041)) ([7faba43](https://github.com/readur/readur/commit/7faba43a9fc033d1264b8f5df754097c0c928bbe))
+* **npm:** Update dependency lucide-react (1.70.0 ➔ 1.71.0) ([#1059](https://github.com/readur/readur/issues/1059)) ([8372812](https://github.com/readur/readur/commit/8372812aafd6c7fdd1d48559ee46cfb0c35e80cf))
+* **npm:** Update dependency lucide-react (1.71.0 ➔ 1.72.0) ([#1064](https://github.com/readur/readur/issues/1064)) ([42479b3](https://github.com/readur/readur/commit/42479b38cbcbba21e15113a58d93800a7347c3d9))
+* **npm:** Update dependency react-dropzone (20.1.4 ➔ 20.2.0) ([#1046](https://github.com/readur/readur/issues/1046)) ([30de69c](https://github.com/readur/readur/commit/30de69c2bf72887b5a7fb345601cf78ee7c76585))
+* **npm:** Update dependency react-i18next (17.1.11 ➔ 17.1.12) ([#1027](https://github.com/readur/readur/issues/1027)) ([c5d90b6](https://github.com/readur/readur/commit/c5d90b6ddf1be4aa3883c72e8df795beca329227))
+* **npm:** Update dependency react-i18next (17.1.12 ➔ 17.1.13) ([#1036](https://github.com/readur/readur/issues/1036)) ([36cf505](https://github.com/readur/readur/commit/36cf505d7beb2129eb4cb33e228dc56356e7cab4))
+* **npm:** Update dependency vite (8.3.5 ➔ 8.3.6) ([#1032](https://github.com/readur/readur/issues/1032)) ([27466a8](https://github.com/readur/readur/commit/27466a843f3062865da65a61074d6819027c2380))
+* **npm:** Update dependency vite (8.3.6 ➔ 8.3.7) ([#1051](https://github.com/readur/readur/issues/1051)) ([01bb17a](https://github.com/readur/readur/commit/01bb17a5f464b48871f7bd99de4c83a10495bcc2))
+* **npm:** Update dependency vite (8.3.7 ➔ 8.3.8) ([#1063](https://github.com/readur/readur/issues/1063)) ([fa2ddf7](https://github.com/readur/readur/commit/fa2ddf70ea99536664029b3c5a1eeba7afdd27e8))
+* **rust:** Update aws-sdk-rust monorepo ([#1057](https://github.com/readur/readur/issues/1057)) ([1d73fce](https://github.com/readur/readur/commit/1d73fce47f118aaedc4a368f9f5151d2a17d918d))
+* **rust:** Update aws-sdk-rust monorepo ([#1061](https://github.com/readur/readur/issues/1061)) ([af56442](https://github.com/readur/readur/commit/af5644256c7d3377747bf23de83c859fd4ef9692))
+* **rust:** Update crate aws-smithy-runtime-api (1.19.2 ➔ 1.20.0) ([#1044](https://github.com/readur/readur/issues/1044)) ([162598a](https://github.com/readur/readur/commit/162598af5daf2b77240d398aa7598356aa10b14f))
+* **rust:** Update crate dav-server (0.11.0 ➔ 0.12.0) ([#1054](https://github.com/readur/readur/issues/1054)) ([4d8ae98](https://github.com/readur/readur/commit/4d8ae981241189d3e14846daf187b5418d3df61f))
+* **rust:** Update crate kamadak-exif (0.6.1 ➔ 0.6.2) ([#1037](https://github.com/readur/readur/issues/1037)) ([ebecf58](https://github.com/readur/readur/commit/ebecf584856c7eff8f31c6b43c0772ae57ef02eb))
+* **rust:** Update crate notify (8.2.1 ➔ 8.2.2) ([#1047](https://github.com/readur/readur/issues/1047)) ([d2d03c5](https://github.com/readur/readur/commit/d2d03c578c86777795720838933ca805dfc427bb))
+* **rust:** Update crate uuid (1.29.0 ➔ 1.29.1) ([#1043](https://github.com/readur/readur/issues/1043)) ([6132a74](https://github.com/readur/readur/commit/6132a74321b98118c521b172dc1b6b2cb9775419))
+* **rust:** Update crate uuid (1.29.1 ➔ 1.29.2) ([#1050](https://github.com/readur/readur/issues/1050)) ([d684606](https://github.com/readur/readur/commit/d684606652230fa5c87bc126608d5239065b53f1))
+* **rust:** Update crate zip (9.2.2 ➔ 9.3.0) ([#1022](https://github.com/readur/readur/issues/1022)) ([48bb727](https://github.com/readur/readur/commit/48bb727ac0129b781fa261be19713f34eb419f70))
+* **rust:** Update crate zip (9.3.0 ➔ 9.4.0) ([#1038](https://github.com/readur/readur/issues/1038)) ([e4811bc](https://github.com/readur/readur/commit/e4811bcb5096f06ad73dc454230333050463f77b))
+* **rust:** Update crate zip (9.4.0 ➔ 9.4.1) ([#1040](https://github.com/readur/readur/issues/1040)) ([27e01c7](https://github.com/readur/readur/commit/27e01c7349649b830f7018468da735c5b604a93f))
+* **rust:** Update crate zip (9.4.1 ➔ 9.4.2) ([#1045](https://github.com/readur/readur/issues/1045)) ([2cfb842](https://github.com/readur/readur/commit/2cfb842727edc4ddb3a7beee9f4604cbfcf1af0d))
+* **rust:** Update crate zip (9.4.2 ➔ 9.5.0) ([#1049](https://github.com/readur/readur/issues/1049)) ([27a458c](https://github.com/readur/readur/commit/27a458cc22d976bc076b16064e279eeafe35de03))
+* **rust:** Update crate zip (9.5.0 ➔ 9.5.1) ([#1062](https://github.com/readur/readur/issues/1062)) ([3d2a1d1](https://github.com/readur/readur/commit/3d2a1d133bf6e80caf12555eae285c260ff03a51))
+
 ## [3.1.2](https://github.com/readur/readur/compare/v3.1.1...v3.1.2) (2026-11-04)
 
 
