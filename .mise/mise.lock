@@ -178,7 +178,7 @@ version = "0.72.0"
 backend = "npm:oxfmt"
 
 [[tools.rust]]
-version = "1.99.1"
+version = "1.100.0"
 backend = "core:rust"
 
 [tools.rust.options]
