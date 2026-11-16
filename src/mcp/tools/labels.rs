@@ -46,7 +46,6 @@ pub struct CreateLabelParams {
 #[schemars(crate = "rmcp::schemars")]
 pub struct UpdateLabelParams {
     /// ID of the label to update (from list_labels).
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub id: Uuid,
     /// New name. Must not be blank or contain commas.
     pub name: Option<String>,
@@ -62,7 +61,6 @@ pub struct UpdateLabelParams {
 #[schemars(crate = "rmcp::schemars")]
 pub struct DocumentLabelsParams {
     /// ID of the document.
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub document_id: Uuid,
 }
 
@@ -70,10 +68,8 @@ pub struct DocumentLabelsParams {
 #[schemars(crate = "rmcp::schemars")]
 pub struct DocumentLabelParams {
     /// ID of the document.
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub document_id: Uuid,
     /// ID of the label (from list_labels).
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub label_id: Uuid,
 }
 

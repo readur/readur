@@ -226,7 +226,7 @@ pub async fn upload_document(
 
     let owns_labels = state
         .db
-        .user_owns_labels(user.id, &label_ids)
+        .user_owns_labels(&label_ids, user.id)
         .await
         .map_err(|e| {
             error!("Failed to verify upload labels: {}", e);

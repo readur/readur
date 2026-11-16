@@ -19,7 +19,6 @@ use crate::{
 #[schemars(crate = "rmcp::schemars")]
 pub struct SourceSyncStatusParams {
     /// ID (UUID) of the source, as returned by `list_sources`.
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub source_id: Uuid,
 }
 

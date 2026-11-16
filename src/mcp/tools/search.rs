@@ -37,7 +37,6 @@ pub struct SearchDocumentsParams {
     /// Only documents carrying a label with one of these names.
     pub tags: Option<Vec<String>>,
     /// Only documents carrying one of these label IDs.
-    #[schemars(with = "Option<Vec<String>>")]
     pub label_ids: Option<Vec<Uuid>>,
     /// Only documents with this OCR status: pending, processing, completed or failed.
     pub ocr_status: Option<String>,
@@ -87,7 +86,6 @@ pub struct EnhancedSearchParams {
     /// Only documents carrying a label with one of these names.
     pub tags: Option<Vec<String>>,
     /// Only documents carrying one of these label IDs.
-    #[schemars(with = "Option<Vec<String>>")]
     pub label_ids: Option<Vec<Uuid>>,
     /// Only documents with this OCR status: pending, processing, completed or failed.
     pub ocr_status: Option<String>,

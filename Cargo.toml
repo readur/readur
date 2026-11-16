@@ -85,6 +85,8 @@ rmcp = { version = "3.10", default-features = false, features = [
   "transport-streamable-http-server",
   "base64",
 ] }
+# rmcp derives tool input schemas with schemars; `uuid1` lets parameters be typed `Uuid`.
+schemars = { version = "1", features = ["uuid1"] }
 # rmcp injects http::request::Parts into tool contexts; MCP tools read the authenticated user from it.
 http = "1"
 utoipa = { version = "6", features = ["axum_extras", "chrono", "uuid"] }

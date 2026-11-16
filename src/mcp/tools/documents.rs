@@ -39,14 +39,12 @@ pub struct ListDocumentsParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct DocumentIdParams {
     /// Document ID (UUID).
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub id: Uuid,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct OcrTextParams {
     /// Document ID (UUID).
-    #[schemars(with = "String", extend("format" = "uuid"))]
     pub id: Uuid,
     /// Character offset to start reading from (default 0). Use the
     /// `next_offset` of the previous call to continue.
@@ -65,7 +63,6 @@ pub struct UploadDocumentParams {
     /// MIME type of the file, e.g. "application/pdf" or "image/png".
     pub mime_type: Option<String>,
     /// IDs of the caller's labels to attach to the new document.
-    #[schemars(with = "Option<Vec<String>>")]
     pub label_ids: Option<Vec<Uuid>>,
 }
 
