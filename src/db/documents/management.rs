@@ -88,6 +88,49 @@ impl Database {
         Ok(result)
     }
 
+    /// True when every id in `label_ids` is a label owned by `user_id`.
+    pub async fn user_owns_labels(&self, user_id: Uuid, label_ids: &[Uuid]) -> Result<bool> {
+        if label_ids.is_empty() {
+            return Ok(true);
+        }
+        let mut unique = label_ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM labels WHERE id = ANY($1) AND user_id = $2")
+                .bind(&unique)
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(count as usize == unique.len())
+    }
+
+    /// Attaches labels to a document, skipping ones it already has. Callers
+    /// check label ownership first (`user_owns_labels`).
+    pub async fn add_labels_to_document(
+        &self,
+        document_id: Uuid,
+        label_ids: &[Uuid],
+        assigned_by: Uuid,
+    ) -> Result<()> {
+        if label_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            r#"
+            INSERT INTO document_labels (document_id, label_id, assigned_by)
+            SELECT $1, label_id, $3 FROM UNNEST($2::uuid[]) AS label_id
+            ON CONFLICT (document_id, label_id) DO NOTHING
+            "#,
+        )
+        .bind(document_id)
+        .bind(label_ids)
+        .bind(assigned_by)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     /// Finds duplicate documents by file hash for a user
     pub async fn get_user_duplicates(
         &self,
