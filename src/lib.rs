@@ -4,22 +4,23 @@ pub mod config;
 pub mod db;
 pub mod db_guardrails_simple;
 pub mod errors;
+pub mod http_security;
 pub mod ingestion;
+pub mod jwt_signing_key;
+pub mod mcp;
 pub mod metadata_extraction;
 pub mod mime_detection;
 pub mod models;
 pub mod monitoring;
 pub mod ocr;
 pub mod oidc;
-pub mod http_security;
-pub mod jwt_signing_key;
+pub mod rate_limit;
 pub mod routes;
 pub mod scheduling;
 pub mod seed;
 pub mod services;
 pub mod storage;
 pub mod swagger;
-pub mod rate_limit;
 pub mod utils;
 pub mod webdav_xml_parser;
 
@@ -35,10 +36,10 @@ pub mod test_utils;
 pub mod test_helpers;
 
 use axum::{http::StatusCode, Json};
-use utoipa;
 use config::Config;
 use db::Database;
 use oidc::OidcClient;
+use utoipa;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -51,7 +52,8 @@ pub struct AppState {
     pub oidc_client: Option<std::sync::Arc<OidcClient>>,
     pub sync_progress_tracker: std::sync::Arc<services::sync_progress_tracker::SyncProgressTracker>,
     pub user_watch_service: Option<std::sync::Arc<services::user_watch_service::UserWatchService>>,
-    pub webdav_metrics_collector: Option<std::sync::Arc<services::webdav_metrics_integration::WebDAVMetricsCollector>>,
+    pub webdav_metrics_collector:
+        Option<std::sync::Arc<services::webdav_metrics_integration::WebDAVMetricsCollector>>,
     pub rate_limiters: rate_limit::RateLimiters,
 }
 

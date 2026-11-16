@@ -47,10 +47,14 @@ const REVIEWED_MOUNTS: &[&str] = &[
     "/api/shared/links",
     "/api/public/shared",
     "/api/comments",
+    "/api/mcp",
 ];
 
 /// Mounted routes without an OpenAPI annotation.
 const UNDOCUMENTED_ROUTES: &[(&str, &str)] = &[
+    ("GET", "/api/mcp"),
+    ("POST", "/api/mcp"),
+    ("DELETE", "/api/mcp"),
     ("POST", "/api/auth/keys"),
     ("GET", "/api/auth/keys"),
     ("DELETE", "/api/auth/keys/{id}"),
@@ -59,10 +63,22 @@ const UNDOCUMENTED_ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/documents/{id}/validate"),
     ("GET", "/api/comments/documents/{document_id}/comments"),
     ("POST", "/api/comments/documents/{document_id}/comments"),
-    ("GET", "/api/comments/documents/{document_id}/comments/{comment_id}/replies"),
-    ("PUT", "/api/comments/documents/{document_id}/comments/{comment_id}"),
-    ("DELETE", "/api/comments/documents/{document_id}/comments/{comment_id}"),
-    ("GET", "/api/comments/documents/{document_id}/comments/count"),
+    (
+        "GET",
+        "/api/comments/documents/{document_id}/comments/{comment_id}/replies",
+    ),
+    (
+        "PUT",
+        "/api/comments/documents/{document_id}/comments/{comment_id}",
+    ),
+    (
+        "DELETE",
+        "/api/comments/documents/{document_id}/comments/{comment_id}",
+    ),
+    (
+        "GET",
+        "/api/comments/documents/{document_id}/comments/count",
+    ),
     ("POST", "/api/shared/links"),
     ("GET", "/api/shared/links"),
     ("GET", "/api/shared/links/document/{document_id}"),
@@ -123,7 +139,11 @@ fn documented_routes() -> Vec<(String, String)> {
 
 fn all_routes() -> Vec<(String, String)> {
     let mut routes = documented_routes();
-    routes.extend(UNDOCUMENTED_ROUTES.iter().map(|(m, p)| (m.to_string(), p.to_string())));
+    routes.extend(
+        UNDOCUMENTED_ROUTES
+            .iter()
+            .map(|(m, p)| (m.to_string(), p.to_string())),
+    );
     routes.sort();
     routes.dedup();
     routes
@@ -131,7 +151,10 @@ fn all_routes() -> Vec<(String, String)> {
 
 #[test]
 fn mounted_routers_match_reviewed_list() {
-    let mounted: Vec<&str> = readur::routes::mounted_routers().into_iter().map(|(path, _)| path).collect();
+    let mounted: Vec<&str> = readur::routes::mounted_routers()
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect();
     assert_eq!(
         mounted, REVIEWED_MOUNTS,
         "Mounted routers changed. Add the new routes to this test (public allowlist or \
@@ -141,7 +164,9 @@ fn mounted_routers_match_reviewed_list() {
     let routes = all_routes();
     for mount in REVIEWED_MOUNTS {
         assert!(
-            routes.iter().any(|(_, path)| path == mount || path.starts_with(&format!("{}/", mount))),
+            routes
+                .iter()
+                .any(|(_, path)| path == mount || path.starts_with(&format!("{}/", mount))),
             "No route under {} is checked by this test",
             mount
         );
@@ -171,7 +196,10 @@ async fn every_route_requires_authentication_unless_public() {
         checked += 1;
 
         let allowed = if WEBSOCKET_ROUTES.contains(&template.as_str()) {
-            matches!(status, StatusCode::UNAUTHORIZED | StatusCode::BAD_REQUEST | StatusCode::UPGRADE_REQUIRED)
+            matches!(
+                status,
+                StatusCode::UNAUTHORIZED | StatusCode::BAD_REQUEST | StatusCode::UPGRADE_REQUIRED
+            )
         } else {
             status == StatusCode::UNAUTHORIZED
         };
@@ -181,8 +209,16 @@ async fn every_route_requires_authentication_unless_public() {
     }
 
     let _ = ctx.cleanup_and_close().await;
-    assert!(checked > 100, "Expected to check the whole API, only checked {}", checked);
-    assert!(failures.is_empty(), "Routes not rejecting unauthenticated requests with 401:\n{}", failures.join("\n"));
+    assert!(
+        checked > 100,
+        "Expected to check the whole API, only checked {}",
+        checked
+    );
+    assert!(
+        failures.is_empty(),
+        "Routes not rejecting unauthenticated requests with 401:\n{}",
+        failures.join("\n")
+    );
 }
 
 #[tokio::test]
@@ -190,7 +226,11 @@ async fn invalid_credentials_are_rejected() {
     let ctx = TestContext::new().await;
     let app = ctx.app().clone();
 
-    for header in ["Bearer not-a-jwt", "Bearer readur_pat_notarealkey", "Basic YWRtaW46YWRtaW4="] {
+    for header in [
+        "Bearer not-a-jwt",
+        "Bearer readur_pat_notarealkey",
+        "Basic YWRtaW46YWRtaW4=",
+    ] {
         for uri in ["/api/auth/me", "/api/documents", "/metrics"] {
             let request = Request::builder()
                 .uri(uri)
@@ -198,7 +238,13 @@ async fn invalid_credentials_are_rejected() {
                 .body(Body::empty())
                 .unwrap();
             let status = app.clone().oneshot(request).await.unwrap().status();
-            assert_eq!(status, StatusCode::UNAUTHORIZED, "{} with '{}'", uri, header);
+            assert_eq!(
+                status,
+                StatusCode::UNAUTHORIZED,
+                "{} with '{}'",
+                uri,
+                header
+            );
         }
     }
 
@@ -208,7 +254,10 @@ async fn invalid_credentials_are_rejected() {
 #[tokio::test]
 async fn metrics_requires_authentication() {
     let ctx = TestContext::new().await;
-    let request = Request::builder().uri("/metrics").body(Body::empty()).unwrap();
+    let request = Request::builder()
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
     let status = ctx.app().clone().oneshot(request).await.unwrap().status();
     let _ = ctx.cleanup_and_close().await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);

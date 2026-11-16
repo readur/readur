@@ -1,4 +1,6 @@
+pub mod api_keys;
 pub mod auth;
+pub mod comments;
 pub mod documents;
 pub mod documents_ocr_retry;
 pub mod ignored_files;
@@ -10,14 +12,12 @@ pub mod prometheus_metrics;
 pub mod queue;
 pub mod search;
 pub mod settings;
+pub mod shared_links;
 pub mod source_errors;
 pub mod sources;
 pub mod users;
 pub mod webdav;
 pub mod webdav_scan_failures;
-pub mod shared_links;
-pub mod comments;
-pub mod api_keys;
 
 use std::sync::Arc;
 
@@ -49,14 +49,14 @@ pub fn mounted_routers() -> Vec<(&'static str, Router<Arc<AppState>>)> {
         ("/api/shared/links", shared_links::authenticated_router()),
         ("/api/public/shared", shared_links::public_router()),
         ("/api/comments", comments::router()),
+        ("/api/mcp", crate::mcp::router()),
     ]
 }
 
 /// The complete HTTP API (without API docs and static frontend files).
 pub fn api_router() -> Router<Arc<AppState>> {
-    mounted_routers()
-        .into_iter()
-        .fold(Router::new().route("/api/health", get(crate::health_check)), |app, (path, router)| {
-            app.nest(path, router)
-        })
+    mounted_routers().into_iter().fold(
+        Router::new().route("/api/health", get(crate::health_check)),
+        |app, (path, router)| app.nest(path, router),
+    )
 }

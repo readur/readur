@@ -1,6 +1,6 @@
 /*!
  * Source Scheduler Unit Tests
- * 
+ *
  * Tests for the universal source scheduler functionality including:
  * - Auto-resume sync after server restart
  * - Background sync scheduling
@@ -9,19 +9,22 @@
  * - Error handling and recovery
  */
 
+use chrono::Utc;
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
-use chrono::Utc;
-use serde_json::json;
 
 use readur::{
-    AppState, 
     config::Config,
     db::Database,
-    models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig},
+    models::{
+        LocalFolderSourceConfig, S3SourceConfig, Source, SourceStatus, SourceType,
+        WebDAVSourceConfig,
+    },
     scheduling::source_scheduler::SourceScheduler,
+    AppState,
 };
 
 /// Mock database for testing
@@ -51,7 +54,7 @@ impl MockDatabase {
                     "auto_sync": true,
                     "sync_interval_minutes": 60
                 });
-            },
+            }
             SourceType::LocalFolder => {
                 config = json!({
                     "paths": ["/test/folder"],
@@ -60,7 +63,7 @@ impl MockDatabase {
                     "auto_sync": true,
                     "sync_interval_minutes": 30
                 });
-            },
+            }
             SourceType::S3 => {
                 config = json!({
                     "bucket": "test-bucket",
@@ -90,30 +93,35 @@ impl MockDatabase {
             total_size_bytes: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-        validation_status: None,
-        last_validation_at: None,
-        validation_score: None,
-        validation_issues: None,
+            validation_status: None,
+            last_validation_at: None,
+            validation_score: None,
+            validation_issues: None,
         });
-        
+
         self.sources_for_sync = self.sources.clone();
         self
     }
 
-    fn with_due_sync_source(mut self, name: &str, source_type: SourceType, minutes_ago: i64) -> Self {
+    fn with_due_sync_source(
+        mut self,
+        name: &str,
+        source_type: SourceType,
+        minutes_ago: i64,
+    ) -> Self {
         let mut config = json!({});
         match source_type {
             SourceType::WebDAV => {
                 config = json!({
                     "server_url": "https://test.com",
-                    "username": "test", 
+                    "username": "test",
                     "password": "test",
                     "watch_folders": ["/test"],
                     "file_extensions": [".pdf", ".txt"],
                     "auto_sync": true,
                     "sync_interval_minutes": 30
                 });
-            },
+            }
             SourceType::LocalFolder => {
                 config = json!({
                     "paths": ["/test/folder"],
@@ -122,11 +130,11 @@ impl MockDatabase {
                     "auto_sync": true,
                     "sync_interval_minutes": 30
                 });
-            },
+            }
             SourceType::S3 => {
                 config = json!({
                     "bucket": "test-bucket",
-                    "region": "us-east-1", 
+                    "region": "us-east-1",
                     "access_key_id": "test",
                     "secret_access_key": "test",
                     "prefix": "",
@@ -152,20 +160,23 @@ impl MockDatabase {
             total_size_bytes: 1024,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-        validation_status: None,
-        last_validation_at: None,
-        validation_score: None,
-        validation_issues: None,
+            validation_status: None,
+            last_validation_at: None,
+            validation_score: None,
+            validation_issues: None,
         });
-        
+
         self.sources_for_sync = self.sources.clone();
         self
     }
 }
 
 async fn create_test_app_state() -> Arc<AppState> {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
-    
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
+
     let config = Config {
         database_url: database_url.clone(),
         server_address: "127.0.0.1:8080".to_string(),
@@ -173,7 +184,8 @@ async fn create_test_app_state() -> Arc<AppState> {
         upload_path: "/tmp/test_uploads".to_string(),
         watch_folder: "/tmp/test_watch".to_string(),
         user_watch_base_dir: "./user_watch".to_string(),
-        enable_per_user_watch: false,        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
+        enable_per_user_watch: false,
+        allowed_file_types: vec!["pdf".to_string(), "txt".to_string()],
         watch_interval_seconds: Some(30),
         file_stability_check_ms: Some(500),
         max_file_age_hours: None,
@@ -192,22 +204,41 @@ async fn create_test_app_state() -> Arc<AppState> {
         allow_local_auth: None,
         s3_enabled: false,
         s3_config: None,
-            max_pdf_size_mb: 100,
-            max_office_document_size_mb: 100,
+        max_pdf_size_mb: 100,
+        max_office_document_size_mb: 100,
         public_url: None,
         security: Default::default(),
+        mcp: Default::default(),
     };
 
-    // Use smaller connection pool for tests to avoid exhaustion  
-    let db = Database::new_with_pool_config(&database_url, 10, 2).await.unwrap();
-    
+    // Use smaller connection pool for tests to avoid exhaustion
+    let db = Database::new_with_pool_config(&database_url, 10, 2)
+        .await
+        .unwrap();
+
     // Create test file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: "/tmp/test_uploads".to_string() };
-    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage("/tmp/test_uploads".to_string(), storage_backend));
-    
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone(), 100, 100, 300));
-    
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: "/tmp/test_uploads".to_string(),
+    };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config)
+        .await
+        .unwrap();
+    let file_service =
+        std::sync::Arc::new(readur::services::file_service::FileService::with_storage(
+            "/tmp/test_uploads".to_string(),
+            storage_backend,
+        ));
+
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.pool.clone(),
+        2,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
+
     Arc::new(AppState {
         db: db.clone(),
         config,
@@ -216,7 +247,9 @@ async fn create_test_app_state() -> Arc<AppState> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: std::sync::Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
         webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
@@ -232,7 +265,7 @@ async fn cleanup_test_app_state(state: Arc<AppState>) {
 async fn test_source_scheduler_creation() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     // Test that scheduler is created successfully
     // assert_eq!(scheduler.check_interval, Duration::from_secs(60)); // private field
 }
@@ -241,7 +274,7 @@ async fn test_source_scheduler_creation() {
 async fn test_interrupted_sync_detection_webdav() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     // Create a mock source that was interrupted during sync
     let source = Source {
         id: Uuid::new_v4(),
@@ -252,7 +285,7 @@ async fn test_interrupted_sync_detection_webdav() {
         config: json!({
             "server_url": "https://test.com",
             "username": "test",
-            "password": "test", 
+            "password": "test",
             "watch_folders": ["/test"],
             "file_extensions": [".pdf", ".txt"],
             "auto_sync": true,
@@ -275,7 +308,7 @@ async fn test_interrupted_sync_detection_webdav() {
 
     // Test that interrupted sync is detected
     assert_eq!(source.status, SourceStatus::Syncing);
-    
+
     // Test config parsing for WebDAV
     let config: Result<WebDAVSourceConfig, _> = serde_json::from_value(source.config.clone());
     assert!(config.is_ok());
@@ -288,7 +321,7 @@ async fn test_interrupted_sync_detection_webdav() {
 async fn test_interrupted_sync_detection_local_folder() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -330,7 +363,7 @@ async fn test_interrupted_sync_detection_local_folder() {
 async fn test_interrupted_sync_detection_s3() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -375,7 +408,7 @@ async fn test_interrupted_sync_detection_s3() {
 async fn test_sync_due_calculation() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     // Test source that should be due for sync
     let old_sync_source = Source {
         id: Uuid::new_v4(),
@@ -406,7 +439,7 @@ async fn test_sync_due_calculation() {
         validation_score: None,
         validation_issues: None,
     };
-    
+
     // Test source that should NOT be due for sync
     let recent_sync_source = Source {
         id: Uuid::new_v4(),
@@ -440,7 +473,7 @@ async fn test_sync_due_calculation() {
     // let old_result = scheduler.is_sync_due(&old_sync_source).await;
     // assert!(old_result.is_ok());
     // assert!(old_result.unwrap(), "Old sync should be due");
-    
+
     // let recent_result = scheduler.is_sync_due(&recent_sync_source).await;
     // assert!(recent_result.is_ok());
     // assert!(!recent_result.unwrap(), "Recent sync should not be due");
@@ -450,7 +483,7 @@ async fn test_sync_due_calculation() {
 async fn test_auto_sync_disabled() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let source_with_auto_sync_disabled = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -490,7 +523,7 @@ async fn test_auto_sync_disabled() {
 async fn test_currently_syncing_source() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let syncing_source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -530,7 +563,7 @@ async fn test_currently_syncing_source() {
 async fn test_invalid_sync_interval() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let invalid_interval_source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -570,7 +603,7 @@ async fn test_invalid_sync_interval() {
 async fn test_never_synced_source() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let never_synced_source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -608,13 +641,13 @@ async fn test_never_synced_source() {
 async fn test_trigger_sync_nonexistent_source() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     let nonexistent_id = Uuid::new_v4();
     let result = scheduler.trigger_sync(nonexistent_id).await;
-    
+
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Source not found");
-    
+
     // Cleanup database connections
     cleanup_test_app_state(state).await;
 }
@@ -633,7 +666,7 @@ async fn test_source_type_enum() {
     let webdav = SourceType::WebDAV;
     let local = SourceType::LocalFolder;
     let s3 = SourceType::S3;
-    
+
     assert_eq!(webdav.to_string(), "webdav");
     assert_eq!(local.to_string(), "local_folder");
     assert_eq!(s3.to_string(), "s3");
@@ -652,13 +685,13 @@ async fn test_config_validation() {
         sync_interval_minutes: 60,
         server_type: Some("nextcloud".to_string()),
     };
-    
+
     assert!(!webdav_config.server_url.is_empty());
     assert!(!webdav_config.username.is_empty());
     assert!(!webdav_config.password.is_empty());
     assert!(!webdav_config.watch_folders.is_empty());
     assert!(webdav_config.sync_interval_minutes > 0);
-    
+
     // Test Local Folder config validation
     let local_config = LocalFolderSourceConfig {
         watch_folders: vec!["/test/path".to_string()],
@@ -668,10 +701,10 @@ async fn test_config_validation() {
         sync_interval_minutes: 30,
         file_extensions: vec![".pdf".to_string()],
     };
-    
+
     assert!(!local_config.watch_folders.is_empty());
     assert!(local_config.sync_interval_minutes > 0);
-    
+
     // Test S3 config validation
     let s3_config = S3SourceConfig {
         bucket_name: "test-bucket".to_string(),
@@ -686,7 +719,7 @@ async fn test_config_validation() {
         sync_interval_minutes: 120,
         file_extensions: vec![".pdf".to_string()],
     };
-    
+
     assert!(!s3_config.bucket_name.is_empty());
     assert!(!s3_config.region.is_empty());
     assert!(!s3_config.access_key_id.is_empty());
@@ -698,10 +731,10 @@ async fn test_config_validation() {
 async fn test_scheduler_timeout_handling() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     // Test that operations complete within reasonable time
     let start = std::time::Instant::now();
-    
+
     let dummy_source = Source {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
@@ -731,10 +764,13 @@ async fn test_scheduler_timeout_handling() {
         validation_score: None,
         validation_issues: None,
     };
-    
+
     // let result = timeout(Duration::from_secs(1), scheduler.is_sync_due(&dummy_source)).await;
     // assert!(result.is_ok(), "Sync due calculation should complete quickly");
-    
+
     let elapsed = start.elapsed();
-    assert!(elapsed < Duration::from_millis(500), "Operation should be fast");
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "Operation should be fast"
+    );
 }

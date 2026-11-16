@@ -1,22 +1,22 @@
 //! Test utilities for loading and working with test images and data
-//! 
+//!
 //! This module provides utilities for loading test images from the tests/test_images/
 //! directory and working with them in unit and integration tests.
 
 use std::path::Path;
 
 #[cfg(any(test, feature = "test-utils"))]
-use std::sync::Arc;
-#[cfg(any(test, feature = "test-utils"))]
-use crate::{AppState, models::UserResponse, storage::StorageConfig};
+use crate::{models::UserResponse, storage::StorageConfig, AppState};
 #[cfg(any(test, feature = "test-utils"))]
 use axum::Router;
 #[cfg(any(test, feature = "test-utils"))]
 use serde_json::json;
 #[cfg(any(test, feature = "test-utils"))]
-use uuid;
+use std::sync::Arc;
 #[cfg(any(test, feature = "test-utils"))]
 use tower::util::ServiceExt;
+#[cfg(any(test, feature = "test-utils"))]
+use uuid;
 
 /// Cleanup strategy for database cleanup operations
 #[cfg(any(test, feature = "test-utils"))]
@@ -40,7 +40,11 @@ pub struct TestImage {
 }
 
 impl TestImage {
-    pub fn new(filename: &'static str, mime_type: &'static str, expected_content: &'static str) -> Self {
+    pub fn new(
+        filename: &'static str,
+        mime_type: &'static str,
+        expected_content: &'static str,
+    ) -> Self {
         Self {
             filename,
             path: format!("tests/test_images/{}", filename),
@@ -48,11 +52,11 @@ impl TestImage {
             expected_content,
         }
     }
-    
+
     pub fn exists(&self) -> bool {
         Path::new(&self.path).exists()
     }
-    
+
     pub async fn load_data(&self) -> Result<Vec<u8>, std::io::Error> {
         tokio::fs::read(&self.path).await
     }
@@ -61,15 +65,51 @@ impl TestImage {
 /// Get all available test images with their expected OCR content
 pub fn get_test_images() -> Vec<TestImage> {
     vec![
-        TestImage::new("test1.png", "image/png", "Test 1\nThis is some text from text 1"),
-        TestImage::new("test2.jpg", "image/jpeg", "Test 2\nThis is some text from text 2"),
-        TestImage::new("test3.jpeg", "image/jpeg", "Test 3\nThis is some text from text 3"),
-        TestImage::new("test4.png", "image/png", "Test 4\nThis is some text from text 4"),
-        TestImage::new("test5.jpg", "image/jpeg", "Test 5\nThis is some text from text 5"),
-        TestImage::new("test6.jpeg", "image/jpeg", "Test 6\nThis is some text from text 6"),
-        TestImage::new("test7.png", "image/png", "Test 7\nThis is some text from text 7"),
-        TestImage::new("test8.jpeg", "image/jpeg", "Test 8\nThis is some text from text 8"),
-        TestImage::new("test9.png", "image/png", "Test 9\nThis is some text from text 9"),
+        TestImage::new(
+            "test1.png",
+            "image/png",
+            "Test 1\nThis is some text from text 1",
+        ),
+        TestImage::new(
+            "test2.jpg",
+            "image/jpeg",
+            "Test 2\nThis is some text from text 2",
+        ),
+        TestImage::new(
+            "test3.jpeg",
+            "image/jpeg",
+            "Test 3\nThis is some text from text 3",
+        ),
+        TestImage::new(
+            "test4.png",
+            "image/png",
+            "Test 4\nThis is some text from text 4",
+        ),
+        TestImage::new(
+            "test5.jpg",
+            "image/jpeg",
+            "Test 5\nThis is some text from text 5",
+        ),
+        TestImage::new(
+            "test6.jpeg",
+            "image/jpeg",
+            "Test 6\nThis is some text from text 6",
+        ),
+        TestImage::new(
+            "test7.png",
+            "image/png",
+            "Test 7\nThis is some text from text 7",
+        ),
+        TestImage::new(
+            "test8.jpeg",
+            "image/jpeg",
+            "Test 8\nThis is some text from text 8",
+        ),
+        TestImage::new(
+            "test9.png",
+            "image/png",
+            "Test 9\nThis is some text from text 9",
+        ),
     ]
 }
 
@@ -78,7 +118,7 @@ pub fn get_test_image(number: u8) -> Option<TestImage> {
     if number < 1 || number > 9 {
         return None;
     }
-    
+
     get_test_images().into_iter().nth((number - 1) as usize)
 }
 
@@ -131,14 +171,25 @@ mod tests {
     fn test_image_paths_are_valid() {
         let images = get_test_images();
         assert_eq!(images.len(), 9);
-        
+
         for (i, image) in images.iter().enumerate() {
-            assert_eq!(image.filename, format!("test{}.{}", i + 1, 
-                if image.mime_type == "image/png" { "png" } 
-                else if image.filename.ends_with(".jpg") { "jpg" }
-                else { "jpeg" }
-            ));
-            assert!(image.expected_content.starts_with(&format!("Test {}", i + 1)));
+            assert_eq!(
+                image.filename,
+                format!(
+                    "test{}.{}",
+                    i + 1,
+                    if image.mime_type == "image/png" {
+                        "png"
+                    } else if image.filename.ends_with(".jpg") {
+                        "jpg"
+                    } else {
+                        "jpeg"
+                    }
+                )
+            );
+            assert!(image
+                .expected_content
+                .starts_with(&format!("Test {}", i + 1)));
         }
     }
 
@@ -170,7 +221,6 @@ pub struct TestContext {
     cleanup_called: Arc<std::sync::atomic::AtomicBool>,
 }
 
-
 #[cfg(any(test, feature = "test-utils"))]
 impl Drop for TestContext {
     fn drop(&mut self) {
@@ -180,59 +230,75 @@ impl Drop for TestContext {
     }
 }
 
+/// MCP protocol revision the test helpers speak (stateless, no `initialize`).
+#[cfg(any(test, feature = "test-utils"))]
+pub const MCP_TEST_PROTOCOL_VERSION: &str = "2026-07-28";
+
 #[cfg(any(test, feature = "test-utils"))]
 impl TestContext {
     /// Create a new test context with default test configuration using shared database
     pub async fn new() -> Self {
         Self::with_config(TestConfigBuilder::default()).await
     }
-    
+
     /// Create a test context with custom configuration using individual database
     pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
         // Generate unique context ID for this test instance
         let context_id = format!(
             "test_{}_{}_{}_{}",
             std::process::id(),
-            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
+            format!("{:?}", std::thread::current().id())
+                .replace("ThreadId(", "")
+                .replace(")", ""),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos(),
             uuid::Uuid::new_v4().simple()
         );
-        
+
         // A fresh database cloned from the migrated template (see crate::test_db)
         let database = crate::test_db::TestDatabase::from_template().await;
         let database_url = database.url().to_string();
         // Use larger pool for error handling tests that need more concurrent connections
-        let (max_connections, min_connections) = if std::env::var("TEST_REQUIRES_LARGER_POOL").is_ok() {
-            (15, 3)
-        } else {
-            (5, 1)
-        };
-        let db = crate::db::Database::new_with_pool_config(&database_url, max_connections, min_connections)
-            .await
-            .expect("Failed to connect to test database");
-        
+        let (max_connections, min_connections) =
+            if std::env::var("TEST_REQUIRES_LARGER_POOL").is_ok() {
+                (15, 3)
+            } else {
+                (5, 1)
+            };
+        let db = crate::db::Database::new_with_pool_config(
+            &database_url,
+            max_connections,
+            min_connections,
+        )
+        .await
+        .expect("Failed to connect to test database");
+
         let config = config_builder.build(database_url);
-        
+
         let user_watch_service = if config.enable_per_user_watch {
-            Some(Arc::new(crate::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir)))
+            Some(Arc::new(
+                crate::services::user_watch_service::UserWatchService::new(
+                    &config.user_watch_base_dir,
+                ),
+            ))
         } else {
             None
         };
-        
+
         // Create FileService with local storage for testing
-        let storage_config = StorageConfig::Local { 
-            upload_path: config.upload_path.clone() 
+        let storage_config = StorageConfig::Local {
+            upload_path: config.upload_path.clone(),
         };
-        let storage_backend = crate::storage::factory::create_storage_backend(storage_config).await
+        let storage_backend = crate::storage::factory::create_storage_backend(storage_config)
+            .await
             .expect("Failed to create storage backend for tests");
         let file_service = Arc::new(crate::services::file_service::FileService::with_storage(
-            config.upload_path.clone(), 
-            storage_backend
+            config.upload_path.clone(),
+            storage_backend,
         ));
-        
+
         let queue_service = Arc::new(crate::ocr::queue::OcrQueueService::new(
             db.clone(),
             db.pool.clone(),
@@ -252,27 +318,28 @@ impl TestContext {
             source_scheduler: None,
             queue_service,
             oidc_client: None,
-            sync_progress_tracker: Arc::new(crate::services::sync_progress_tracker::SyncProgressTracker::new()),
+            sync_progress_tracker: Arc::new(
+                crate::services::sync_progress_tracker::SyncProgressTracker::new(),
+            ),
             user_watch_service,
             webdav_metrics_collector: None,
             rate_limiters: crate::rate_limit::RateLimiters::new(),
         });
-        
+
         // Same routes the server mounts (src/main.rs).
         let app = crate::routes::api_router()
             .with_state(state.clone())
             .layer(axum::extract::DefaultBodyLimit::max(max_body_size));
-        
-        Self { 
-            app, 
-            database, 
+
+        Self {
+            app,
+            database,
             state,
             context_id,
             cleanup_called: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
-    
-    
+
     /// Get the app router for making requests
     pub fn app(&self) -> &Router {
         &self.app
@@ -282,10 +349,142 @@ impl TestContext {
     pub fn auth_helper(&self) -> TestAuthHelper {
         TestAuthHelper::with_db(self.app.clone(), self.state.db.clone())
     }
-    
+
     /// Get the application state
     pub fn state(&self) -> &Arc<AppState> {
         &self.state
+    }
+
+    /// POST a raw JSON-RPC message to `/api/mcp` and return the HTTP status
+    /// and the parsed body (a JSON string holding the raw text when the body
+    /// is not JSON).
+    pub async fn mcp_post(
+        &self,
+        token: Option<&str>,
+        message: serde_json::Value,
+    ) -> (axum::http::StatusCode, serde_json::Value) {
+        let mut request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/mcp")
+            .header("content-type", "application/json")
+            .header("accept", "application/json, text/event-stream")
+            .header(
+                "mcp-protocol-version",
+                // `initialize` must announce the same revision it negotiates.
+                message["params"]["protocolVersion"]
+                    .as_str()
+                    .unwrap_or(MCP_TEST_PROTOCOL_VERSION),
+            );
+        if let Some(method) = message["method"].as_str() {
+            request = request.header("mcp-method", method);
+        }
+        if let Some(name) = message["params"]["name"].as_str() {
+            request = request.header("mcp-name", name);
+        }
+        if let Some(token) = token {
+            request = request.header("authorization", format!("Bearer {}", token));
+        }
+        let request = request
+            .body(axum::body::Body::from(message.to_string()))
+            .unwrap();
+        let response = self.app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&bytes).into_owned())
+        });
+        (status, body)
+    }
+
+    /// Send one stateless MCP request (`method` + `params`) and return the
+    /// JSON-RPC `result`. Panics on a non-200 status or a JSON-RPC error.
+    pub async fn mcp_request(
+        &self,
+        token: &str,
+        method: &str,
+        params: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut params = params;
+        params["_meta"] = json!({
+            "io.modelcontextprotocol/protocolVersion": MCP_TEST_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": { "name": "readur-tests", "version": "1.0" },
+            "io.modelcontextprotocol/clientCapabilities": {}
+        });
+        let message = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
+        let (status, body) = self.mcp_post(Some(token), message).await;
+        assert_eq!(
+            status,
+            axum::http::StatusCode::OK,
+            "MCP {} failed: {}",
+            method,
+            body
+        );
+        assert!(
+            body.get("error").is_none(),
+            "MCP {} returned an error: {}",
+            method,
+            body
+        );
+        body["result"].clone()
+    }
+
+    /// Names of the tools `tools/list` returns for this caller.
+    pub async fn mcp_tool_names(&self, token: &str) -> Vec<String> {
+        let result = self.mcp_request(token, "tools/list", json!({})).await;
+        result["tools"]
+            .as_array()
+            .expect("tools/list result has no tools array")
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// Call a tool and return the `CallToolResult` JSON (`content`,
+    /// `structuredContent`, `isError`). Tool-level failures come back with
+    /// `isError: true` rather than panicking, so tests can assert on them.
+    pub async fn mcp_call_tool(
+        &self,
+        token: &str,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> serde_json::Value {
+        self.mcp_request(
+            token,
+            "tools/call",
+            json!({ "name": name, "arguments": arguments }),
+        )
+        .await
+    }
+
+    /// Create a personal API key (`readur_pat_...`) for the user owning `token`.
+    pub async fn create_api_key(&self, token: &str) -> String {
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/auth/keys")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", token))
+            .body(axum::body::Body::from(
+                json!({ "name": "mcp-test" }).to_string(),
+            ))
+            .unwrap();
+        let response = self.app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+        assert!(
+            status.is_success(),
+            "creating API key failed: {} {}",
+            status,
+            body
+        );
+        body["plaintext"]
+            .as_str()
+            .expect("API key missing from response")
+            .to_string()
     }
 
     /// Check database pool health
@@ -302,7 +501,7 @@ impl TestContext {
     pub async fn wait_for_pool_health(&self, timeout_secs: u64) -> Result<(), String> {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        
+
         while start.elapsed() < timeout {
             if self.check_pool_health().await {
                 let health = self.get_pool_health();
@@ -313,7 +512,7 @@ impl TestContext {
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        
+
         let health = self.get_pool_health();
         Err(format!(
             "Pool health check timed out after {}s. Health: size={}, idle={}, closed={}",
@@ -323,106 +522,131 @@ impl TestContext {
 
     /// Clean up test database by removing test data for this context
     pub async fn cleanup_database(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.cleanup_database_with_strategy(CleanupStrategy::Standard).await
+        self.cleanup_database_with_strategy(CleanupStrategy::Standard)
+            .await
     }
 
     /// Clean up test database with configurable strategy for different test scenarios
-    pub async fn cleanup_database_with_strategy(&self, strategy: CleanupStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn cleanup_database_with_strategy(
+        &self,
+        strategy: CleanupStrategy,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let cleanup_start = std::time::Instant::now();
-        println!("Starting database cleanup for test context {} with strategy {:?}", self.context_id, strategy);
-        
+        println!(
+            "Starting database cleanup for test context {} with strategy {:?}",
+            self.context_id, strategy
+        );
+
         match strategy {
             CleanupStrategy::Fast => self.cleanup_database_fast().await,
             CleanupStrategy::Standard => self.cleanup_database_standard().await,
             CleanupStrategy::Thorough => self.cleanup_database_thorough().await,
         }
         .map_err(|e| {
-            eprintln!("Database cleanup failed for test context {}: {}", self.context_id, e);
+            eprintln!(
+                "Database cleanup failed for test context {}: {}",
+                self.context_id, e
+            );
             e
         })?;
-        
-        println!("Database cleanup completed for test context {} in {:?}", 
-                 self.context_id, cleanup_start.elapsed());
+
+        println!(
+            "Database cleanup completed for test context {} in {:?}",
+            self.context_id,
+            cleanup_start.elapsed()
+        );
         Ok(())
     }
 
     /// Fast cleanup strategy for performance tests - uses TRUNCATE where possible
     async fn cleanup_database_fast(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("Using FAST cleanup strategy - truncating tables where possible");
-        
+
         // First, get test user IDs to clean up user-specific data
         let test_user_ids = self.get_test_user_ids().await?;
-        
+
         if test_user_ids.is_empty() {
             println!("No test users found, skipping cleanup");
             return Ok(());
         }
-        
+
         println!("Cleaning up test user data");
-        
+
         // For performance tests, we can safely truncate global tables since they're test-only
-        let global_truncate_queries = vec![
-            ("ocr_metrics", "TRUNCATE TABLE ocr_metrics RESTART IDENTITY CASCADE"),
-        ];
-        
+        let global_truncate_queries = vec![(
+            "ocr_metrics",
+            "TRUNCATE TABLE ocr_metrics RESTART IDENTITY CASCADE",
+        )];
+
         for (table_name, query) in global_truncate_queries {
-            if let Err(e) = self.execute_cleanup_query_with_timeout(table_name, query, 10).await {
+            if let Err(e) = self
+                .execute_cleanup_query_with_timeout(table_name, query, 10)
+                .await
+            {
                 eprintln!("Warning: Failed to truncate {}: {}", table_name, e);
             }
         }
-        
+
         // For user-specific data, use optimized batch deletes
-        self.cleanup_user_specific_data_batched(&test_user_ids).await?;
-        
+        self.cleanup_user_specific_data_batched(&test_user_ids)
+            .await?;
+
         Ok(())
     }
 
     /// Standard cleanup strategy - optimized queries with timeouts
-    async fn cleanup_database_standard(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_database_standard(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("Using STANDARD cleanup strategy - optimized queries with timeouts");
-        
+
         let test_user_ids = self.get_test_user_ids().await?;
-        
+
         if test_user_ids.is_empty() {
             println!("No test users found, skipping cleanup");
             return Ok(());
         }
-        
+
         println!("Cleaning up test user data");
-        
+
         // Clean up global test data first
-        let global_cleanup_queries = vec![
-            ("ocr_metrics", "DELETE FROM ocr_metrics", 15),
-        ];
-        
+        let global_cleanup_queries = vec![("ocr_metrics", "DELETE FROM ocr_metrics", 15)];
+
         for (table_name, query, timeout_secs) in global_cleanup_queries {
-            if let Err(e) = self.execute_cleanup_query_with_timeout(table_name, query, timeout_secs).await {
+            if let Err(e) = self
+                .execute_cleanup_query_with_timeout(table_name, query, timeout_secs)
+                .await
+            {
                 eprintln!("Warning: Failed to clean up {}: {}", table_name, e);
             }
         }
-        
+
         // Clean up user-specific data with batching
-        self.cleanup_user_specific_data_batched(&test_user_ids).await?;
-        
+        self.cleanup_user_specific_data_batched(&test_user_ids)
+            .await?;
+
         Ok(())
     }
 
     /// Thorough cleanup strategy - detailed logging and error handling
-    async fn cleanup_database_thorough(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_database_thorough(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("Using THOROUGH cleanup strategy - detailed logging and error handling");
-        
+
         let test_user_ids = self.get_test_user_ids().await?;
-        
+
         if test_user_ids.is_empty() {
             println!("No test users found, skipping cleanup");
             return Ok(());
         }
-        
+
         println!("Cleaning up test user data");
-        
+
         // Clean up with detailed progress tracking
-        self.cleanup_user_specific_data_with_progress(&test_user_ids).await?;
-        
+        self.cleanup_user_specific_data_with_progress(&test_user_ids)
+            .await?;
+
         // Verify cleanup completed
         let counts_after = self.count_test_records(&test_user_ids).await;
         if counts_after.values().all(|count| *count == 0) {
@@ -430,17 +654,23 @@ impl TestContext {
         } else {
             println!("Cleanup incomplete: some test records remain");
         }
-        
+
         Ok(())
     }
 
     /// Get all test user IDs efficiently
-    async fn get_test_user_ids(&self) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_test_user_ids(
+        &self,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let query = "SELECT id::text FROM users WHERE username LIKE 'testuser_%' OR username LIKE 'adminuser_%'";
-        
+
         let start_time = std::time::Instant::now();
-        match tokio::time::timeout(std::time::Duration::from_secs(10), 
-                                   sqlx::query_scalar::<_, String>(query).fetch_all(self.state.db.get_pool())).await {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            sqlx::query_scalar::<_, String>(query).fetch_all(self.state.db.get_pool()),
+        )
+        .await
+        {
             Ok(Ok(user_ids)) => {
                 println!("Retrieved test user IDs in {:?}", start_time.elapsed());
                 Ok(user_ids)
@@ -457,40 +687,51 @@ impl TestContext {
     }
 
     /// Clean up user-specific data using batched deletes
-    async fn cleanup_user_specific_data_batched(&self, user_ids: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_user_specific_data_batched(
+        &self,
+        user_ids: &[String],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if user_ids.is_empty() {
             return Ok(());
         }
 
         // Define cleanup order (respecting foreign key dependencies)
         let cleanup_tables = vec![
-            ("ocr_queue", "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))", 20),
+            (
+                "ocr_queue",
+                "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))",
+                20,
+            ),
             ("notifications", "user_id = ANY($1)", 15),
             ("ignored_files", "ignored_by = ANY($1)", 15),
             ("webdav_files", "user_id = ANY($1)", 30), // Potentially large table
             ("webdav_directories", "user_id = ANY($1)", 30), // Potentially large table
-            ("documents", "user_id = ANY($1)", 45), // Potentially very large table
+            ("documents", "user_id = ANY($1)", 45),    // Potentially very large table
             ("sources", "user_id = ANY($1)", 15),
             ("settings", "user_id = ANY($1)", 10),
             ("users", "id = ANY($1)", 10),
         ];
 
         // Convert user_ids to UUID array for PostgreSQL
-        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids
+            .iter()
             .map(|id| uuid::Uuid::parse_str(id))
             .collect();
-        
+
         let user_uuids = user_uuids.map_err(|e| format!("Failed to parse user UUIDs: {}", e))?;
 
         for (table_name, where_clause, timeout_secs) in cleanup_tables {
             let query = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
-            
-            if let Err(e) = self.execute_parameterized_cleanup_with_timeout(
-                table_name, 
-                &query, 
-                &user_uuids, 
-                timeout_secs
-            ).await {
+
+            if let Err(e) = self
+                .execute_parameterized_cleanup_with_timeout(
+                    table_name,
+                    &query,
+                    &user_uuids,
+                    timeout_secs,
+                )
+                .await
+            {
                 eprintln!("Warning: Failed to clean up {}: {}", table_name, e);
                 // Continue with other tables even if one fails
             }
@@ -507,19 +748,31 @@ impl TestContext {
         timeout_secs: u64,
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let start_time = std::time::Instant::now();
-        println!("Executing cleanup on {}: {} (timeout: {}s)", 
-                 table_name, 
-                 if query.len() > 80 { format!("{}...", &query[..77]) } else { query.to_string() },
-                 timeout_secs);
+        println!(
+            "Executing cleanup on {}: {} (timeout: {}s)",
+            table_name,
+            if query.len() > 80 {
+                format!("{}...", &query[..77])
+            } else {
+                query.to_string()
+            },
+            timeout_secs
+        );
 
         match tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            sqlx::query(sqlx::AssertSqlSafe(query)).execute(self.state.db.get_pool()) // fixed cleanup tables; ids are bound
-        ).await {
+            sqlx::query(sqlx::AssertSqlSafe(query)).execute(self.state.db.get_pool()), // fixed cleanup tables; ids are bound
+        )
+        .await
+        {
             Ok(Ok(result)) => {
                 let rows_affected = result.rows_affected();
-                println!("✅ Cleaned up {} rows from {} in {:?}", 
-                         rows_affected, table_name, start_time.elapsed());
+                println!(
+                    "✅ Cleaned up {} rows from {} in {:?}",
+                    rows_affected,
+                    table_name,
+                    start_time.elapsed()
+                );
                 Ok(rows_affected)
             }
             Ok(Err(e)) => {
@@ -527,7 +780,10 @@ impl TestContext {
                 Err(e.into())
             }
             Err(_) => {
-                eprintln!("⏰ Timeout cleaning up {} after {}s", table_name, timeout_secs);
+                eprintln!(
+                    "⏰ Timeout cleaning up {} after {}s",
+                    table_name, timeout_secs
+                );
                 Err(format!("Timeout cleaning up {} after {}s", table_name, timeout_secs).into())
             }
         }
@@ -545,12 +801,20 @@ impl TestContext {
 
         match tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            sqlx::query(sqlx::AssertSqlSafe(query)).bind(user_uuids).execute(self.state.db.get_pool()) // fixed cleanup tables; ids are bound
-        ).await {
+            sqlx::query(sqlx::AssertSqlSafe(query))
+                .bind(user_uuids)
+                .execute(self.state.db.get_pool()), // fixed cleanup tables; ids are bound
+        )
+        .await
+        {
             Ok(Ok(result)) => {
                 let rows_affected = result.rows_affected();
-                println!("✅ Cleaned up {} rows from {} in {:?}", 
-                         rows_affected, table_name, start_time.elapsed());
+                println!(
+                    "✅ Cleaned up {} rows from {} in {:?}",
+                    rows_affected,
+                    table_name,
+                    start_time.elapsed()
+                );
                 Ok(rows_affected)
             }
             Ok(Err(e)) => {
@@ -558,28 +822,39 @@ impl TestContext {
                 Err(e.into())
             }
             Err(_) => {
-                eprintln!("⏰ Timeout cleaning up {} after {}s", table_name, timeout_secs);
+                eprintln!(
+                    "⏰ Timeout cleaning up {} after {}s",
+                    table_name, timeout_secs
+                );
                 Err(format!("Timeout cleaning up {} after {}s", table_name, timeout_secs).into())
             }
         }
     }
 
     /// Clean up user-specific data with detailed progress tracking
-    async fn cleanup_user_specific_data_with_progress(&self, user_ids: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_user_specific_data_with_progress(
+        &self,
+        user_ids: &[String],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if user_ids.is_empty() {
             return Ok(());
         }
 
         // Convert user_ids to UUID array
-        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids
+            .iter()
             .map(|id| uuid::Uuid::parse_str(id))
             .collect();
-        
+
         let user_uuids = user_uuids.map_err(|e| format!("Failed to parse user UUIDs: {}", e))?;
 
         // Define cleanup with progress reporting
         let cleanup_tables = vec![
-            ("ocr_queue", "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))", 20),
+            (
+                "ocr_queue",
+                "document_id IN (SELECT id FROM documents WHERE user_id = ANY($1))",
+                20,
+            ),
             ("notifications", "user_id = ANY($1)", 15),
             ("ignored_files", "ignored_by = ANY($1)", 15),
             ("webdav_files", "user_id = ANY($1)", 30),
@@ -592,23 +867,41 @@ impl TestContext {
 
         let total_tables = cleanup_tables.len();
         for (i, (table_name, where_clause, timeout_secs)) in cleanup_tables.iter().enumerate() {
-            println!("🧹 Cleanup progress: {}/{} - Processing {}", i + 1, total_tables, table_name);
-            
+            println!(
+                "🧹 Cleanup progress: {}/{} - Processing {}",
+                i + 1,
+                total_tables,
+                table_name
+            );
+
             let query = format!("DELETE FROM {} WHERE {}", table_name, where_clause);
-            
-            match self.execute_parameterized_cleanup_with_timeout(
-                table_name, 
-                &query, 
-                &user_uuids, 
-                *timeout_secs
-            ).await {
+
+            match self
+                .execute_parameterized_cleanup_with_timeout(
+                    table_name,
+                    &query,
+                    &user_uuids,
+                    *timeout_secs,
+                )
+                .await
+            {
                 Ok(rows_affected) => {
-                    println!("✅ Progress {}/{}: Cleaned {} rows from {}", 
-                             i + 1, total_tables, rows_affected, table_name);
+                    println!(
+                        "✅ Progress {}/{}: Cleaned {} rows from {}",
+                        i + 1,
+                        total_tables,
+                        rows_affected,
+                        table_name
+                    );
                 }
                 Err(e) => {
-                    eprintln!("❌ Progress {}/{}: Failed to clean {}: {}", 
-                              i + 1, total_tables, table_name, e);
+                    eprintln!(
+                        "❌ Progress {}/{}: Failed to clean {}: {}",
+                        i + 1,
+                        total_tables,
+                        table_name,
+                        e
+                    );
                     // Continue with other tables
                 }
             }
@@ -618,17 +911,21 @@ impl TestContext {
     }
 
     /// Count test records for reporting (best effort)
-    async fn count_test_records(&self, user_ids: &[String]) -> std::collections::HashMap<String, u64> {
+    async fn count_test_records(
+        &self,
+        user_ids: &[String],
+    ) -> std::collections::HashMap<String, u64> {
         let mut counts = std::collections::HashMap::new();
-        
+
         if user_ids.is_empty() {
             return counts;
         }
 
-        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids.iter()
+        let user_uuids: Result<Vec<uuid::Uuid>, _> = user_ids
+            .iter()
             .map(|id| uuid::Uuid::parse_str(id))
             .collect();
-        
+
         let user_uuids = match user_uuids {
             Ok(uuids) => uuids,
             Err(_) => return counts,
@@ -636,20 +933,45 @@ impl TestContext {
 
         let count_queries = vec![
             ("users", "SELECT COUNT(*) FROM users WHERE id = ANY($1)"),
-            ("documents", "SELECT COUNT(*) FROM documents WHERE user_id = ANY($1)"),
-            ("webdav_directories", "SELECT COUNT(*) FROM webdav_directories WHERE user_id = ANY($1)"),
-            ("webdav_files", "SELECT COUNT(*) FROM webdav_files WHERE user_id = ANY($1)"),
-            ("settings", "SELECT COUNT(*) FROM settings WHERE user_id = ANY($1)"),
-            ("sources", "SELECT COUNT(*) FROM sources WHERE user_id = ANY($1)"),
-            ("notifications", "SELECT COUNT(*) FROM notifications WHERE user_id = ANY($1)"),
-            ("ignored_files", "SELECT COUNT(*) FROM ignored_files WHERE ignored_by = ANY($1)"),
+            (
+                "documents",
+                "SELECT COUNT(*) FROM documents WHERE user_id = ANY($1)",
+            ),
+            (
+                "webdav_directories",
+                "SELECT COUNT(*) FROM webdav_directories WHERE user_id = ANY($1)",
+            ),
+            (
+                "webdav_files",
+                "SELECT COUNT(*) FROM webdav_files WHERE user_id = ANY($1)",
+            ),
+            (
+                "settings",
+                "SELECT COUNT(*) FROM settings WHERE user_id = ANY($1)",
+            ),
+            (
+                "sources",
+                "SELECT COUNT(*) FROM sources WHERE user_id = ANY($1)",
+            ),
+            (
+                "notifications",
+                "SELECT COUNT(*) FROM notifications WHERE user_id = ANY($1)",
+            ),
+            (
+                "ignored_files",
+                "SELECT COUNT(*) FROM ignored_files WHERE ignored_by = ANY($1)",
+            ),
         ];
 
         for (table_name, query) in count_queries {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(5),
-                sqlx::query_scalar::<_, i64>(query).bind(&user_uuids).fetch_one(self.state.db.get_pool())
-            ).await {
+                sqlx::query_scalar::<_, i64>(query)
+                    .bind(&user_uuids)
+                    .fetch_one(self.state.db.get_pool()),
+            )
+            .await
+            {
                 Ok(Ok(count)) => {
                     counts.insert(table_name.to_string(), count as u64);
                 }
@@ -673,8 +995,9 @@ impl TestContext {
     /// This is specifically for tests that only need connection cleanup without data cleanup
     pub async fn close_connections_only(&self) {
         // Mark cleanup as called to prevent automatic cleanup in Drop
-        self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
-        
+        self.cleanup_called
+            .store(true, std::sync::atomic::Ordering::Release);
+
         // Close the connection pool directly
         if !self.state.db.pool.is_closed() {
             self.state.db.close().await;
@@ -683,23 +1006,32 @@ impl TestContext {
 
     /// Complete cleanup: database cleanup + close connections
     pub async fn cleanup_and_close(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.cleanup_and_close_with_strategy(CleanupStrategy::Standard).await
+        self.cleanup_and_close_with_strategy(CleanupStrategy::Standard)
+            .await
     }
 
     /// Complete cleanup with configurable strategy: database cleanup + close connections
-    pub async fn cleanup_and_close_with_strategy(&self, strategy: CleanupStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn cleanup_and_close_with_strategy(
+        &self,
+        strategy: CleanupStrategy,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Mark cleanup as called to prevent automatic cleanup in Drop
-        self.cleanup_called.store(true, std::sync::atomic::Ordering::Release);
-        
+        self.cleanup_called
+            .store(true, std::sync::atomic::Ordering::Release);
+
         // First clean up test data
         self.cleanup_database_with_strategy(strategy).await?;
-        
+
         // Then close the connection pool
         self.close_connections().await;
 
         // The database was this test's alone; drop it rather than leave it to process exit
         if let Err(e) = self.database.drop_database().await {
-            eprintln!("Warning: could not drop test database {}: {}", self.database.name(), e);
+            eprintln!(
+                "Warning: could not drop test database {}: {}",
+                self.database.name(),
+                e
+            );
         }
 
         Ok(())
@@ -717,6 +1049,7 @@ pub struct TestConfigBuilder {
     max_file_size_mb: u64,
     memory_limit_mb: u64,
     oidc_enabled: bool,
+    mcp: crate::config::McpConfig,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -731,27 +1064,38 @@ impl Default for TestConfigBuilder {
             max_file_size_mb: 10,
             memory_limit_mb: 256,
             oidc_enabled: false,
+            mcp: crate::config::McpConfig::default(),
         }
     }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl TestConfigBuilder {
+    pub fn with_mcp_enabled(mut self, enabled: bool) -> Self {
+        self.mcp.enabled = enabled;
+        self
+    }
+
+    pub fn with_mcp_allow_delete(mut self, allow: bool) -> Self {
+        self.mcp.allow_delete = allow;
+        self
+    }
+
     pub fn with_upload_path(mut self, path: &str) -> Self {
         self.upload_path = path.to_string();
         self
     }
-    
+
     pub fn with_watch_folder(mut self, folder: &str) -> Self {
         self.watch_folder = folder.to_string();
         self
     }
-    
+
     pub fn with_concurrent_ocr_jobs(mut self, jobs: usize) -> Self {
         self.concurrent_ocr_jobs = jobs;
         self
     }
-    
+
     pub fn with_oidc_enabled(mut self, enabled: bool) -> Self {
         self.oidc_enabled = enabled;
         self
@@ -761,7 +1105,7 @@ impl TestConfigBuilder {
         self.max_file_size_mb = size_mb;
         self
     }
-    
+
     pub(crate) fn build(self, database_url: String) -> crate::config::Config {
         crate::config::Config {
             database_url,
@@ -775,7 +1119,7 @@ impl TestConfigBuilder {
             watch_interval_seconds: Some(30),
             file_stability_check_ms: Some(500),
             max_file_age_hours: None,
-            
+
             // OCR Configuration
             ocr_language: "eng".to_string(),
             concurrent_ocr_jobs: self.concurrent_ocr_jobs,
@@ -787,7 +1131,7 @@ impl TestConfigBuilder {
             // Performance
             memory_limit_mb: self.memory_limit_mb as usize,
             cpu_priority: "normal".to_string(),
-            
+
             // OIDC Configuration
             oidc_enabled: self.oidc_enabled,
             oidc_client_id: None,
@@ -809,6 +1153,7 @@ impl TestConfigBuilder {
                 registration_requires_approval: false,
                 ..Default::default()
             },
+            mcp: self.mcp,
         }
     }
 }
@@ -836,13 +1181,16 @@ impl TestAuthHelper {
     pub fn with_db(app: Router, db: crate::db::Database) -> Self {
         Self { app, db: Some(db) }
     }
-    
+
     /// Create a regular test user with unique credentials
     pub async fn create_test_user(&self) -> TestUser {
         // Generate a more unique ID using process ID, thread ID (as debug string), and nanoseconds
-        let test_id = format!("{}_{}_{}", 
+        let test_id = format!(
+            "{}_{}_{}",
             std::process::id(),
-            format!("{:?}", std::thread::current().id()).replace("ThreadId(", "").replace(")", ""),
+            format!("{:?}", std::thread::current().id())
+                .replace("ThreadId(", "")
+                .replace(")", ""),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -851,51 +1199,61 @@ impl TestAuthHelper {
         let username = format!("testuser_{}", test_id);
         let email = format!("test_{}@example.com", test_id);
         let password = "password123";
-        
+
         let user_data = json!({
             "username": username,
             "email": email,
             "password": password
         });
-        
-        let response = self.make_request("POST", "/api/auth/register", Some(user_data), None).await;
-        
+
+        let response = self
+            .make_request("POST", "/api/auth/register", Some(user_data), None)
+            .await;
+
         // Debug logging to understand CI vs local differences
         let response_str = String::from_utf8_lossy(&response);
         println!("DEBUG: Register response body: {}", response_str);
         println!("DEBUG: Register response length: {} bytes", response.len());
-        
+
         // Try to parse as JSON first to see what we actually got
         let user_response = match serde_json::from_slice::<serde_json::Value>(&response) {
             Ok(json_value) => {
                 println!("DEBUG: Parsed JSON structure: {:#}", json_value);
-                
+
                 // Check if this is an error response due to username collision
                 if let Some(error_msg) = json_value.get("error").and_then(|e| e.as_str()) {
                     if error_msg.contains("Username already exists") {
                         println!("DEBUG: Username collision detected, retrying with UUID suffix");
                         // Retry with a UUID suffix for guaranteed uniqueness
-                        let retry_username = format!("{}_{}",
+                        let retry_username = format!(
+                            "{}_{}",
                             username,
                             uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
                         );
-                        let retry_email = format!("test_{}@example.com", 
+                        let retry_email = format!(
+                            "test_{}@example.com",
                             uuid::Uuid::new_v4().to_string().replace('-', "")[..16].to_string()
                         );
-                        
+
                         let retry_user_data = json!({
                             "username": retry_username,
                             "email": retry_email,
                             "password": password
                         });
-                        
-                        let retry_response = self.make_request("POST", "/api/auth/register", Some(retry_user_data), None).await;
+
+                        let retry_response = self
+                            .make_request("POST", "/api/auth/register", Some(retry_user_data), None)
+                            .await;
                         let retry_response_str = String::from_utf8_lossy(&retry_response);
-                        println!("DEBUG: Retry register response body: {}", retry_response_str);
-                        
-                        let retry_json_value = serde_json::from_slice::<serde_json::Value>(&retry_response)
-                            .expect("Retry response should be valid JSON");
-                        
+                        println!(
+                            "DEBUG: Retry register response body: {}",
+                            retry_response_str
+                        );
+
+                        let retry_json_value =
+                            serde_json::from_slice::<serde_json::Value>(&retry_response)
+                                .expect("Retry response should be valid JSON");
+
                         match serde_json::from_value::<UserResponse>(retry_json_value) {
                             Ok(user_response) => {
                                 return TestUser {
@@ -904,15 +1262,18 @@ impl TestAuthHelper {
                                     password: password.to_string(),
                                     token: None,
                                 };
-                            },
+                            }
                             Err(e) => {
-                                eprintln!("ERROR: Failed to parse UserResponse from retry JSON: {}", e);
+                                eprintln!(
+                                    "ERROR: Failed to parse UserResponse from retry JSON: {}",
+                                    e
+                                );
                                 panic!("Failed to parse UserResponse from retry: {}", e);
                             }
                         }
                     }
                 }
-                
+
                 // Try to parse as UserResponse
                 match serde_json::from_value::<UserResponse>(json_value) {
                     Ok(user_response) => user_response,
@@ -922,14 +1283,14 @@ impl TestAuthHelper {
                         panic!("Failed to parse UserResponse: {}", e);
                     }
                 }
-            },
+            }
             Err(e) => {
                 eprintln!("ERROR: Response is not valid JSON: {}", e);
                 eprintln!("ERROR: Raw response: {:?}", response);
                 panic!("Invalid JSON response from register endpoint: {}", e);
             }
         };
-        
+
         TestUser {
             user_response,
             username,
@@ -937,7 +1298,7 @@ impl TestAuthHelper {
             token: None,
         }
     }
-    
+
     /// Create an admin test user with unique credentials.
     ///
     /// Public registration never grants roles, so the account is inserted
@@ -949,10 +1310,7 @@ impl TestAuthHelper {
              construct the helper with TestAuthHelper::with_db or TestContext::auth_helper",
         );
 
-        let test_id = format!("{}_{}",
-            std::process::id(),
-            uuid::Uuid::new_v4().simple()
-        );
+        let test_id = format!("{}_{}", std::process::id(), uuid::Uuid::new_v4().simple());
         let username = format!("adminuser_{}", test_id);
         let email = format!("admin_{}@example.com", test_id);
         let password = "adminpass123";
@@ -979,47 +1337,62 @@ impl TestAuthHelper {
     pub async fn create_test_admin(&self) -> TestUser {
         self.create_admin_user().await
     }
-    
+
     /// Login a user and return their authentication token
     pub async fn login_user(&self, username: &str, password: &str) -> String {
         let login_data = json!({
             "username": username,
             "password": password
         });
-        
-        let response = self.make_request("POST", "/api/auth/login", Some(login_data), None).await;
+
+        let response = self
+            .make_request("POST", "/api/auth/login", Some(login_data), None)
+            .await;
         let login_response: serde_json::Value = serde_json::from_slice(&response).unwrap();
         login_response["token"].as_str().unwrap().to_string()
     }
-    
+
     /// Make an authenticated HTTP request
-    pub async fn make_authenticated_request(&self, method: &str, uri: &str, body: Option<serde_json::Value>, token: &str) -> Vec<u8> {
+    pub async fn make_authenticated_request(
+        &self,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+        token: &str,
+    ) -> Vec<u8> {
         self.make_request(method, uri, body, Some(token)).await
     }
-    
+
     /// Make an HTTP request (internal helper)
-    async fn make_request(&self, method: &str, uri: &str, body: Option<serde_json::Value>, token: Option<&str>) -> Vec<u8> {
+    async fn make_request(
+        &self,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+        token: Option<&str>,
+    ) -> Vec<u8> {
         let mut builder = axum::http::Request::builder()
             .method(method)
             .uri(uri)
             .header("Content-Type", "application/json");
-        
+
         if let Some(token) = token {
             builder = builder.header("Authorization", format!("Bearer {}", token));
         }
-        
+
         let request_body = if let Some(body) = body {
             axum::body::Body::from(serde_json::to_vec(&body).unwrap())
         } else {
             axum::body::Body::empty()
         };
-        
-        let response = self.app
+
+        let response = self
+            .app
             .clone()
             .oneshot(builder.body(request_body).unwrap())
             .await
             .unwrap();
-        
+
         axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap()
@@ -1039,23 +1412,34 @@ pub struct TestUser {
 #[cfg(any(test, feature = "test-utils"))]
 impl TestUser {
     /// Login this user and store the authentication token
-    pub async fn login(&mut self, auth_helper: &TestAuthHelper) -> Result<&str, Box<dyn std::error::Error>> {
+    pub async fn login(
+        &mut self,
+        auth_helper: &TestAuthHelper,
+    ) -> Result<&str, Box<dyn std::error::Error>> {
         let token = auth_helper.login_user(&self.username, &self.password).await;
         self.token = Some(token);
         Ok(self.token.as_ref().unwrap())
     }
-    
+
     /// Make an authenticated request as this user
-    pub async fn make_request(&self, auth_helper: &TestAuthHelper, method: &str, uri: &str, body: Option<serde_json::Value>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub async fn make_request(
+        &self,
+        auth_helper: &TestAuthHelper,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let token = self.token.as_ref().ok_or("User not logged in")?;
-        Ok(auth_helper.make_authenticated_request(method, uri, body, token).await)
+        Ok(auth_helper
+            .make_authenticated_request(method, uri, body, token)
+            .await)
     }
-    
+
     /// Get user ID
     pub fn id(&self) -> String {
         self.user_response.id.to_string()
     }
-    
+
     /// Check if user is admin
     pub fn is_admin(&self) -> bool {
         matches!(self.user_response.role, crate::models::UserRole::Admin)
@@ -1126,9 +1510,9 @@ pub async fn create_live_server_user(
 /// Centralized test Document helpers to reduce duplication across test files
 #[cfg(any(test, feature = "test-utils"))]
 pub mod document_helpers {
-    use uuid::Uuid;
-    use chrono::Utc;
     use crate::models::Document;
+    use chrono::Utc;
+    use uuid::Uuid;
 
     /// Create a basic test document with all required fields
     pub fn create_test_document(user_id: Uuid) -> Document {
@@ -1167,7 +1551,11 @@ pub mod document_helpers {
     }
 
     /// Create a test document with custom filename and hash
-    pub fn create_test_document_with_hash(user_id: Uuid, filename: &str, file_hash: String) -> Document {
+    pub fn create_test_document_with_hash(
+        user_id: Uuid,
+        filename: &str,
+        file_hash: String,
+    ) -> Document {
         Document {
             id: Uuid::new_v4(),
             filename: filename.to_string(),
@@ -1223,7 +1611,9 @@ pub mod document_helpers {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             user_id,
-            file_hash: Some("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string()),
+            file_hash: Some(
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string(),
+            ),
             original_created_at: None,
             original_modified_at: None,
             source_path: None,
@@ -1319,50 +1709,67 @@ pub mod document_helpers {
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let actual_status = response.status();
         let url = response.url().clone();
-        
+
         if actual_status == expected_status {
             // Success case - try to parse JSON
             let response_text = response.text().await?;
-            
+
             if response_text.is_empty() {
-                println!("✅ {} - Status {} as expected (empty response)", context, expected_status);
+                println!(
+                    "✅ {} - Status {} as expected (empty response)",
+                    context, expected_status
+                );
                 return Ok(serde_json::Value::Null);
             }
-            
+
             match serde_json::from_str::<serde_json::Value>(&response_text) {
                 Ok(json_value) => {
                     println!("✅ {} - Status {} as expected", context, expected_status);
                     Ok(json_value)
                 }
                 Err(e) => {
-                    println!("⚠️  {} - Status {} as expected but failed to parse JSON: {}", context, expected_status, e);
+                    println!(
+                        "⚠️  {} - Status {} as expected but failed to parse JSON: {}",
+                        context, expected_status, e
+                    );
                     println!("Response text: {}", response_text);
                     Err(format!("JSON parse error: {}", e).into())
                 }
             }
         } else {
             // Failure case - provide detailed debug info
-            let response_text = response.text().await.unwrap_or_else(|_| "Unable to read response body".to_string());
-            
-            println!("❌ {} - Expected status {}, got {}", context, expected_status, actual_status);
+            let response_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+
+            println!(
+                "❌ {} - Expected status {}, got {}",
+                context, expected_status, actual_status
+            );
             println!("🔗 Request URL: {}", url);
             println!("📄 Response headers:");
-            
+
             println!("📝 Response body:");
             println!("{}", response_text);
-            
+
             // Try to parse as JSON for better formatting
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
                 println!("📋 Formatted JSON response:");
-                println!("{}", serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| response_text.clone()));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json_value)
+                        .unwrap_or_else(|_| response_text.clone())
+                );
             }
-            
+
             Err(format!(
-                "{} - Expected status {}, got {}. URL: {}. Response: {}", 
+                "{} - Expected status {}, got {}. URL: {}. Response: {}",
                 context, expected_status, actual_status, url, response_text
-            ).into())
+            )
+            .into())
         }
-}
+    }
 
     /// Quick assertion for successful responses (2xx status codes)
     #[cfg(any(test, feature = "test-utils"))]
@@ -1371,7 +1778,7 @@ pub mod document_helpers {
         context: &str,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let status = response.status();
-        
+
         if status.is_success() {
             assert_response_status_with_debug(response, status, context).await
         } else {
@@ -1406,42 +1813,57 @@ impl AssertRequest {
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let actual_status = response.status();
         let headers = response.headers().clone();
-        
+
         // Extract response body
         let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await?;
         let response_text = String::from_utf8_lossy(&response_bytes);
-        
+
         println!("🔍 AssertRequest Debug Info for: {}", context);
         println!("🔗 Request URL: {}", original_url);
-        
+
         if let Some(payload) = payload {
             println!("📤 Request Payload:");
-            println!("{}", serde_json::to_string_pretty(payload).unwrap_or_else(|_| "Invalid JSON payload".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(payload)
+                    .unwrap_or_else(|_| "Invalid JSON payload".to_string())
+            );
         } else {
             println!("📤 Request Payload: (empty)");
         }
-        
-        println!("📊 Response Status: {} (expected: {})", actual_status, expected_status);
+
+        println!(
+            "📊 Response Status: {} (expected: {})",
+            actual_status, expected_status
+        );
         println!("📋 Response Headers:");
         for (name, value) in headers.iter() {
-            println!("  {}: {}", name, value.to_str().unwrap_or("<invalid header>"));
+            println!(
+                "  {}: {}",
+                name,
+                value.to_str().unwrap_or("<invalid header>")
+            );
         }
-        
+
         println!("📝 Response Body ({} bytes):", response_bytes.len());
         if response_text.is_empty() {
             println!("  (empty response)");
         } else {
             // Try to format as JSON for better readability
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
-                println!("{}", serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| response_text.to_string()));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json_value)
+                        .unwrap_or_else(|_| response_text.to_string())
+                );
             } else {
                 println!("{}", response_text);
             }
         }
-        
+
         if actual_status == expected_status {
             println!("✅ {} - Status {} as expected", context, expected_status);
-            
+
             if response_text.is_empty() {
                 Ok(serde_json::Value::Null)
             } else {
@@ -1454,14 +1876,18 @@ impl AssertRequest {
                 }
             }
         } else {
-            println!("❌ {} - Expected status {}, got {}", context, expected_status, actual_status);
+            println!(
+                "❌ {} - Expected status {}, got {}",
+                context, expected_status, actual_status
+            );
             Err(format!(
-                "{} - Expected status {}, got {}. URL: {}. Response: {}", 
+                "{} - Expected status {}, got {}. URL: {}. Response: {}",
                 context, expected_status, actual_status, original_url, response_text
-            ).into())
+            )
+            .into())
         }
     }
-    
+
     /// Assert successful response (2xx status codes) with comprehensive debugging
     pub async fn assert_success(
         response: axum::response::Response,
@@ -1470,14 +1896,21 @@ impl AssertRequest {
         payload: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         let status = response.status();
-        
+
         if status.is_success() {
             Self::assert_response(response, status, context, original_url, payload).await
         } else {
-            Self::assert_response(response, axum::http::StatusCode::OK, context, original_url, payload).await
+            Self::assert_response(
+                response,
+                axum::http::StatusCode::OK,
+                context,
+                original_url,
+                payload,
+            )
+            .await
         }
     }
-    
+
     /// Assert client error (4xx) with comprehensive debugging
     pub async fn assert_client_error(
         response: axum::response::Response,
@@ -1488,7 +1921,7 @@ impl AssertRequest {
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         Self::assert_response(response, expected_status, context, original_url, payload).await
     }
-    
+
     /// Assert server error (5xx) with comprehensive debugging
     pub async fn assert_server_error(
         response: axum::response::Response,
@@ -1499,7 +1932,7 @@ impl AssertRequest {
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         Self::assert_response(response, expected_status, context, original_url, payload).await
     }
-    
+
     /// Make a request and assert the response in one call
     pub async fn make_and_assert(
         app: &axum::Router,
@@ -1514,22 +1947,19 @@ impl AssertRequest {
             .method(method)
             .uri(uri)
             .header("Content-Type", "application/json");
-        
+
         if let Some(token) = token {
             builder = builder.header("Authorization", format!("Bearer {}", token));
         }
-        
+
         let request_body = if let Some(ref body) = payload {
             axum::body::Body::from(serde_json::to_vec(body)?)
         } else {
             axum::body::Body::empty()
         };
-        
-        let response = app
-            .clone()
-            .oneshot(builder.body(request_body)?)
-            .await?;
-        
+
+        let response = app.clone().oneshot(builder.body(request_body)?).await?;
+
         Self::assert_response(response, expected_status, context, uri, payload.as_ref()).await
     }
 }
@@ -1545,15 +1975,17 @@ pub struct ConcurrentTestManager {
 impl ConcurrentTestManager {
     pub async fn new() -> Self {
         let context = TestContext::new().await;
-        
+
         // Wait for initial pool health
         if let Err(e) = context.wait_for_pool_health(10).await {
             eprintln!("Warning: Pool health check failed during setup: {}", e);
         }
-        
+
         Self {
             context,
-            active_operations: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
+            active_operations: std::sync::Arc::new(tokio::sync::RwLock::new(
+                std::collections::HashSet::new(),
+            )),
         }
     }
 
@@ -1565,34 +1997,35 @@ impl ConcurrentTestManager {
     ) -> Result<T, Box<dyn std::error::Error + Send + Sync>>
     where
         F: FnOnce(&TestContext) -> Fut + Send,
-        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>> + Send,
+        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>>
+            + Send,
         T: Send,
     {
         let op_id = format!("{}_{}", operation_name, uuid::Uuid::new_v4());
-        
+
         // Register operation
         {
             let mut ops = self.active_operations.write().await;
             ops.insert(op_id.clone());
         }
-        
+
         // Check pool health before operation
         let health = self.context.get_pool_health();
         if health.is_closed {
             return Err("Database pool is closed".into());
         }
-        
+
         // Execute operation
         // Since TestContext no longer implements Clone, we need to pass by reference
         let context = &self.context;
         let result = operation(context).await;
-        
+
         // Cleanup: Remove operation from tracking
         {
             let mut ops = self.active_operations.write().await;
             ops.remove(&op_id);
         }
-        
+
         result
     }
 
@@ -1600,7 +2033,7 @@ impl ConcurrentTestManager {
     pub async fn wait_for_completion(&self, timeout_secs: u64) -> Result<(), String> {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        
+
         while start.elapsed() < timeout {
             let ops = self.active_operations.read().await;
             if ops.is_empty() {
@@ -1609,9 +2042,12 @@ impl ConcurrentTestManager {
             drop(ops);
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        
+
         let ops = self.active_operations.read().await;
-        Err(format!("Timeout waiting for {} operations to complete", ops.len()))
+        Err(format!(
+            "Timeout waiting for {} operations to complete",
+            ops.len()
+        ))
     }
 
     /// Get current pool health and active operation count
@@ -1628,27 +2064,30 @@ impl ConcurrentTestManager {
         if let Err(e) = self.wait_for_completion(30).await {
             eprintln!("Warning: {}", e);
         }
-        
+
         // Clean up database and close connections
         if let Err(e) = self.context.cleanup_and_close().await {
-            eprintln!("Warning: Failed to cleanup database and close connections: {}", e);
+            eprintln!(
+                "Warning: Failed to cleanup database and close connections: {}",
+                e
+            );
         }
-        
+
         // Wait for pool to stabilize
         if let Err(e) = self.context.wait_for_pool_health(10).await {
             eprintln!("Warning: Pool did not stabilize after cleanup: {}", e);
         }
-        
+
         Ok(())
     }
 }
 
 /// Macro for running integration tests with automatic database cleanup
-/// 
+///
 /// Usage:
 /// ```rust
 /// use readur::integration_test_with_cleanup;
-/// 
+///
 /// integration_test_with_cleanup!(test_my_function, {
 ///     let user_id = create_test_user(&ctx.state.db, "testuser").await?;
 ///     // Your test logic here
@@ -1663,27 +2102,27 @@ macro_rules! integration_test_with_cleanup {
         #[tokio::test]
         async fn $test_name() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let ctx = $crate::test_utils::TestContext::new().await;
-            
+
             // Run test logic with proper error handling
             let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async move $test_body.await;
-            
+
             // Always cleanup database connections and test data, regardless of test result
             if let Err(e) = ctx.cleanup_and_close().await {
                 eprintln!("Warning: Test cleanup failed: {}", e);
             }
-            
+
             result
         }
     };
 }
 
 /// Macro for running integration tests with custom TestContext configuration and automatic cleanup
-/// 
+///
 /// Usage:
 /// ```rust
 /// use readur::integration_test_with_config_and_cleanup;
-/// 
-/// integration_test_with_config_and_cleanup!(test_with_custom_config, 
+///
+/// integration_test_with_config_and_cleanup!(test_with_custom_config,
 ///     TestConfigBuilder::default().with_concurrent_ocr_jobs(1),
 ///     {
 ///         // Your test logic here
@@ -1698,15 +2137,15 @@ macro_rules! integration_test_with_config_and_cleanup {
         #[tokio::test]
         async fn $test_name() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let ctx = $crate::test_utils::TestContext::with_config($config).await;
-            
+
             // Run test logic with proper error handling
             let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async move $test_body.await;
-            
+
             // Always cleanup database connections and test data, regardless of test result
             if let Err(e) = ctx.cleanup_and_close().await {
                 eprintln!("Warning: Test cleanup failed: {}", e);
             }
-            
+
             result
         }
     };

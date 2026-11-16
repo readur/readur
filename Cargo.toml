@@ -16,8 +16,6 @@ name = "analyze-webdav-performance"
 path = "src/bin/analyze-webdav-performance.rs"
 
 
-
-
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", features = ["multipart", "ws"] }
@@ -25,7 +23,15 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7", features = ["cors", "fs", "set-header"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "sqlite", "chrono", "uuid", "migrate"] }
+sqlx = { version = "0.9", features = [
+  "runtime-tokio",
+  "tls-rustls-ring-webpki",
+  "postgres",
+  "sqlite",
+  "chrono",
+  "uuid",
+  "migrate",
+] }
 regex = "1.11"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -52,7 +58,16 @@ raw-cpuid = { version = "11", optional = true }
 # 0.13 made rustls the default TLS backend; keep native-tls (system OpenSSL) so
 # WebDAV/S3 servers that only speak legacy TLS keep working. `form` (OIDC) is opt-in
 # since 0.13, as is `query`.
-reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "multipart", "form", "query"] }
+reqwest = { version = "0.13", default-features = false, features = [
+  "native-tls",
+  "charset",
+  "http2",
+  "system-proxy",
+  "json",
+  "multipart",
+  "form",
+  "query",
+] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 urlencoding = "2.1"
 url = "2.4"
@@ -63,6 +78,15 @@ walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 async-trait = "0.1"
 once_cell = "1.21"
+# Native MCP server mounted at /api/mcp (src/mcp).
+rmcp = { version = "3.10", default-features = false, features = [
+  "server",
+  "macros",
+  "transport-streamable-http-server",
+  "base64",
+] }
+# rmcp injects http::request::Parts into tool contexts; MCP tools read the authenticated user from it.
+http = "1"
 utoipa = { version = "6", features = ["axum_extras", "chrono", "uuid"] }
 # Generates the frontend API types (frontend/src/types/generated) from the Rust models.
 ts-rs = { version = "12", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
@@ -79,13 +103,20 @@ testcontainers = { version = "0.27", optional = true }
 testcontainers-modules = { version = "0.15", features = ["postgres"], optional = true }
 libc = "0.2"
 # Office document support - now using XML extraction only
-zip = "9"             # Still needed for other archive handling
+zip = "9" # Still needed for other archive handling
 rand = "0.10"
 
 [features]
 default = ["ocr", "s3"]
 ocr = ["tesseract", "image", "imageproc", "raw-cpuid", "kamadak-exif"]
-s3 = ["aws-config", "aws-sdk-s3", "aws-credential-types", "aws-types", "aws-smithy-http-client", "aws-smithy-runtime-api"]
+s3 = [
+  "aws-config",
+  "aws-sdk-s3",
+  "aws-credential-types",
+  "aws-types",
+  "aws-smithy-http-client",
+  "aws-smithy-runtime-api",
+]
 test-utils = ["testcontainers", "testcontainers-modules"]
 stress-testing = ["test-utils"]
 
@@ -99,7 +130,7 @@ rand = "0.10"
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
 # Dependencies for creating proper test Office documents
-rust_xlsxwriter = "0.102"  # For creating proper XLSX test files
+rust_xlsxwriter = "0.102" # For creating proper XLSX test files
 # WebDAV server for realistic stress testing
 dav-server = { version = "0.12", features = ["memfs"] }
 hyper = { version = "1", features = ["server", "http1"] }
