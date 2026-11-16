@@ -4,13 +4,9 @@ use axum::{
     response::Json as ResponseJson,
 };
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
-use crate::{
-    auth::AuthUser,
-    models::DocumentOcrResponse,
-    AppState,
-};
+use crate::{auth::AuthUser, models::DocumentOcrResponse, AppState};
 
 /// Get OCR text for a document
 #[utoipa::path(
@@ -35,44 +31,14 @@ pub async fn get_document_ocr(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
 ) -> Result<ResponseJson<DocumentOcrResponse>, StatusCode> {
-    let document = state
-        .db
-        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
+    crate::services::documents::get_document_ocr(&state, &auth_user.user, document_id)
         .await
         .map_err(|e| {
             error!("Database error getting document {}: {}", document_id, e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    // Fetch progress from ocr_queue when actively processing
-    let pages_processed = if document.ocr_status.as_deref() == Some("processing") {
-        sqlx::query_as::<_, (Option<i32>,)>(
-            "SELECT progress_current FROM ocr_queue WHERE document_id = $1 AND status = 'processing' LIMIT 1"
-        )
-        .bind(document_id)
-        .fetch_optional(&state.db.pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|row| row.0)
-    } else {
-        None
-    };
-
-    let response = DocumentOcrResponse {
-        id: document.id,
-        filename: document.original_filename,
-        has_ocr_text: document.ocr_text.is_some(),
-        ocr_text: document.ocr_text,
-        ocr_confidence: document.ocr_confidence,
-        ocr_status: document.ocr_status,
-        ocr_processing_time_ms: document.ocr_processing_time_ms,
-        detected_language: None,
-        pages_processed,
-    };
-
-    Ok(ResponseJson(response))
+        .map(ResponseJson)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 /// Retry OCR processing for a document
@@ -101,86 +67,31 @@ pub async fn retry_ocr(
     Path(document_id): Path<uuid::Uuid>,
     Json(request): Json<super::types::RetryOcrRequest>,
 ) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
-    debug!("OCR retry request for document {} by user {}", document_id, auth_user.user.id);
-    debug!("Request data: language={:?}, languages={:?}", request.language, request.languages);
-    // Get document first to check if it exists and user has access
-    let document = state
-        .db
-        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
-        .await
-        .map_err(|e| {
-            error!("Database error getting document {}: {}", document_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    // Check if OCR is already in progress
-    if let Some(ref status) = document.ocr_status {
-        if status == "processing" {
-            return Ok(ResponseJson(serde_json::json!({
-                "success": false,
-                "message": "OCR is already in progress for this document"
-            })));
-        }
-    }
-
-    // Update user's OCR language settings based on what was provided
-    if let Some(languages) = &request.languages {
-        // Multi-language support: validate and update preferred languages
-        let health_checker = crate::ocr::health::OcrHealthChecker::new();
-        match health_checker.validate_preferred_languages(languages) {
-            Ok(_) => {
-                let settings_update = crate::models::UpdateSettings::language_update(
-                    languages.clone(),
-                    languages[0].clone(), // First language as primary
-                    languages[0].clone(), // Backward compatibility
-                );
-                
-                if let Err(e) = state.db.create_or_update_settings(auth_user.user.id, &settings_update).await {
-                    warn!("Failed to update user preferred languages to {:?}: {}", languages, e);
-                } else {
-                    info!("Updated user {} preferred languages to: {:?} for retry", auth_user.user.id, languages);
-                }
-            }
-            Err(e) => {
-                warn!("Invalid language combination provided for document {}: {}", document_id, e);
-                error!("OCR retry failed due to invalid languages: {:?}", request.languages);
-                return Err(StatusCode::BAD_REQUEST);
-            }
-        }
-    } else if let Some(lang) = &request.language {
-        // Single language (backward compatibility)
-        let health_checker = crate::ocr::health::OcrHealthChecker::new();
-        match health_checker.validate_language(lang) {
-            Ok(_) => {
-                if let Err(e) = state.db.update_user_ocr_language(auth_user.user.id, lang).await {
-                    warn!("Failed to update user OCR language to {}: {}", lang, e);
-                } else {
-                    info!("Updated user {} OCR language to: {} for retry", auth_user.user.id, lang);
-                }
-            }
-            Err(e) => {
-                warn!("Invalid OCR language specified '{}' for document {}: {}", lang, document_id, e);
-                error!("OCR retry failed due to invalid language: {}", lang);
-                return Err(StatusCode::BAD_REQUEST);
-            }
-        }
-    }
-
-    // Add to OCR queue
-    match state.queue_service.enqueue_document(document.id, 5, document.file_size).await {
-        Ok(_) => {
-            info!("Document {} queued for OCR retry", document_id);
-            Ok(ResponseJson(serde_json::json!({
-                "success": true,
-                "message": "Document queued for OCR processing"
-            })))
-        }
-        Err(e) => {
-            error!("Failed to queue document {} for OCR: {}", document_id, e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    debug!(
+        "OCR retry request for document {} by user {}",
+        document_id, auth_user.user.id
+    );
+    debug!(
+        "Request data: language={:?}, languages={:?}",
+        request.language, request.languages
+    );
+    let outcome = crate::services::documents::retry_document_ocr(
+        &state,
+        &auth_user.user,
+        document_id,
+        request.languages.as_deref(),
+        request.language.as_deref(),
+    )
+    .await
+    .map_err(|e| match e {
+        super::DocumentError::NotFound => StatusCode::NOT_FOUND,
+        super::DocumentError::BadRequest(_) => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    })?;
+    Ok(ResponseJson(serde_json::json!({
+        "success": outcome.queued,
+        "message": outcome.message
+    })))
 }
 
 /// Get OCR processing status for multiple documents
@@ -194,7 +105,7 @@ pub async fn get_ocr_status_batch(
     }
 
     let mut results = Vec::new();
-    
+
     for document_id in document_ids {
         match state
             .db
@@ -271,14 +182,10 @@ pub async fn get_ocr_stats(
         })?;
 
     // Get queue statistics
-    let queue_stats = state
-        .queue_service
-        .get_stats()
-        .await
-        .map_err(|e| {
-            error!("Failed to get OCR queue stats: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let queue_stats = state.queue_service.get_stats().await.map_err(|e| {
+        error!("Failed to get OCR queue stats: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(ResponseJson(serde_json::json!({
         "total_documents": total,
@@ -310,8 +217,11 @@ pub async fn update_ocr_settings(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // For now, just return success - OCR settings would be stored in metadata
-    debug!("OCR settings updated for document {}: {:?}", document_id, settings);
-    
+    debug!(
+        "OCR settings updated for document {}: {:?}",
+        document_id, settings
+    );
+
     Ok(ResponseJson(serde_json::json!({
         "success": true,
         "message": "OCR settings updated"

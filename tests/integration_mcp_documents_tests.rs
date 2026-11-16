@@ -1,0 +1,407 @@
+//! MCP document tools: list, get, OCR text, upload, delete and OCR retry.
+
+use axum::http::StatusCode;
+use base64ct::{Base64, Encoding};
+use serde_json::{json, Value};
+use uuid::Uuid;
+
+use readur::models::Document;
+use readur::test_utils::{document_helpers, TestConfigBuilder, TestContext};
+
+/// A logged-in user: (id, token).
+async fn login(ctx: &TestContext) -> (Uuid, String) {
+    let auth = ctx.auth_helper();
+    let user = auth.create_test_user().await;
+    let token = auth.login_user(&user.username, &user.password).await;
+    (user.user_response.id, token)
+}
+
+async fn insert(ctx: &TestContext, document: Document) -> Document {
+    ctx.state()
+        .db
+        .create_document(document)
+        .await
+        .expect("failed to insert document")
+}
+
+fn text(result: &Value) -> &str {
+    result["content"][0]["text"].as_str().unwrap_or_default()
+}
+
+fn assert_ok(result: &Value) {
+    assert_eq!(result["isError"], json!(false), "tool failed: {result}");
+}
+
+fn assert_tool_error(result: &Value) {
+    assert_eq!(
+        result["isError"],
+        json!(true),
+        "expected a tool error: {result}"
+    );
+}
+
+async fn queued(ctx: &TestContext, document_id: Uuid) -> bool {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ocr_queue WHERE document_id = $1")
+        .bind(document_id)
+        .fetch_one(&ctx.state().db.pool)
+        .await
+        .unwrap();
+    count > 0
+}
+
+#[tokio::test]
+async fn list_documents_returns_only_own_documents() {
+    let ctx = TestContext::new().await;
+    let (alice, alice_token) = login(&ctx).await;
+    let (bob, _) = login(&ctx).await;
+    let mine = insert(&ctx, document_helpers::create_test_document(alice)).await;
+    let theirs = insert(&ctx, document_helpers::create_test_document(bob)).await;
+
+    let result = ctx
+        .mcp_call_tool(&alice_token, "list_documents", json!({}))
+        .await;
+    assert_ok(&result);
+    let ids: Vec<&str> = result["structuredContent"]["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["id"].as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&mine.id.to_string().as_str()), "{result}");
+    assert!(!ids.contains(&theirs.id.to_string().as_str()), "{result}");
+    assert_eq!(result["structuredContent"]["pagination"]["total"], json!(1));
+    assert!(text(&result).contains(&mine.id.to_string()));
+}
+
+#[tokio::test]
+async fn list_documents_filters_by_ocr_status() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    insert(&ctx, document_helpers::create_test_document(alice)).await;
+    let pending = insert(&ctx, document_helpers::create_document_without_ocr(alice)).await;
+
+    let result = ctx
+        .mcp_call_tool(&token, "list_documents", json!({ "ocr_status": "pending" }))
+        .await;
+    assert_ok(&result);
+    let docs = result["structuredContent"]["documents"].as_array().unwrap();
+    assert_eq!(docs.len(), 1, "{result}");
+    assert_eq!(docs[0]["id"], json!(pending.id));
+
+    let bad = ctx
+        .mcp_call_tool(&token, "list_documents", json!({ "ocr_status": "bogus" }))
+        .await;
+    assert_tool_error(&bad);
+}
+
+#[tokio::test]
+async fn get_document_returns_metadata() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(&ctx, document_helpers::create_test_document(alice)).await;
+
+    let result = ctx
+        .mcp_call_tool(&token, "get_document", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&result);
+    assert_eq!(result["structuredContent"]["id"], json!(doc.id));
+    assert_eq!(
+        result["structuredContent"]["original_filename"],
+        json!(doc.original_filename)
+    );
+    assert!(text(&result).contains(&doc.original_filename));
+    assert!(text(&result).contains("completed"));
+}
+
+#[tokio::test]
+async fn other_users_documents_are_not_found() {
+    let ctx = TestContext::new().await;
+    let (alice, _) = login(&ctx).await;
+    let (_, bob_token) = login(&ctx).await;
+    let doc = insert(&ctx, document_helpers::create_test_document(alice)).await;
+
+    for tool in [
+        "get_document",
+        "get_document_ocr_text",
+        "retry_document_ocr",
+    ] {
+        let result = ctx
+            .mcp_call_tool(&bob_token, tool, json!({ "id": doc.id }))
+            .await;
+        assert_tool_error(&result);
+        assert!(
+            !text(&result).contains("extracted OCR text"),
+            "{tool} leaked content: {result}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn non_uuid_ids_are_rejected() {
+    let ctx = TestContext::new().await;
+    let (_, token) = login(&ctx).await;
+    let message = json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {
+            "name": "get_document",
+            "arguments": { "id": "not-a-uuid" },
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1" },
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }
+        }
+    });
+    let (status, body) = ctx.mcp_post(Some(&token), message).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // rmcp reports argument deserialization failures as a tool error.
+    assert_eq!(body["result"]["isError"], json!(true), "{body}");
+    assert!(text(&body["result"]).contains("UUID"), "{body}");
+}
+
+#[tokio::test]
+async fn ocr_text_is_paged() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let mut doc = document_helpers::create_test_document(alice);
+    let full: String = ('a'..='z').cycle().take(50).collect();
+    doc.ocr_text = Some(full.clone());
+    let doc = insert(&ctx, doc).await;
+
+    let first = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "max_chars": 20 }),
+        )
+        .await;
+    assert_ok(&first);
+    let data = &first["structuredContent"];
+    assert_eq!(data["text"], json!(&full[..20]));
+    assert_eq!(data["total_chars"], json!(50));
+    assert_eq!(data["next_offset"], json!(20));
+    assert!(text(&first).contains(&full[..20]));
+    assert!(text(&first).contains("offset"));
+
+    let last = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "offset": 40, "max_chars": 20 }),
+        )
+        .await;
+    assert_ok(&last);
+    assert_eq!(last["structuredContent"]["text"], json!(&full[40..]));
+    assert_eq!(last["structuredContent"]["next_offset"], Value::Null);
+
+    let past_end = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "offset": 51 }),
+        )
+        .await;
+    assert_tool_error(&past_end);
+}
+
+#[tokio::test]
+async fn ocr_text_reports_pending_status() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(&ctx, document_helpers::create_document_without_ocr(alice)).await;
+
+    let result = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&result);
+    assert!(text(&result).contains("pending"), "{result}");
+    assert_eq!(result["structuredContent"]["has_ocr_text"], json!(false));
+    assert_eq!(result["structuredContent"]["ocr_status"], json!("pending"));
+}
+
+#[tokio::test]
+async fn upload_text_file_is_listed_and_queued() {
+    let ctx = TestContext::new().await;
+    let (_, token) = login(&ctx).await;
+    let content = Base64::encode_string(b"Hello from the MCP upload test.\n");
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "mcp-note.txt", "content_base64": content }),
+        )
+        .await;
+    assert_ok(&result);
+    let id: Uuid = result["structuredContent"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        result["structuredContent"]["mime_type"],
+        json!("text/plain")
+    );
+    assert!(queued(&ctx, id).await, "document was not queued for OCR");
+
+    let list = ctx.mcp_call_tool(&token, "list_documents", json!({})).await;
+    assert!(text(&list).contains(&id.to_string()), "{list}");
+}
+
+#[tokio::test]
+async fn upload_applies_own_labels_and_rejects_foreign_ones() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let (bob, _) = login(&ctx).await;
+    let pool = &ctx.state().db.pool;
+    let mut label_ids = Vec::new();
+    for (owner, name) in [(alice, "mcp-mine"), (bob, "mcp-theirs")] {
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO labels (user_id, name, color) VALUES ($1, $2, '#123456') RETURNING id",
+        )
+        .bind(owner)
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        label_ids.push(id);
+    }
+
+    let foreign = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({
+                "filename": "foreign.txt",
+                "content_base64": Base64::encode_string(b"foreign label"),
+                "label_ids": [label_ids[1]]
+            }),
+        )
+        .await;
+    assert_tool_error(&foreign);
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({
+                "filename": "labelled.txt",
+                "content_base64": Base64::encode_string(b"labelled upload"),
+                "label_ids": [label_ids[0]]
+            }),
+        )
+        .await;
+    assert_ok(&result);
+    let doc_id: Uuid = result["structuredContent"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let labels = ctx.state().db.get_document_labels(doc_id).await.unwrap();
+    assert_eq!(labels.len(), 1);
+    assert_eq!(labels[0].id, label_ids[0]);
+}
+
+#[tokio::test]
+async fn upload_rejects_invalid_base64() {
+    let ctx = TestContext::new().await;
+    let (_, token) = login(&ctx).await;
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "bad.txt", "content_base64": "this is not base64!!" }),
+        )
+        .await;
+    assert_tool_error(&result);
+    assert!(text(&result).to_lowercase().contains("base64"), "{result}");
+}
+
+#[tokio::test]
+async fn upload_rejects_files_over_the_size_limit() {
+    let ctx = TestContext::with_config(TestConfigBuilder::default().with_max_file_size_mb(1)).await;
+    let (_, token) = login(&ctx).await;
+    let content = Base64::encode_string(&vec![b'x'; 1024 * 1024 + 1]);
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "big.txt", "content_base64": content }),
+        )
+        .await;
+    assert_tool_error(&result);
+    assert!(text(&result).contains("exceeds"), "{result}");
+}
+
+#[tokio::test]
+async fn delete_document_is_hidden_by_default() {
+    let ctx = TestContext::new().await;
+    let (_, token) = login(&ctx).await;
+    let names = ctx.mcp_tool_names(&token).await;
+    for tool in [
+        "list_documents",
+        "get_document",
+        "get_document_ocr_text",
+        "upload_document",
+        "retry_document_ocr",
+    ] {
+        assert!(
+            names.contains(&tool.to_string()),
+            "{tool} missing: {names:?}"
+        );
+    }
+    assert!(!names.contains(&"delete_document".to_string()));
+}
+
+#[tokio::test]
+async fn delete_document_works_when_enabled() {
+    let ctx =
+        TestContext::with_config(TestConfigBuilder::default().with_mcp_allow_delete(true)).await;
+    let (alice, token) = login(&ctx).await;
+    let (_, bob_token) = login(&ctx).await;
+    assert!(ctx
+        .mcp_tool_names(&token)
+        .await
+        .contains(&"delete_document".to_string()));
+    let doc = insert(&ctx, document_helpers::create_test_document(alice)).await;
+
+    let foreign = ctx
+        .mcp_call_tool(&bob_token, "delete_document", json!({ "id": doc.id }))
+        .await;
+    assert_tool_error(&foreign);
+
+    let result = ctx
+        .mcp_call_tool(&token, "delete_document", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&result);
+    let gone = ctx
+        .state()
+        .db
+        .get_document_by_id(doc.id, alice, readur::models::UserRole::User)
+        .await
+        .unwrap();
+    assert!(gone.is_none());
+
+    let again = ctx
+        .mcp_call_tool(&token, "delete_document", json!({ "id": doc.id }))
+        .await;
+    assert_tool_error(&again);
+}
+
+#[tokio::test]
+async fn retry_ocr_queues_own_document() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+
+    let result = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&result);
+    assert_eq!(result["structuredContent"]["queued"], json!(true));
+    assert!(queued(&ctx, doc.id).await);
+}
