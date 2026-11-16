@@ -129,12 +129,11 @@ BASELINE: dict[str, int] = {
     "src/services/webdav/service.rs": 1870,
     "src/ocr/enhanced.rs": 1905,
     "tests/webdav_stress_tests.rs": 1879,
-    "src/test_utils.rs": 1713,
+    "src/test_utils.rs": 1689,
     "tests/integration_file_processing_pipeline_tests.rs": 1687,
     "tests/integration_source_sync_cancellation_workflow_tests.rs": 1529,
     "src/ocr/xml_extractor.rs": 1397,
     "src/ocr/queue.rs": 1289,
-    "src/config.rs": 1044,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
 }
 
