@@ -5,8 +5,8 @@ use axum::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use uuid::Uuid;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
@@ -43,29 +43,36 @@ pub async fn list_sources(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<SourceResponse>>, SourceError> {
-    let sources = state
-        .db
-        .get_sources(auth_user.user.id)
+    let responses = source_responses_for_user(&state.db, auth_user.user.id)
         .await
-        .map_err(|e| SourceError::connection_failed(format!("Failed to retrieve sources: {}", e)))?;
+        .map_err(|e| {
+            SourceError::connection_failed(format!("Failed to retrieve sources: {}", e))
+        })?;
+
+    Ok(Json(responses))
+}
+
+/// A user's sources with document counts, credentials redacted. Shared with
+/// the MCP `list_sources` tool.
+pub async fn source_responses_for_user(
+    db: &crate::db::Database,
+    user_id: Uuid,
+) -> anyhow::Result<Vec<SourceResponse>> {
+    let sources = db.get_sources(user_id).await?;
 
     // Get source IDs for batch counting
     let source_ids: Vec<Uuid> = sources.iter().map(|s| s.id).collect();
-    
+
     // Get document counts for all sources in one query
-    let counts = state
-        .db
-        .count_documents_for_sources(auth_user.user.id, &source_ids)
-        .await
-        .map_err(|e| SourceError::connection_failed(format!("Failed to count documents: {}", e)))?;
-    
+    let counts = db.count_documents_for_sources(user_id, &source_ids).await?;
+
     // Create a map for quick lookup
     let count_map: std::collections::HashMap<Uuid, (i64, i64)> = counts
         .into_iter()
         .map(|(id, total, ocr)| (id, (total, ocr)))
         .collect();
 
-    let responses: Vec<SourceResponse> = sources
+    Ok(sources
         .into_iter()
         .map(|s| {
             let (total_docs, total_ocr) = count_map.get(&s.id).copied().unwrap_or((0, 0));
@@ -74,9 +81,7 @@ pub async fn list_sources(
             response.total_documents_ocr = total_ocr;
             response
         })
-        .collect();
-    
-    Ok(Json(responses))
+        .collect())
 }
 
 /// Create a new source
@@ -106,14 +111,20 @@ pub async fn create_source(
         return Err(SourceError::configuration_invalid(validation_error));
     }
 
-    authorize_source_config(source_data.source_type, &source_data.config, &auth_user.user, &state, false)
-        .await
-        .map_err(|rejection| match rejection {
-            ConfigRejection::Forbidden => {
-                SourceError::access_denied("local folder", "not permitted for this user")
-            }
-            ConfigRejection::Invalid(reason) => SourceError::configuration_invalid(reason),
-        })?;
+    authorize_source_config(
+        source_data.source_type,
+        &source_data.config,
+        &auth_user.user,
+        &state,
+        false,
+    )
+    .await
+    .map_err(|rejection| match rejection {
+        ConfigRejection::Forbidden => {
+            SourceError::access_denied("local folder", "not permitted for this user")
+        }
+        ConfigRejection::Invalid(reason) => SourceError::configuration_invalid(reason),
+    })?;
 
     let source = state
         .db
@@ -248,18 +259,27 @@ pub async fn update_source(
             Err(refused) => return Ok(super::validation::secret_reuse_refused(refused)),
         };
         if let Err(validation_error) = validate_config_for_type(&existing.source_type, &config) {
-            error!("Config validation failed for source {}: {}", source_id, validation_error);
+            error!(
+                "Config validation failed for source {}: {}",
+                source_id, validation_error
+            );
             return Err(StatusCode::BAD_REQUEST);
         }
-        authorize_source_config(existing.source_type, &config, &auth_user.user, &state, false)
-            .await
-            .map_err(|rejection| match rejection {
-                ConfigRejection::Forbidden => StatusCode::FORBIDDEN,
-                ConfigRejection::Invalid(reason) => {
-                    error!("Config rejected for source {}: {}", source_id, reason);
-                    StatusCode::BAD_REQUEST
-                }
-            })?;
+        authorize_source_config(
+            existing.source_type,
+            &config,
+            &auth_user.user,
+            &state,
+            false,
+        )
+        .await
+        .map_err(|rejection| match rejection {
+            ConfigRejection::Forbidden => StatusCode::FORBIDDEN,
+            ConfigRejection::Invalid(reason) => {
+                error!("Config rejected for source {}: {}", source_id, reason);
+                StatusCode::BAD_REQUEST
+            }
+        })?;
         update_data.config = Some(config);
     }
 
@@ -267,7 +287,10 @@ pub async fn update_source(
     if update_data.enabled == Some(false) {
         if let Some(scheduler) = &state.source_scheduler {
             if scheduler.stop_sync(source_id).await.is_ok() {
-                info!("Stopped the running sync of source {} because it is being disabled", source_id);
+                info!(
+                    "Stopped the running sync of source {} because it is being disabled",
+                    source_id
+                );
             }
         }
     }
@@ -292,7 +315,10 @@ pub async fn update_source(
     response.total_documents = total_documents;
     response.total_documents_ocr = total_documents_ocr;
 
-    info!("Successfully updated source {}: {}", source_id, response.name);
+    info!(
+        "Successfully updated source {}: {}",
+        source_id, response.name
+    );
     Ok(Json(response).into_response())
 }
 
@@ -330,8 +356,14 @@ pub async fn delete_source(
     // Stop a running sync and let its task exit before the row goes away;
     // otherwise its remaining files would fail against a missing source.
     if let Some(scheduler) = &state.source_scheduler {
-        if !scheduler.stop_sync_and_wait(source_id, SYNC_STOP_WAIT).await {
-            warn!("Not deleting source {}: its sync task is still running", source_id);
+        if !scheduler
+            .stop_sync_and_wait(source_id, SYNC_STOP_WAIT)
+            .await
+        {
+            warn!(
+                "Not deleting source {}: its sync task is still running",
+                source_id
+            );
             return Err(StatusCode::CONFLICT);
         }
     }
@@ -361,13 +393,13 @@ pub fn validate_config_for_type(
 ) -> Result<(), &'static str> {
     match source_type {
         SourceType::WebDAV => {
-            let _: crate::models::WebDAVSourceConfig =
-                serde_json::from_value(config.clone()).map_err(|_| "Invalid WebDAV configuration")?;
+            let _: crate::models::WebDAVSourceConfig = serde_json::from_value(config.clone())
+                .map_err(|_| "Invalid WebDAV configuration")?;
             Ok(())
         }
         SourceType::LocalFolder => {
-            let _: crate::models::LocalFolderSourceConfig =
-                serde_json::from_value(config.clone()).map_err(|_| "Invalid Local Folder configuration")?;
+            let _: crate::models::LocalFolderSourceConfig = serde_json::from_value(config.clone())
+                .map_err(|_| "Invalid Local Folder configuration")?;
             Ok(())
         }
         SourceType::S3 => {

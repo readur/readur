@@ -44,12 +44,20 @@ async fn get_available_languages(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<AvailableLanguagesResponse>, StatusCode> {
-    // Get user's current OCR language setting
-    let user_settings = state
-        .db
-        .get_user_settings(auth_user.user.id)
+    available_languages_for_user(&state.db, auth_user.user.id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+/// The installed Tesseract languages plus the user's configured OCR language.
+/// Shared with the MCP `get_ocr_languages` tool.
+pub async fn available_languages_for_user(
+    db: &crate::db::Database,
+    user_id: uuid::Uuid,
+) -> anyhow::Result<AvailableLanguagesResponse> {
+    // Get user's current OCR language setting
+    let user_settings = db.get_user_settings(user_id).await?;
 
     let current_language = user_settings
         .map(|s| s.ocr_language)
@@ -75,10 +83,10 @@ async fn get_available_languages(
         })
         .collect();
 
-    Ok(Json(AvailableLanguagesResponse {
+    Ok(AvailableLanguagesResponse {
         available_languages: language_info,
         current_user_language: current_language,
-    }))
+    })
 }
 
 /// Convert language codes to human-readable names
