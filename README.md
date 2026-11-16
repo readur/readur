@@ -6,27 +6,27 @@ You can check our our docs at [docs.readur.app](https://docs.readur.app).
 
 ![](./docs/images/gallery/image_2.png)
 
-
 ## ✨ Features
 
-| Feature | Description | Documentation |
-|---------|-------------|---------------|
-| 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support | [User Management](https://docs.readur.app/user-management-guide/), [OIDC Setup](https://docs.readur.app/oidc-setup/) |
-| 👥 **User Management** | Role-based access control with Admin and User roles | [User Management Guide](https://docs.readur.app/user-management-guide/) |
-| 📤 **Smart File Upload** | Drag-and-drop support for PDF, images, text files, and Office documents (DOCX, XLSX, DOC*) | [File Upload Guide](https://docs.readur.app/file-upload-guide/) |
-| 🔍 **Advanced OCR** | Automatic text extraction using Tesseract and Office document parsing | [OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) |
-| 🌍 **Multi-Language OCR** | Process documents in multiple languages simultaneously with automatic language detection | [Multi-Language OCR Guide](https://docs.readur.app/multi-language-ocr-guide/) |
-| 🔎 **Powerful Search** | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean) | [Advanced Search Guide](https://docs.readur.app/advanced-search/) |
-| 🔗 **Multi-Source Sync** | WebDAV, Local Folders, and S3-compatible storage integration | [Sources Guide](https://docs.readur.app/sources-guide/), [S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) |
-| 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure | [Labels & Organization](https://docs.readur.app/labels-and-organization/) |
-| 👁️ **Folder Monitoring** | Non-destructive file watching with intelligent sync scheduling | [Watch Folder Guide](https://docs.readur.app/WATCH_FOLDER/) |
-| 📊 **Health Monitoring** | Proactive source validation and system health tracking | [Health Monitoring Guide](https://docs.readur.app/health-monitoring-guide/) |
-| 🔔 **Notifications** | Real-time alerts for sync events, OCR completion, and system status | [Notifications Guide](https://docs.readur.app/notifications-guide/) |
-| 🔌 **Swagger UI** | Built-in interactive API documentation accessible from your profile menu | [Swagger UI Guide](https://docs.readur.app/swagger-ui-guide/) |
-| 🎨 **Modern UI** | Beautiful React frontend with Material-UI components and responsive design | [User Guide](https://docs.readur.app/user-guide/) |
-| 🐳 **Docker Ready** | Complete containerization with production-ready multi-stage builds | [Installation Guide](https://docs.readur.app/installation/), [Deployment Guide](https://docs.readur.app/deployment/) |
-| ⚡ **High Performance** | Rust backend for speed and reliability | [Architecture Documentation](https://docs.readur.app/dev/architecture/) |
-| 📊 **Analytics Dashboard** | Document statistics and processing status overview | [Analytics Dashboard Guide](https://docs.readur.app/analytics-dashboard-guide/) |
+| Feature                      | Description                                                                                                               | Documentation                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 🔐 **Secure Authentication** | JWT-based user authentication with bcrypt password hashing + OIDC/SSO support                                             | [User Management](https://docs.readur.app/user-management-guide/), [OIDC Setup](https://docs.readur.app/oidc-setup/)   |
+| 👥 **User Management**       | Role-based access control with Admin and User roles                                                                       | [User Management Guide](https://docs.readur.app/user-management-guide/)                                                |
+| 📤 **Smart File Upload**     | Drag-and-drop support for PDF, images, text files, and Office documents (DOCX, XLSX, DOC*)                                | [File Upload Guide](https://docs.readur.app/file-upload-guide/)                                                        |
+| 🔍 **Advanced OCR**          | Automatic text extraction using Tesseract and Office document parsing                                                     | [OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/)                                                |
+| 🌍 **Multi-Language OCR**    | Process documents in multiple languages simultaneously with automatic language detection                                  | [Multi-Language OCR Guide](https://docs.readur.app/multi-language-ocr-guide/)                                          |
+| 🔎 **Powerful Search**       | PostgreSQL full-text search with multiple modes (simple, phrase, fuzzy, boolean)                                          | [Advanced Search Guide](https://docs.readur.app/advanced-search/)                                                      |
+| 🔗 **Multi-Source Sync**     | WebDAV, Local Folders, and S3-compatible storage integration                                                              | [Sources Guide](https://docs.readur.app/sources-guide/), [S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) |
+| 🏷️ **Labels & Organization** | Comprehensive tagging system with color-coding and hierarchical structure                                                 | [Labels & Organization](https://docs.readur.app/labels-and-organization/)                                              |
+| 👁️ **Folder Monitoring**     | Non-destructive file watching with intelligent sync scheduling                                                            | [Watch Folder Guide](https://docs.readur.app/WATCH_FOLDER/)                                                            |
+| 📊 **Health Monitoring**     | Proactive source validation and system health tracking                                                                    | [Health Monitoring Guide](https://docs.readur.app/health-monitoring-guide/)                                            |
+| 🔔 **Notifications**         | Real-time alerts for sync events, OCR completion, and system status                                                       | [Notifications Guide](https://docs.readur.app/notifications-guide/)                                                    |
+| 🤖 **AI Assistants (MCP)**   | Built-in Model Context Protocol endpoint so Claude and other assistants can search, read, upload and label your documents | [AI Assistants Guide](https://docs.readur.app/mcp-guide/)                                                              |
+| 🔌 **Swagger UI**            | Built-in interactive API documentation accessible from your profile menu                                                  | [Swagger UI Guide](https://docs.readur.app/swagger-ui-guide/)                                                          |
+| 🎨 **Modern UI**             | Beautiful React frontend with Material-UI components and responsive design                                                | [User Guide](https://docs.readur.app/user-guide/)                                                                      |
+| 🐳 **Docker Ready**          | Complete containerization with production-ready multi-stage builds                                                        | [Installation Guide](https://docs.readur.app/installation/), [Deployment Guide](https://docs.readur.app/deployment/)   |
+| ⚡ **High Performance**      | Rust backend for speed and reliability                                                                                    | [Architecture Documentation](https://docs.readur.app/dev/architecture/)                                                |
+| 📊 **Analytics Dashboard**   | Document statistics and processing status overview                                                                        | [Analytics Dashboard Guide](https://docs.readur.app/analytics-dashboard-guide/)                                        |
 
 ## 🚀 Quick Start
 
@@ -47,6 +47,7 @@ open http://localhost:8000
 ```
 
 **Admin credentials:**
+
 - Username: `admin` (override with `ADMIN_USERNAME`)
 - Password: the value of `ADMIN_PASSWORD` if set; otherwise generated on first run and written to a file
 
@@ -59,6 +60,7 @@ docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 Sign in, change the password, then delete the file.
 
 To reset the admin password later:
+
 ```bash
 docker compose exec readur readur reset-admin-password
 ```
@@ -66,12 +68,14 @@ docker compose exec readur readur reset-admin-password
 ## 📚 Documentation
 
 ### Getting Started
+
 - [📦 Installation Guide](https://docs.readur.app/installation/) - Docker & manual installation instructions
 - [🔧 Configuration](https://docs.readur.app/configuration/) - Environment variables and settings
 - [⚙️ Configuration Reference](https://docs.readur.app/configuration-reference/) - Complete configuration options reference
 - [📖 User Guide](https://docs.readur.app/user-guide/) - How to use Readur effectively
 
 ### Core Features
+
 - [🔗 Sources Guide](https://docs.readur.app/sources-guide/) - WebDAV, Local Folders, and S3 integration
 - [☁️ S3 Storage Guide](https://docs.readur.app/s3-storage-guide/) - Complete S3 and S3-compatible storage setup
 - [👥 User Management](https://docs.readur.app/user-management-guide/) - Authentication, roles, and administration
@@ -81,6 +85,7 @@ docker compose exec readur readur reset-admin-password
 - [🔐 OIDC Setup](https://docs.readur.app/oidc-setup/) - Single Sign-On integration
 
 ### Deployment & Operations
+
 - [🚀 Deployment Guide](https://docs.readur.app/deployment/) - Production deployment, SSL, monitoring
 - [🔄 Reverse Proxy Setup](https://docs.readur.app/REVERSE_PROXY/) - Nginx, Traefik, and more
 - [📁 Watch Folder Guide](https://docs.readur.app/WATCH_FOLDER/) - Automatic document ingestion
@@ -88,10 +93,13 @@ docker compose exec readur readur reset-admin-password
 - [🛠️ S3 Troubleshooting](https://docs.readur.app/s3-troubleshooting/) - Debug and resolve S3 storage issues
 
 ### Development
+
 - [🏗️ Developer Documentation](https://docs.readur.app/dev/) - Architecture, development setup, testing
 - [🔌 API Reference](https://docs.readur.app/api-reference/) - REST API documentation
+- [🤖 AI Assistants (MCP)](https://docs.readur.app/mcp-guide/) - Connect Claude and other MCP clients
 
 ### Advanced Topics
+
 - [🔍 OCR Optimization](https://docs.readur.app/dev/OCR_OPTIMIZATION_GUIDE/) - Improve OCR performance
 - [🗄️ Database Best Practices](https://docs.readur.app/dev/DATABASE_GUARDRAILS/) - Concurrency and safety
 - [📊 Queue Architecture](https://docs.readur.app/dev/QUEUE_IMPROVEMENTS/) - Background job processing
@@ -114,19 +122,23 @@ docker compose exec readur readur reset-admin-password
 ## 📋 System Requirements
 
 ### Minimum
+
 - 2 CPU cores, 2GB RAM, 10GB storage
 - Docker or manual installation prerequisites
 
 ### Recommended for Production
+
 - 4+ CPU cores, 4GB+ RAM, 50GB+ SSD
 - See [deployment guide](https://docs.readur.app/deployment/) for details
 
 ### Optional Dependencies
+
 For legacy Microsoft Word (.doc) file support, install one of:
+
 - `antiword` - Lightweight DOC text extractor
 - `catdoc` - Alternative DOC text extraction tool
 
-*Note: Modern Office formats (DOCX, XLSX) are fully supported without additional dependencies.*
+_Note: Modern Office formats (DOCX, XLSX) are fully supported without additional dependencies._
 
 ## 🤝 Contributing
 
@@ -163,6 +175,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ and ☕ by the Readur team**
-
-
-

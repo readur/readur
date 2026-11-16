@@ -102,6 +102,15 @@ See the [Configuration Reference](configuration-reference.md#security-and-access
 | `ENABLE_COMPRESSION` | `false` | Compress stored documents to save space |
 | `ENABLE_BACKGROUND_OCR` | `true` | Process OCR in background queue |
 
+### AI Assistants (MCP)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_ENABLED` | `true` | Serve the Model Context Protocol endpoint at `/api/mcp` (requires an API key or session token) |
+| `MCP_ALLOW_DELETE` | `false` | Offer the `delete_document` tool to MCP clients |
+
+See [AI Assistants (MCP)](mcp-guide.md) for connecting Claude and other clients.
+
 ## Port Configuration
 
 Readur supports flexible port configuration:

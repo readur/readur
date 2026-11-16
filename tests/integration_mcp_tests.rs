@@ -120,3 +120,36 @@ async fn endpoint_is_not_found_when_disabled() {
     let (status, _) = ctx.mcp_post(Some(&token), tools_list()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+async fn auth_config_mcp_enabled(ctx: &TestContext) -> serde_json::Value {
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    let response = ctx
+        .app()
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let config: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    config["mcp_enabled"].clone()
+}
+
+#[tokio::test]
+async fn public_auth_config_reports_mcp_availability() {
+    let ctx = TestContext::new().await;
+    assert_eq!(auth_config_mcp_enabled(&ctx).await, json!(true));
+
+    let ctx = TestContext::with_config(TestConfigBuilder::default().with_mcp_enabled(false)).await;
+    assert_eq!(auth_config_mcp_enabled(&ctx).await, json!(false));
+}

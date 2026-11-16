@@ -7,6 +7,7 @@ import type { ApiKey } from '../../../services/api';
 import { Notice } from '../shared/Notice';
 import formStyles from '../form/form.module.css';
 import styles from './ApiKeys.module.css';
+import { McpSnippets } from './McpConnect';
 import type { ExpirationOption } from './useApiKeys';
 
 const EXPIRATIONS: { id: ExpirationOption; label: string; fallback: string }[] = [
@@ -53,7 +54,11 @@ export function CreateKeyDialog({
     try {
       await onCreate(trimmed, expiration);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('settings.apiKeys.createFailed', 'Failed to create API key.'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('settings.apiKeys.createFailed', 'Failed to create API key.'),
+      );
     } finally {
       setCreating(false);
     }
@@ -96,7 +101,9 @@ export function CreateKeyDialog({
         <Select
           label={t('settings.apiKeys.expiration', 'Expiration')}
           selectedKey={expiration}
-          onSelectionChange={(k: Key | null) => k !== null && setExpiration(String(k) as ExpirationOption)}
+          onSelectionChange={(k: Key | null) =>
+            k !== null && setExpiration(String(k) as ExpirationOption)
+          }
         >
           {EXPIRATIONS.map((o) => (
             <SelectItem key={o.id} id={o.id} textValue={t(o.label, o.fallback)}>
@@ -114,7 +121,16 @@ export function CreateKeyDialog({
  * Shows the new key exactly once. Only "I've saved it" closes it: Esc and outside clicks are
  * ignored because this is the last chance to copy the key.
  */
-export function RevealKeyDialog({ revealed, onDone }: { revealed: { name: string; plaintext: string } | null; onDone: () => void }) {
+export function RevealKeyDialog({
+  revealed,
+  showMcp = false,
+  onDone,
+}: {
+  revealed: { name: string; plaintext: string } | null;
+  /** Also offer MCP client configuration prefilled with the new key. */
+  showMcp?: boolean;
+  onDone: () => void;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -162,7 +178,11 @@ export function RevealKeyDialog({ revealed, onDone }: { revealed: { name: string
             <div className={styles.secret}>
               <code className={styles.secretValue}>{revealed.plaintext}</code>
               <IconButton
-                label={copied ? t('settings.apiKeys.copied', 'Copied') : t('settings.apiKeys.copy', 'Copy API key')}
+                label={
+                  copied
+                    ? t('settings.apiKeys.copied', 'Copied')
+                    : t('settings.apiKeys.copy', 'Copy API key')
+                }
                 icon={copied ? <Check fontSize="inherit" /> : <ContentCopy fontSize="inherit" />}
                 onPress={() => void copy()}
               />
@@ -172,13 +192,32 @@ export function RevealKeyDialog({ revealed, onDone }: { revealed: { name: string
             </p>
             {copyError ? (
               <Notice tone="danger">
-                {t('settings.apiKeys.copyFailed', 'Failed to copy to clipboard. Please select and copy manually.')}
+                {t(
+                  'settings.apiKeys.copyFailed',
+                  'Failed to copy to clipboard. Please select and copy manually.',
+                )}
               </Notice>
             ) : null}
             <p className={formStyles.help}>
               {t('settings.apiKeys.usage', 'Use it like:')}{' '}
-              <code className={styles.inlineCode}>curl -H "Authorization: Bearer {revealed.plaintext.slice(0, 15)}…"</code>
+              <code className={styles.inlineCode}>
+                curl -H "Authorization: Bearer {revealed.plaintext.slice(0, 15)}…"
+              </code>
             </p>
+            {showMcp ? (
+              <section aria-labelledby="reveal-mcp-title" className={styles.revealMcp}>
+                <h3 id="reveal-mcp-title" className={styles.panelTitle}>
+                  {t('settings.apiKeys.mcp.title', 'Connect an AI assistant')}
+                </h3>
+                <p className={formStyles.help}>
+                  {t(
+                    'settings.apiKeys.mcp.revealHelp',
+                    'Add Readur to an MCP client with this key:',
+                  )}
+                </p>
+                <McpSnippets apiKey={revealed.plaintext} />
+              </section>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -209,7 +248,11 @@ export function RevokeKeyDialog({
       await onRevoke(target);
     } catch (err) {
       // Shown inside the dialog, where the user is looking.
-      setError(err instanceof Error ? err.message : t('settings.apiKeys.revokeFailed', 'Failed to revoke API key.'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('settings.apiKeys.revokeFailed', 'Failed to revoke API key.'),
+      );
     } finally {
       setRevoking(false);
     }
@@ -241,7 +284,11 @@ export function RevokeKeyDialog({
             { name: target?.name ?? '' },
           )}
         </p>
-        {error ? <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice> : null}
+        {error ? (
+          <Notice tone="danger" onDismiss={() => setError(null)}>
+            {error}
+          </Notice>
+        ) : null}
       </div>
     </Dialog>
   );

@@ -237,6 +237,13 @@ Related API behavior:
 | `FEATURE_WEBDAV` | Boolean | `true` | Enable WebDAV sync | No |
 | `FEATURE_API_V2` | Boolean | `false` | Enable API v2 endpoints | No |
 
+### AI Assistants (MCP)
+
+| Variable | Type | Default | Description | Required |
+|----------|------|---------|-------------|----------|
+| `MCP_ENABLED` | Boolean | `true` | Serve the Model Context Protocol endpoint at `/api/mcp`. Every request still needs an API key or session token. When `false`, the endpoint returns `404`. See [AI Assistants (MCP)](mcp-guide.md) | No |
+| `MCP_ALLOW_DELETE` | Boolean | `false` | Offer the `delete_document` tool to MCP clients | No |
+
 ## Database Connection Priority
 
 The database connection can be configured in two ways:

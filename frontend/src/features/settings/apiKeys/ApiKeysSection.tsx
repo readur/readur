@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, EmptyState, IconButton, type BoardColumn } from '../../../ui';
 import { Add, Delete, Key } from '../../../ui/icons';
 import type { ApiKey } from '../../../services/api';
+import { FeatureFlagsContext } from '../../../contexts/FeatureFlagsContext';
 import { Tag } from '../shared/Facts';
 import { Notice } from '../shared/Notice';
 import shared from '../shared/shared.module.css';
 import { CreateKeyDialog, RevealKeyDialog, RevokeKeyDialog } from './ApiKeyDialogs';
 import styles from './ApiKeys.module.css';
+import { McpConnectPanel } from './McpConnect';
 import { useApiKeys } from './useApiKeys';
 
 function formatDate(value: string | null): string {
@@ -25,6 +27,7 @@ function formatDate(value: string | null): string {
 export default function ApiKeysSection() {
   const { t } = useTranslation();
   const { keys, isLoading, error, setError, create, revoke } = useApiKeys();
+  const mcpEnabled = useContext(FeatureFlagsContext)?.flags.mcpEnabled ?? false;
   const [createOpen, setCreateOpen] = useState(false);
   const [revealed, setRevealed] = useState<{ name: string; plaintext: string } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
@@ -61,15 +64,28 @@ export default function ApiKeysSection() {
             </Tag>
           ),
       },
-      { id: 'lastUsed', hideOnNarrow: true, label: t('settings.apiKeys.lastUsed', 'Last used'), mono: true, render: (k) => formatDate(k.last_used_at) },
+      {
+        id: 'lastUsed',
+        hideOnNarrow: true,
+        label: t('settings.apiKeys.lastUsed', 'Last used'),
+        mono: true,
+        render: (k) => formatDate(k.last_used_at),
+      },
       {
         id: 'expires',
         hideOnNarrow: true,
         label: t('settings.apiKeys.expires', 'Expires'),
         mono: true,
-        render: (k) => (k.expires_at ? formatDate(k.expires_at) : t('settings.apiKeys.never', 'Never')),
+        render: (k) =>
+          k.expires_at ? formatDate(k.expires_at) : t('settings.apiKeys.never', 'Never'),
       },
-      { id: 'created', hideOnNarrow: true, label: t('settings.apiKeys.created', 'Created'), mono: true, render: (k) => formatDate(k.created_at) },
+      {
+        id: 'created',
+        hideOnNarrow: true,
+        label: t('settings.apiKeys.created', 'Created'),
+        mono: true,
+        render: (k) => formatDate(k.created_at),
+      },
       {
         id: 'actions',
         label: t('settings.userManagement.tableHeaders.actions'),
@@ -101,7 +117,11 @@ export default function ApiKeysSection() {
             'Use an API key in the Authorization: Bearer header to authenticate scripts and integrations. Keys carry your full account permissions — treat them like passwords.',
           )}
         </p>
-        <Button variant="primary" icon={<Add fontSize="inherit" />} onPress={() => setCreateOpen(true)}>
+        <Button
+          variant="primary"
+          icon={<Add fontSize="inherit" />}
+          onPress={() => setCreateOpen(true)}
+        >
           {t('settings.apiKeys.create', 'Create API key')}
         </Button>
       </div>
@@ -125,6 +145,7 @@ export default function ApiKeysSection() {
           />
         }
       />
+      {mcpEnabled ? <McpConnectPanel /> : null}
       <CreateKeyDialog
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -134,7 +155,7 @@ export default function ApiKeysSection() {
           setRevealed(result);
         }}
       />
-      <RevealKeyDialog revealed={revealed} onDone={() => setRevealed(null)} />
+      <RevealKeyDialog revealed={revealed} showMcp={mcpEnabled} onDone={() => setRevealed(null)} />
       <RevokeKeyDialog
         target={revokeTarget}
         onCancel={() => setRevokeTarget(null)}

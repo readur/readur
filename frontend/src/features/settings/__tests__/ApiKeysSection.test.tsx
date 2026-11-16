@@ -5,7 +5,9 @@ import { apiKeysService, type ApiKey } from '../../../services/api';
 import ApiKeysSection from '../apiKeys/ApiKeysSection';
 import { httpError, renderSettings } from './settingsTestUtils';
 
-vi.mock('../../../services/api', async (importOriginal) => (await import('./apiMock')).mockApiModule(importOriginal));
+vi.mock('../../../services/api', async (importOriginal) =>
+  (await import('./apiMock')).mockApiModule(importOriginal),
+);
 
 const key = (over: Partial<ApiKey>): ApiKey => ({
   id: 'k1',
@@ -27,7 +29,6 @@ const KEYS = [
 ];
 const PLAINTEXT = 'readur_pat_ab12cd34ef56gh78ij90';
 
-
 beforeEach(() => {
   vi.spyOn(apiKeysService, 'list').mockResolvedValue({ data: KEYS } as never);
   vi.spyOn(apiKeysService, 'create').mockResolvedValue({
@@ -36,7 +37,10 @@ beforeEach(() => {
   vi.spyOn(apiKeysService, 'revoke').mockResolvedValue({ data: null } as never);
 });
 
-const render = () => renderSettings(<ApiKeysSection />, { path: '/settings/api-keys' });
+const render = (opts: { mcpEnabled?: boolean } = {}) =>
+  renderSettings(<ApiKeysSection />, { path: '/settings/api-keys', ...opts });
+
+const ENDPOINT = `${window.location.origin}/api/mcp`;
 
 async function createKey(user: ReturnType<typeof userEvent.setup>, name = 'ci') {
   await user.click(await screen.findByRole('button', { name: 'Create API key' }));
@@ -52,8 +56,12 @@ describe('ApiKeysSection', () => {
     const row = within(table).getByRole('row', { name: /backup-script/ });
     expect(within(row).getByText('readur_pat_ab12…')).toBeInTheDocument();
     expect(within(row).getByText('Active')).toBeInTheDocument();
-    expect(within(within(table).getByRole('row', { name: /old-sync/ })).getByText('Revoked')).toBeInTheDocument();
-    expect(within(within(table).getByRole('row', { name: /expired-one/ })).getByText('Expired')).toBeInTheDocument();
+    expect(
+      within(within(table).getByRole('row', { name: /old-sync/ })).getByText('Revoked'),
+    ).toBeInTheDocument();
+    expect(
+      within(within(table).getByRole('row', { name: /expired-one/ })).getByText('Expired'),
+    ).toBeInTheDocument();
   });
 
   it('shows an empty state', async () => {
@@ -106,7 +114,10 @@ describe('ApiKeysSection', () => {
     await user.click(within(dialog).getByRole('button', { name: /Expiration/ }));
     await user.click(await screen.findByRole('option', { name: 'Never (not recommended)' }));
     await user.click(within(dialog).getByRole('button', { name: 'Create' }));
-    expect(apiKeysService.create).toHaveBeenCalledWith({ name: 'forever', expires_in_days: undefined });
+    expect(apiKeysService.create).toHaveBeenCalledWith({
+      name: 'forever',
+      expires_in_days: undefined,
+    });
   });
 
   it('keeps the new key open on Escape: only the explicit button closes it', async () => {
@@ -155,7 +166,9 @@ describe('ApiKeysSection', () => {
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole('button', { name: 'Revoke backup-script' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
+    );
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(apiKeysService.revoke).not.toHaveBeenCalled();
   });
@@ -173,5 +186,63 @@ describe('ApiKeysSection', () => {
   it('disables revoking an already revoked key', async () => {
     render();
     expect(await screen.findByRole('button', { name: 'Already revoked' })).toBeDisabled();
+  });
+
+  describe('Connect an AI assistant', () => {
+    it('is hidden when the server does not serve MCP', async () => {
+      render();
+      await screen.findByRole('grid', { name: 'API keys' });
+      expect(
+        screen.queryByRole('region', { name: 'Connect an AI assistant' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows the endpoint and a Claude Code command with a key placeholder', async () => {
+      render({ mcpEnabled: true });
+      const panel = await screen.findByRole('region', { name: 'Connect an AI assistant' });
+      expect(within(panel).getByLabelText('MCP endpoint')).toHaveTextContent(ENDPOINT);
+      expect(within(panel).getByLabelText('Claude Code command')).toHaveTextContent(
+        `claude mcp add --transport http readur ${ENDPOINT} --header "Authorization: Bearer <your-api-key>"`,
+      );
+    });
+
+    it('offers an mcpServers JSON snippet and copies it', async () => {
+      const user = userEvent.setup();
+      render({ mcpEnabled: true });
+      const panel = await screen.findByRole('region', { name: 'Connect an AI assistant' });
+      await user.click(within(panel).getByRole('tab', { name: 'JSON config' }));
+      const json = JSON.parse(within(panel).getByLabelText('MCP configuration').textContent ?? '');
+      expect(json).toEqual({
+        mcpServers: {
+          readur: {
+            type: 'http',
+            url: ENDPOINT,
+            headers: { Authorization: 'Bearer <your-api-key>' },
+          },
+        },
+      });
+      await user.click(within(panel).getByRole('button', { name: 'Copy MCP configuration' }));
+      expect(JSON.parse(await navigator.clipboard.readText())).toEqual(json);
+    });
+
+    it('prefills the snippets with a newly created key', async () => {
+      const user = userEvent.setup();
+      render({ mcpEnabled: true });
+      await createKey(user);
+      const reveal = await screen.findByRole('dialog', { name: 'Your new API key' });
+      expect(within(reveal).getByLabelText('Claude Code command')).toHaveTextContent(
+        `Authorization: Bearer ${PLAINTEXT}`,
+      );
+      await user.click(within(reveal).getByRole('button', { name: 'Copy Claude Code command' }));
+      expect(await navigator.clipboard.readText()).toContain(`Bearer ${PLAINTEXT}`);
+    });
+
+    it('leaves MCP out of the new-key dialog when disabled', async () => {
+      const user = userEvent.setup();
+      render();
+      await createKey(user);
+      const reveal = await screen.findByRole('dialog', { name: 'Your new API key' });
+      expect(within(reveal).queryByLabelText('Claude Code command')).not.toBeInTheDocument();
+    });
   });
 });

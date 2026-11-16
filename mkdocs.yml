@@ -15,7 +15,7 @@ copyright: Copyright &copy; 2025 Readur
 # Theme configuration
 theme:
   name: material
-  
+
   # Color scheme
   palette:
     # Light mode
@@ -26,7 +26,7 @@ theme:
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    
+
     # Dark mode - warmer, less depressing colors
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
@@ -35,12 +35,12 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-  
+
   # Font configuration - more readable, friendly fonts
   font:
     text: Inter
     code: JetBrains Mono
-  
+
   # Features
   features:
     - announce.dismiss
@@ -66,7 +66,7 @@ theme:
     - search.suggest
     - toc.follow
     - toc.integrate
-  
+
   # Icons
   icon:
     logo: material/book-open-page-variant
@@ -101,7 +101,7 @@ markdown_extensions:
   - toc:
       permalink: true
       permalink_title: Anchor link to this section for reference
-  
+
   # Python Markdown Extensions
   - pymdownx.arithmatex:
       generic: true
@@ -153,11 +153,11 @@ extra:
       link: https://twitter.com/readur
     - icon: fontawesome/brands/discord
       link: https://discord.gg/readur
-  
+
   # Analytics (optional)
   analytics:
     provider: google
-    property: G-XXXXXXXXXX  # Replace with your Google Analytics ID
+    property: G-XXXXXXXXXX # Replace with your Google Analytics ID
     feedback:
       title: Was this page helpful?
       ratings:
@@ -172,12 +172,12 @@ extra:
           note: >-
             Thanks for your feedback! Help us improve this page by
             <a href="https://github.com/readur/readur/issues/new/?title=[Feedback]+{title}+-+{url}" target="_blank" rel="noopener">opening an issue</a>.
-  
+
   # Versioning (optional)
   version:
     provider: mike
     default: stable
-  
+
   # Cookie consent (optional)
   consent:
     title: Cookie consent
@@ -190,81 +190,82 @@ extra:
 # Navigation structure
 nav:
   - Home: index.md
-  
+
   - Quick Start:
-    - Self-Hosting: quickstart/self-hosting.md
-    - Docker Setup: quickstart/docker.md
-    - Development: dev/development.md
-    
+      - Self-Hosting: quickstart/self-hosting.md
+      - Docker Setup: quickstart/docker.md
+      - Development: dev/development.md
+
   - Self-Hosting:
-    - Overview: self-hosting/index.md
-    - Installation:
-      - getting-started/installation.md
-      - deployment.md
-    - Configuration:
-      - getting-started/configuration.md
-      - configuration-reference.md
-    - Storage Setup:
-      - s3-storage-guide.md
-      - WATCH_FOLDER.md
-      - per-user-watch-directories.md
-    - Authentication:
-      - oidc-setup.md
-      - user-management-guide.md
-    - Networking:
-      - REVERSE_PROXY.md
-    - Backup & Updates:
-      - backup-recovery.md
-      - migration-guide.md
-      - administration/storage-migration.md
-    - Security:
-      - security-guide.md
-    
+      - Overview: self-hosting/index.md
+      - Installation:
+          - getting-started/installation.md
+          - deployment.md
+      - Configuration:
+          - getting-started/configuration.md
+          - configuration-reference.md
+      - Storage Setup:
+          - s3-storage-guide.md
+          - WATCH_FOLDER.md
+          - per-user-watch-directories.md
+      - Authentication:
+          - oidc-setup.md
+          - user-management-guide.md
+      - Networking:
+          - REVERSE_PROXY.md
+      - Backup & Updates:
+          - backup-recovery.md
+          - migration-guide.md
+          - administration/storage-migration.md
+      - Security:
+          - security-guide.md
+
   - Using Readur:
-    - Getting Started: guide/overview.md
-    - Complete Guide: user-guide.md
-    - Gallery: gallery.md
-    - Documents & OCR:
-      - file-upload-guide.md
-      - multi-language-ocr-guide.md
-    - Search & Organization:
-      - advanced-search.md
-      - labels-and-organization.md
-    - Sources & Sync: sources-guide.md
-    - Analytics: analytics-dashboard-guide.md
-    - Notifications: notifications-guide.md
-    
+      - Getting Started: guide/overview.md
+      - Complete Guide: user-guide.md
+      - Gallery: gallery.md
+      - Documents & OCR:
+          - file-upload-guide.md
+          - multi-language-ocr-guide.md
+      - Search & Organization:
+          - advanced-search.md
+          - labels-and-organization.md
+      - Sources & Sync: sources-guide.md
+      - Analytics: analytics-dashboard-guide.md
+      - Notifications: notifications-guide.md
+
   - Administration:
-    - Health Monitoring: health-monitoring-guide.md
-    - Performance Tuning: performance-tuning.md
-    - CLI Tools: administration/cli-tools.md
-    - Troubleshooting:
-      - troubleshooting.md
-      - s3-troubleshooting.md
-      - administration/migration-troubleshooting.md
-    
+      - Health Monitoring: health-monitoring-guide.md
+      - Performance Tuning: performance-tuning.md
+      - CLI Tools: administration/cli-tools.md
+      - Troubleshooting:
+          - troubleshooting.md
+          - s3-troubleshooting.md
+          - administration/migration-troubleshooting.md
+
   - API & Integrations:
-    - API Reference: api-reference.md
-    - Integration Guide: integrations.md
-    - Swagger UI: swagger-ui-guide.md
-    
+      - API Reference: api-reference.md
+      - Integration Guide: integrations.md
+      - AI Assistants (MCP): mcp-guide.md
+      - Swagger UI: swagger-ui-guide.md
+
   - Reference:
-    - Architecture: architecture.md
-    - Configuration: configuration-reference.md
-    - CLI Reference: administration/cli-tools.md
-    
+      - Architecture: architecture.md
+      - Configuration: configuration-reference.md
+      - CLI Reference: administration/cli-tools.md
+
   - Development:
-    - Contributing: dev/README.md
-    - Development Setup: dev/development.md
-    - Testing:
-      - dev/TESTING.md
-      - dev/README-E2E.md
-      - dev/test-infrastructure.md
-      - dev/LABEL_TESTING.md
-    - Architecture:
-      - dev/architecture.md
-      - dev/QUEUE_IMPROVEMENTS.md
-      - dev/DATABASE_GUARDRAILS.md
-    - Optimization:
-      - dev/OCR_OPTIMIZATION_GUIDE.md
-      - dev/ERROR_SYSTEM.md
+      - Contributing: dev/README.md
+      - Development Setup: dev/development.md
+      - Testing:
+          - dev/TESTING.md
+          - dev/README-E2E.md
+          - dev/test-infrastructure.md
+          - dev/LABEL_TESTING.md
+      - Architecture:
+          - dev/architecture.md
+          - dev/QUEUE_IMPROVEMENTS.md
+          - dev/DATABASE_GUARDRAILS.md
+      - Optimization:
+          - dev/OCR_OPTIMIZATION_GUIDE.md
+          - dev/ERROR_SYSTEM.md

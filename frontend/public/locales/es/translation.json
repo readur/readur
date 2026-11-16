@@ -981,7 +981,20 @@
       "revoked": "Revocada",
       "saved": "Ya la he guardado",
       "status": "Estado",
-      "usage": "Úsala así:"
+      "usage": "Úsala así:",
+      "mcp": {
+        "title": "Conectar un asistente de IA",
+        "intro": "Readur habla el Model Context Protocol, así que asistentes como Claude pueden buscar, leer, subir y etiquetar tus documentos. Crea una clave de API arriba y luego añade este servidor a tu cliente. El asistente puede hacer todo lo que permita la clave.",
+        "endpoint": "Endpoint MCP",
+        "clients": "Configuración del cliente",
+        "claudeCode": "Claude Code",
+        "json": "Configuración JSON",
+        "command": "Comando de Claude Code",
+        "config": "Configuración MCP",
+        "jsonHelp": "Para Claude Desktop y otros clientes que leen un archivo de configuración mcpServers.",
+        "copyNamed": "Copiar {{name}}",
+        "revealHelp": "Añade Readur a un cliente MCP con esta clave:"
+      }
     },
     "appearance": {
       "dark": "Oscuro",

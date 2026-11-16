@@ -73,6 +73,10 @@ controllers:
           # METRICS_TOKEN: ""                     # bearer token for Prometheus scrapes of /metrics
           # ADMIN_EMAIL: "admin@example.com"
 
+          # AI assistants (MCP endpoint at /api/mcp; see docs/mcp-guide.md)
+          # MCP_ENABLED: "true"
+          # MCP_ALLOW_DELETE: "false"             # expose the delete_document tool
+
 persistence:
   uploads:
     enabled: true

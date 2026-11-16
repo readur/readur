@@ -1080,7 +1080,20 @@
       "revoked": "Widerrufen",
       "saved": "Ich habe ihn gespeichert",
       "status": "Status",
-      "usage": "Verwendung:"
+      "usage": "Verwendung:",
+      "mcp": {
+        "title": "KI-Assistenten verbinden",
+        "intro": "Readur spricht das Model Context Protocol, sodass Assistenten wie Claude Ihre Dokumente durchsuchen, lesen, hochladen und mit Labels versehen können. Erstellen Sie oben einen API-Schlüssel und fügen Sie diesen Server dann Ihrem Client hinzu. Der Assistent kann alles, was der Schlüssel darf.",
+        "endpoint": "MCP-Endpunkt",
+        "clients": "Client-Konfiguration",
+        "claudeCode": "Claude Code",
+        "json": "JSON-Konfiguration",
+        "command": "Claude-Code-Befehl",
+        "config": "MCP-Konfiguration",
+        "jsonHelp": "Für Claude Desktop und andere Clients, die eine mcpServers-Konfigurationsdatei lesen.",
+        "copyNamed": "{{name}} kopieren",
+        "revealHelp": "Fügen Sie Readur mit diesem Schlüssel einem MCP-Client hinzu:"
+      }
     },
     "appearance": {
       "dark": "Dunkel",
