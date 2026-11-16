@@ -378,7 +378,11 @@ impl TestContext {
         if let Some(method) = message["method"].as_str() {
             request = request.header("mcp-method", method);
         }
-        if let Some(name) = message["params"]["name"].as_str() {
+        // `Mcp-Name` carries the tool name, or the URI for `resources/read`.
+        if let Some(name) = message["params"]["name"]
+            .as_str()
+            .or(message["params"]["uri"].as_str())
+        {
             request = request.header("mcp-name", name);
         }
         if let Some(token) = token {

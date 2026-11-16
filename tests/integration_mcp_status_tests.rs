@@ -4,7 +4,6 @@
 
 use axum::http::StatusCode;
 use serde_json::{json, Value};
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use readur::{
@@ -28,8 +27,7 @@ fn text(result: &Value) -> &str {
     result["content"][0]["text"].as_str().unwrap_or_default()
 }
 
-/// `resources/read` needs an `Mcp-Name` header carrying the URI, which the
-/// shared `mcp_post` helper only derives from `params.name`.
+/// Send `resources/read` for `uri`, returning the HTTP status and body.
 async fn read_resource(ctx: &TestContext, token: &str, uri: &str) -> (StatusCode, Value) {
     let message = json!({
         "jsonrpc": "2.0", "id": 1, "method": "resources/read",
@@ -42,23 +40,7 @@ async fn read_resource(ctx: &TestContext, token: &str, uri: &str) -> (StatusCode
             }
         }
     });
-    let request = axum::http::Request::builder()
-        .method("POST")
-        .uri("/api/mcp")
-        .header("content-type", "application/json")
-        .header("accept", "application/json, text/event-stream")
-        .header("mcp-protocol-version", MCP_TEST_PROTOCOL_VERSION)
-        .header("mcp-method", "resources/read")
-        .header("mcp-name", uri)
-        .header("authorization", format!("Bearer {token}"))
-        .body(axum::body::Body::from(message.to_string()))
-        .unwrap();
-    let response = ctx.app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    ctx.mcp_post(Some(token), message).await
 }
 
 /// Store `data` as a document owned by `owner` and return its id.
