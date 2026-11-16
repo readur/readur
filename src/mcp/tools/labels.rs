@@ -21,16 +21,14 @@ use crate::{
 
 const DEFAULT_LABEL_COLOR: &str = "#0969da";
 
-#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListLabelsParams {
     /// Also report how many documents and sources use each label (slower). Defaults to false.
     #[serde(default)]
     pub include_counts: bool,
 }
 
-#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateLabelParams {
     /// Name of the label. Must not be blank or contain commas, and must be unique among your labels.
     pub name: String,
@@ -42,8 +40,7 @@ pub struct CreateLabelParams {
     pub icon: Option<String>,
 }
 
-#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct UpdateLabelParams {
     /// ID of the label to update (from list_labels).
     pub id: Uuid,
@@ -57,15 +54,13 @@ pub struct UpdateLabelParams {
     pub icon: Option<String>,
 }
 
-#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct DocumentLabelsParams {
     /// ID of the document.
     pub document_id: Uuid,
 }
 
-#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct DocumentLabelParams {
     /// ID of the document.
     pub document_id: Uuid,

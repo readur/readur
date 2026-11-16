@@ -6,7 +6,7 @@ use http::request::Parts;
 use rmcp::{
     handler::server::{tool::Extension, wrapper::Parameters},
     model::CallToolResult,
-    schemars, tool, tool_router, ErrorData as McpError,
+    tool, tool_router, ErrorData as McpError,
 };
 use serde::Deserialize;
 use uuid::Uuid;

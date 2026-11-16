@@ -29,6 +29,12 @@ use crate::{
 /// Priority for documents queued by a user action (upload, manual retry).
 const USER_OCR_PRIORITY: i32 = 5;
 
+/// Upload warnings (`DocumentUploadResponse::warnings`). Public so the MCP
+/// upload tool can recognise them and tell the model what to do next.
+pub const OCR_NOT_QUEUED_WARNING: &str =
+    "The document could not be queued for OCR; retry OCR for it.";
+pub const LABELS_NOT_APPLIED_WARNING: &str = "The requested labels could not be applied.";
+
 /// One page of the caller's documents, with labels and OCR progress.
 /// Callers validate `filters` first.
 pub async fn list_documents(
@@ -259,10 +265,9 @@ pub async fn upload_document(
         group: None,
         metadata: None,
     };
-    if let Ok(Some(metadata)) =
-        crate::metadata_extraction::extract_content_metadata(&data, &mime_type, &filename).await
-    {
-        file_info.metadata = Some(metadata);
+    match crate::metadata_extraction::extract_content_metadata(&data, &mime_type, &filename).await {
+        Ok(metadata) => file_info.metadata = metadata,
+        Err(e) => warn!("Failed to extract metadata from {}: {}", filename, e),
     }
 
     let ingestion_service =
@@ -282,18 +287,24 @@ pub async fn upload_document(
     match result {
         Ok(IngestionResult::Created(document)) => {
             info!("Document uploaded successfully: {}", document.id);
-            attach_labels(state, user, document.id, &label_ids).await?;
+            // The document is stored at this point, so nothing below may fail
+            // the upload: a retry would only hit deduplication and never queue
+            // OCR. Queue OCR first, then label; report failures as warnings.
             store_language_preference(state, user, &ocr_languages, ocr_language.as_deref()).await;
 
+            let mut warnings = Vec::new();
             match state
                 .queue_service
                 .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
                 .await
             {
-                // The upload itself succeeded; OCR can be retried later.
-                Err(e) => error!("Failed to enqueue document {} for OCR: {}", document.id, e),
+                Err(e) => {
+                    error!("Failed to enqueue document {} for OCR: {}", document.id, e);
+                    warnings.push(OCR_NOT_QUEUED_WARNING.to_string());
+                }
                 Ok(_) => info!("Document {} enqueued for OCR processing", document.id),
             }
+            warnings.extend(attach_labels(state, user, document.id, &label_ids).await);
 
             Ok(DocumentUploadResponse {
                 id: document.id,
@@ -302,11 +313,15 @@ pub async fn upload_document(
                 mime_type: document.mime_type,
                 status: "success".to_string(),
                 message: "Document uploaded successfully".to_string(),
+                warnings,
             })
         }
         Ok(IngestionResult::ExistingDocument(existing)) => {
             warn!("Duplicate document upload attempted: {}", existing.id);
-            attach_labels(state, user, existing.id, &label_ids).await?;
+            let warnings = attach_labels(state, user, existing.id, &label_ids)
+                .await
+                .into_iter()
+                .collect();
             Ok(DocumentUploadResponse {
                 id: existing.id,
                 filename: existing.filename,
@@ -314,6 +329,7 @@ pub async fn upload_document(
                 mime_type: existing.mime_type,
                 status: "duplicate".to_string(),
                 message: "Document already exists".to_string(),
+                warnings,
             })
         }
         Ok(IngestionResult::Skipped {
@@ -363,22 +379,22 @@ pub fn check_upload_size(
     Ok(())
 }
 
+/// Attaches the requested labels, returning a warning instead of an error
+/// on failure: by now the document is stored and must stay that way.
 async fn attach_labels(
     state: &AppState,
     user: &User,
     document_id: Uuid,
     label_ids: &[Uuid],
-) -> Result<(), DocumentError> {
-    state
+) -> Option<String> {
+    let result = state
         .db
         .add_labels_to_document(document_id, label_ids, user.id)
-        .await
-        .map_err(|e| {
-            error!("Failed to label document {}: {}", document_id, e);
-            DocumentError::InternalServerError(
-                "Document was uploaded but its labels could not be applied".to_string(),
-            )
-        })
+        .await;
+    result.err().map(|e| {
+        error!("Failed to label document {}: {}", document_id, e);
+        LABELS_NOT_APPLIED_WARNING.to_string()
+    })
 }
 
 /// Stores the OCR languages an upload or retry asked for as the user's

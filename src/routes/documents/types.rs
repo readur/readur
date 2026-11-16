@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::{ToSchema, IntoParams};
-use uuid::Uuid;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 use crate::models::search::{deserialize_comma_separated, deserialize_comma_separated_uuids};
 use crate::models::{DocumentFilters, DocumentSortField, SortOrder};
@@ -100,6 +100,10 @@ pub struct DocumentUploadResponse {
     pub mime_type: String,
     pub status: String,
     pub message: String,
+    /// Follow-up steps that failed after the document was stored (OCR
+    /// queueing, labelling). The upload itself succeeded.
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema, TS)]
@@ -205,7 +209,10 @@ mod tests {
         assert_eq!(q.sort_order, Some(SortOrder::Asc));
         let filters = q.filters();
         assert_eq!(filters.label_ids, Some(vec![label]));
-        assert_eq!(filters.source_types, Some(vec!["direct_upload".to_string()]));
+        assert_eq!(
+            filters.source_types,
+            Some(vec!["direct_upload".to_string()])
+        );
         assert!(filters.validate().is_ok());
     }
 

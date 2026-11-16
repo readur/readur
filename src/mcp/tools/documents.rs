@@ -7,7 +7,7 @@ use http::request::Parts;
 use rmcp::{
     handler::server::{tool::Extension, wrapper::Parameters},
     model::CallToolResult,
-    schemars, tool, tool_router, ErrorData as McpError,
+    tool, tool_router, ErrorData as McpError,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -16,7 +16,9 @@ use crate::{
     mcp::{format, ReadurMcp},
     models::{DocumentFilters, DocumentResponse, User},
     routes::documents::DocumentError,
-    services::documents::{self as service, UploadRequest},
+    services::documents::{
+        self as service, UploadRequest, LABELS_NOT_APPLIED_WARNING, OCR_NOT_QUEUED_WARNING,
+    },
 };
 
 const DEFAULT_LIMIT: u32 = 25;
@@ -191,7 +193,7 @@ impl ReadurMcp {
         let full = ocr.ocr_text.as_deref().unwrap_or_default();
         let total_chars = full.chars().count();
         let offset = p.offset.unwrap_or(0) as usize;
-        if offset > total_chars {
+        if ocr.has_ocr_text && offset > total_chars {
             return Ok(format::tool_error(format!(
                 "offset {offset} is past the end of the OCR text ({total_chars} characters)"
             )));
@@ -217,7 +219,11 @@ impl ReadurMcp {
                     }
                     msg.push_str(" Check back shortly.");
                 }
-                _ => msg.push_str(" The document is waiting in the OCR queue."),
+                "pending" => msg.push_str(" The document is waiting in the OCR queue."),
+                "completed" => msg.push_str(
+                    " OCR completed but stored no text. Use retry_document_ocr to process it again.",
+                ),
+                _ => msg.push_str(" Use retry_document_ocr if it does not start processing."),
             }
             msg
         } else if total_chars == 0 {
@@ -283,11 +289,17 @@ impl ReadurMcp {
         }
 
         // Reject oversized payloads before decoding them.
-        let encoded: String = p
-            .content_base64
-            .chars()
-            .filter(|c| !c.is_ascii_whitespace())
-            .collect();
+        // Base64 is often line-wrapped; only copy the payload when it is.
+        let encoded: std::borrow::Cow<str> =
+            if p.content_base64.bytes().any(|b| b.is_ascii_whitespace()) {
+                p.content_base64
+                    .chars()
+                    .filter(|c| !c.is_ascii_whitespace())
+                    .collect::<String>()
+                    .into()
+            } else {
+                p.content_base64.as_str().into()
+            };
         let padding = encoded.bytes().rev().take_while(|&b| b == b'=').count();
         let decoded_len = (encoded.len() / 4 * 3).saturating_sub(padding);
         if let Err(e) = service::check_upload_size(&self.state, &filename, decoded_len) {
@@ -328,10 +340,22 @@ impl ReadurMcp {
             Err(e) => return upload_error(e),
         };
 
-        let text = if uploaded.status == "duplicate" {
+        let mut text = if uploaded.status == "duplicate" {
             format!(
                 "An identical file already exists: \"{}\" ({}). No new document was created.",
                 uploaded.filename, uploaded.id
+            )
+        } else if uploaded
+            .warnings
+            .iter()
+            .any(|w| w == OCR_NOT_QUEUED_WARNING)
+        {
+            format!(
+                "Uploaded \"{}\" ({}, {}) as document {}, but it could not be queued for OCR. Call retry_document_ocr with this ID to process it.",
+                uploaded.filename,
+                uploaded.mime_type,
+                format::file_size(uploaded.file_size),
+                uploaded.id
             )
         } else {
             format!(
@@ -342,6 +366,15 @@ impl ReadurMcp {
                 uploaded.id
             )
         };
+        if uploaded
+            .warnings
+            .iter()
+            .any(|w| w == LABELS_NOT_APPLIED_WARNING)
+        {
+            text.push_str(
+                " The requested labels were not applied; add them with add_document_label.",
+            );
+        }
         format::text_and_json(text, &uploaded)
     }
 
@@ -458,7 +491,12 @@ fn upload_error(error: DocumentError) -> Result<CallToolResult, McpError> {
         DocumentError::BadRequest(msg)
         | DocumentError::InvalidQuery(msg)
         | DocumentError::Conflict(msg)
-        | DocumentError::PayloadTooLarge(msg) => Ok(format::tool_error(msg)),
+        | DocumentError::PayloadTooLarge(msg)
+        | DocumentError::UploadTimeout(msg)
+        | DocumentError::DatabaseConstraintViolation(msg)
+        | DocumentError::OcrProcessingError(msg)
+        | DocumentError::FileProcessingError(msg)
+        | DocumentError::ConcurrentUploadError(msg) => Ok(format::tool_error(msg)),
         DocumentError::NotFound => Ok(format::tool_error("Document not found")),
         _ => Err(McpError::internal_error("failed to upload document", None)),
     }

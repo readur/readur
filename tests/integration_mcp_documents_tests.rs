@@ -220,6 +220,86 @@ async fn ocr_text_reports_pending_status() {
 }
 
 #[tokio::test]
+async fn ocr_text_explains_completed_document_without_text() {
+    // `mark_documents_ocr_completed` can leave a completed document with no
+    // stored text; it must not be described as waiting in the queue.
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let mut doc = document_helpers::create_document_without_ocr(alice);
+    doc.ocr_status = Some("completed".to_string());
+    let doc = insert(&ctx, doc).await;
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "offset": 10 }),
+        )
+        .await;
+    assert_ok(&result);
+    assert!(text(&result).contains("retry_document_ocr"), "{result}");
+    assert!(
+        !text(&result).contains("waiting in the OCR queue"),
+        "{result}"
+    );
+}
+
+#[tokio::test]
+async fn upload_still_queues_ocr_when_labels_fail() {
+    // Labelling runs after the document is stored. If it fails, the upload
+    // must still succeed and be queued for OCR: a retry would only hit
+    // deduplication and leave the document unprocessed for good.
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let pool = &ctx.state().db.pool;
+    let label: Uuid = sqlx::query_scalar(
+        "INSERT INTO labels (user_id, name, color) VALUES ($1, 'doomed', '#123456') RETURNING id",
+    )
+    .bind(alice)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    // This test's own database: make every label assignment fail.
+    sqlx::raw_sql(
+        "CREATE FUNCTION fail_label_insert() RETURNS trigger AS $$ \
+         BEGIN RAISE EXCEPTION 'simulated label failure'; END $$ LANGUAGE plpgsql; \
+         CREATE TRIGGER fail_label_insert BEFORE INSERT ON document_labels \
+         FOR EACH ROW EXECUTE FUNCTION fail_label_insert();",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({
+                "filename": "labels-fail.txt",
+                "content_base64": Base64::encode_string(b"labels will fail"),
+                "label_ids": [label]
+            }),
+        )
+        .await;
+    assert_ok(&result);
+    let id: Uuid = result["structuredContent"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(queued(&ctx, id).await, "document was not queued for OCR");
+    assert_eq!(
+        result["structuredContent"]["warnings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{result}"
+    );
+    assert!(text(&result).contains("add_document_label"), "{result}");
+}
+
+#[tokio::test]
 async fn upload_text_file_is_listed_and_queued() {
     let ctx = TestContext::new().await;
     let (_, token) = login(&ctx).await;
@@ -243,6 +323,7 @@ async fn upload_text_file_is_listed_and_queued() {
         json!("text/plain")
     );
     assert!(queued(&ctx, id).await, "document was not queued for OCR");
+    assert_eq!(result["structuredContent"]["warnings"], json!([]));
 
     let list = ctx.mcp_call_tool(&token, "list_documents", json!({})).await;
     assert!(text(&list).contains(&id.to_string()), "{list}");

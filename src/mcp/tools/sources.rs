@@ -15,8 +15,7 @@ use crate::{
     services::sync_progress_tracker::SyncProgressInfo,
 };
 
-#[derive(Debug, serde::Deserialize, rmcp::schemars::JsonSchema)]
-#[schemars(crate = "rmcp::schemars")]
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SourceSyncStatusParams {
     /// ID (UUID) of the source, as returned by `list_sources`.
     pub source_id: Uuid,
