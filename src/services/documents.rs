@@ -230,45 +230,11 @@ pub async fn upload_document(
 
     check_upload_size(state, &filename, data.len())?;
 
-    let owns_labels = state
-        .db
-        .user_owns_labels(&label_ids, user.id)
-        .await
-        .map_err(|e| {
-            error!("Failed to verify upload labels: {}", e);
-            DocumentError::InternalServerError("Failed to verify labels".to_string())
-        })?;
-    if !owns_labels {
-        return Err(DocumentError::BadRequest(
-            "One or more labels were not found".to_string(),
-        ));
-    }
+    check_label_ownership(state, user, &label_ids).await?;
 
     info!("Uploading document: {} ({} bytes)", filename, data.len());
 
-    let now = Utc::now();
-    let virtual_path = format!("upload/{}", filename);
-    let mut file_info = FileIngestionInfo {
-        relative_path: virtual_path.clone(),
-        full_path: virtual_path.clone(),
-        #[allow(deprecated)]
-        path: virtual_path,
-        name: filename.clone(),
-        size: data.len() as i64,
-        mime_type: mime_type.clone(),
-        last_modified: Some(now),
-        etag: format!("{}-{}", data.len(), now.timestamp()),
-        is_directory: false,
-        created_at: Some(now),
-        permissions: None,
-        owner: Some(user.username.clone()),
-        group: None,
-        metadata: None,
-    };
-    match crate::metadata_extraction::extract_content_metadata(&data, &mime_type, &filename).await {
-        Ok(metadata) => file_info.metadata = metadata,
-        Err(e) => warn!("Failed to extract metadata from {}: {}", filename, e),
-    }
+    let file_info = upload_file_info(user, &filename, &mime_type, &data).await;
 
     let ingestion_service =
         DocumentIngestionService::new(state.db.clone(), state.file_service.as_ref().clone());
@@ -285,71 +251,31 @@ pub async fn upload_document(
         .await;
 
     match result {
-        Ok(IngestionResult::Created(document)) => {
-            info!("Document uploaded successfully: {}", document.id);
-            // The document is stored at this point, so nothing below may fail
-            // the upload: a retry would only hit deduplication and never queue
-            // OCR. Queue OCR first, then label; report failures as warnings.
-            store_language_preference(state, user, &ocr_languages, ocr_language.as_deref()).await;
-
-            let mut warnings = Vec::new();
-            match state
-                .queue_service
-                .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
-                .await
-            {
-                Err(e) => {
-                    error!("Failed to enqueue document {} for OCR: {}", document.id, e);
-                    warnings.push(OCR_NOT_QUEUED_WARNING.to_string());
-                }
-                Ok(_) => info!("Document {} enqueued for OCR processing", document.id),
-            }
-            warnings.extend(attach_labels(state, user, document.id, &label_ids).await);
-
-            Ok(DocumentUploadResponse {
-                id: document.id,
-                filename: document.filename,
-                file_size: document.file_size,
-                mime_type: document.mime_type,
-                status: "success".to_string(),
-                message: "Document uploaded successfully".to_string(),
-                warnings,
-            })
-        }
+        Ok(IngestionResult::Created(document)) => Ok(finish_new_upload(
+            state,
+            user,
+            document,
+            &label_ids,
+            &ocr_languages,
+            ocr_language.as_deref(),
+        )
+        .await),
         Ok(IngestionResult::ExistingDocument(existing)) => {
-            warn!("Duplicate document upload attempted: {}", existing.id);
-            let warnings = attach_labels(state, user, existing.id, &label_ids)
-                .await
-                .into_iter()
-                .collect();
-            Ok(DocumentUploadResponse {
-                id: existing.id,
-                filename: existing.filename,
-                file_size: existing.file_size,
-                mime_type: existing.mime_type,
-                status: "duplicate".to_string(),
-                message: "Document already exists".to_string(),
-                warnings,
-            })
+            Ok(existing_upload(state, user, existing, &label_ids).await)
         }
         Ok(IngestionResult::Skipped {
             existing_document_id,
             reason,
-        }) => {
-            let msg = format!(
-                "Document upload skipped - {}: {}",
-                reason, existing_document_id
-            );
-            info!("{}", msg);
-            Err(DocumentError::Conflict(msg))
-        }
+        }) => Err(rejected_upload(format!(
+            "Document upload skipped - {}: {}",
+            reason, existing_document_id
+        ))),
         Ok(IngestionResult::TrackedAsDuplicate {
             existing_document_id,
-        }) => {
-            let msg = format!("Document tracked as duplicate: {}", existing_document_id);
-            info!("{}", msg);
-            Err(DocumentError::Conflict(msg))
-        }
+        }) => Err(rejected_upload(format!(
+            "Document tracked as duplicate: {}",
+            existing_document_id
+        ))),
         Err(e) => {
             error!(
                 "Failed to ingest document: {} (failed after {:?})",
@@ -377,6 +303,148 @@ pub fn check_upload_size(
         return Err(DocumentError::PayloadTooLarge(msg));
     }
     Ok(())
+}
+
+/// Post-ingestion steps for a newly stored upload: language preference,
+/// OCR queueing and labels. Infallible by design (see the comment inside).
+async fn finish_new_upload(
+    state: &AppState,
+    user: &User,
+    document: crate::models::Document,
+    label_ids: &[Uuid],
+    ocr_languages: &[String],
+    ocr_language: Option<&str>,
+) -> DocumentUploadResponse {
+    info!("Document uploaded successfully: {}", document.id);
+    // The document is stored at this point, so nothing below may fail
+    // the upload: a retry would only hit deduplication and never queue
+    // OCR. Queue OCR first, then label; report failures as warnings.
+    store_language_preference(state, user, ocr_languages, ocr_language).await;
+
+    let mut warnings: Vec<String> = queue_upload_for_ocr(state, &document)
+        .await
+        .into_iter()
+        .collect();
+    warnings.extend(attach_labels(state, user, document.id, label_ids).await);
+
+    DocumentUploadResponse {
+        id: document.id,
+        filename: document.filename,
+        file_size: document.file_size,
+        mime_type: document.mime_type,
+        status: "success".to_string(),
+        message: "Document uploaded successfully".to_string(),
+        warnings,
+    }
+}
+
+/// Describes an uploaded file for ingestion, including any metadata that
+/// can be extracted from its content.
+async fn upload_file_info(
+    user: &User,
+    filename: &str,
+    mime_type: &str,
+    data: &[u8],
+) -> FileIngestionInfo {
+    let now = Utc::now();
+    let virtual_path = format!("upload/{}", filename);
+    let mut file_info = FileIngestionInfo {
+        relative_path: virtual_path.clone(),
+        full_path: virtual_path.clone(),
+        #[allow(deprecated)]
+        path: virtual_path,
+        name: filename.to_string(),
+        size: data.len() as i64,
+        mime_type: mime_type.to_string(),
+        last_modified: Some(now),
+        etag: format!("{}-{}", data.len(), now.timestamp()),
+        is_directory: false,
+        created_at: Some(now),
+        permissions: None,
+        owner: Some(user.username.clone()),
+        group: None,
+        metadata: None,
+    };
+    match crate::metadata_extraction::extract_content_metadata(data, mime_type, filename).await {
+        Ok(metadata) => file_info.metadata = metadata,
+        Err(e) => warn!("Failed to extract metadata from {}: {}", filename, e),
+    }
+
+    file_info
+}
+
+/// Fails an upload whose labels are not all the caller's own.
+async fn check_label_ownership(
+    state: &AppState,
+    user: &User,
+    label_ids: &[Uuid],
+) -> Result<(), DocumentError> {
+    let owns_labels = state
+        .db
+        .user_owns_labels(label_ids, user.id)
+        .await
+        .map_err(|e| {
+            error!("Failed to verify upload labels: {}", e);
+            DocumentError::InternalServerError("Failed to verify labels".to_string())
+        })?;
+    if owns_labels {
+        Ok(())
+    } else {
+        Err(DocumentError::BadRequest(
+            "One or more labels were not found".to_string(),
+        ))
+    }
+}
+
+/// An upload identical to one of the caller's documents: return that
+/// document, still applying any requested labels to it.
+async fn existing_upload(
+    state: &AppState,
+    user: &User,
+    existing: crate::models::Document,
+    label_ids: &[Uuid],
+) -> DocumentUploadResponse {
+    warn!("Duplicate document upload attempted: {}", existing.id);
+    let warnings = attach_labels(state, user, existing.id, label_ids)
+        .await
+        .into_iter()
+        .collect();
+    DocumentUploadResponse {
+        id: existing.id,
+        filename: existing.filename,
+        file_size: existing.file_size,
+        mime_type: existing.mime_type,
+        status: "duplicate".to_string(),
+        message: "Document already exists".to_string(),
+        warnings,
+    }
+}
+
+/// The conflict reported for an ingestion that stored nothing.
+fn rejected_upload(msg: String) -> DocumentError {
+    info!("{}", msg);
+    DocumentError::Conflict(msg)
+}
+
+/// Queues a new upload for OCR, returning a warning if that failed.
+async fn queue_upload_for_ocr(
+    state: &AppState,
+    document: &crate::models::Document,
+) -> Option<String> {
+    match state
+        .queue_service
+        .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
+        .await
+    {
+        Ok(_) => {
+            info!("Document {} enqueued for OCR processing", document.id);
+            None
+        }
+        Err(e) => {
+            error!("Failed to enqueue document {} for OCR: {}", document.id, e);
+            Some(OCR_NOT_QUEUED_WARNING.to_string())
+        }
+    }
 }
 
 /// Attaches the requested labels, returning a warning instead of an error
@@ -407,34 +475,45 @@ async fn store_language_preference(
     language: Option<&str>,
 ) {
     if let Some(primary) = languages.first() {
-        let health_checker = crate::ocr::health::OcrHealthChecker::new();
-        if let Err(e) = health_checker.validate_preferred_languages(languages) {
-            warn!(
-                "Invalid language combination provided, not updating user settings: {}",
-                e
-            );
-            return;
-        }
-        let update = crate::models::UpdateSettings::language_update(
-            languages.to_vec(),
-            primary.clone(),
-            primary.clone(),
-        );
-        match state.db.create_or_update_settings(user.id, &update).await {
-            Ok(_) => info!(
-                "Updated user {} preferred languages to: {:?}",
-                user.id, languages
-            ),
-            Err(e) => warn!(
-                "Failed to update user preferred languages to {:?}: {}",
-                languages, e
-            ),
-        }
+        store_preferred_languages(state, user, languages, primary).await;
     } else if let Some(lang) = language {
         match state.db.update_user_ocr_language(user.id, lang).await {
             Ok(_) => info!("Updated user {} OCR language to: {}", user.id, lang),
             Err(e) => warn!("Failed to update user OCR language to {}: {}", lang, e),
         }
+    }
+}
+
+/// Stores a multi-language OCR preference with `primary` first, if the
+/// combination is valid.
+async fn store_preferred_languages(
+    state: &AppState,
+    user: &User,
+    languages: &[String],
+    primary: &str,
+) {
+    let health_checker = crate::ocr::health::OcrHealthChecker::new();
+    if let Err(e) = health_checker.validate_preferred_languages(languages) {
+        warn!(
+            "Invalid language combination provided, not updating user settings: {}",
+            e
+        );
+        return;
+    }
+    let update = crate::models::UpdateSettings::language_update(
+        languages.to_vec(),
+        primary.to_string(),
+        primary.to_string(),
+    );
+    match state.db.create_or_update_settings(user.id, &update).await {
+        Ok(_) => info!(
+            "Updated user {} preferred languages to: {:?}",
+            user.id, languages
+        ),
+        Err(e) => warn!(
+            "Failed to update user preferred languages to {:?}: {}",
+            languages, e
+        ),
     }
 }
 
