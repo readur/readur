@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use crate::{
     auth::AuthUser,
-    errors::search::SearchError,
+    errors::{search::SearchError, AppError},
     models::{
         EnhancedDocumentResponse, MonthCount, SearchFacetsResponse, SearchMode, SearchRequest,
-        SearchResponse,
+        SearchResponse, User,
     },
     AppState,
 };
@@ -48,6 +48,19 @@ async fn search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, SearchError> {
+    run_basic_search(&state, &auth_user.user, &search_request)
+        .await
+        .map(Json)
+}
+
+/// Basic (simple-mode) search for `user`: validation, total count, the page
+/// of results and their labels. Shared by `GET /api/search` and the MCP
+/// `search_documents` tool.
+pub(crate) async fn run_basic_search(
+    state: &AppState,
+    user: &User,
+    search_request: &SearchRequest,
+) -> Result<SearchResponse, SearchError> {
     // Validate filters, then query length (allow empty query if filters are present)
     let filters = search_request.filters();
     filters.validate().map_err(SearchError::invalid_syntax)?;
@@ -73,9 +86,9 @@ async fn search_documents(
     let total = state
         .db
         .count_search_documents_in_mode(
-            auth_user.user.id,
-            auth_user.user.role.clone(),
-            &search_request,
+            user.id,
+            user.role.clone(),
+            search_request,
             &SearchMode::Simple,
         )
         .await
@@ -88,7 +101,7 @@ async fn search_documents(
 
     let documents = state
         .db
-        .search_documents_with_role(auth_user.user.id, auth_user.user.role, &search_request)
+        .search_documents_with_role(user.id, user.role.clone(), search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
@@ -111,14 +124,12 @@ async fn search_documents(
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Loading labels failed: {}", e)))?;
 
-    let response = SearchResponse {
+    Ok(SearchResponse {
         documents,
         total,
         query_time_ms: 0,
         suggestions: Vec::new(),
-    };
-
-    Ok(Json(response))
+    })
 }
 
 #[utoipa::path(
@@ -144,16 +155,33 @@ async fn enhanced_search_documents(
     auth_user: AuthUser,
     Query(search_request): Query<SearchRequest>,
 ) -> Result<Json<SearchResponse>, StatusCode> {
+    run_enhanced_search(&state, &auth_user.user, &search_request)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            if e.status_code().is_client_error() {
+                StatusCode::BAD_REQUEST
+            } else {
+                tracing::error!("Enhanced search failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        })
+}
+
+/// Enhanced search for `user` (ranking, snippets, suggestions). Shared by
+/// `GET /api/search/enhanced` and the MCP `enhanced_search` tool.
+pub(crate) async fn run_enhanced_search(
+    state: &AppState,
+    user: &User,
+    search_request: &SearchRequest,
+) -> Result<SearchResponse, SearchError> {
     // Validate filters, then query length (allow empty query if filters are present)
     let filters = search_request.filters();
-    if filters.validate().is_err() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    filters.validate().map_err(SearchError::invalid_syntax)?;
     if search_request.query.len() < 2 && !filters.is_active() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(SearchError::query_too_short(search_request.query.len(), 2));
     }
 
-    // Generate suggestions before moving search_request
     let suggestions = generate_search_suggestions(&search_request.query);
 
     let start_time = std::time::Instant::now();
@@ -161,34 +189,24 @@ async fn enhanced_search_documents(
     // Get total count (without pagination) for proper pagination support
     let total = state
         .db
-        .count_search_documents(
-            auth_user.user.id,
-            auth_user.user.role.clone(),
-            &search_request,
-        )
+        .count_search_documents(user.id, user.role.clone(), search_request)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
     let documents = state
         .db
-        .enhanced_search_documents_with_role(
-            auth_user.user.id,
-            auth_user.user.role,
-            &search_request,
-        )
+        .enhanced_search_documents_with_role(user.id, user.role.clone(), search_request)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
     let query_time = start_time.elapsed().as_millis() as u64;
 
-    let response = SearchResponse {
+    Ok(SearchResponse {
         documents,
         total,
         query_time_ms: query_time,
         suggestions,
-    };
-
-    Ok(Json(response))
+    })
 }
 
 #[utoipa::path(
@@ -278,27 +296,25 @@ async fn get_search_facets(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<SearchFacetsResponse>, StatusCode> {
-    let user_id = auth_user.user.id;
-    let user_role = auth_user.user.role;
-
-    // Get MIME type facets
-    let mime_type_facets = state
-        .db
-        .get_mime_type_facets(user_id, user_role.clone())
+    load_search_facets(&state, &auth_user.user)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map(Json)
+        .map_err(|e| {
+            tracing::error!("Loading search facets failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}
 
-    // Get tag facets
-    let tag_facets = state
+/// MIME type and tag facets for the documents `user` can see. Shared by
+/// `GET /api/search/facets` and the MCP `get_search_facets` tool.
+pub(crate) async fn load_search_facets(
+    state: &AppState,
+    user: &User,
+) -> anyhow::Result<SearchFacetsResponse> {
+    let mime_types = state
         .db
-        .get_tag_facets(user_id, user_role)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let response = SearchFacetsResponse {
-        mime_types: mime_type_facets,
-        tags: tag_facets,
-    };
-
-    Ok(Json(response))
+        .get_mime_type_facets(user.id, user.role.clone())
+        .await?;
+    let tags = state.db.get_tag_facets(user.id, user.role.clone()).await?;
+    Ok(SearchFacetsResponse { mime_types, tags })
 }
