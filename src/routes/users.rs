@@ -67,20 +67,14 @@ fn validate_account_fields(
 
 /// Map a failed user insert/update to the REST error. A username or email clash is recognised
 /// by SQLSTATE 23505 and the name of the unique constraint it hit, not by the error text.
-fn map_user_write_error(
-    e: anyhow::Error,
-    id: Option<Uuid>,
-    username: &str,
-    email: &str,
-) -> UserError {
+/// Classify a failed user write. Only unique violations on the username and
+/// email constraints are client errors; everything else is a 500. A user that
+/// no longer exists is not an error here: `Database::update_user` reports it
+/// as `Ok(None)`.
+fn map_user_write_error(e: anyhow::Error, username: &str, email: &str) -> UserError {
     match violated_unique_constraint_in(&e) {
-        Some(USERS_USERNAME_UNIQUE) => return UserError::duplicate_username(username),
-        Some(USERS_EMAIL_UNIQUE) => return UserError::duplicate_email(email),
-        _ => {}
-    }
-    match id {
-        // `Database::update_user` reports a user deleted since the handler looked it up this way.
-        Some(id) if e.to_string().contains("not found") => UserError::not_found_by_id(id),
+        Some(USERS_USERNAME_UNIQUE) => UserError::duplicate_username(username),
+        Some(USERS_EMAIL_UNIQUE) => UserError::duplicate_email(email),
         _ => UserError::internal_server_error(format!("Failed to save user: {}", e)),
     }
 }
@@ -200,7 +194,7 @@ async fn create_user(
         .db
         .create_user(user_data)
         .await
-        .map_err(|e| map_user_write_error(e, None, &username, &email))?;
+        .map_err(|e| map_user_write_error(e, &username, &email))?;
 
     Ok(Json(user.into()))
 }
@@ -277,7 +271,9 @@ async fn update_user(
             update_data.is_active,
         )
         .await
-        .map_err(|e| map_user_write_error(e, Some(id), &username, &email))?;
+        .map_err(|e| map_user_write_error(e, &username, &email))?
+        // Deleted between the lookup above and the write.
+        .ok_or_else(|| UserError::not_found_by_id(id))?;
 
     Ok(Json(user.into()))
 }
@@ -313,14 +309,13 @@ async fn delete_user(
         ));
     }
 
-    state.db.delete_user(id).await.map_err(|e| {
-        let error_msg = e.to_string();
-        if error_msg.contains("not found") {
-            UserError::not_found_by_id(id)
-        } else {
-            UserError::internal_server_error(format!("Failed to delete user: {}", e))
-        }
-    })?;
+    // Deleting an account that does not exist is idempotent (204), as it
+    // always has been: `Database::delete_user` does not report missing rows.
+    state
+        .db
+        .delete_user(id)
+        .await
+        .map_err(|e| UserError::internal_server_error(format!("Failed to delete user: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -548,20 +543,17 @@ mod tests {
     use crate::db::unique_violation::fake::{db_error, unique_violation};
     use crate::errors::AppError;
 
-    fn map(error: sqlx::Error, id: Option<Uuid>) -> UserError {
-        map_user_write_error(anyhow::Error::from(error), id, "alice", "alice@example.com")
+    fn map(error: sqlx::Error) -> UserError {
+        map_user_write_error(anyhow::Error::from(error), "alice", "alice@example.com")
     }
 
     #[test]
     fn username_clash_is_classified_by_constraint_not_text() {
         // No "username" or "unique" anywhere in the message: a German-locale server.
-        let err = map(
-            unique_violation(
-                "doppelter Schlüsselwert verletzt »users_username_key«",
-                USERS_USERNAME_UNIQUE,
-            ),
-            None,
-        );
+        let err = map(unique_violation(
+            "doppelter Schlüsselwert verletzt »users_username_key«",
+            USERS_USERNAME_UNIQUE,
+        ));
         assert!(
             matches!(err, UserError::DuplicateUsername { ref username } if username == "alice")
         );
@@ -572,10 +564,10 @@ mod tests {
 
     #[test]
     fn email_clash_is_classified_by_constraint_not_text() {
-        let err = map(
-            unique_violation("Schlüssel existiert bereits", USERS_EMAIL_UNIQUE),
-            Some(Uuid::new_v4()),
-        );
+        let err = map(unique_violation(
+            "Schlüssel existiert bereits",
+            USERS_EMAIL_UNIQUE,
+        ));
         assert!(
             matches!(err, UserError::DuplicateEmail { ref email } if email == "alice@example.com")
         );
@@ -588,29 +580,22 @@ mod tests {
     fn matching_text_without_the_structured_fields_is_not_a_clash() {
         // The old substring match would have called each of these a duplicate.
         let text = "duplicate key value violates unique constraint \"users_username_key\" (email)";
-        let not_unique = map(
-            db_error(text, Some("23503"), Some(USERS_USERNAME_UNIQUE)),
-            None,
-        );
+        let not_unique = map(db_error(text, Some("23503"), Some(USERS_USERNAME_UNIQUE)));
         assert!(matches!(not_unique, UserError::InternalServerError { .. }));
-        let other_constraint = map(unique_violation(text, "some_other_key"), None);
+        let other_constraint = map(unique_violation(text, "some_other_key"));
         assert!(matches!(
             other_constraint,
             UserError::InternalServerError { .. }
         ));
-        let plain = map_user_write_error(anyhow::anyhow!(text), None, "alice", "a@example.com");
+        let plain = map_user_write_error(anyhow::anyhow!(text), "alice", "a@example.com");
         assert!(matches!(plain, UserError::InternalServerError { .. }));
     }
 
     #[test]
-    fn user_gone_during_update_is_not_found() {
-        let id = Uuid::new_v4();
-        let err = map_user_write_error(
-            anyhow::anyhow!("User not found"),
-            Some(id),
-            "a",
-            "a@example.com",
-        );
-        assert!(matches!(err, UserError::NotFoundById { id: got } if got == id));
+    fn not_found_text_is_not_classified_as_not_found() {
+        // "User gone" is a typed signal (`update_user` returns `Ok(None)`);
+        // an error that merely says so is an ordinary failure.
+        let err = map_user_write_error(anyhow::anyhow!("User not found"), "a", "a@example.com");
+        assert!(matches!(err, UserError::InternalServerError { .. }));
     }
 }

@@ -230,14 +230,19 @@ async fn rest_update_to_taken_username_or_email_is_409_with_the_same_body() -> R
     Ok(())
 }
 
-fn ingest_request(user_id: Uuid, name: &str, data: &[u8]) -> DocumentIngestionRequest {
+fn ingest_request(
+    user_id: Uuid,
+    name: &str,
+    data: &[u8],
+    policy: DeduplicationPolicy,
+) -> DocumentIngestionRequest {
     DocumentIngestionRequest {
         filename: name.to_string(),
         original_filename: name.to_string(),
         file_data: data.to_vec(),
         mime_type: "text/plain".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::ReturnExisting,
+        deduplication_policy: policy,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -250,97 +255,212 @@ fn ingest_request(user_id: Uuid, name: &str, data: &[u8]) -> DocumentIngestionRe
     }
 }
 
-/// The concurrent-upload race, forced deterministically: another transaction holds an
-/// uncommitted row with the same user and hash, so ingestion's duplicate lookup misses it and its
-/// insert blocks on the unique index. Once the other transaction commits, the insert fails with a
-/// unique violation on `idx_documents_user_file_hash`, which ingestion must turn into the
-/// committed document (and remove the file it had already stored), not an error.
-#[tokio::test]
-async fn concurrent_duplicate_upload_returns_the_winning_document() -> Result<()> {
-    let dir = tempfile::tempdir()?;
-    let ctx = TestContext::with_config(
-        TestConfigBuilder::default().with_upload_path(dir.path().to_str().unwrap()),
-    )
-    .await;
-    let state = ctx.state();
-    let user = state.db.create_user(new_user("uv_race")).await?;
-    let data = b"content uploaded twice at the same moment";
-    let hash = readur::utils::hash::to_hex(&<sha2::Sha256 as sha2::Digest>::digest(data));
+/// A policy-independent view of an ingestion outcome, so the race and non-race paths can be
+/// compared for equality.
+fn outcome_summary(result: &IngestionResult) -> (&'static str, Uuid, Option<String>) {
+    match result {
+        IngestionResult::Created(doc) => ("created", doc.id, None),
+        IngestionResult::ExistingDocument(doc) => ("existing", doc.id, None),
+        IngestionResult::Skipped {
+            existing_document_id,
+            reason,
+        } => ("skipped", *existing_document_id, Some(reason.clone())),
+        IngestionResult::TrackedAsDuplicate {
+            existing_document_id,
+        } => ("tracked", *existing_document_id, None),
+    }
+}
 
+/// Insert a document with `data`'s hash for `user_id` in a transaction that is left open: the
+/// row is invisible to other transactions, but its unique-index entry blocks a competing insert.
+async fn uncommitted_winner(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    data: &[u8],
+) -> Result<(Uuid, sqlx::Transaction<'static, sqlx::Postgres>)> {
+    let hash = readur::utils::hash::to_hex(&<sha2::Sha256 as sha2::Digest>::digest(data));
     let winner_id = Uuid::new_v4();
-    let mut winner = state.db.pool.begin().await?;
+    let mut winner = pool.begin().await?;
     sqlx::query(
         "INSERT INTO documents (id, filename, original_filename, file_path, file_size, mime_type, user_id, file_hash)
          VALUES ($1, 'winner.txt', 'winner.txt', '/elsewhere/winner.txt', $2, 'text/plain', $3, $4)",
     )
     .bind(winner_id)
     .bind(data.len() as i64)
-    .bind(user.id)
+    .bind(user_id)
     .bind(&hash)
     .execute(&mut *winner)
     .await?;
+    Ok((winner_id, winner))
+}
 
-    let service = DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
-    let pool = state.db.pool.clone();
-    let commit_once_blocked = async move {
-        // Wait until ingestion's INSERT is parked on the winner's index entry, then commit.
-        for _ in 0..200 {
-            let (waiting,): (i64,) = sqlx::query_as(
-                "SELECT count(*) FROM pg_stat_activity
-                 WHERE datname = current_database() AND wait_event_type = 'Lock'
-                   AND query LIKE '%INSERT INTO documents%'",
-            )
-            .fetch_one(&pool)
-            .await?;
-            if waiting > 0 {
-                winner.commit().await?;
-                return Ok::<bool, anyhow::Error>(true);
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-        winner.commit().await?;
-        Ok(false)
-    };
-
-    let (outcome, blocked) = tokio::join!(
-        service.ingest_document(ingest_request(user.id, "loser.txt", data)),
-        commit_once_blocked
-    );
-    assert!(
-        blocked?,
-        "ingestion's insert never waited on the uncommitted duplicate"
-    );
-
-    match outcome.map_err(|e| anyhow::anyhow!("{e}"))? {
-        IngestionResult::ExistingDocument(doc) => assert_eq!(doc.id, winner_id),
-        other => panic!("expected ExistingDocument(winner), got {other:?}"),
-    }
-
-    let (rows,): (i64,) = sqlx::query_as("SELECT count(*) FROM documents WHERE user_id = $1")
-        .bind(user.id)
-        .fetch_one(&state.db.pool)
+/// Commit `winner` as soon as an `INSERT INTO documents` is parked on its index entry; returns
+/// whether that wait was observed (if not, the race was not exercised).
+async fn commit_once_blocked(
+    pool: sqlx::PgPool,
+    winner: sqlx::Transaction<'static, sqlx::Postgres>,
+) -> Result<bool> {
+    for _ in 0..200 {
+        let (waiting,): (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM pg_stat_activity
+             WHERE datname = current_database() AND wait_event_type = 'Lock'
+               AND query LIKE '%INSERT INTO documents%'",
+        )
+        .fetch_one(&pool)
         .await?;
-    assert_eq!(rows, 1, "only the winner's row exists");
-    let (failed,): (i64,) =
-        sqlx::query_as("SELECT count(*) FROM failed_documents WHERE user_id = $1")
-            .bind(user.id)
-            .fetch_one(&state.db.pool)
-            .await?;
-    assert_eq!(
-        failed, 0,
-        "a lost race is not recorded as a failed ingestion"
-    );
-    let stored: Vec<_> = std::fs::read_dir(dir.path().join("documents"))
+        if waiting > 0 {
+            winner.commit().await?;
+            return Ok(true);
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    winner.commit().await?;
+    Ok(false)
+}
+
+fn stored_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir.join("documents"))
         .map(|entries| {
             entries
                 .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
+                .map(|e| e.path())
+                .filter(|p| p.is_file())
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// The concurrent-upload race, forced deterministically for every deduplication policy: another
+/// transaction holds an uncommitted row with the same user and hash, so ingestion's duplicate
+/// lookup misses it and its insert blocks on the unique index. Once the other transaction
+/// commits, the insert fails with a unique violation on `idx_documents_user_file_hash`. Ingestion
+/// must report the committed document exactly as the up-front duplicate check would have for the
+/// requested policy (and remove the file it had already stored), not an error and not a fixed
+/// `ExistingDocument`.
+#[tokio::test]
+async fn concurrent_duplicate_upload_honours_the_policy_like_the_non_race_path() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(dir.path().to_str().unwrap()),
+    )
+    .await;
+    let state = ctx.state();
+    let service = DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
+    let data = b"content uploaded twice at the same moment";
+
+    for (policy, expected_kind) in [
+        (DeduplicationPolicy::Skip, "skipped"),
+        (DeduplicationPolicy::ReturnExisting, "existing"),
+        (DeduplicationPolicy::TrackAsDuplicate, "tracked"),
+    ] {
+        let user = state.db.create_user(new_user("uv_race")).await?;
+        let (winner_id, winner) = uncommitted_winner(&state.db.pool, user.id, data).await?;
+
+        let (outcome, blocked) = tokio::join!(
+            service.ingest_document(ingest_request(user.id, "loser.txt", data, policy.clone())),
+            commit_once_blocked(state.db.pool.clone(), winner)
+        );
+        assert!(
+            blocked?,
+            "{policy:?}: ingestion's insert never waited on the uncommitted duplicate"
+        );
+        let raced = outcome.map_err(|e| anyhow::anyhow!("{policy:?}: {e}"))?;
+        let raced = outcome_summary(&raced);
+        assert_eq!(raced.0, expected_kind, "{policy:?}: {raced:?}");
+        assert_eq!(
+            raced.1, winner_id,
+            "{policy:?}: reports the committed document"
+        );
+
+        // The same request without a race goes through the up-front check: identical outcome.
+        let direct = service
+            .ingest_document(ingest_request(user.id, "loser.txt", data, policy.clone()))
+            .await
+            .map_err(|e| anyhow::anyhow!("{policy:?}: {e}"))?;
+        assert_eq!(
+            outcome_summary(&direct),
+            raced,
+            "{policy:?}: race and non-race paths report the same outcome"
+        );
+
+        let (rows,): (i64,) = sqlx::query_as("SELECT count(*) FROM documents WHERE user_id = $1")
+            .bind(user.id)
+            .fetch_one(&state.db.pool)
+            .await?;
+        assert_eq!(rows, 1, "{policy:?}: only the winner's row exists");
+        let (failed,): (i64,) =
+            sqlx::query_as("SELECT count(*) FROM failed_documents WHERE user_id = $1")
+                .bind(user.id)
+                .fetch_one(&state.db.pool)
+                .await?;
+        assert_eq!(
+            failed, 0,
+            "{policy:?}: a lost race is not recorded as a failed ingestion"
+        );
+        let stored = stored_files(dir.path());
+        assert!(
+            stored.is_empty(),
+            "{policy:?}: the loser's stored file is removed: {stored:?}"
+        );
+    }
+    Ok(())
+}
+
+/// The REST upload pipeline (`services::documents::upload_document`, `Skip`) answers a duplicate
+/// with the same 409 whether the duplicate was found up front or by losing the insert race.
+#[tokio::test]
+async fn rest_upload_conflict_is_identical_with_and_without_the_race() -> Result<()> {
+    use axum::response::IntoResponse;
+    use readur::routes::documents::DocumentError;
+    use readur::services::documents::{upload_document, UploadRequest};
+
+    let dir = tempfile::tempdir()?;
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(dir.path().to_str().unwrap()),
+    )
+    .await;
+    let state = ctx.state();
+    let user = state.db.create_user(new_user("uv_race_rest")).await?;
+    let data = b"uploaded through REST while another upload commits";
+    let upload = || UploadRequest {
+        filename: "loser.txt".to_string(),
+        mime_type: "text/plain".to_string(),
+        data: data.to_vec(),
+        ocr_languages: Vec::new(),
+        ocr_language: None,
+        label_ids: Vec::new(),
+    };
+
+    let (winner_id, winner) = uncommitted_winner(&state.db.pool, user.id, data).await?;
+    let (raced, blocked) = tokio::join!(
+        upload_document(state, &user, upload()),
+        commit_once_blocked(state.db.pool.clone(), winner)
+    );
     assert!(
-        stored.is_empty(),
-        "the loser's stored file is removed: {stored:?}"
+        blocked?,
+        "the upload's insert never waited on the uncommitted duplicate"
+    );
+    let raced = raced.err().expect("a raced duplicate upload is rejected");
+    let direct = upload_document(state, &user, upload())
+        .await
+        .err()
+        .expect("a duplicate upload is rejected");
+
+    let (DocumentError::Conflict(raced_msg), DocumentError::Conflict(direct_msg)) =
+        (&raced, &direct)
+    else {
+        panic!("expected two conflicts, got {raced:?} and {direct:?}");
+    };
+    assert_eq!(
+        raced_msg, direct_msg,
+        "same message whether or not the race happened"
+    );
+    assert!(raced_msg.contains(&winner_id.to_string()), "{raced_msg}");
+    assert_eq!(raced.into_response().status(), StatusCode::CONFLICT);
+    assert_eq!(direct.into_response().status(), StatusCode::CONFLICT);
+    assert!(
+        stored_files(dir.path()).is_empty(),
+        "no file outlives the rejected uploads"
     );
     Ok(())
 }
