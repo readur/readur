@@ -285,9 +285,7 @@ Image preprocessing options help with documents that aren't perfectly scanned. E
 
 ### Configuring Search Behavior
 
-Search settings affect how results appear and behave. Adjust the number of results per page based on your screen size and browsing preferences. The default sort order determines how search results are organized - by relevance, date, or other criteria that match how you typically look for documents.
-
-Snippet length controls how much text appears in search previews. The fuzzy search threshold (0.0 to 1.0, default 0.5) is how closely a word must be spelled like the query for Similar spelling mode to match it: higher accepts fewer spelling mistakes, 1.0 only the exact spelling, and lower values tolerate more but below about 0.3 start matching unrelated long documents (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
+The search page sets the number of results per page, the sort order and the snippet length for each search. The one saved search setting is the fuzzy search threshold (0.0 to 1.0, default 0.5) is how closely a word must be spelled like the query for Similar spelling mode to match it: higher accepts fewer spelling mistakes, 1.0 only the exact spelling, and lower values tolerate more but below about 0.3 start matching unrelated long documents (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
 
 ## API Keys
 

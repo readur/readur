@@ -1,14 +1,10 @@
-use axum::{
-    extract::DefaultBodyLimit,
-    routing::get,
-    Router,
-};
+use anyhow;
+use axum::{extract::DefaultBodyLimit, routing::get, Router};
+use clap::{Parser, Subcommand};
+use sqlx::Column;
 use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::{info, error, warn};
-use anyhow;
-use sqlx::Column;
-use clap::{Parser, Subcommand};
+use tracing::{error, info, warn};
 
 use readur::{config::Config, db::Database, AppState, *};
 
@@ -40,9 +36,9 @@ enum Commands {
 /// Checks multiple possible locations in order of preference
 fn determine_static_files_path() -> std::path::PathBuf {
     use std::path::PathBuf;
-    
+
     let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    
+
     // List of possible static file locations in order of preference
     let possible_paths = vec![
         // Docker/production environment - frontend build copied to /app/frontend/dist
@@ -56,18 +52,21 @@ fn determine_static_files_path() -> std::path::PathBuf {
         // Last resort fallback
         PathBuf::from("dist"),
     ];
-    
+
     for path in possible_paths {
         let index_path = path.join("index.html");
         if index_path.exists() && index_path.is_file() {
             info!("Found static files at: {}", path.display());
             return path;
         } else {
-            info!("Static files not found at: {} (index.html exists: {})", 
-                path.display(), index_path.exists());
+            info!(
+                "Static files not found at: {} (index.html exists: {})",
+                path.display(),
+                index_path.exists()
+            );
         }
     }
-    
+
     // If no valid path found, default to frontend/dist and let it fail gracefully
     warn!("No valid static files directory found, defaulting to 'frontend/dist'");
     PathBuf::from("frontend/dist")
@@ -75,6 +74,9 @@ fn determine_static_files_path() -> std::path::PathBuf {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // readur_uptime_seconds counts from here
+    readur::monitoring::process::mark_process_start();
+
     // Parse CLI arguments
     let cli = Cli::parse();
 
@@ -83,18 +85,15 @@ async fn main() -> anyhow::Result<()> {
     // RUST_LOG=debug cargo run                                          (enable debug for all)
     // RUST_LOG=readur=debug,pdf_extract=error,sqlx::postgres::notice=off (debug for readur, suppress spam)
     // RUST_LOG=sqlx::postgres::notice=debug                             (show PostgreSQL notices for debugging)
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            // Default filter when RUST_LOG is not set
-            tracing_subscriber::EnvFilter::new("info")
-                .add_directive("pdf_extract=error".parse().unwrap())           // Suppress pdf_extract WARN spam
-                .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam
-                .add_directive("readur=info".parse().unwrap())                 // Keep our app logs at info
-        });
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // Default filter when RUST_LOG is not set
+        tracing_subscriber::EnvFilter::new("info")
+            .add_directive("pdf_extract=error".parse().unwrap()) // Suppress pdf_extract WARN spam
+            .add_directive("sqlx::postgres::notice=warn".parse().unwrap()) // Suppress PostgreSQL NOTICE spam
+            .add_directive("readur=info".parse().unwrap()) // Keep our app logs at info
+    });
 
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Handle CLI commands
     match cli.command {
@@ -125,10 +124,10 @@ async fn main() -> anyhow::Result<()> {
             // Continue with normal server startup below
         }
     }
-    
+
     println!("\n🚀 READUR APPLICATION STARTUP");
     println!("{}", "=".repeat(60));
-    
+
     // Load and validate configuration with comprehensive logging
     let mut config = match Config::from_env() {
         Ok(cfg) => {
@@ -142,7 +141,7 @@ async fn main() -> anyhow::Result<()> {
             return Err(e);
         }
     };
-    
+
     // Log critical configuration values that affect startup
     println!("\n🔗 STARTUP CONFIGURATION:");
     println!("{}", "=".repeat(50));
@@ -150,31 +149,47 @@ async fn main() -> anyhow::Result<()> {
     println!("🗄️  Database: configured");
     println!("📁 Upload directory: {}", config.upload_path);
     println!("👁️  Watch directory: {}", config.watch_folder);
-    
+
     // Initialize file service using the new storage backend architecture with fallback
     info!("Initializing file service with storage backend...");
     let storage_config = readur::storage::factory::storage_config_from_env(&config)?;
-    let file_service = match readur::services::file_service::FileService::from_config(storage_config, config.upload_path.clone()).await {
+    let file_service = match readur::services::file_service::FileService::from_config(
+        storage_config,
+        config.upload_path.clone(),
+    )
+    .await
+    {
         Ok(service) => {
-            info!("✅ File service initialized with {} storage backend", service.storage_type());
+            info!(
+                "✅ File service initialized with {} storage backend",
+                service.storage_type()
+            );
             service
         }
         Err(e) => {
             error!("❌ Failed to initialize configured storage backend: {}", e);
             warn!("🔄 Falling back to local storage...");
-            
+
             // Create fallback local storage configuration
             let fallback_config = readur::storage::StorageConfig::Local {
                 upload_path: config.upload_path.clone(),
             };
-            
-            match readur::services::file_service::FileService::from_config(fallback_config, config.upload_path.clone()).await {
+
+            match readur::services::file_service::FileService::from_config(
+                fallback_config,
+                config.upload_path.clone(),
+            )
+            .await
+            {
                 Ok(fallback_service) => {
                     warn!("✅ Successfully initialized fallback local storage");
                     fallback_service
                 }
                 Err(fallback_err) => {
-                    error!("💥 CRITICAL: Even fallback local storage failed to initialize: {}", fallback_err);
+                    error!(
+                        "💥 CRITICAL: Even fallback local storage failed to initialize: {}",
+                        fallback_err
+                    );
                     return Err(fallback_err.into());
                 }
             }
@@ -187,21 +202,21 @@ async fn main() -> anyhow::Result<()> {
         return Err(e.into());
     }
     info!("✅ Storage backend initialized successfully");
-    
+
     // Wrap file service in Arc for sharing across application state
     let file_service = std::sync::Arc::new(file_service);
-    
+
     // Migrate existing files to new structure (one-time operation)
     info!("Migrating existing files to structured directories...");
     if let Err(e) = file_service.migrate_existing_files().await {
         warn!("Failed to migrate some existing files: {}", e);
         // Don't fail startup for migration issues
     }
-    
+
     // Create separate database pools for different workloads
     println!("\n🗄️  DATABASE CONNECTION:");
     println!("{}", "=".repeat(50));
-    
+
     let web_db = match Database::new_with_pool_config(&config.database_url, 20, 2).await {
         Ok(db) => {
             println!("✅ Web database pool created (max: 20 connections, min idle: 2)");
@@ -218,7 +233,7 @@ async fn main() -> anyhow::Result<()> {
             return Err(e.into());
         }
     };
-    
+
     let background_db = match Database::new_with_pool_config(&config.database_url, 30, 3).await {
         Ok(db) => {
             println!("✅ Background database pool created (max: 30 connections, min idle: 3)");
@@ -231,63 +246,78 @@ async fn main() -> anyhow::Result<()> {
             return Err(e.into());
         }
     };
-    
+
     // Don't run the old migration system - let SQLx handle everything
     // db.migrate().await?;
-    
+
     // Run SQLx migrations
     info!("Running SQLx migrations...");
     let migrations = sqlx::migrate!("./migrations");
     let total_migrations = migrations.migrations.len();
-    
+
     if total_migrations > 0 {
         // Verify migrations are in correct chronological order
         let mut is_ordered = true;
         let mut prev_version = 0i64;
-        
+
         for migration in migrations.migrations.iter() {
             if migration.version <= prev_version {
-                error!("❌ Migration {} is out of order (previous: {})", migration.version, prev_version);
+                error!(
+                    "❌ Migration {} is out of order (previous: {})",
+                    migration.version, prev_version
+                );
                 is_ordered = false;
             }
             prev_version = migration.version;
         }
-        
+
         if is_ordered {
-            info!("✅ {} migrations found in correct chronological order", total_migrations);
+            info!(
+                "✅ {} migrations found in correct chronological order",
+                total_migrations
+            );
         } else {
             error!("❌ Migrations are not in chronological order - this may cause issues");
         }
-        
+
         // Log first and last migration for reference
         let first_migration = &migrations.migrations[0];
         let last_migration = &migrations.migrations[total_migrations - 1];
-        
-        info!("Migration range: {} ({}) → {} ({})", 
-              first_migration.version, first_migration.description,
-              last_migration.version, last_migration.description);
+
+        info!(
+            "Migration range: {} ({}) → {} ({})",
+            first_migration.version,
+            first_migration.description,
+            last_migration.version,
+            last_migration.description
+        );
     } else {
         info!("No migrations found");
     }
-    
+
     // Enhanced migration execution with detailed logging
     info!("🔄 Starting migration execution...");
-    
+
     // Check current database migration state
-    let applied_migrations = sqlx::query_scalar::<_, i64>(
-        "SELECT version FROM _sqlx_migrations ORDER BY version"
-    )
-    .fetch_all(web_db.get_pool())
-    .await
-    .unwrap_or_default();
-    
+    let applied_migrations =
+        sqlx::query_scalar::<_, i64>("SELECT version FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(web_db.get_pool())
+            .await
+            .unwrap_or_default();
+
     if !applied_migrations.is_empty() {
-        info!("📋 {} migrations already applied in database", applied_migrations.len());
-        info!("📋 Latest applied migration: {}", applied_migrations.last().unwrap_or(&0));
+        info!(
+            "📋 {} migrations already applied in database",
+            applied_migrations.len()
+        );
+        info!(
+            "📋 Latest applied migration: {}",
+            applied_migrations.last().unwrap_or(&0)
+        );
     } else {
         info!("📋 No migrations previously applied - fresh database");
     }
-    
+
     // List all migrations that will be processed
     info!("📝 Migrations to process:");
     for (i, migration) in migrations.migrations.iter().enumerate() {
@@ -296,53 +326,61 @@ async fn main() -> anyhow::Result<()> {
         } else {
             "⏳ PENDING"
         };
-        info!("  {}: {} ({}) [{}]", 
-              i + 1, migration.version, migration.description, status);
+        info!(
+            "  {}: {} ({}) [{}]",
+            i + 1,
+            migration.version,
+            migration.description,
+            status
+        );
     }
-    
+
     let result = migrations.run(web_db.get_pool()).await;
     match result {
         Ok(_) => {
             info!("✅ SQLx migrations completed successfully");
-            
+
             // Verify final migration state
             let final_applied = sqlx::query_scalar::<_, i64>(
-                "SELECT version FROM _sqlx_migrations ORDER BY version"
+                "SELECT version FROM _sqlx_migrations ORDER BY version",
             )
             .fetch_all(web_db.get_pool())
             .await
             .unwrap_or_default();
-            
-            info!("📊 Final migration state: {} total applied", final_applied.len());
+
+            info!(
+                "📊 Final migration state: {} total applied",
+                final_applied.len()
+            );
             if let Some(latest) = final_applied.last() {
                 info!("📊 Latest migration now: {}", latest);
             }
-            
         }
         Err(e) => {
             error!("❌ CRITICAL: SQLx migrations failed!");
             error!("Migration error: {}", e);
-            
+
             // Get detailed error information
             error!("🔍 Migration failure details:");
             error!("  Error type: {}", std::any::type_name_of_val(&e));
             error!("  Error message: {}", e);
-            
+
             // Try to get the current migration state even after failure
             match sqlx::query_scalar::<_, i64>(
-                "SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1"
+                "SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1",
             )
             .fetch_optional(web_db.get_pool())
-            .await {
+            .await
+            {
                 Ok(Some(latest)) => error!("  Last successful migration: {}", latest),
                 Ok(None) => error!("  No migrations were applied successfully"),
                 Err(table_err) => error!("  Could not read migration table: {}", table_err),
             }
-            
+
             return Err(e.into());
         }
     }
-    
+
     // Sign sessions with JWT_SECRET, or with the key stored in the database.
     let origin = if config.jwt_secret.is_empty() {
         let (stored, origin) = readur::jwt_signing_key::load_or_generate(&web_db).await?;
@@ -355,31 +393,37 @@ async fn main() -> anyhow::Result<()> {
 
     // Seed admin user
     seed::seed_admin_user(&background_db, &config.upload_path).await?;
-    
+
     // Reset any running WebDAV syncs from previous server instance using background DB
     match background_db.reset_running_webdav_syncs().await {
         Ok(count) => {
             if count > 0 {
-                info!("Reset {} orphaned WebDAV sync states from server restart", count);
+                info!(
+                    "Reset {} orphaned WebDAV sync states from server restart",
+                    count
+                );
             }
         }
         Err(e) => {
             warn!("Failed to reset running WebDAV syncs: {}", e);
         }
     }
-    
+
     // Reset any running universal source syncs from previous server instance
     match background_db.reset_running_source_syncs().await {
         Ok(count) => {
             if count > 0 {
-                info!("Reset {} orphaned source sync states from server restart", count);
+                info!(
+                    "Reset {} orphaned source sync states from server restart",
+                    count
+                );
             }
         }
         Err(e) => {
             warn!("Failed to reset running source syncs: {}", e);
         }
     }
-    
+
     // Create shared OCR queue service for both web and background operations
     // OcrQueueService clamps this to protect the DB pool.
     let concurrent_jobs = config.concurrent_ocr_jobs;
@@ -392,7 +436,7 @@ async fn main() -> anyhow::Result<()> {
         config.max_office_document_size_mb,
         config.ocr_timeout_seconds,
     ));
-    
+
     // Initialize OIDC client if enabled
     let oidc_client = if config.oidc_enabled {
         match readur::oidc::OidcClient::new(&config).await {
@@ -410,24 +454,24 @@ async fn main() -> anyhow::Result<()> {
         println!("ℹ️  OIDC authentication is disabled");
         None
     };
-    
+
     // Create shared progress tracker
-    let sync_progress_tracker = Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
-    
+    let sync_progress_tracker =
+        Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new());
+
     // Initialize user watch service if per-user watch is enabled
     let user_watch_service = if config.enable_per_user_watch {
-        let service = readur::services::user_watch_service::UserWatchService::new(&config.user_watch_base_dir);
-        println!("✅ User watch service initialized: {}", config.user_watch_base_dir);
+        let service = readur::services::user_watch_service::UserWatchService::new(
+            &config.user_watch_base_dir,
+        );
+        println!(
+            "✅ User watch service initialized: {}",
+            config.user_watch_base_dir
+        );
         Some(Arc::new(service))
     } else {
         println!("ℹ️  Per-user watch directories are disabled");
         None
-    };
-    
-    // Create simplified WebDAV metrics collector
-    let webdav_metrics_collector = {
-        let metrics = std::sync::Arc::new(crate::services::webdav_metrics_simple::WebDAVMetrics::new());
-        Some(std::sync::Arc::new(crate::services::webdav_metrics_integration::WebDAVMetricsCollector::new(metrics)))
     };
 
     // Create web-facing state with shared queue service
@@ -442,11 +486,10 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
-        webdav_metrics_collector: webdav_metrics_collector.clone(),
         rate_limiters: rate_limiters.clone(),
     };
     let web_state = Arc::new(web_state);
-    
+
     // Create background state with shared queue service
     let background_state = AppState {
         db: background_db,
@@ -458,41 +501,46 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
-        webdav_metrics_collector: webdav_metrics_collector.clone(),
         rate_limiters: rate_limiters.clone(),
     };
     let background_state = Arc::new(background_state);
-    
+
     let watcher_config = config.clone();
     let watcher_db = background_state.db.clone();
     let watcher_file_service = background_state.file_service.clone();
     tokio::spawn(async move {
-        if let Err(e) = readur::scheduling::watcher::start_folder_watcher(watcher_config, watcher_db, watcher_file_service).await {
+        if let Err(e) = readur::scheduling::watcher::start_folder_watcher(
+            watcher_config,
+            watcher_db,
+            watcher_file_service,
+        )
+        .await
+        {
             error!("Folder watcher error: {}", e);
         }
     });
-    
+
     // Create dedicated runtime for OCR processing to prevent interference with WebDAV
     let ocr_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(3)  // Dedicated threads for OCR work
+        .worker_threads(3) // Dedicated threads for OCR work
         .thread_name("readur-ocr")
         .enable_all()
         .build()?;
-    
+
     // Create separate runtime for other background tasks (WebDAV, maintenance)
     let background_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Dedicated threads for WebDAV and maintenance
+        .worker_threads(2) // Dedicated threads for WebDAV and maintenance
         .thread_name("readur-background")
         .enable_all()
         .build()?;
-        
+
     // Create dedicated runtime for database-heavy operations
     let db_runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)  // Dedicated threads for intensive DB operations
+        .worker_threads(2) // Dedicated threads for intensive DB operations
         .thread_name("readur-db")
         .enable_all()
         .build()?;
-    
+
     // Start OCR queue worker on dedicated OCR runtime using shared queue service
     let queue_worker = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
@@ -503,37 +551,41 @@ async fn main() -> anyhow::Result<()> {
             info!("✅ OCR queue worker started successfully");
         }
     });
-    
+
     // Start OCR maintenance tasks on dedicated OCR runtime
     let queue_maintenance = shared_queue_service.clone();
     ocr_runtime.spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // Every 5 minutes
         loop {
             interval.tick().await;
-            
+
             // Recover stale items (older than 10 minutes)
             if let Err(e) = queue_maintenance.recover_stale_items(10).await {
                 error!("Error recovering stale items: {}", e);
             }
-            
+
             // Clean up old completed items (older than 7 days)
             if let Err(e) = queue_maintenance.cleanup_completed(7).await {
                 error!("Error cleaning up completed items: {}", e);
             }
         }
     });
-    
+
     // Create universal source scheduler with background state (handles WebDAV, Local, S3)
     println!("\n📅 SCHEDULER INITIALIZATION:");
     println!("{}", "=".repeat(50));
-    
-    let source_scheduler = Arc::new(readur::scheduling::source_scheduler::SourceScheduler::new(background_state.clone()));
+
+    let source_scheduler = Arc::new(readur::scheduling::source_scheduler::SourceScheduler::new(
+        background_state.clone(),
+    ));
     println!("✅ Universal source scheduler created (handles WebDAV, Local, S3)");
-    
+
     // Keep WebDAV scheduler for backward compatibility with existing WebDAV endpoints
-    let webdav_scheduler = Arc::new(readur::scheduling::webdav_scheduler::WebDAVScheduler::new(background_state.clone()));
+    let webdav_scheduler = Arc::new(readur::scheduling::webdav_scheduler::WebDAVScheduler::new(
+        background_state.clone(),
+    ));
     println!("✅ Legacy WebDAV scheduler created (backward compatibility)");
-    
+
     // Update the web state to include scheduler references
     let updated_web_state = AppState {
         db: web_state.db.clone(),
@@ -545,11 +597,10 @@ async fn main() -> anyhow::Result<()> {
         oidc_client: oidc_client.clone(),
         sync_progress_tracker: sync_progress_tracker.clone(),
         user_watch_service: user_watch_service.clone(),
-        webdav_metrics_collector: webdav_metrics_collector.clone(),
         rate_limiters: rate_limiters.clone(),
     };
     let web_state = Arc::new(updated_web_state);
-    
+
     // Start universal source scheduler on background runtime
     println!("⏰ Scheduling background source sync to start in 30 seconds");
     let scheduler_for_background = source_scheduler.clone();
@@ -560,14 +611,14 @@ async fn main() -> anyhow::Result<()> {
         info!("🔄 Universal source sync scheduler starting after startup delay - this will check for WebDAV sources!");
         scheduler_for_background.start().await;
     });
-    
+
     // Determine the correct static files path for SPA serving
     let static_dir = determine_static_files_path();
     let index_file = static_dir.join("index.html");
-    
+
     info!("Using static files directory: {}", static_dir.display());
     info!("Using index.html file: {}", index_file.display());
-    
+
     // Create the router with the updated state
     let mut app = readur::routes::api_router()
         .merge(readur::swagger::create_swagger_router())
@@ -575,9 +626,11 @@ async fn main() -> anyhow::Result<()> {
             ServeDir::new(&static_dir)
                 .precompressed_gzip()
                 .precompressed_br()
-                .fallback(ServeFile::new(&index_file))
+                .fallback(ServeFile::new(&index_file)),
         )
-        .layer(DefaultBodyLimit::max(config.max_file_size_mb as usize * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(
+            config.max_file_size_mb as usize * 1024 * 1024,
+        ))
         .layer(readur::http_security::cors_layer(&config))
         .with_state(web_state.clone());
     for layer in readur::http_security::security_header_layers(&config) {
@@ -586,23 +639,29 @@ async fn main() -> anyhow::Result<()> {
 
     println!("\n🌐 STARTING HTTP SERVER:");
     println!("{}", "=".repeat(50));
-    
+
     let listener = match tokio::net::TcpListener::bind(&config.server_address).await {
         Ok(listener) => {
             println!("✅ HTTP server bound to: {}", config.server_address);
             listener
         }
         Err(e) => {
-            println!("❌ CRITICAL: Failed to bind to address: {}", config.server_address);
+            println!(
+                "❌ CRITICAL: Failed to bind to address: {}",
+                config.server_address
+            );
             println!("Error: {}", e);
             println!("\n🔧 Please check:");
-            println!("   - Address {} is not already in use", config.server_address);
+            println!(
+                "   - Address {} is not already in use",
+                config.server_address
+            );
             println!("   - SERVER_HOST and SERVER_PORT environment variables are correct");
             println!("   - You have permission to bind to this address");
             return Err(e.into());
         }
     };
-    
+
     println!("\n🎉 READUR APPLICATION READY!");
     println!("{}", "=".repeat(60));
     println!("🌐 Server: http://{}", config.server_address);
@@ -611,7 +670,7 @@ async fn main() -> anyhow::Result<()> {
     println!("🔄 Source Scheduler: Will start in 30 seconds");
     println!("📋 Check logs above for any configuration warnings");
     println!("{}", "=".repeat(60));
-    
+
     info!("🚀 Readur server is now running and accepting connections");
 
     // Spawn periodic rate limiter cleanup (every 5 minutes)
@@ -629,8 +688,6 @@ async fn main() -> anyhow::Result<()> {
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await?;
-    
+
     Ok(())
 }
-
-

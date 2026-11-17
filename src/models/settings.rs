@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use uuid::Uuid;
-use utoipa::ToSchema;
 use ts_rs::TS;
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
 #[ts(export)]
@@ -13,25 +13,24 @@ pub struct Settings {
     pub ocr_language: String,
     pub preferred_languages: Vec<String>,
     pub primary_language: String,
-    pub auto_detect_language_combination: bool,
-    pub concurrent_ocr_jobs: i32,
+    /// Longest one of this user's documents may spend in OCR before the job
+    /// fails as timed out (see `crate::ocr::user_settings`).
     pub ocr_timeout_seconds: i32,
-    pub max_file_size_mb: i32,
-    pub allowed_file_types: Vec<String>,
+    /// Largest file this user may upload, in MB; `None` means the server's
+    /// `MAX_FILE_SIZE_MB`, which also caps any value set here (see
+    /// `crate::ocr::user_settings::max_upload_bytes`).
+    pub max_file_size_mb: Option<i32>,
     pub auto_rotate_images: bool,
     pub enable_image_preprocessing: bool,
-    pub search_results_per_page: i32,
-    pub search_snippet_length: i32,
     pub fuzzy_search_threshold: f32,
-    pub retention_days: Option<i32>,
-    pub enable_auto_cleanup: bool,
-    pub enable_compression: bool,
-    pub memory_limit_mb: i32,
-    pub cpu_priority: String,
+    /// Queue this user's uploads and synced files for OCR automatically.
     pub enable_background_ocr: bool,
+    /// Tesseract page segmentation mode (0-13), for images and scanned PDFs.
     pub ocr_page_segmentation_mode: i32,
+    /// Tesseract engine mode (0 legacy, 1 LSTM, 2 both, 3 default).
     pub ocr_engine_mode: i32,
     pub ocr_min_confidence: f32,
+    /// Resolution PDF pages are rendered at and images are assumed to have.
     pub ocr_dpi: i32,
     pub ocr_enhance_contrast: bool,
     pub ocr_remove_noise: bool,
@@ -62,9 +61,8 @@ pub struct Settings {
     pub webdav_file_extensions: Vec<String>,
     pub webdav_auto_sync: bool,
     pub webdav_sync_interval_minutes: i32,
-    // Office document extraction configuration
+    /// Longest an Office document extraction may take, in seconds.
     pub office_extraction_timeout_seconds: i32,
-    pub office_extraction_enable_detailed_logging: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -75,21 +73,12 @@ pub struct SettingsResponse {
     pub ocr_language: String,
     pub preferred_languages: Vec<String>,
     pub primary_language: String,
-    pub auto_detect_language_combination: bool,
-    pub concurrent_ocr_jobs: i32,
     pub ocr_timeout_seconds: i32,
-    pub max_file_size_mb: i32,
-    pub allowed_file_types: Vec<String>,
+    /// The user's upload limit in MB; null means the server's limit.
+    pub max_file_size_mb: Option<i32>,
     pub auto_rotate_images: bool,
     pub enable_image_preprocessing: bool,
-    pub search_results_per_page: i32,
-    pub search_snippet_length: i32,
     pub fuzzy_search_threshold: f32,
-    pub retention_days: Option<i32>,
-    pub enable_auto_cleanup: bool,
-    pub enable_compression: bool,
-    pub memory_limit_mb: i32,
-    pub cpu_priority: String,
     pub enable_background_ocr: bool,
     pub ocr_page_segmentation_mode: i32,
     pub ocr_engine_mode: i32,
@@ -127,30 +116,25 @@ pub struct SettingsResponse {
     pub webdav_sync_interval_minutes: i32,
     // Office document extraction configuration
     pub office_extraction_timeout_seconds: i32,
-    pub office_extraction_enable_detailed_logging: bool,
 }
 
-#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[derive(Default, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export, optional_fields)]
 pub struct UpdateSettings {
     pub ocr_language: Option<String>,
     pub preferred_languages: Option<Vec<String>>,
     pub primary_language: Option<String>,
-    pub auto_detect_language_combination: Option<bool>,
-    pub concurrent_ocr_jobs: Option<i32>,
     pub ocr_timeout_seconds: Option<i32>,
-    pub max_file_size_mb: Option<i32>,
-    pub allowed_file_types: Option<Vec<String>>,
+    /// `Some(None)` (JSON null) returns the user to the server's limit.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
+    pub max_file_size_mb: Option<Option<i32>>,
     pub auto_rotate_images: Option<bool>,
     pub enable_image_preprocessing: Option<bool>,
-    pub search_results_per_page: Option<i32>,
-    pub search_snippet_length: Option<i32>,
     pub fuzzy_search_threshold: Option<f32>,
-    pub retention_days: Option<Option<i32>>,
-    pub enable_auto_cleanup: Option<bool>,
-    pub enable_compression: Option<bool>,
-    pub memory_limit_mb: Option<i32>,
-    pub cpu_priority: Option<String>,
     pub enable_background_ocr: Option<bool>,
     pub ocr_page_segmentation_mode: Option<i32>,
     pub ocr_engine_mode: Option<i32>,
@@ -159,7 +143,17 @@ pub struct UpdateSettings {
     pub ocr_enhance_contrast: Option<bool>,
     pub ocr_remove_noise: Option<bool>,
     pub ocr_detect_orientation: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
     pub ocr_whitelist_chars: Option<Option<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
     pub ocr_blacklist_chars: Option<Option<String>>,
     pub ocr_brightness_boost: Option<f32>,
     pub ocr_contrast_multiplier: Option<f32>,
@@ -178,8 +172,23 @@ pub struct UpdateSettings {
     pub ocr_quality_threshold_sharpness: Option<f32>,
     pub ocr_skip_enhancement: Option<bool>,
     pub webdav_enabled: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
     pub webdav_server_url: Option<Option<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
     pub webdav_username: Option<Option<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "nullable"
+    )]
     pub webdav_password: Option<Option<String>>,
     pub webdav_watch_folders: Option<Vec<String>>,
     pub webdav_file_extensions: Option<Vec<String>>,
@@ -187,7 +196,17 @@ pub struct UpdateSettings {
     pub webdav_sync_interval_minutes: Option<i32>,
     // Office document extraction configuration
     pub office_extraction_timeout_seconds: Option<i32>,
-    pub office_extraction_enable_detailed_logging: Option<bool>,
+}
+
+/// Reads a field of [`UpdateSettings`] that can be cleared: JSON `null`
+/// becomes `Some(None)` (clear it), while a missing field stays `None`
+/// (leave it unchanged) through `#[serde(default)]`.
+fn nullable<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 impl std::fmt::Debug for Settings {
@@ -199,7 +218,10 @@ impl std::fmt::Debug for Settings {
             .field("webdav_enabled", &self.webdav_enabled)
             .field("webdav_server_url", &self.webdav_server_url)
             .field("webdav_username", &self.webdav_username)
-            .field("webdav_password", &self.webdav_password.as_ref().map(|_| "***"))
+            .field(
+                "webdav_password",
+                &self.webdav_password.as_ref().map(|_| "***"),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -211,7 +233,13 @@ impl std::fmt::Debug for UpdateSettings {
             .field("webdav_enabled", &self.webdav_enabled)
             .field("webdav_server_url", &self.webdav_server_url)
             .field("webdav_username", &self.webdav_username)
-            .field("webdav_password", &self.webdav_password.as_ref().map(|p| p.as_ref().map(|_| "***")))
+            .field(
+                "webdav_password",
+                &self
+                    .webdav_password
+                    .as_ref()
+                    .map(|p| p.as_ref().map(|_| "***")),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -222,21 +250,11 @@ impl From<Settings> for SettingsResponse {
             ocr_language: settings.ocr_language,
             preferred_languages: settings.preferred_languages,
             primary_language: settings.primary_language,
-            auto_detect_language_combination: settings.auto_detect_language_combination,
-            concurrent_ocr_jobs: settings.concurrent_ocr_jobs,
             ocr_timeout_seconds: settings.ocr_timeout_seconds,
             max_file_size_mb: settings.max_file_size_mb,
-            allowed_file_types: settings.allowed_file_types,
             auto_rotate_images: settings.auto_rotate_images,
             enable_image_preprocessing: settings.enable_image_preprocessing,
-            search_results_per_page: settings.search_results_per_page,
-            search_snippet_length: settings.search_snippet_length,
             fuzzy_search_threshold: settings.fuzzy_search_threshold,
-            retention_days: settings.retention_days,
-            enable_auto_cleanup: settings.enable_auto_cleanup,
-            enable_compression: settings.enable_compression,
-            memory_limit_mb: settings.memory_limit_mb,
-            cpu_priority: settings.cpu_priority,
             enable_background_ocr: settings.enable_background_ocr,
             ocr_page_segmentation_mode: settings.ocr_page_segmentation_mode,
             ocr_engine_mode: settings.ocr_engine_mode,
@@ -266,14 +284,16 @@ impl From<Settings> for SettingsResponse {
             webdav_enabled: settings.webdav_enabled,
             webdav_server_url: settings.webdav_server_url,
             webdav_username: settings.webdav_username,
-            has_webdav_password: settings.webdav_password.as_deref().is_some_and(|p| !p.is_empty()),
+            has_webdav_password: settings
+                .webdav_password
+                .as_deref()
+                .is_some_and(|p| !p.is_empty()),
             webdav_watch_folders: settings.webdav_watch_folders,
             webdav_file_extensions: settings.webdav_file_extensions,
             webdav_auto_sync: settings.webdav_auto_sync,
             webdav_sync_interval_minutes: settings.webdav_sync_interval_minutes,
             // Office document extraction configuration
             office_extraction_timeout_seconds: settings.office_extraction_timeout_seconds,
-            office_extraction_enable_detailed_logging: settings.office_extraction_enable_detailed_logging,
         }
     }
 }
@@ -289,58 +309,7 @@ impl UpdateSettings {
             preferred_languages: Some(preferred_languages),
             primary_language: Some(primary_language),
             ocr_language: Some(ocr_language),
-            auto_detect_language_combination: None,
-            concurrent_ocr_jobs: None,
-            ocr_timeout_seconds: None,
-            max_file_size_mb: None,
-            allowed_file_types: None,
-            auto_rotate_images: None,
-            enable_image_preprocessing: None,
-            search_results_per_page: None,
-            search_snippet_length: None,
-            fuzzy_search_threshold: None,
-            retention_days: None,
-            enable_auto_cleanup: None,
-            enable_compression: None,
-            memory_limit_mb: None,
-            cpu_priority: None,
-            enable_background_ocr: None,
-            ocr_page_segmentation_mode: None,
-            ocr_engine_mode: None,
-            ocr_min_confidence: None,
-            ocr_dpi: None,
-            ocr_enhance_contrast: None,
-            ocr_remove_noise: None,
-            ocr_detect_orientation: None,
-            ocr_whitelist_chars: None,
-            ocr_blacklist_chars: None,
-            ocr_brightness_boost: None,
-            ocr_contrast_multiplier: None,
-            ocr_noise_reduction_level: None,
-            ocr_sharpening_strength: None,
-            ocr_morphological_operations: None,
-            ocr_adaptive_threshold_window_size: None,
-            ocr_histogram_equalization: None,
-            ocr_upscale_factor: None,
-            ocr_max_image_width: None,
-            ocr_max_image_height: None,
-            save_processed_images: None,
-            ocr_quality_threshold_brightness: None,
-            ocr_quality_threshold_contrast: None,
-            ocr_quality_threshold_noise: None,
-            ocr_quality_threshold_sharpness: None,
-            ocr_skip_enhancement: None,
-            webdav_enabled: None,
-            webdav_server_url: None,
-            webdav_username: None,
-            webdav_password: None,
-            webdav_watch_folders: None,
-            webdav_file_extensions: None,
-            webdav_auto_sync: None,
-            webdav_sync_interval_minutes: None,
-            // Office document extraction configuration - don't update these in language update
-            office_extraction_timeout_seconds: None,
-            office_extraction_enable_detailed_logging: None,
+            ..Self::default()
         }
     }
 }
@@ -353,55 +322,37 @@ impl Default for Settings {
             ocr_language: "eng".to_string(),
             preferred_languages: vec!["eng".to_string()],
             primary_language: "eng".to_string(),
-            auto_detect_language_combination: false,
-            concurrent_ocr_jobs: 4,
             ocr_timeout_seconds: 300,
-            max_file_size_mb: 50,
-            allowed_file_types: vec![
-                "pdf".to_string(),
-                "png".to_string(),
-                "jpg".to_string(),
-                "jpeg".to_string(),
-                "tiff".to_string(),
-                "bmp".to_string(),
-                "txt".to_string(),
-            ],
+            max_file_size_mb: None, // the server's MAX_FILE_SIZE_MB
             auto_rotate_images: true,
             enable_image_preprocessing: false,
-            search_results_per_page: 25,
-            search_snippet_length: 200,
             fuzzy_search_threshold: crate::models::FuzzyThreshold::DEFAULT,
-            retention_days: None,
-            enable_auto_cleanup: false,
-            enable_compression: false,
-            memory_limit_mb: 512,
-            cpu_priority: "normal".to_string(),
             enable_background_ocr: true,
             ocr_page_segmentation_mode: 3, // PSM_AUTO_OSD - Fully automatic page segmentation, but no OSD
-            ocr_engine_mode: 3, // OEM_DEFAULT - Default, based on what is available
-            ocr_min_confidence: 30.0, // Minimum confidence threshold (0-100)
-            ocr_dpi: 300, // Optimal DPI for OCR
-            ocr_enhance_contrast: true, // Enable contrast enhancement
-            ocr_remove_noise: true, // Enable noise removal
-            ocr_detect_orientation: true, // Enable orientation detection
-            ocr_whitelist_chars: None, // No character whitelist by default
-            ocr_blacklist_chars: None, // No character blacklist by default
-            ocr_brightness_boost: 1.0, // Conservative brightness boost
-            ocr_contrast_multiplier: 1.2, // Conservative contrast enhancement
-            ocr_noise_reduction_level: 1, // Light noise reduction
-            ocr_sharpening_strength: 0.5, // Light sharpening
+            ocr_engine_mode: 3,            // OEM_DEFAULT - Default, based on what is available
+            ocr_min_confidence: 30.0,      // Minimum confidence threshold (0-100)
+            ocr_dpi: 300,                  // Optimal DPI for OCR
+            ocr_enhance_contrast: true,    // Enable contrast enhancement
+            ocr_remove_noise: true,        // Enable noise removal
+            ocr_detect_orientation: true,  // Enable orientation detection
+            ocr_whitelist_chars: None,     // No character whitelist by default
+            ocr_blacklist_chars: None,     // No character blacklist by default
+            ocr_brightness_boost: 1.0,     // Conservative brightness boost
+            ocr_contrast_multiplier: 1.2,  // Conservative contrast enhancement
+            ocr_noise_reduction_level: 1,  // Light noise reduction
+            ocr_sharpening_strength: 0.5,  // Light sharpening
             ocr_morphological_operations: false, // Conservative - no morphological ops by default
             ocr_adaptive_threshold_window_size: 15, // Small window for adaptive threshold
             ocr_histogram_equalization: false, // Conservative - no histogram equalization by default
-            ocr_upscale_factor: 1.0, // No upscaling by default
-            ocr_max_image_width: 3000, // Reasonable max width
-            ocr_max_image_height: 3000, // Reasonable max height
-            save_processed_images: false, // Conservative - don't save by default
+            ocr_upscale_factor: 1.0,           // No upscaling by default
+            ocr_max_image_width: 3000,         // Reasonable max width
+            ocr_max_image_height: 3000,        // Reasonable max height
+            save_processed_images: false,      // Conservative - don't save by default
             ocr_quality_threshold_brightness: 0.3, // Conservative threshold
             ocr_quality_threshold_contrast: 0.2, // Conservative threshold
-            ocr_quality_threshold_noise: 0.7, // Conservative threshold
+            ocr_quality_threshold_noise: 0.7,  // Conservative threshold
             ocr_quality_threshold_sharpness: 0.3, // Conservative threshold
-            ocr_skip_enhancement: false, // Allow enhancement by default
+            ocr_skip_enhancement: false,       // Allow enhancement by default
             webdav_enabled: false,
             webdav_server_url: None,
             webdav_username: None,
@@ -420,9 +371,37 @@ impl Default for Settings {
             webdav_sync_interval_minutes: 60,
             // Office document extraction configuration defaults
             office_extraction_timeout_seconds: 120, // 2 minutes default timeout
-            office_extraction_enable_detailed_logging: false, // Conservative default
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn null_clears_a_field_and_a_missing_field_keeps_it() {
+        let cleared: UpdateSettings =
+            serde_json::from_str(r#"{"max_file_size_mb": null, "ocr_whitelist_chars": null}"#)
+                .unwrap();
+        assert_eq!(cleared.max_file_size_mb, Some(None));
+        assert_eq!(cleared.ocr_whitelist_chars, Some(None));
+        assert_eq!(cleared.webdav_password, None);
+
+        let set: UpdateSettings = serde_json::from_str(r#"{"max_file_size_mb": 20}"#).unwrap();
+        assert_eq!(set.max_file_size_mb, Some(Some(20)));
+        assert_eq!(set.ocr_whitelist_chars, None);
+    }
+
+    #[test]
+    fn unchanged_fields_are_left_out_when_serialized() {
+        let json = serde_json::to_value(UpdateSettings {
+            ocr_dpi: Some(200),
+            ..UpdateSettings::default()
+        })
+        .unwrap();
+        assert!(json.get("max_file_size_mb").is_none(), "{json}");
+        assert!(json.get("webdav_password").is_none(), "{json}");
     }
 }

@@ -127,11 +127,11 @@ MIN_SCANNED = 300
 BASELINE: dict[str, int] = {
     "tests/integration_documents_database_tests.rs": 2702,
     "src/services/webdav/service.rs": 1870,
-    "src/ocr/enhanced.rs": 1905,
+    "src/ocr/enhanced.rs": 1712,
     "tests/webdav_stress_tests.rs": 1879,
-    "src/test_utils.rs": 1592,
+    "src/test_utils.rs": 1591,
     "tests/integration_file_processing_pipeline_tests.rs": 1687,
-    "tests/integration_source_sync_cancellation_workflow_tests.rs": 1529,
+    "tests/integration_source_sync_cancellation_workflow_tests.rs": 1527,
     "src/ocr/xml_extractor.rs": 1397,
     "tests/integration_ocrmypdf_strategy_validation_tests.rs": 1037,
 }

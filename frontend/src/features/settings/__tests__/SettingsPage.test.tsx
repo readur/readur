@@ -15,7 +15,6 @@ vi.mock('../appearance/AppearanceSection', () => ({ default: () => <p>appearance
 
 const nav = () => screen.getByRole('navigation', { name: 'Settings sections' });
 
-
 describe('SettingsPage routing', () => {
   it.each([
     ['/settings', 'general body', 'General'],
@@ -46,8 +45,13 @@ describe('SettingsPage routing', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     await user.click(within(nav()).getByRole('link', { name: 'Debug' }));
     expect(await screen.findByText('debug body')).toBeInTheDocument();
-    expect(within(nav()).getByRole('link', { name: 'Debug' })).toHaveAttribute('aria-current', 'page');
-    expect(within(nav()).getByRole('link', { name: 'General' })).not.toHaveAttribute('aria-current');
+    expect(within(nav()).getByRole('link', { name: 'Debug' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(nav()).getByRole('link', { name: 'General' })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('marks only one link as current', async () => {
@@ -67,7 +71,17 @@ describe('SettingsPage admin gating', () => {
     const names = within(nav())
       .getAllByRole('link')
       .map((a) => a.textContent);
-    expect(names).toEqual(['General', 'Account', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']);
+    expect(names).toEqual([
+      'General',
+      'Account',
+      'OCR',
+      'Users',
+      'Server',
+      'API keys',
+      'Labels',
+      'Debug',
+      'Appearance',
+    ]);
   });
 
   it('hides admin-only sections from other users', async () => {
@@ -79,14 +93,20 @@ describe('SettingsPage admin gating', () => {
     expect(names).toEqual(['General', 'Account', 'OCR', 'API keys', 'Labels', 'Appearance']);
   });
 
-  it.each(['users', 'server', 'debug'])('shows "Admins only" for /settings/%s to a non-admin', async (id) => {
-    renderSettings(<SettingsPage />, { path: `/settings/${id}`, user: plainUser });
-    expect(await screen.findByRole('heading', { name: 'Admins only' })).toBeInTheDocument();
-    expect(screen.queryByText(`${id} body`)).not.toBeInTheDocument();
-  });
+  it.each(['users', 'server', 'debug'])(
+    'shows "Admins only" for /settings/%s to a non-admin',
+    async (id) => {
+      renderSettings(<SettingsPage />, { path: `/settings/${id}`, user: plainUser });
+      expect(await screen.findByRole('heading', { name: 'Admins only' })).toBeInTheDocument();
+      expect(screen.queryByText(`${id} body`)).not.toBeInTheDocument();
+    },
+  );
 
   it('treats the role case-insensitively', async () => {
-    renderSettings(<SettingsPage />, { path: '/settings/users', user: { ...plainUser, role: 'admin' } });
+    renderSettings(<SettingsPage />, {
+      path: '/settings/users',
+      user: { ...plainUser, role: 'admin' },
+    });
     expect(await screen.findByText('users body')).toBeInTheDocument();
   });
 });
@@ -115,7 +135,9 @@ describe('SettingsPage search', () => {
     expect(within(nav()).queryByRole('link', { name: 'Appearance' })).not.toBeInTheDocument();
     await user.click(hit);
     expect(await screen.findByText('ocr body')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/settings/ocr#ocr-thresholds');
+    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent(
+      '/settings/ocr#ocr-thresholds',
+    );
   });
 
   it('is case-insensitive and reports no matches', async () => {
@@ -123,12 +145,29 @@ describe('SettingsPage search', () => {
     renderSettings(<SettingsPage />);
     await screen.findByText('general body');
     const field = screen.getByRole('searchbox', { name: 'Search settings' });
-    await user.type(field, 'CPU');
-    expect(within(nav()).getByRole('link', { name: 'CPU Priority' })).toBeInTheDocument();
+    await user.type(field, 'TIMEOUT');
+    expect(within(nav()).getByRole('link', { name: 'OCR Timeout (seconds)' })).toBeInTheDocument();
     await user.clear(field);
     await user.type(field, 'zzzz');
     expect(within(nav()).queryAllByRole('link')).toHaveLength(0);
     expect(screen.getByText('No settings match “zzzz”')).toBeInTheDocument();
+  });
+
+  it.each([
+    'Concurrent',
+    'CPU',
+    'Memory',
+    'Results Per Page',
+    'Snippet',
+    'Storage',
+    'Retention',
+    'Auto-detect',
+  ])('no longer finds the removed setting "%s"', async (query) => {
+    const user = userEvent.setup();
+    renderSettings(<SettingsPage />);
+    await screen.findByText('general body');
+    await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), query);
+    expect(within(nav()).queryAllByRole('link')).toHaveLength(0);
   });
 
   it('does not surface admin-only settings to other users', async () => {

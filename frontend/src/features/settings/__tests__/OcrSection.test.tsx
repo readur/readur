@@ -5,16 +5,15 @@ import { ocrService, queueService } from '../../../services/api';
 import OcrSection from '../ocr/OcrSection';
 import { apiMock, httpError, ok, plainUser, renderSettings } from './settingsTestUtils';
 
-vi.mock('../../../services/api', async (importOriginal) => (await import('./apiMock')).mockApiModule(importOriginal));
+vi.mock('../../../services/api', async (importOriginal) =>
+  (await import('./apiMock')).mockApiModule(importOriginal),
+);
 
 const SERVER_SETTINGS = {
   preferred_languages: ['eng', 'deu'],
   primary_language: 'eng',
   ocr_language: 'eng',
-  auto_detect_language_combination: false,
-  concurrent_ocr_jobs: 4,
   ocr_timeout_seconds: 300,
-  cpu_priority: 'normal',
   ocr_skip_enhancement: false,
   ocr_brightness_boost: 0,
   ocr_contrast_multiplier: 1,
@@ -53,7 +52,9 @@ beforeEach(() => {
   apiMock.get.mockResolvedValue(ok(SERVER_SETTINGS));
   apiMock.put.mockResolvedValue(ok({}));
   vi.spyOn(ocrService, 'getAvailableLanguages').mockResolvedValue(LANGUAGES as never);
-  vi.spyOn(queueService, 'getOcrStatus').mockResolvedValue({ data: { is_paused: false, status: 'running' } } as never);
+  vi.spyOn(queueService, 'getOcrStatus').mockResolvedValue({
+    data: { is_paused: false, status: 'running' },
+  } as never);
   vi.spyOn(queueService, 'pauseOcr').mockResolvedValue({ data: {} } as never);
   vi.spyOn(queueService, 'resumeOcr').mockResolvedValue({ data: {} } as never);
 });
@@ -61,9 +62,11 @@ beforeEach(() => {
 describe('OcrSection', () => {
   it('summarises languages and processing in one line each', async () => {
     renderSettings(<OcrSection />);
-    expect(await screen.findByText('ENG, DEU · auto-detect off')).toBeInTheDocument();
-    expect(screen.getByText('4 jobs · 300s · normal priority')).toBeInTheDocument();
-    expect(screen.getByText('brightness 0 · contrast 1× · noise none · sharpen 0')).toBeInTheDocument();
+    expect(await screen.findByText('ENG, DEU')).toBeInTheDocument();
+    expect(screen.getByText('300s per document')).toBeInTheDocument();
+    expect(
+      screen.getByText('brightness 0 · contrast 1× · noise none · sharpen 0'),
+    ).toBeInTheDocument();
     expect(screen.getByText('10000 × 10000 px · upscale 1×')).toBeInTheDocument();
   });
 
@@ -71,27 +74,47 @@ describe('OcrSection', () => {
     const user = userEvent.setup();
     renderSettings(<OcrSection />);
     const processing = await openGroup(user, 'Processing');
-    expect(within(processing).getByRole('spinbutton', { name: 'Concurrent OCR Jobs' })).toHaveValue(4);
-    expect(within(processing).getByRole('spinbutton', { name: 'OCR Timeout (seconds)' })).toHaveValue(300);
-    expect(within(processing).getByRole('button', { name: /CPU Priority/ })).toHaveTextContent('Normal');
+    expect(
+      within(processing).getByRole('spinbutton', { name: 'OCR Timeout (seconds)' }),
+    ).toHaveValue(300);
 
     const enhancement = await openGroup(user, 'Enhancement Controls');
-    expect(within(enhancement).getByRole('switch', { name: /Skip All Image Enhancement/ })).not.toBeChecked();
+    expect(
+      within(enhancement).getByText(/These apply only when image preprocessing is on/),
+    ).toBeInTheDocument();
+    expect(
+      within(enhancement).getByRole('switch', { name: /Skip All Image Enhancement/ }),
+    ).not.toBeChecked();
     for (const name of ['Brightness Boost', 'Contrast Multiplier', 'Sharpening Strength']) {
       expect(within(enhancement).getByRole('spinbutton', { name })).toBeInTheDocument();
     }
-    expect(within(enhancement).getByRole('button', { name: /Noise Reduction Level/ })).toHaveTextContent('None');
+    expect(
+      within(enhancement).getByRole('button', { name: /Noise Reduction Level/ }),
+    ).toHaveTextContent('None');
 
     const thresholds = await openGroup(user, 'Quality thresholds');
-    for (const name of ['Brightness Threshold', 'Contrast Threshold', 'Noise Threshold', 'Sharpness Threshold']) {
+    for (const name of [
+      'Brightness Threshold',
+      'Contrast Threshold',
+      'Noise Threshold',
+      'Sharpness Threshold',
+    ]) {
       expect(within(thresholds).getByRole('spinbutton', { name })).toBeInTheDocument();
     }
 
     const advanced = await openGroup(user, 'Advanced Processing Options');
-    expect(within(advanced).getByRole('switch', { name: /Morphological Operations/ })).toBeChecked();
-    expect(within(advanced).getByRole('switch', { name: /Histogram Equalization/ })).not.toBeChecked();
-    expect(within(advanced).getByRole('switch', { name: /Save Processed Images/ })).not.toBeChecked();
-    expect(within(advanced).getByRole('spinbutton', { name: 'Adaptive Threshold Window Size' })).toHaveValue(15);
+    expect(
+      within(advanced).getByRole('switch', { name: /Morphological Operations/ }),
+    ).toBeChecked();
+    expect(
+      within(advanced).getByRole('switch', { name: /Histogram Equalization/ }),
+    ).not.toBeChecked();
+    expect(
+      within(advanced).getByRole('switch', { name: /Save Processed Images/ }),
+    ).not.toBeChecked();
+    expect(
+      within(advanced).getByRole('spinbutton', { name: 'Adaptive Threshold Window Size' }),
+    ).toHaveValue(15);
 
     const size = await openGroup(user, 'Image Size and Scaling');
     for (const name of ['Max Image Width', 'Max Image Height', 'Upscale Factor']) {
@@ -99,8 +122,25 @@ describe('OcrSection', () => {
     }
 
     const languages = await openGroup(user, 'Languages');
-    expect(within(languages).getByRole('switch', { name: /Auto-detect language combinations/ })).not.toBeChecked();
     expect(await within(languages).findByText('OCR Languages (2/4)')).toBeInTheDocument();
+  });
+
+  it('no longer offers the settings that never had an effect', async () => {
+    const user = userEvent.setup();
+    renderSettings(<OcrSection />);
+    const processing = await openGroup(user, 'Processing');
+    expect(
+      within(processing).queryByRole('spinbutton', { name: 'Concurrent OCR Jobs' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(processing).queryByRole('button', { name: /CPU Priority/ }),
+    ).not.toBeInTheDocument();
+    const languages = await openGroup(user, 'Languages');
+    await within(languages).findByText('OCR Languages (2/4)');
+    expect(
+      within(languages).queryByRole('switch', { name: /Auto-detect/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto-detect/)).not.toBeInTheDocument();
   });
 
   it('saves languages together with the primary and legacy language', async () => {
@@ -118,7 +158,7 @@ describe('OcrSection', () => {
         ocr_language: 'fra',
       }),
     );
-    expect(await screen.findByText('ENG, DEU, FRA · auto-detect off')).toBeInTheDocument();
+    expect(await screen.findByText('ENG, DEU, FRA')).toBeInTheDocument();
   });
 
   it('discards a language draft on Cancel', async () => {
@@ -132,24 +172,23 @@ describe('OcrSection', () => {
     expect(apiMock.put).not.toHaveBeenCalled();
   });
 
-  it('saves processing values and validates their ranges', async () => {
+  it('limits the per-document OCR timeout to 10 minutes', async () => {
     const user = userEvent.setup();
     renderSettings(<OcrSection />);
     const region = await openGroup(user, 'Processing');
-    const jobs = within(region).getByRole('spinbutton', { name: 'Concurrent OCR Jobs' });
-    await user.clear(jobs);
-    await user.type(jobs, '17');
+    const timeout = within(region).getByRole('spinbutton', { name: 'OCR Timeout (seconds)' });
+    await user.clear(timeout);
+    await user.type(timeout, '601');
     await user.click(within(region).getByRole('button', { name: 'Save' }));
-    expect(await within(region).findByText('Enter a value from 1 to 16.')).toBeInTheDocument();
+    expect(await within(region).findByText('Enter a value from 10 to 600.')).toBeInTheDocument();
     expect(apiMock.put).not.toHaveBeenCalled();
-    await user.clear(jobs);
-    await user.type(jobs, '8');
-    await user.click(within(region).getByRole('button', { name: /CPU Priority/ }));
-    await user.click(await screen.findByRole('option', { name: 'High' }));
+    await user.clear(timeout);
+    await user.type(timeout, '600');
     await user.click(within(region).getByRole('button', { name: 'Save' }));
     await waitFor(() =>
-      expect(apiMock.put).toHaveBeenCalledWith('/settings', { concurrent_ocr_jobs: 8, cpu_priority: 'high' }),
+      expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_timeout_seconds: 600 }),
     );
+    expect(await screen.findByText('600s per document')).toBeInTheDocument();
   });
 
   it('requires an odd adaptive threshold window', async () => {
@@ -164,7 +203,11 @@ describe('OcrSection', () => {
     await user.clear(win);
     await user.type(win, '21');
     await user.click(within(region).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_adaptive_threshold_window_size: 21 }));
+    await waitFor(() =>
+      expect(apiMock.put).toHaveBeenCalledWith('/settings', {
+        ocr_adaptive_threshold_window_size: 21,
+      }),
+    );
   });
 
   it('saves a noise-reduction level of zero as 0', async () => {
@@ -175,7 +218,9 @@ describe('OcrSection', () => {
     await user.click(within(region).getByRole('button', { name: /Noise Reduction Level/ }));
     await user.click(await screen.findByRole('option', { name: 'None' }));
     await user.click(within(region).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_noise_reduction_level: 0 }));
+    await waitFor(() =>
+      expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_noise_reduction_level: 0 }),
+    );
   });
 
   it('saves the skip-enhancement switch on change', async () => {
@@ -183,7 +228,9 @@ describe('OcrSection', () => {
     renderSettings(<OcrSection />);
     const region = await openGroup(user, 'Enhancement Controls');
     await user.click(within(region).getByRole('switch', { name: /Skip All Image Enhancement/ }));
-    await waitFor(() => expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_skip_enhancement: true }));
+    await waitFor(() =>
+      expect(apiMock.put).toHaveBeenCalledWith('/settings', { ocr_skip_enhancement: true }),
+    );
     expect(await screen.findByText('skipped · original images only')).toBeInTheDocument();
   });
 
@@ -192,7 +239,9 @@ describe('OcrSection', () => {
     renderSettings(<OcrSection />);
     const region = await openGroup(user, 'Processing controls');
     expect(await within(region).findByText('OCR Status: RUNNING')).toBeInTheDocument();
-    vi.mocked(queueService.getOcrStatus).mockResolvedValue({ data: { is_paused: true, status: 'paused' } } as never);
+    vi.mocked(queueService.getOcrStatus).mockResolvedValue({
+      data: { is_paused: true, status: 'paused' },
+    } as never);
     await user.click(within(region).getByRole('button', { name: 'Pause OCR Processing' }));
     expect(queueService.pauseOcr).toHaveBeenCalled();
     expect(await screen.findByText('OCR processing paused successfully')).toBeInTheDocument();
@@ -207,13 +256,17 @@ describe('OcrSection', () => {
     renderSettings(<OcrSection />);
     const region = await openGroup(user, 'Processing controls');
     await user.click(await within(region).findByRole('button', { name: 'Pause OCR Processing' }));
-    expect(await screen.findByText('Admin access required to pause OCR processing')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Admin access required to pause OCR processing'),
+    ).toBeInTheDocument();
   });
 
   it('hides the pause controls from non-admins and never asks for the queue status', async () => {
     renderSettings(<OcrSection />, { user: plainUser });
-    await screen.findByText('ENG, DEU · auto-detect off');
-    expect(screen.queryByRole('button', { name: 'Edit Processing controls' })).not.toBeInTheDocument();
+    await screen.findByText('ENG, DEU');
+    expect(
+      screen.queryByRole('button', { name: 'Edit Processing controls' }),
+    ).not.toBeInTheDocument();
     expect(queueService.getOcrStatus).not.toHaveBeenCalled();
   });
 });

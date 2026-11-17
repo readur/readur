@@ -533,8 +533,10 @@ impl FileService {
 
         // Create a temporary file for the PDF
         let temp_id = Uuid::new_v4();
-        let temp_pdf_path = format!("/tmp/pdf_thumb_{}.pdf", temp_id);
-        let temp_png_path = format!("/tmp/pdf_thumb_{}.png", temp_id);
+        let temp_prefix = crate::config::temp_dir().join(format!("pdf_thumb_{}", temp_id));
+        let temp_prefix = temp_prefix.to_string_lossy();
+        let temp_pdf_path = format!("{}.pdf", temp_prefix);
+        let temp_png_path = format!("{}.png", temp_prefix);
 
         // Write PDF data to temporary file
         if let Err(e) = fs::write(&temp_pdf_path, file_data).await {
@@ -553,7 +555,7 @@ impl FileService {
             .arg("-png") // Output as PNG
             .arg("-singlefile") // Omit the page-number suffix
             .arg(&temp_pdf_path)
-            .arg(format!("/tmp/pdf_thumb_{}", temp_id)) // Output prefix
+            .arg(temp_prefix.as_ref()) // Output prefix
             .output();
 
         // Clean up temporary PDF file

@@ -22,7 +22,10 @@ use crate::{
         DocumentSortField, DocumentUploadResponse, FileIngestionInfo, PaginatedDocumentsResponse,
         SortOrder, User,
     },
-    ocr::{priority::user_priority_for_file_size, queue::EnqueueOutcome},
+    ocr::{
+        priority::user_priority_for_file_size, queue::EnqueueOutcome,
+        user_settings::max_upload_bytes,
+    },
     services::ingestion_error::categorize_ingestion_error,
     AppState,
 };
@@ -32,6 +35,8 @@ use crate::{
 pub const OCR_NOT_QUEUED_WARNING: &str =
     "The document could not be queued for OCR; retry OCR for it.";
 pub const LABELS_NOT_APPLIED_WARNING: &str = "The requested labels could not be applied.";
+pub const BACKGROUND_OCR_OFF_WARNING: &str =
+    "Background OCR is off in your settings, so the document was not queued for OCR; retry OCR for it to process it.";
 
 /// One page of the caller's documents, with labels and OCR progress.
 /// Callers validate `filters` first.
@@ -262,7 +267,15 @@ async fn ingest_upload(
         label_ids,
     } = request;
 
-    check_upload_size(state, &filename, data.len())?;
+    let owner_settings = upload_settings(state, user.id).await?;
+    check_upload_size_against(
+        &filename,
+        data.len(),
+        max_upload_bytes(state.config.max_file_size_mb, owner_settings.as_ref()),
+    )?;
+    let queue_ocr = owner_settings
+        .as_ref()
+        .is_none_or(|settings| settings.enable_background_ocr);
 
     check_label_ownership(state, user, &label_ids).await?;
 
@@ -292,6 +305,7 @@ async fn ingest_upload(
             &label_ids,
             &ocr_languages,
             ocr_language.as_deref(),
+            queue_ocr,
         )
         .await),
         Ok(IngestionResult::ExistingDocument(existing)) => {
@@ -324,17 +338,45 @@ async fn ingest_upload(
     }
 }
 
-/// Rejects uploads larger than `MAX_FILE_SIZE_MB`.
-pub fn check_upload_size(
+/// The uploading user's saved settings (`None` when they have never saved any).
+async fn upload_settings(
     state: &AppState,
+    user_id: Uuid,
+) -> Result<Option<crate::models::Settings>, DocumentError> {
+    state.db.get_user_settings(user_id).await.map_err(|e| {
+        error!("Failed to load settings for upload by {}: {}", user_id, e);
+        DocumentError::InternalServerError("Failed to load your settings")
+    })
+}
+
+/// Rejects an upload larger than the user's limit: their own
+/// `max_file_size_mb`, capped by the server's `MAX_FILE_SIZE_MB`.
+pub async fn check_upload_size(
+    state: &AppState,
+    user_id: Uuid,
     filename: &str,
     size: usize,
 ) -> Result<(), DocumentError> {
-    let max_bytes = state.config.max_file_size_mb as usize * 1024 * 1024;
-    if size > max_bytes {
+    let settings = upload_settings(state, user_id).await?;
+    check_upload_size_against(
+        filename,
+        size,
+        max_upload_bytes(state.config.max_file_size_mb, settings.as_ref()),
+    )
+}
+
+fn check_upload_size_against(
+    filename: &str,
+    size: usize,
+    max_bytes: u64,
+) -> Result<(), DocumentError> {
+    if size as u64 > max_bytes {
         let msg = format!(
             "File '{}' size ({} bytes) exceeds maximum allowed size ({} bytes / {}MB)",
-            filename, size, max_bytes, state.config.max_file_size_mb
+            filename,
+            size,
+            max_bytes,
+            max_bytes / (1024 * 1024)
         );
         warn!("{}", msg);
         return Err(DocumentError::PayloadTooLarge(msg));
@@ -351,6 +393,7 @@ async fn finish_new_upload(
     label_ids: &[Uuid],
     ocr_languages: &[String],
     ocr_language: Option<&str>,
+    queue_ocr: bool,
 ) -> DocumentUploadResponse {
     info!("Document uploaded successfully: {}", document.id);
     // The document is stored at this point, so nothing below may fail
@@ -358,10 +401,19 @@ async fn finish_new_upload(
     // OCR. Queue OCR first, then label; report failures as warnings.
     store_language_preference(state, user, ocr_languages, ocr_language).await;
 
-    let mut warnings: Vec<String> = queue_upload_for_ocr(state, &document)
-        .await
-        .into_iter()
-        .collect();
+    // The owner's enable_background_ocr setting decides whether it is queued
+    let mut warnings: Vec<String> = if queue_ocr {
+        queue_upload_for_ocr(state, &document)
+            .await
+            .into_iter()
+            .collect()
+    } else {
+        info!(
+            "Background OCR is off for {}; {} not queued",
+            user.id, document.id
+        );
+        vec![BACKGROUND_OCR_OFF_WARNING.to_string()]
+    };
     warnings.extend(attach_labels(state, user, document.id, label_ids).await);
 
     DocumentUploadResponse {

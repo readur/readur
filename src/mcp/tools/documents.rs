@@ -17,7 +17,8 @@ use crate::{
     mcp::{format, ReadurMcp},
     models::{DocumentFilters, DocumentOcrResponse, DocumentResponse, User},
     services::documents::{
-        self as service, UploadRequest, LABELS_NOT_APPLIED_WARNING, OCR_NOT_QUEUED_WARNING,
+        self as service, UploadRequest, BACKGROUND_OCR_OFF_WARNING, LABELS_NOT_APPLIED_WARNING,
+        OCR_NOT_QUEUED_WARNING,
     },
 };
 
@@ -299,8 +300,13 @@ impl ReadurMcp {
         // Reject oversized payloads before decoding them, and decode in
         // place so the request never holds the file more than once.
         let encoded = strip_base64_whitespace(content_base64);
-        if let Err(e) =
-            service::check_upload_size(&self.state, &filename, base64_decoded_len(&encoded))
+        if let Err(e) = service::check_upload_size(
+            &self.state,
+            user.id,
+            &filename,
+            base64_decoded_len(&encoded),
+        )
+        .await
         {
             return upload_error(e);
         }
@@ -348,6 +354,18 @@ impl ReadurMcp {
         {
             format!(
                 "Uploaded \"{}\" ({}, {}) as document {}, but it could not be queued for OCR. Call retry_document_ocr with this ID to process it.",
+                uploaded.filename,
+                uploaded.mime_type,
+                format::file_size(uploaded.file_size),
+                uploaded.id
+            )
+        } else if uploaded
+            .warnings
+            .iter()
+            .any(|w| w == BACKGROUND_OCR_OFF_WARNING)
+        {
+            format!(
+                "Uploaded \"{}\" ({}, {}) as document {}. Background OCR is off in this user's settings, so it was not queued for OCR; call retry_document_ocr with this ID to process it.",
                 uploaded.filename,
                 uploaded.mime_type,
                 format::file_size(uploaded.file_size),

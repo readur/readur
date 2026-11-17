@@ -6,20 +6,11 @@ export type SettingsValues = Pick<
   | 'ocr_language'
   | 'preferred_languages'
   | 'primary_language'
-  | 'auto_detect_language_combination'
-  | 'concurrent_ocr_jobs'
   | 'ocr_timeout_seconds'
   | 'max_file_size_mb'
   | 'auto_rotate_images'
   | 'enable_image_preprocessing'
-  | 'search_results_per_page'
-  | 'search_snippet_length'
   | 'fuzzy_search_threshold'
-  | 'retention_days'
-  | 'enable_auto_cleanup'
-  | 'enable_compression'
-  | 'memory_limit_mb'
-  | 'cpu_priority'
   | 'enable_background_ocr'
   | 'ocr_brightness_boost'
   | 'ocr_contrast_multiplier'
@@ -47,20 +38,11 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   ocr_language: 'eng',
   preferred_languages: ['eng'],
   primary_language: 'eng',
-  auto_detect_language_combination: false,
-  concurrent_ocr_jobs: 4,
   ocr_timeout_seconds: 300,
-  max_file_size_mb: 50,
+  max_file_size_mb: null,
   auto_rotate_images: true,
   enable_image_preprocessing: false,
-  search_results_per_page: 25,
-  search_snippet_length: 200,
   fuzzy_search_threshold: 0.5,
-  retention_days: null,
-  enable_auto_cleanup: false,
-  enable_compression: false,
-  memory_limit_mb: 512,
-  cpu_priority: 'normal',
   enable_background_ocr: true,
   ocr_brightness_boost: 0,
   ocr_contrast_multiplier: 1,
@@ -82,7 +64,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
 
 /**
  * Merge a server response over the defaults. Missing or null values fall back to the default,
- * except `retention_days`, where null means "keep forever".
+ * except `max_file_size_mb`, where null means "use the server's limit".
  */
 export function normalizeSettings(
   data: Partial<Record<string, unknown>> | null | undefined,
@@ -91,7 +73,7 @@ export function normalizeSettings(
   if (!data || typeof data !== 'object') return out as SettingsValues;
   for (const key of Object.keys(DEFAULT_SETTINGS) as SettingKey[]) {
     const v = data[key];
-    if (key === 'retention_days') {
+    if (key === 'max_file_size_mb') {
       out[key] = typeof v === 'number' ? v : null;
     } else if (key === 'preferred_languages') {
       out[key] = Array.isArray(v) ? v : DEFAULT_SETTINGS.preferred_languages;
