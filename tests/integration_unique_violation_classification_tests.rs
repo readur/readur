@@ -411,7 +411,7 @@ async fn concurrent_duplicate_upload_honours_the_policy_like_the_non_race_path()
 #[tokio::test]
 async fn rest_upload_conflict_is_identical_with_and_without_the_race() -> Result<()> {
     use axum::response::IntoResponse;
-    use readur::routes::documents::DocumentError;
+    use readur::errors::document::DocumentError;
     use readur::services::documents::{upload_document, UploadRequest};
 
     let dir = tempfile::tempdir()?;
