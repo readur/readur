@@ -245,7 +245,7 @@ async fn test_authenticated_endpoint() {
     // Make authenticated request
     let request = Request::builder()
         .method("GET")
-        .uri("/api/protected")
+        .uri("/api/auth/me")
         .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();

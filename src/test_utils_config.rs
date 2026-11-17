@@ -17,6 +17,9 @@ pub struct TestConfigBuilder {
     pub(super) memory_limit_mb: u64,
     pub(super) oidc_enabled: bool,
     pub(super) mcp: crate::config::McpConfig,
+    /// Whether self-registered accounts start inactive, as they always do in
+    /// production. Off by default because tests register users and log in.
+    pub(super) registration_requires_approval: bool,
 }
 
 impl Default for TestConfigBuilder {
@@ -31,6 +34,7 @@ impl Default for TestConfigBuilder {
             memory_limit_mb: 256,
             oidc_enabled: false,
             mcp: crate::config::McpConfig::default(),
+            registration_requires_approval: false,
         }
     }
 }
@@ -58,6 +62,11 @@ impl TestConfigBuilder {
 
     pub fn with_max_file_size_mb(mut self, size_mb: u64) -> Self {
         self.max_file_size_mb = size_mb;
+        self
+    }
+
+    pub fn with_registration_requires_approval(mut self, required: bool) -> Self {
+        self.registration_requires_approval = required;
         self
     }
 
@@ -125,7 +134,7 @@ impl TestConfigBuilder {
             // Tests create users through the public registration endpoint.
             security: crate::config::SecurityConfig {
                 allow_registration: true,
-                registration_requires_approval: false,
+                registration_requires_approval: self.registration_requires_approval,
                 ..Default::default()
             },
             mcp: self.mcp,

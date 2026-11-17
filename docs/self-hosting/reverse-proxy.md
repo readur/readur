@@ -521,7 +521,7 @@ proxy_cache_path /var/cache/nginx/readur
     inactive=60m
     use_temp_path=off;
 
-location /api/documents/search {
+location /api/search {
     proxy_cache readur_cache;
     proxy_cache_valid 200 10m;
     proxy_cache_valid 404 1m;

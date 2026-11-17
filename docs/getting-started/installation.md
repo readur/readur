@@ -348,7 +348,7 @@ docker exec readur-postgres psql -U readur -d readur -c "\dt"
 docker exec readur tesseract --version
 
 # Upload a test document
-curl -X POST http://localhost:8000/api/upload \
+curl -X POST http://localhost:8000/api/documents \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@test.pdf"
 ```
@@ -392,8 +392,8 @@ docker-compose up -d
 #### OCR Processing Stuck
 
 ```bash
-# Check OCR queue status
-curl http://localhost:8000/api/admin/queue/status
+# Check OCR queue status (administrator token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/queue/stats
 
 # Restart OCR workers
 docker-compose restart readur
@@ -505,7 +505,7 @@ TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
 
 # 2. Upload a PDF
-curl -X POST http://localhost:8000/api/documents/upload \
+curl -X POST http://localhost:8000/api/documents \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@sample.pdf"
 

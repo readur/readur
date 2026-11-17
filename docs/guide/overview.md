@@ -90,7 +90,7 @@ Start here if you need to:
 1. [Set up sources](../sources-guide.md)
 2. [Configure watch folders](../WATCH_FOLDER.md)
 3. [Use the API](../api-reference.md)
-4. [Automate workflows](../api-reference.md#examples)
+4. [Automate workflows](../api-reference.md#client-examples)
 
 ## Feature Highlights
 

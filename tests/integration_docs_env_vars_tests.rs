@@ -1,7 +1,10 @@
-//! Keeps the environment variables documented in docs/configuration.md,
-//! docs/configuration-reference.md and charts/readur/values.yaml in step with the code: every
-//! variable named there must be read somewhere, and every user-facing variable the server reads
-//! must be in the configuration reference.
+//! Keeps the environment variables the documentation names in step with the code: every
+//! variable named in a checked file ([`DOCUMENTED_IN`]: the configuration docs, the OIDC guide,
+//! charts/readur/values.yaml and every other page whose variables are all real) must be read
+//! somewhere, and every user-facing variable the server reads must be in the configuration
+//! reference. README.md and every other page under docs/ that names a variable must be either
+//! checked or listed in [`UNAUDITED`], whose entries must still name a variable the code does
+//! not read, so the list only shrinks.
 //!
 //! A variable is "named" by a doc when it appears as
 //! - the first cell of a Markdown table row, as `` `NAME` ``;
@@ -20,10 +23,66 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
-const DOCUMENTED_IN: [&str; 3] = [
+const DOCUMENTED_IN: &[&str] = &[
     "docs/configuration.md",
     "docs/configuration-reference.md",
     "charts/readur/values.yaml",
+    "docs/oidc-setup.md",
+    "README.md",
+    "docs/REVERSE_PROXY.md",
+    "docs/WATCH_FOLDER.md",
+    "docs/administration/cli-tools.md",
+    "docs/administration/storage-migration.md",
+    "docs/architecture.md",
+    "docs/dev/LABEL_TESTING.md",
+    "docs/dev/development.md",
+    "docs/index.md",
+    "docs/installation.md",
+    "docs/mcp-guide.md",
+    "docs/per-user-watch-directories.md",
+    "docs/sources-guide.md",
+    "docs/user-guide.md",
+    "docs/user-management-guide.md",
+];
+
+/// Pages that still name variables Readur does not read: settings of other software in
+/// examples, shell variables of scripts, and settings that do not exist. Audit a page (make
+/// every variable it names real, or reword it) and move it to [`DOCUMENTED_IN`].
+const UNAUDITED: &[&str] = &[
+    "docs/administration/migration-troubleshooting.md",
+    "docs/api-reference.md",
+    "docs/backup-recovery.md",
+    "docs/deployment.md",
+    "docs/dev/DEPLOYMENT_SUMMARY.md",
+    "docs/dev/ERROR_SYSTEM.md",
+    "docs/dev/QUEUE_IMPROVEMENTS.md",
+    "docs/dev/README-E2E.md",
+    "docs/dev/TESTING.md",
+    "docs/dev/architecture.md",
+    "docs/dev/test-infrastructure.md",
+    "docs/getting-started/configuration.md",
+    "docs/getting-started/installation.md",
+    "docs/getting-started/quickstart.md",
+    "docs/health-monitoring-guide.md",
+    "docs/integrations.md",
+    "docs/migration-guide.md",
+    "docs/notifications-guide.md",
+    "docs/performance-tuning.md",
+    "docs/quickstart/docker.md",
+    "docs/quickstart/self-hosting.md",
+    "docs/redesign/BRIEF.md",
+    "docs/s3-storage-guide.md",
+    "docs/s3-troubleshooting.md",
+    "docs/security-guide.md",
+    "docs/self-hosting/authentication.md",
+    "docs/self-hosting/backup.md",
+    "docs/self-hosting/index.md",
+    "docs/self-hosting/monitoring.md",
+    "docs/self-hosting/performance.md",
+    "docs/self-hosting/storage.md",
+    "docs/swagger-ui-guide.md",
+    "docs/synology.md",
+    "docs/troubleshooting.md",
 ];
 
 /// Variables the server reads that are not settings for users: test harness switches and
@@ -129,9 +188,15 @@ fn every_documented_variable_is_read_by_the_code() {
     for file in DOCUMENTED_IN {
         let names = documented(file);
         assert!(
-            names.len() > 10,
-            "{file}: only {names:?} found; is the extraction broken?"
+            !names.is_empty(),
+            "{file}: no variables found; is the extraction broken?"
         );
+        if file.starts_with("docs/configuration") || file.ends_with(".yaml") {
+            assert!(
+                names.len() > 10,
+                "{file}: only {names:?} found; is the extraction broken?"
+            );
+        }
         missing.extend(
             names
                 .into_iter()
@@ -144,6 +209,50 @@ fn every_documented_variable_is_read_by_the_code() {
         "documented but never read (remove them from the docs, or read them):\n{}",
         missing.join("\n")
     );
+}
+
+/// Every Markdown page outside [`DOCUMENTED_IN`] that names a variable.
+fn unchecked_pages_naming_variables() -> BTreeMap<String, BTreeSet<String>> {
+    let mut pages = vec![repo().join("README.md")];
+    files_with_extension(&repo().join("docs"), "md", &mut pages);
+    pages
+        .into_iter()
+        .map(|path| path.strip_prefix(repo()).unwrap().display().to_string())
+        .filter(|file| !DOCUMENTED_IN.contains(&file.as_str()))
+        .map(|file| {
+            let names = documented(&file);
+            (file, names)
+        })
+        .filter(|(_, names)| !names.is_empty())
+        .collect()
+}
+
+#[test]
+fn every_page_naming_variables_is_checked_or_listed_as_unaudited() {
+    let read = variables_read();
+    let pages = unchecked_pages_naming_variables();
+    let unlisted: Vec<&String> = pages
+        .keys()
+        .filter(|file| !UNAUDITED.contains(&file.as_str()))
+        .collect();
+    assert!(
+        unlisted.is_empty(),
+        "pages naming variables that are neither checked nor listed as unaudited (add them to \
+         DOCUMENTED_IN once every variable they name is read by the code): {unlisted:?}"
+    );
+    for file in UNAUDITED {
+        assert!(
+            !DOCUMENTED_IN.contains(file),
+            "{file} is both checked and unaudited"
+        );
+        let fake = pages.get(*file).map_or(0, |names| {
+            names.iter().filter(|n| !read.contains_key(*n)).count()
+        });
+        assert!(
+            fake > 0,
+            "{file} now names only real variables: move it from UNAUDITED to DOCUMENTED_IN"
+        );
+    }
 }
 
 #[test]

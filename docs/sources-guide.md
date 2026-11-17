@@ -370,36 +370,24 @@ Auto Sync: Every 1 hour
 
 ### Real-Time Sync Progress (v2.5.4+)
 
-Readur uses WebSocket connections for real-time sync progress updates, providing lower latency and bidirectional communication compared to the previous Server-Sent Events implementation.
+The web interface follows a running sync over a WebSocket, `GET /api/sources/{id}/sync/progress/ws`. Browsers cannot set an `Authorization` header on a WebSocket, so the session token or API key travels as the subprotocol `bearer.<token>`; the connection must also come from an allowed origin.
 
 **WebSocket Connection:**
 ```javascript
-// Connect to sync progress WebSocket
-const ws = new WebSocket('wss://readur.example.com/api/sources/{sourceId}/sync/progress');
+const ws = new WebSocket(
+  `wss://readur.example.com/api/sources/${sourceId}/sync/progress/ws`,
+  [`bearer.${token}`]
+);
 
 ws.onmessage = (event) => {
-  const progress = JSON.parse(event.data);
-  console.log(`Sync progress: ${progress.percentage}%`);
+  const message = JSON.parse(event.data);
+  if (message.type === 'progress') {
+    console.log(`${message.data.files_processed}/${message.data.files_found} files`);
+  }
 };
 ```
 
-**Progress Event Format:**
-```json
-{
-  "phase": "discovering",
-  "progress": 45,
-  "current_file": "document.pdf",
-  "total_files": 150,
-  "processed_files": 68,
-  "status": "in_progress"
-}
-```
-
-**Benefits:**
-- Bidirectional communication for interactive control
-- 50% reduction in bandwidth compared to SSE
-- Automatic reconnection handling
-- Lower server CPU usage
+Every message is `{"type": ..., "data": ...}`. The server sends `connection_confirmed` once, then every second a `progress` message while a sync runs (its `data` has the same fields as the `GET /api/sources/{id}/sync/status` response) or a `heartbeat` while none does, and `error` when something goes wrong. For a single reading without a WebSocket, call `GET /api/sources/{id}/sync/status`.
 
 ### Stopping Sync
 

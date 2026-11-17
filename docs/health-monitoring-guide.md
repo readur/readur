@@ -96,32 +96,20 @@ Access health information through:
 
 ### API Health Checks
 ```bash
-# System health overview
+# Liveness: answers {"status": "ok"} without authentication
 GET /api/health
 
-# Detailed component status
-GET /api/health/detailed
+# OCR engine and language data (any signed-in user)
+GET /api/ocr/health
 
-# Source-specific health
-GET /api/health/sources/{source_id}
+# Database, OCR queue, document and user figures (administrators only)
+GET /api/metrics
+
+# Health check of one source's configuration and connectivity
+POST /api/sources/{id}/validate
 ```
 
-### Response Format
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-01T00:00:00Z",
-  "components": {
-    "database": "healthy",
-    "ocr_engine": "healthy",
-    "file_storage": "healthy",
-    "sources": {
-      "webdav_1": "healthy",
-      "local_1": "warning"
-    }
-  }
-}
-```
+See the [API Reference](api-reference.md) for the response formats.
 
 ## Troubleshooting
 

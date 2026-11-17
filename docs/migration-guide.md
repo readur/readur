@@ -63,11 +63,8 @@ docker-compose up -d
 
 **Verify upgrade:** Confirm that the upgrade completed successfully and all systems are functioning correctly.
 ```bash
-# Check version
-curl http://localhost:8080/api/version
-
-# Check health
-curl http://localhost:8080/health
+# Check health (the version is printed in the startup log)
+curl http://localhost:8080/api/health
 
 # Verify migrations
 psql $DATABASE_URL -c "SELECT * FROM _sqlx_migrations ORDER BY installed_on DESC LIMIT 5;"
@@ -173,7 +170,7 @@ vim docker-compose.yml  # Set S3_ENABLED=true
 docker-compose up -d
 
 # Test file upload
-curl -X POST http://localhost:8080/api/documents/upload \
+curl -X POST http://localhost:8080/api/documents \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@test.pdf"
 ```

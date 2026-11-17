@@ -483,8 +483,8 @@ server {
         proxy_read_timeout 86400;
     }
     
-    # File uploads
-    location /api/documents/upload {
+    # File uploads (POST /api/documents)
+    location = /api/documents {
         proxy_pass http://readur;
         client_max_body_size 500M;
         proxy_request_buffering off;
