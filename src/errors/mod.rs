@@ -1,7 +1,61 @@
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Json, Response};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
+use utoipa::ToSchema;
 
 use crate::monitoring::error_management::{ErrorCategory, ErrorSeverity, ManagedError};
+
+pub mod normalize;
+
+/// The body of every error response (4xx and 5xx) the API sends.
+///
+/// Handlers produce it through an [`AppError`] type (`impl_into_response!`)
+/// or [`error_response`]; the [`normalize`] middleware rewrites any other
+/// error body (axum extractor rejections, bare status codes) into this shape,
+/// so clients can rely on it for every route.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct ApiErrorBody {
+    /// A message that can be shown to the user. Never contains internal
+    /// details such as SQL, file paths or stack traces.
+    pub error: String,
+    /// A stable, machine-readable code in UPPER_SNAKE_CASE (for example
+    /// `USER_NOT_FOUND`, or `NOT_FOUND` when no more specific code applies).
+    pub code: String,
+    /// The HTTP status code, repeated in the body.
+    pub status: u16,
+}
+
+/// An error response in the shape of [`ApiErrorBody`].
+pub fn error_response(
+    status: StatusCode,
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> Response {
+    let body = ApiErrorBody {
+        error: message.into(),
+        code: code.into(),
+        status: status.as_u16(),
+    };
+    (status, Json(body)).into_response()
+}
+
+/// The generic code for a status with no more specific one: its reason
+/// phrase in UPPER_SNAKE_CASE (`404` is `NOT_FOUND`, `413` is
+/// `PAYLOAD_TOO_LARGE`), or `HTTP_<status>` for an unnamed status.
+pub fn status_code_name(status: StatusCode) -> String {
+    match status.canonical_reason() {
+        Some(reason) => reason
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_ascii_uppercase)
+            .collect::<Vec<_>>()
+            .join("_"),
+        None => format!("HTTP_{}", status.as_u16()),
+    }
+}
 
 /// Common trait for all custom error types in the application
 pub trait AppError: std::error::Error + Send + Sync + 'static {
@@ -52,8 +106,6 @@ macro_rules! impl_into_response {
             fn into_response(self) -> axum::response::Response {
                 use crate::errors::AppError;
                 use crate::monitoring::error_management::get_error_manager;
-                use axum::response::Json;
-                use serde_json::json;
 
                 // Send error to management system
                 let error_manager = get_error_manager();
@@ -62,15 +114,11 @@ macro_rules! impl_into_response {
                     error_manager.handle_error(managed_error).await;
                 });
 
-                // Create HTTP response
-                let status = self.status_code();
-                let body = Json(json!({
-                    "error": self.user_message(),
-                    "code": self.error_code(),
-                    "status": status.as_u16()
-                }));
-
-                (status, body).into_response()
+                crate::errors::error_response(
+                    self.status_code(),
+                    self.error_code(),
+                    self.user_message(),
+                )
             }
         }
     };

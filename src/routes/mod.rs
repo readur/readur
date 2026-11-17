@@ -54,9 +54,15 @@ pub fn mounted_routers() -> Vec<(&'static str, Router<Arc<AppState>>)> {
 }
 
 /// The complete HTTP API (without API docs and static frontend files).
+/// Every error response it sends has the `errors::ApiErrorBody` shape.
 pub fn api_router() -> Router<Arc<AppState>> {
-    mounted_routers().into_iter().fold(
-        Router::new().route("/api/health", get(crate::health_check)),
-        |app, (path, router)| app.nest(path, router),
-    )
+    mounted_routers()
+        .into_iter()
+        .fold(
+            Router::new().route("/api/health", get(crate::health_check)),
+            |app, (path, router)| app.nest(path, router),
+        )
+        .layer(axum::middleware::map_response(
+            crate::errors::normalize::normalize_error_response,
+        ))
 }

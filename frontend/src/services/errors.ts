@@ -1,16 +1,40 @@
 import axios, { AxiosError } from 'axios';
+import type { ApiErrorBody } from '../types/generated';
 
-// Error Response Interfaces
-export interface ApiErrorResponse {
-  error: string;
-  code: string;
-  status: number;
-}
+/**
+ * The body of every API error response (4xx and 5xx): `{ error, code, status }`.
+ * See "Errors" in docs/api-reference.md.
+ */
+export type ApiErrorResponse = ApiErrorBody;
 
+/** An axios error whose response carries the API error body. */
 export interface AxiosErrorWithCode extends AxiosError {
   response?: AxiosError['response'] & {
     data: ApiErrorResponse;
   };
+}
+
+/**
+ * The API error body carried by `data` (an axios `response.data`), or null when
+ * `data` is not one (network failure, non-API response). `code` and `status`
+ * fall back to '' and `fallbackStatus` for bodies that only carry `error`.
+ */
+export function parseApiError(data: unknown, fallbackStatus?: number): ApiErrorResponse | null {
+  if (!data || typeof data !== 'object') return null;
+  const { error, code, status } = data as Record<string, unknown>;
+  if (typeof error !== 'string') return null;
+  return {
+    error,
+    code: typeof code === 'string' ? code : '',
+    status: typeof status === 'number' ? status : (fallbackStatus ?? 0),
+  };
+}
+
+/** The server's `error` message from a failed API call, or null when there is none. */
+export function apiErrorMessage(err: unknown): string | null {
+  const response = (err as { response?: { data?: unknown; status?: number } } | null)?.response;
+  const body = parseApiError(response?.data, response?.status);
+  return body && body.error.trim() ? body.error : null;
 }
 
 // Error Code Constants
@@ -104,37 +128,19 @@ export const ErrorHelper = {
    */
   getErrorInfo: (error: unknown): { message: string; code?: string; status?: number } => {
     if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosErrorWithCode;
-
-      // Check if it's our new structured error format
-      if (axiosError.response?.data?.error && axiosError.response?.data?.code) {
+      const body = parseApiError(error.response?.data, error.response?.status);
+      if (body) {
         return {
-          message: axiosError.response.data.error,
-          code: axiosError.response.data.code,
-          status: axiosError.response.data.status || axiosError.response.status,
+          message: body.error,
+          code: body.code || undefined,
+          status: body.status || error.response?.status,
         };
       }
 
-      // Fallback to legacy error handling
-      if (axiosError.response?.data && 'message' in axiosError.response.data) {
-        return {
-          message: (axiosError.response.data as any).message,
-          status: axiosError.response.status,
-        };
-      }
-
-      // Plain `{ "error": "..." }` bodies (no error code)
-      if (typeof (axiosError.response?.data as any)?.error === 'string') {
-        return {
-          message: (axiosError.response!.data as any).error,
-          status: axiosError.response!.status,
-        };
-      }
-
-      // Default axios error handling
+      // No API error body (network failure, proxy page, ...)
       return {
-        message: axiosError.message || 'An error occurred',
-        status: axiosError.response?.status,
+        message: error.message || 'An error occurred',
+        status: error.response?.status,
       };
     }
 

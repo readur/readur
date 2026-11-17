@@ -31,7 +31,8 @@ pub const EXAMPLES: &[(&str, Option<&str>)] = &[
     ("Change Own Password", None),
     ("Log Out", None),
     ("Error Response", None),
-    ("Document Error Response", None),
+    ("Invalid Query Error", None),
+    ("Invalid Request Body", None),
     ("Authentication Error", None),
     ("List Documents", None),
     ("Upload a Document", None),
@@ -232,7 +233,8 @@ pub async fn setup(heading: &str, fx: &Fixture) -> Setup {
         "Register" => Setup::new(Anonymous).schema::<RegisterRequest>(""),
         "Change Own Password" => Setup::new(Alice).schema::<ChangePasswordRequest>(""),
         "Error Response" => Setup::new(Alice).subst("{id}", Uuid::new_v4()),
-        "Document Error Response" => Setup::new(Alice),
+        "Invalid Query Error" => Setup::new(Alice),
+        "Invalid Request Body" => Setup::new(Alice).schema::<CreateLabel>(""),
         "List Documents" => {
             fx.document().await;
             Setup::new(Alice)

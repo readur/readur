@@ -327,5 +327,12 @@ async fn process_single_file(
             );
             Ok(None) // File was tracked as duplicate
         }
+        IngestionResult::Ignored { ignored_file_id } => {
+            info!(
+                "Skipped batch file {}: on the ignored-files list ({})",
+                file_info.name, ignored_file_id
+            );
+            Ok(None)
+        }
     }
 }

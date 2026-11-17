@@ -80,7 +80,7 @@ pub async fn create_shared_link(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<CreateSharedLinkRequest>,
-) -> Result<Json<SharedLinkResponse>, SharedLinkError> {
+) -> Result<(StatusCode, Json<SharedLinkResponse>), SharedLinkError> {
     let user_id = auth_user.user.id;
 
     // Rate limit shared link creation per user
@@ -132,7 +132,10 @@ pub async fn create_shared_link(
     let base_url = get_base_url(&state);
     debug!("Created shared link {} for document {}", link.id, document.id);
 
-    Ok(Json(SharedLinkResponse::from_shared_link(link, &base_url)))
+    Ok((
+        StatusCode::CREATED,
+        Json(SharedLinkResponse::from_shared_link(link, &base_url)),
+    ))
 }
 
 pub async fn list_shared_links(

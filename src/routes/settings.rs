@@ -89,11 +89,11 @@ async fn update_settings(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if !stored_webdav_password_reusable(stored.as_ref(), &update_data) {
-            return Ok((
+            return Ok(crate::errors::error_response(
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": SecretReuseRefused::MESSAGE })),
-            )
-                .into_response());
+                "SECRET_REUSE_REFUSED",
+                SecretReuseRefused::MESSAGE,
+            ));
         }
     }
     if let Some(Some(url)) = &update_data.webdav_server_url {

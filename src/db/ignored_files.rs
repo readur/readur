@@ -4,6 +4,14 @@ use crate::models::{IgnoredFile, IgnoredFileResponse, CreateIgnoredFile, Ignored
 use anyhow::{Result, Context};
 use crate::db::sanitize::ToDb;
 
+/// Ignored-files `reason` for a document its owner deleted.
+pub const REASON_DELETED_BY_USER: &str = "deleted by user";
+/// Ignored-files `reason` for a document removed by the low-OCR-confidence
+/// clean-up.
+pub const REASON_LOW_CONFIDENCE_CLEANUP: &str = "low OCR confidence clean-up";
+/// Ignored-files `reason` for a document removed by the failed-OCR clean-up.
+pub const REASON_FAILED_OCR_CLEANUP: &str = "failed OCR clean-up";
+
 pub async fn create_ignored_file(
     pool: &PgPool,
     ignored_file: CreateIgnoredFile,
@@ -326,48 +334,36 @@ pub async fn get_ignored_file_by_id(
     }
 }
 
+/// Takes a file off the user's ignored list. `false` when the user has no
+/// such entry.
 pub async fn delete_ignored_file(
     pool: &PgPool,
     id: Uuid,
     user_id: Uuid,
 ) -> Result<bool> {
-    let result = sqlx::query("DELETE FROM ignored_files WHERE id = $1 AND ignored_by = $2")
-        .bind(id)
-        .bind(user_id)
-        .execute(pool)
+    let removed = bulk_delete_ignored_files(pool, vec![id], user_id)
         .await
         .context("Failed to delete ignored file")?;
-
-    Ok(result.rows_affected() > 0)
+    Ok(removed > 0)
 }
 
-pub async fn is_file_ignored(
+/// The id of the user's ignored-files entry for this content, if any.
+/// Automatic ingestion (source sync, watch folders, batch import) skips such
+/// content; uploads are never checked.
+pub async fn find_ignored_file(
     pool: &PgPool,
+    user_id: Uuid,
     file_hash: &str,
-    source_type: Option<&str>,
-    source_path: Option<&str>,
-) -> Result<bool> {
-    let result = if let (Some(source_type), Some(source_path)) = (source_type, source_path) {
-        sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE file_hash = $1 AND source_type = $2 AND source_path = $3")
-            .bind(file_hash)
-            .bind(source_type.for_db())
-            .bind(source_path.for_db())
-            .fetch_one(pool)
-            .await
-    } else {
-        sqlx::query("SELECT COUNT(*) as count FROM ignored_files WHERE file_hash = $1")
-            .bind(file_hash)
-            .fetch_one(pool)
-            .await
-    };
-
-    match result {
-        Ok(row) => {
-            let count: i64 = row.get("count");
-            Ok(count > 0)
-        },
-        Err(_) => Ok(false),
-    }
+) -> Result<Option<Uuid>> {
+    sqlx::query_scalar(
+        "SELECT id FROM ignored_files WHERE ignored_by = $1 AND file_hash = $2 \
+         ORDER BY ignored_at DESC LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(file_hash)
+    .fetch_optional(pool)
+    .await
+    .context("Failed to look up ignored file")
 }
 
 pub async fn count_ignored_files(
@@ -453,65 +449,36 @@ pub async fn count_ignored_files(
     Ok(row.get::<i64, _>("count"))
 }
 
+/// Takes several files off the user's ignored list; returns how many were
+/// removed.
 pub async fn bulk_delete_ignored_files(
     pool: &PgPool,
     ids: Vec<Uuid>,
     user_id: Uuid,
 ) -> Result<i64> {
-    let result = sqlx::query("DELETE FROM ignored_files WHERE id = ANY($1) AND ignored_by = $2")
-        .bind(&ids)
-        .bind(user_id)
-        .execute(pool)
-        .await
-        .context("Failed to bulk delete ignored files")?;
-
-    Ok(result.rows_affected() as i64)
-}
-
-pub async fn create_ignored_file_from_document(
-    pool: &PgPool,
-    document_id: Uuid,
-    ignored_by: Uuid,
-    reason: Option<String>,
-    source_type: Option<String>,
-    source_path: Option<String>,
-    source_identifier: Option<String>,
-) -> Result<Option<IgnoredFile>> {
-    let document = sqlx::query(
+    // A WebDAV sync skips a path whose tracking row has an unchanged ETag,
+    // and the row of a deleted document stays behind without a document.
+    // Dropping that row makes the next sync download the file again, so
+    // taking a file off the list really lets it be imported again.
+    sqlx::query_scalar(
         r#"
-        SELECT id, filename, original_filename, file_path, file_size, mime_type, file_hash
-        FROM documents
-        WHERE id = $1
-        "#
+        WITH removed AS (
+            DELETE FROM ignored_files WHERE id = ANY($1) AND ignored_by = $2
+            RETURNING ignored_by, source_path
+        ),
+        untracked AS (
+            DELETE FROM webdav_files w
+            USING removed r
+            WHERE w.user_id = r.ignored_by
+              AND w.webdav_path = r.source_path
+              AND w.document_id IS NULL
+        )
+        SELECT COUNT(*) FROM removed
+        "#,
     )
-    .bind(document_id)
-    .fetch_optional(pool)
+    .bind(&ids)
+    .bind(user_id)
+    .fetch_one(pool)
     .await
-    .context("Failed to fetch document for ignored file creation")?;
-
-    if let Some(doc) = document {
-        let file_hash: Option<String> = doc.get("file_hash");
-        if let Some(file_hash) = file_hash {
-            let ignored_file = CreateIgnoredFile {
-                file_hash,
-                filename: doc.get("filename"),
-                original_filename: doc.get("original_filename"),
-                file_path: doc.get("file_path"),
-                file_size: doc.get("file_size"),
-                mime_type: doc.get("mime_type"),
-                source_type,
-                source_path,
-                source_identifier,
-                ignored_by,
-                reason,
-            };
-
-            let result = create_ignored_file(pool, ignored_file).await?;
-            Ok(Some(result))
-        } else {
-            Ok(None)
-        }
-    } else {
-        Ok(None)
-    }
+    .context("Failed to bulk delete ignored files")
 }

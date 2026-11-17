@@ -417,8 +417,8 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         )
         .await?;
 
-    // Should return internal server error when feature is disabled
-    assert_eq!(get_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    // 501 Not Implemented while the feature is disabled, as documented
+    assert_eq!(get_response.status(), StatusCode::NOT_IMPLEMENTED);
 
     // Cleanup
     if let Err(e) = ctx.cleanup_and_close().await {

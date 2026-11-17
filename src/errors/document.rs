@@ -10,9 +10,8 @@
 
 use axum::{
     http::StatusCode,
-    response::{IntoResponse, Json, Response},
+    response::{IntoResponse, Response},
 };
-use serde_json::json;
 
 /// Custom error type for document operations
 #[derive(Debug)]
@@ -49,7 +48,7 @@ impl DocumentError {
         }
     }
 
-    /// The HTTP status and the stable `error_code` clients can match on.
+    /// The HTTP status and the stable `code` clients can match on.
     pub fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "UPLOAD_BAD_REQUEST"),
@@ -76,17 +75,7 @@ impl DocumentError {
 
 impl IntoResponse for DocumentError {
     fn into_response(self) -> Response {
-        let (status, error_code) = self.status_and_code();
-        (
-            status,
-            Json(json!({
-                "error": self.message(),
-                "status": status.as_u16(),
-                "error_code": error_code,
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "request_id": uuid::Uuid::new_v4()
-            })),
-        )
-            .into_response()
+        let (status, code) = self.status_and_code();
+        super::error_response(status, code, self.message())
     }
 }

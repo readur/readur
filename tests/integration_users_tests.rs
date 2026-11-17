@@ -135,7 +135,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
@@ -579,7 +579,7 @@ mod tests {
         });
 
         let (status, body) = json_request(&ctx, "POST", "/api/users", &token, Some(new_admin)).await;
-        assert_eq!(status, StatusCode::OK, "{}", body);
+        assert_eq!(status, StatusCode::CREATED, "{}", body);
         assert_eq!(body["role"], "admin");
 
         let stored = ctx.state.db.get_user_by_username(&username).await.unwrap().unwrap();

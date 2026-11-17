@@ -5,7 +5,6 @@ use uuid::Uuid;
 use readur::{
     AppState,
     db::Database,
-    config::Config,
     models::{CreateUser, UserRole, CreateIgnoredFile},
     test_helpers::create_test_config_with_db,
 };
@@ -98,14 +97,9 @@ async fn test_ignored_files_crud_operations() -> Result<()> {
     assert_eq!(ignored_files.len(), 1);
     assert_eq!(ignored_files[0].file_hash, "test_hash_123");
     
-    // Test is_file_ignored function
-    let is_ignored = readur::db::ignored_files::is_file_ignored(
-        &state.db.pool,
-        "test_hash_123",
-        Some("webdav"),
-        Some("/webdav/test_file.pdf")
-    ).await?;
-    assert!(is_ignored);
+    // The entry is found by its owner and content hash
+    let found = readur::db::ignored_files::find_ignored_file(&state.db.pool, user_id, "test_hash_123").await?;
+    assert_eq!(found, Some(created.id));
     
     // Test deleting ignored file
     let deleted = readur::db::ignored_files::delete_ignored_file(&state.db.pool, created.id, user_id).await?;
@@ -315,74 +309,6 @@ async fn test_ignored_files_bulk_operations() -> Result<()> {
     
     let remaining_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
     assert_eq!(remaining_files.len(), 0);
-    
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_create_ignored_file_from_document() -> Result<()> {
-    let state = create_test_app_state().await?;
-    let user = create_test_user_with_suffix(&format!("doc_{}", Uuid::new_v4().simple()));
-    
-    // Create user in database
-    let created_user = state.db.create_user(user).await?;
-    let user_id = created_user.id;
-    
-    // Create a test document first
-    let document = readur::models::Document {
-        id: Uuid::new_v4(),
-        filename: "test_document.pdf".to_string(),
-        original_filename: "test_document.pdf".to_string(),
-        file_path: "/uploads/test_document.pdf".to_string(),
-        file_size: 1024000,
-        mime_type: "application/pdf".to_string(),
-        content: Some("Test document content".to_string()),
-        ocr_text: Some("OCR text".to_string()),
-        ocr_confidence: Some(95.5),
-        ocr_word_count: Some(150),
-        ocr_processing_time_ms: Some(1200),
-        ocr_status: Some("completed".to_string()),
-        ocr_error: None,
-        ocr_completed_at: Some(chrono::Utc::now()),
-        ocr_retry_count: None,
-        ocr_failure_reason: None,
-        tags: vec!["test".to_string()],
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-        user_id,
-        file_hash: Some("document_hash_123".to_string()),
-        original_created_at: None,
-        original_modified_at: None,
-        source_path: None,
-        source_type: None,
-        source_id: None,
-        file_permissions: None,
-        file_owner: None,
-        file_group: None,
-        source_metadata: None,
-    };
-    
-    // Insert document into database
-    let _document_id = state.db.create_document(document.clone()).await?;
-    
-    // Test creating ignored file from document
-    let ignored_file = readur::db::ignored_files::create_ignored_file_from_document(
-        &state.db.pool,
-        document.id,
-        user_id,
-        Some("deleted by user".to_string()),
-        Some("webdav".to_string()),
-        Some("/webdav/test_document.pdf".to_string()),
-        Some("webdav-server".to_string()),
-    ).await?;
-    
-    assert!(ignored_file.is_some());
-    let ignored_file = ignored_file.unwrap();
-    assert_eq!(ignored_file.filename, document.filename);
-    assert_eq!(ignored_file.file_size, document.file_size);
-    assert_eq!(ignored_file.mime_type, document.mime_type);
-    assert_eq!(ignored_file.ignored_by, user_id);
-    assert_eq!(ignored_file.source_type, Some("webdav".to_string()));
     
     Ok(())
 }

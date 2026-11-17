@@ -185,13 +185,14 @@ impl Database {
         Ok(())
     }
 
-    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
+    /// Deletes the account. Returns `false` when no account has that id.
+    pub async fn delete_user(&self, id: Uuid) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
 
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn get_user_by_oidc_subject(

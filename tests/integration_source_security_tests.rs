@@ -81,7 +81,7 @@ async fn local_folder_sources_are_admin_only_without_allowlist() {
     }
 
     let (status, _, body) = send(&ctx, "POST", "/api/sources", &admin_token, Some(local_folder_source(path))).await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
 
     let _ = ctx.cleanup_and_close().await;
 }
@@ -107,7 +107,7 @@ async fn source_credentials_are_redacted_and_preserved() {
         }
     });
     let (status, _, body) = send(&ctx, "POST", "/api/sources", &user_token, Some(create)).await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
     assert!(!String::from_utf8_lossy(&body).contains("stored-secret"));
     let created = json_body(&body);
     assert_eq!(created["config"]["has_password"], json!(true));
@@ -264,7 +264,7 @@ async fn sources_of_disabled_owners_are_not_synced() {
         }
     });
     let (status, _, body) = send(&ctx, "POST", "/api/sources", &token, Some(create)).await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
     let source_id = uuid::Uuid::parse_str(json_body(&body)["id"].as_str().unwrap()).unwrap();
     let owner_id = user.user_response.id;
 
@@ -339,7 +339,7 @@ async fn sources_without_a_secret_stay_editable() {
     });
     let create = json!({"name": "anonymous", "source_type": "webdav", "enabled": false, "config": config});
     let (status, _, body) = send(&ctx, "POST", "/api/sources", &user_token, Some(create)).await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
     let id = json_body(&body)["id"].as_str().unwrap().to_string();
 
     let mut edited = config.clone();
@@ -436,7 +436,7 @@ async fn user_content_is_served_with_restrictive_headers_and_bounded_share_views
         Some(json!({"document_id": document.id, "max_views": 2})),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&body));
     let share_token = json_body(&body)["token"].as_str().unwrap().to_string();
 
     let view = |ctx: &TestContext, share_token: String| {

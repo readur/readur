@@ -1,4 +1,4 @@
-import { ErrorCodes, ErrorHelper, type ErrorCode } from '../../../services/errors';
+import { apiErrorMessage, ErrorCodes, ErrorHelper, type ErrorCode } from '../../../services/errors';
 
 export { ErrorCodes };
 
@@ -16,9 +16,7 @@ export function statusOf(error: unknown): number | undefined {
 
 /** Server message from an API error body, if any. */
 export function serverMessage(error: unknown): string | undefined {
-  const data = (error as { response?: { data?: { message?: unknown; error?: unknown } } } | null)?.response?.data;
-  const text = data?.message ?? data?.error;
-  return typeof text === 'string' && text.trim() ? text : undefined;
+  return apiErrorMessage(error) ?? undefined;
 }
 
 export type ErrorCategory = 'auth' | 'validation' | 'network' | 'server' | 'unknown';

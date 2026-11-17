@@ -42,7 +42,9 @@ const mockApiResponse = {
   },
 };
 
-const renderLanguageSelector = (props: Partial<React.ComponentProps<typeof LanguageSelector>> = {}) => {
+const renderLanguageSelector = (
+  props: Partial<React.ComponentProps<typeof LanguageSelector>> = {},
+) => {
   const defaultProps = {
     selectedLanguages: [],
     primaryLanguage: '',
@@ -79,7 +81,9 @@ describe('LanguageSelector Component', () => {
     test('should show default state text when no languages selected', async () => {
       renderLanguageSelector();
       await waitFor(() => {
-        expect(screen.getByText('No languages selected. Documents will use default OCR language.')).toBeInTheDocument();
+        expect(
+          screen.getByText('No languages selected. Documents will use default OCR language.'),
+        ).toBeInTheDocument();
       });
     });
 
@@ -93,7 +97,7 @@ describe('LanguageSelector Component', () => {
     test('should show language count when languages are selected', async () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
-        primaryLanguage: 'eng'
+        primaryLanguage: 'eng',
       });
       await waitFor(() => {
         expect(screen.getByText('OCR Languages (2/4)')).toBeInTheDocument();
@@ -127,7 +131,7 @@ describe('LanguageSelector Component', () => {
     test('should show selected languages as tags', async () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
-        primaryLanguage: 'eng'
+        primaryLanguage: 'eng',
       });
 
       await waitFor(() => {
@@ -157,7 +161,7 @@ describe('LanguageSelector Component', () => {
     test('should show "Add more languages" when languages are selected', async () => {
       renderLanguageSelector({
         selectedLanguages: ['eng'],
-        primaryLanguage: 'eng'
+        primaryLanguage: 'eng',
       });
 
       await waitFor(() => {
@@ -169,7 +173,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa', 'fra', 'deu'],
         primaryLanguage: 'eng',
-        maxLanguages: 4
+        maxLanguages: 4,
       });
 
       await waitFor(() => {
@@ -182,7 +186,7 @@ describe('LanguageSelector Component', () => {
     test('should show primary language indicator', async () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
-        primaryLanguage: 'eng'
+        primaryLanguage: 'eng',
       });
 
       await waitFor(() => {
@@ -195,7 +199,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
         primaryLanguage: 'eng',
-        onLanguagesChange: mockOnChange
+        onLanguagesChange: mockOnChange,
       });
 
       await waitFor(() => {
@@ -222,7 +226,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
         primaryLanguage: 'eng',
-        disabled: true
+        disabled: true,
       });
 
       await waitFor(() => {
@@ -238,7 +242,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
         primaryLanguage: 'eng',
-        maxLanguages: 3
+        maxLanguages: 3,
       });
 
       await waitFor(() => {
@@ -251,7 +255,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng'],
         primaryLanguage: 'eng',
-        maxLanguages: 1
+        maxLanguages: 1,
       });
 
       await waitFor(() => {
@@ -302,7 +306,9 @@ describe('LanguageSelector Component', () => {
 
       await waitFor(() => {
         // Start with no languages
-        expect(screen.getByText('No languages selected. Documents will use default OCR language.')).toBeInTheDocument();
+        expect(
+          screen.getByText('No languages selected. Documents will use default OCR language.'),
+        ).toBeInTheDocument();
       });
 
       // Open dropdown and select English
@@ -319,7 +325,7 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: ['eng'],
         primaryLanguage: 'eng',
-        onLanguagesChange: mockOnChange
+        onLanguagesChange: mockOnChange,
       });
 
       await waitFor(() => {
@@ -336,11 +342,13 @@ describe('LanguageSelector Component', () => {
       renderLanguageSelector({
         selectedLanguages: [],
         primaryLanguage: '',
-        onLanguagesChange: mockOnChange
+        onLanguagesChange: mockOnChange,
       });
 
       await waitFor(() => {
-        expect(screen.getByText('No languages selected. Documents will use default OCR language.')).toBeInTheDocument();
+        expect(
+          screen.getByText('No languages selected. Documents will use default OCR language.'),
+        ).toBeInTheDocument();
       });
     });
   });
@@ -381,7 +389,7 @@ describe('LanguageSelector Component', () => {
     test('should have proper structure when languages are selected', async () => {
       renderLanguageSelector({
         selectedLanguages: ['eng', 'spa'],
-        primaryLanguage: 'eng'
+        primaryLanguage: 'eng',
       });
 
       await waitFor(() => {
@@ -418,29 +426,52 @@ describe('LanguageSelector Component', () => {
 
     test('removes a tag and promotes the next language to primary', async () => {
       const mockOnChange = vi.fn();
-      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', onLanguagesChange: mockOnChange });
+      renderLanguageSelector({
+        selectedLanguages: ['eng', 'spa'],
+        primaryLanguage: 'eng',
+        onLanguagesChange: mockOnChange,
+      });
       await user.click(await screen.findByRole('button', { name: 'Remove English' }));
       expect(mockOnChange).toHaveBeenCalledWith(['spa'], 'spa');
     });
 
     test('changes the primary language', async () => {
       const mockOnChange = vi.fn();
-      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', onLanguagesChange: mockOnChange });
-      await user.click(await screen.findByRole('button', { name: 'Add more languages (2 remaining)' }));
+      renderLanguageSelector({
+        selectedLanguages: ['eng', 'spa'],
+        primaryLanguage: 'eng',
+        onLanguagesChange: mockOnChange,
+      });
+      await user.click(
+        await screen.findByRole('button', { name: 'Add more languages (2 remaining)' }),
+      );
       await user.click(screen.getByRole('button', { name: 'Set Primary Spanish' }));
       expect(mockOnChange).toHaveBeenCalledWith(['eng', 'spa'], 'spa');
     });
 
     test('disables unselected languages at the limit and says why', async () => {
-      renderLanguageSelector({ selectedLanguages: ['eng', 'spa'], primaryLanguage: 'eng', maxLanguages: 2 });
-      await user.click(await screen.findByRole('button', { name: 'Add more languages (0 remaining)' }));
+      renderLanguageSelector({
+        selectedLanguages: ['eng', 'spa'],
+        primaryLanguage: 'eng',
+        maxLanguages: 2,
+      });
+      await user.click(
+        await screen.findByRole('button', { name: 'Add more languages (0 remaining)' }),
+      );
       expect(screen.getByRole('checkbox', { name: 'French' })).toBeDisabled();
       expect(screen.getByRole('checkbox', { name: 'English' })).toBeEnabled();
-      expect(screen.getByText('Maximum 2 languages allowed for optimal performance.')).toBeInTheDocument();
+      expect(
+        screen.getByText('Maximum 2 languages allowed for optimal performance.'),
+      ).toBeInTheDocument();
     });
 
     test('shows the server message when languages fail to load', async () => {
-      vi.mocked(ocrService.getAvailableLanguages).mockRejectedValue({ response: { data: { message: 'OCR offline' } } });
+      vi.mocked(ocrService.getAvailableLanguages).mockRejectedValue({
+        response: {
+          status: 503,
+          data: { error: 'OCR offline', code: 'SERVICE_UNAVAILABLE', status: 503 },
+        },
+      });
       renderLanguageSelector();
       expect(await screen.findByRole('alert')).toHaveTextContent('OCR offline');
     });

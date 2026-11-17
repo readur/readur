@@ -71,7 +71,16 @@ pub enum IngestionResult {
     },
     /// Document was tracked as duplicate (for WebDAV)
     TrackedAsDuplicate { existing_document_id: Uuid },
+    /// Nothing was stored: the user deleted a document with this content
+    /// that a source sync had imported, which put it on their ignored-files
+    /// list (`ignored_files`). Only automatic ingestion is checked; uploads
+    /// (`USER_UPLOAD_SOURCE_TYPE`) always go through.
+    Ignored { ignored_file_id: Uuid },
 }
+
+/// `source_type` of documents a user uploaded themselves. Every other source
+/// type is automatic ingestion, which skips content on the ignored-files list.
+pub const USER_UPLOAD_SOURCE_TYPE: &str = "web_upload";
 
 #[derive(Debug)]
 pub struct DocumentIngestionRequest {
@@ -243,14 +252,15 @@ impl DocumentIngestionService {
     /// compare against it. Both hold even when the stored bytes differ
     /// (images may be re-encoded by EXIF auto-rotation).
     ///
-    /// Steps: report content the user already has; otherwise prepare the
+    /// Steps: report content on the user's ignored-files list (automatic
+    /// ingestion only) or content the user already has; otherwise prepare the
     /// bytes (auto-rotation), store the file, and insert the row, resolving a
     /// lost race with a concurrent ingestion of the same content. Storage and
     /// insert failures are recorded as failed documents before returning.
     pub async fn ingest_document(
         &self,
         mut request: DocumentIngestionRequest,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let file_hash = self.calculate_file_hash(&request.file_data);
         let file_size = request.file_data.len() as i64;
 
@@ -263,14 +273,8 @@ impl DocumentIngestionService {
             request.deduplication_policy
         );
 
-        if let Some(existing_doc) = self
-            .find_existing_content(request.user_id, &file_hash, &request.filename)
-            .await
-        {
-            return Ok(duplicate_outcome(
-                &request.deduplication_policy,
-                existing_doc,
-            ));
+        if let Some(outcome) = self.outcome_without_storing(&request, &file_hash).await {
+            return Ok(outcome);
         }
 
         let failure = IngestionFailureContext::new(&request, &file_hash, file_size);
@@ -301,7 +305,7 @@ impl DocumentIngestionService {
                     "storage error",
                 )
                 .await;
-                return Err(e.into());
+                return Err(e);
             }
         };
 
@@ -309,6 +313,47 @@ impl DocumentIngestionService {
         let document = self.build_document(document_id, request, &file_path, file_size, &file_hash);
         self.insert_document(document, &policy, &failure, &file_path)
             .await
+    }
+
+    /// The outcome for content that is not stored: content on the user's
+    /// ignored-files list (automatic ingestion only), else content the user
+    /// already has. `None` when the content is new and must be stored.
+    async fn outcome_without_storing(
+        &self,
+        request: &DocumentIngestionRequest,
+        file_hash: &str,
+    ) -> Option<IngestionResult> {
+        if let Some(ignored_file_id) = self.find_ignored_content(request, file_hash).await {
+            debug!(
+                "Not ingesting {}: content is on the user's ignored-files list ({})",
+                request.filename, ignored_file_id
+            );
+            return Some(IngestionResult::Ignored { ignored_file_id });
+        }
+        let existing = self
+            .find_existing_content(request.user_id, file_hash, &request.filename)
+            .await?;
+        Some(duplicate_outcome(&request.deduplication_policy, existing))
+    }
+
+    /// The user's ignored-files entry for this content, for automatic
+    /// ingestion only. A failed lookup is logged and treated as "not
+    /// ignored": the file is imported, which the user can undo by deleting it
+    /// again.
+    async fn find_ignored_content(
+        &self,
+        request: &DocumentIngestionRequest,
+        file_hash: &str,
+    ) -> Option<Uuid> {
+        if request.source_type.as_deref() == Some(USER_UPLOAD_SOURCE_TYPE) {
+            return None;
+        }
+        crate::db::ignored_files::find_ignored_file(&self.db.pool, request.user_id, file_hash)
+            .await
+            .unwrap_or_else(|e| {
+                warn!("Could not check the ignored-files list for {}: {}", request.filename, e);
+                None
+            })
     }
 
     /// The user's stored document with this content, if any. A failed
@@ -356,7 +401,7 @@ impl DocumentIngestionService {
         mime_type: &str,
         filename: &str,
         data: Vec<u8>,
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<Vec<u8>> {
         if !mime_type.starts_with("image/") {
             return Ok(data);
         }
@@ -418,7 +463,7 @@ impl DocumentIngestionService {
         policy: &DeduplicationPolicy,
         failure: &IngestionFailureContext,
         file_path: &str,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let stored_document = document.clone();
         match self.db.create_document(document).await {
             Ok(saved_document) => {
@@ -444,7 +489,7 @@ impl DocumentIngestionService {
                 );
                 let failed = failure.failed_document("ingestion", Some(file_path.to_string()), &e);
                 self.record_failure(failed, "database error").await;
-                Err(e.into())
+                Err(e)
             }
         }
     }
@@ -460,7 +505,7 @@ impl DocumentIngestionService {
         failure: &IngestionFailureContext,
         policy: &DeduplicationPolicy,
         insert_error: anyhow::Error,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         warn!(
             "Hash collision detected during concurrent upload for {} (hash: {}), fetching existing document",
             failure.filename,
@@ -472,7 +517,7 @@ impl DocumentIngestionService {
 
         match self.find_race_winner(failure).await {
             Some(existing_doc) => Ok(duplicate_outcome(policy, existing_doc)),
-            None => Err(insert_error.into()),
+            None => Err(insert_error),
         }
     }
 
@@ -621,7 +666,7 @@ impl DocumentIngestionService {
         deduplication_policy: DeduplicationPolicy,
         source_type: &str,
         source_id: Option<Uuid>,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let (original_created_at, original_modified_at, source_metadata) =
             Self::extract_metadata_from_file_info(file_info);
 
@@ -655,7 +700,7 @@ impl DocumentIngestionService {
         user_id: Uuid,
         source_id: Uuid,
         source_type: &str,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),
@@ -685,7 +730,7 @@ impl DocumentIngestionService {
         mime_type: &str,
         user_id: Uuid,
         webdav_source_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),
@@ -714,7 +759,7 @@ impl DocumentIngestionService {
         file_data: Vec<u8>,
         mime_type: &str,
         user_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),

@@ -74,7 +74,7 @@ pub async fn create_source(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
     Json(source_data): Json<CreateSource>,
-) -> Result<Json<SourceResponse>, SourceError> {
+) -> Result<(StatusCode, Json<SourceResponse>), SourceError> {
     // Validate source configuration based on type
     if let Err(validation_error) = validate_source_config(&source_data) {
         error!("Source validation failed: {}", validation_error);
@@ -114,7 +114,7 @@ pub async fn create_source(
     response.total_documents = 0;
     response.total_documents_ocr = 0;
 
-    Ok(Json(response))
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// Get a specific source by ID with detailed stats
