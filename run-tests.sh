@@ -26,6 +26,10 @@ DEFAULT_ADMIN_PASSWORD="readur-test-admin-password"
 # Matches readur_test's ADMIN_USERNAME in docker-compose.test.yml.
 ADMIN_USERNAME_IN_COMPOSE="admin"
 
+# The Playwright install shared with scripts/run-e2e-local.sh.
+# shellcheck source=scripts/lib/playwright-browsers.sh
+. "$REPO_ROOT/scripts/lib/playwright-browsers.sh"
+
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[TEST]${NC} $1"
@@ -314,16 +318,22 @@ run_e2e_tests() {
     # Playwright runs on the host against the containerised dev server. The server was seeded
     # with ADMIN_PASSWORD (exported in main) and the compose file's admin username, so the
     # suite gets exactly those, whatever E2E_ADMIN_* the calling shell has.
+    # Installs run outside the captured subshell below, so a failure stops the run with its
+    # own error instead of surfacing as a failed test run (or not at all).
+    if [ ! -d "frontend/node_modules" ]; then
+        print_status "Installing frontend dependencies..."
+        (cd frontend && npm ci) || {
+            print_error "npm ci failed in frontend/"
+            exit 1
+        }
+    fi
+    (cd frontend && install_playwright_browsers) || {
+        print_error "Could not prepare the Playwright browsers (see the error above)"
+        exit 1
+    }
+
     output=$(
         cd frontend || exit 1
-        if [ ! -d "node_modules" ]; then
-            print_status "Installing frontend dependencies..." >&2
-            npm ci >&2
-        fi
-        if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
-            print_status "Installing the Playwright Chromium browser..." >&2
-            npx playwright install chromium >&2
-        fi
         PLAYWRIGHT_BASE_URL="http://localhost:5174" \
             E2E_ADMIN_USERNAME="$ADMIN_USERNAME_IN_COMPOSE" \
             E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \

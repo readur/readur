@@ -33,6 +33,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The Playwright install shared with run-tests.sh.
+# shellcheck source=scripts/lib/playwright-browsers.sh
+. "$REPO_ROOT/scripts/lib/playwright-browsers.sh"
 
 DB_HOST="${E2E_DB_HOST:-localhost}"
 DB_PORT="${E2E_DB_PORT:-5432}"
@@ -60,9 +63,16 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
-# True when something accepts TCP connections on the port (needs no lsof/ss).
+# True when something accepts TCP connections on the port over IPv4 or IPv6 loopback (needs no
+# lsof/ss). Both matter: Vite on Node 17+ binds `localhost` to ::1 only.
 port_in_use() {
-    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+    local host
+    for host in 127.0.0.1 ::1; do
+        if (exec 3<>"/dev/tcp/$host/$1") 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Wait until `url` answers, failing early if the process `pid` exits.
@@ -85,30 +95,117 @@ wait_for_service() {
     return 1
 }
 
-# Stop a process started with setsid, together with its children (npm runs vite as a child).
-stop_group() {
-    local pid="$1"
-    [ -n "$pid" ] || return 0
-    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
-    for _ in 1 2 3 4 5; do
-        kill -0 "$pid" 2>/dev/null || return 0
-        sleep 1
+# Run a command in the background as the leader of a new process group, so stop_tree can
+# signal it together with its children (npm runs vite as a child). setsid is Linux-only; macOS
+# ships perl, whose setpgrp does the same. Without either the command shares this script's
+# group and stop_tree falls back to walking its process tree. Sets STARTED_PID.
+start_in_own_group() {
+    if command_exists setsid; then
+        setsid "$@" &
+    elif command_exists perl; then
+        perl -e 'setpgrp(0, 0) or die "setpgrp: $!\n"; exec { $ARGV[0] } @ARGV or die "exec $ARGV[0]: $!\n"' "$@" &
+    else
+        "$@" &
+    fi
+    STARTED_PID=$!
+}
+
+# Whether the process exists and is not a zombie (`ps` behaves the same on Linux and macOS).
+process_alive() {
+    local state
+    state="$(ps -o stat= -p "$1" 2>/dev/null)" || return 1
+    case "$state" in
+        "" | *Z*) return 1 ;;
+    esac
+}
+
+# The process and all its descendants, parents first.
+process_tree() {
+    local table queue=("$1") pid child
+    table="$(ps -A -o pid= -o ppid=)"
+    while [ "${#queue[@]}" -gt 0 ]; do
+        pid="${queue[0]}"
+        queue=("${queue[@]:1}")
+        echo "$pid"
+        while read -r child; do
+            queue+=("$child")
+        done < <(awk -v parent="$pid" '$2 == parent { print $1 }' <<<"$table")
     done
-    kill -KILL -- "-$pid" 2>/dev/null || true
+}
+
+# Wait up to `seconds` for every listed process to exit; prints the survivors.
+wait_for_exit() {
+    local seconds="$1" pid survivors
+    shift
+    while :; do
+        survivors=""
+        for pid in "$@"; do
+            process_alive "$pid" && survivors="$survivors $pid"
+        done
+        if [ -z "$survivors" ] || [ "$seconds" -le 0 ]; then
+            echo "${survivors# }"
+            return 0
+        fi
+        sleep 1
+        seconds=$((seconds - 1))
+    done
+}
+
+# Stop a process started by start_in_own_group together with its children, and wait until they
+# are gone: TERM, up to 10s grace, then KILL. The tree is collected before signalling, since
+# children are reparented once their parent exits. Returns 1, naming them, when processes
+# survive even SIGKILL.
+stop_tree() {
+    local name="$1" pid="$2" tree survivors
+    [ -n "$pid" ] || return 0
+    # shellcheck disable=SC2207 # PIDs never contain whitespace
+    tree=($(process_tree "$pid"))
+    kill -TERM -- "-$pid" 2>/dev/null || true
+    kill -TERM "${tree[@]}" 2>/dev/null || true
+    survivors="$(wait_for_exit 10 "${tree[@]}")"
+    if [ -n "$survivors" ]; then
+        print_warning "The $name did not stop within 10s; killing PIDs $survivors"
+        kill -KILL -- "-$pid" 2>/dev/null || true
+        # shellcheck disable=SC2086 # a list of PIDs
+        kill -KILL $survivors 2>/dev/null || true
+        survivors="$(wait_for_exit 5 "${tree[@]}")"
+    fi
+    # Reap the direct child; it has exited (or is stuck and listed below).
+    process_alive "$pid" || wait "$pid" 2>/dev/null || true
+    if [ -n "$survivors" ]; then
+        print_error "The $name left processes running: PIDs $survivors (stop them by hand)"
+        return 1
+    fi
+}
+
+# Drop the scratch database. --force (PostgreSQL 13+) also ends sessions a stuck process still
+# holds; older servers and clients reject it, so retry without.
+drop_database() {
+    local output
+    if output="$(dropdb --if-exists --force -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" 2>&1)"; then
+        return 0
+    fi
+    if output="$(dropdb --if-exists -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" 2>&1)"; then
+        return 0
+    fi
+    print_error "Could not drop database $DB_NAME on $DB_HOST:$DB_PORT: $output"
+    print_error "Drop it by hand: dropdb -h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME"
+    return 1
 }
 
 cleanup() {
+    local status=$?
     print_status "Cleaning up..."
-    stop_group "$FRONTEND_PID"
-    stop_group "$BACKEND_PID"
+    stop_tree "frontend dev server" "$FRONTEND_PID" || status=1
+    stop_tree "backend" "$BACKEND_PID" || status=1
     if [ "$DB_CREATED" = true ]; then
-        dropdb --if-exists -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" 2>/dev/null ||
-            print_warning "Could not drop database $DB_NAME"
+        drop_database || status=1
     fi
     if [ -n "$RUNTIME_DIR" ]; then
         rm -rf "$RUNTIME_DIR"
     fi
     print_status "Cleanup complete (logs: $LOG_DIR)"
+    exit "$status"
 }
 
 usage() {
@@ -134,7 +231,7 @@ binary_path() {
 check_prerequisites() {
     print_status "Checking prerequisites..."
     local tool
-    for tool in "${CARGO_CMD%% *}" npm npx psql createdb dropdb curl setsid; do
+    for tool in "${CARGO_CMD%% *}" npm npx psql createdb dropdb curl ps awk; do
         if ! command_exists "$tool"; then
             print_error "$tool not found"
             exit 1
@@ -179,8 +276,9 @@ start_backend() {
         ADMIN_PASSWORD="$ADMIN_PASS" \
         UPLOAD_PATH="$RUNTIME_DIR/uploads" \
         WATCH_FOLDER="$RUNTIME_DIR/watch" \
-        setsid "$binary" >"$LOG_DIR/backend.log" 2>&1 &
-    BACKEND_PID=$!
+        TRUSTED_PROXIES="127.0.0.1,::1" \
+        start_in_own_group "$binary" >"$LOG_DIR/backend.log" 2>&1
+    BACKEND_PID="$STARTED_PID"
 
     if ! wait_for_service "http://127.0.0.1:$BACKEND_PORT/api/health" "$BACKEND_PID" 300; then
         print_error "Backend failed to start; see $LOG_DIR/backend.log"
@@ -196,21 +294,18 @@ start_frontend() {
         npm ci
     fi
 
-    if [ -n "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
-        print_status "Using Chromium at $PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"
-        # playwright.config.ts records video on failure, which needs Playwright's own ffmpeg.
-        npx playwright install ffmpeg ||
-            print_warning "Could not install Playwright's ffmpeg; pages fail to open without it (point PLAYWRIGHT_BROWSERS_PATH at a writable directory)"
-    else
-        print_status "Installing the Playwright Chromium browser..."
-        npx playwright install chromium
+    if ! install_playwright_browsers; then
+        print_error "Could not prepare the Playwright browsers (see the error above)"
+        exit 1
     fi
 
-    # vite.config.ts proxies /api (HTTP and WebSocket) to VITE_API_PROXY_TARGET.
+    # vite.config.ts proxies /api (HTTP and WebSocket) to VITE_API_PROXY_TARGET. WebSocket
+    # handshakes carry X-Forwarded-Host, which the backend believes from TRUSTED_PROXIES (set
+    # to loopback above) when it checks their Origin.
     print_status "Starting frontend dev server on port $FRONTEND_PORT..."
     VITE_API_PROXY_TARGET="http://127.0.0.1:$BACKEND_PORT" \
-        setsid npm run dev -- --port "$FRONTEND_PORT" --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
-    FRONTEND_PID=$!
+        start_in_own_group npm run dev -- --port "$FRONTEND_PORT" --strictPort >"$LOG_DIR/frontend.log" 2>&1
+    FRONTEND_PID="$STARTED_PID"
 
     if ! wait_for_service "http://localhost:$FRONTEND_PORT" "$FRONTEND_PID" 120; then
         print_error "Frontend failed to start; see $LOG_DIR/frontend.log"
