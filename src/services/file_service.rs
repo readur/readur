@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::models::Document;
 use crate::services::s3_service::S3Service;
 use crate::storage::local::LocalStorageBackend;
-use crate::storage::{factory, StorageBackend, StorageConfig};
+use crate::storage::{factory, read_limited, LimitedRead, StorageBackend, StorageConfig};
 
 #[cfg(feature = "ocr")]
 use image::{imageops::FilterType, DynamicImage, ImageFormat};
@@ -433,6 +433,32 @@ impl FileService {
                 let resolved_path = self.resolve_file_path(file_path).await?;
                 let data = fs::read(&resolved_path).await?;
                 Ok(data)
+            }
+        }
+    }
+
+    /// [`read_file`](Self::read_file), reading at most `max_bytes + 1` bytes
+    /// on every path (storage backend and legacy fallback alike), so a file
+    /// over the limit is reported as [`LimitedRead::TooLarge`] without being
+    /// loaded.
+    pub async fn read_file_limited(&self, file_path: &str, max_bytes: u64) -> Result<LimitedRead> {
+        if let Some(storage_key) = file_path.strip_prefix("s3://") {
+            return self
+                .storage
+                .retrieve_file_limited(storage_key, max_bytes)
+                .await;
+        }
+
+        match self
+            .storage
+            .retrieve_file_limited(file_path, max_bytes)
+            .await
+        {
+            Ok(read) => Ok(read),
+            Err(_) => {
+                let resolved_path = self.resolve_file_path(file_path).await?;
+                let file = fs::File::open(&resolved_path).await?;
+                Ok(read_limited(file, max_bytes).await?)
             }
         }
     }

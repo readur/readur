@@ -138,6 +138,22 @@ where
     }
 }
 
+/// Whether a failed ranged GetObject was refused because the range cannot
+/// be satisfied (`InvalidRange`, HTTP 416). Every range readur sends starts
+/// at byte 0, so this means the object is empty.
+#[cfg(feature = "s3")]
+pub(super) fn is_unsatisfiable_range<E>(
+    err: &aws_sdk_s3::error::SdkError<E, aws_sdk_s3::config::http::HttpResponse>,
+) -> bool
+where
+    E: aws_sdk_s3::error::ProvideErrorMetadata,
+{
+    let aws_sdk_s3::error::SdkError::ServiceError(ctx) = err else {
+        return false;
+    };
+    ctx.err().code() == Some("InvalidRange") || ctx.raw().status().as_u16() == 416
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +231,53 @@ mod tests {
         );
         assert_eq!(key_from_stored_path("s3://"), None);
         assert_eq!(key_from_stored_path("./uploads/documents/d.pdf"), None);
+    }
+
+    #[cfg(feature = "s3")]
+    fn get_object_failure(
+        status: u16,
+        code: Option<&str>,
+    ) -> aws_sdk_s3::error::SdkError<
+        aws_sdk_s3::operation::get_object::GetObjectError,
+        aws_sdk_s3::config::http::HttpResponse,
+    > {
+        use aws_sdk_s3::error::ErrorMetadata;
+        use aws_sdk_s3::operation::get_object::GetObjectError;
+        use aws_sdk_s3::primitives::SdkBody;
+        use aws_smithy_runtime_api::http::{Response, StatusCode};
+
+        let mut meta = ErrorMetadata::builder();
+        if let Some(code) = code {
+            meta = meta.code(code);
+        }
+        aws_sdk_s3::error::SdkError::service_error(
+            GetObjectError::generic(meta.build()),
+            Response::new(StatusCode::try_from(status).unwrap(), SdkBody::empty()),
+        )
+    }
+
+    /// A ranged read of an empty object is refused as `InvalidRange` / 416;
+    /// that, and only that, is classified as an unsatisfiable range.
+    #[cfg(feature = "s3")]
+    #[test]
+    fn unsatisfiable_range_is_told_from_typed_errors() {
+        assert!(is_unsatisfiable_range(&get_object_failure(
+            416,
+            Some("InvalidRange")
+        )));
+        assert!(is_unsatisfiable_range(&get_object_failure(416, None)));
+        assert!(!is_unsatisfiable_range(&get_object_failure(
+            404,
+            Some("NoSuchKey")
+        )));
+        assert!(!is_unsatisfiable_range(&get_object_failure(
+            403,
+            Some("AccessDenied")
+        )));
+        // A missing object stays a missing object under a ranged read.
+        assert!(is_missing_object(&get_object_failure(
+            404,
+            Some("NoSuchKey")
+        )));
     }
 }

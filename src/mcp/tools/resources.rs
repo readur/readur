@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::{
     mcp::{format, ReadurMcp},
     models::User,
+    storage::LimitedRead,
 };
 
 const DOCUMENT_URI_PREFIX: &str = "readur://documents/";
@@ -60,32 +61,39 @@ pub async fn read_resource(
         .map_err(|e| format::internal(&format!("load document {document_id}"), e))?
         .ok_or_else(|| McpError::resource_not_found(format!("document not found: {uri}"), None))?;
 
-    let too_large = |size: i64| {
+    let too_large = |size: Option<i64>| {
+        let size = match size {
+            Some(size) => format!("is {}, over", format::file_size(size)),
+            // A bounded read stopped past the limit: the exact size is unknown.
+            None => "is over".to_string(),
+        };
         McpError::invalid_params(
             format!(
-                "{} is {}, over the {} limit for resource reads. Use get_document_ocr_text to read \
-                 its extracted text instead.",
+                "{} {size} the {} limit for resource reads. Use get_document_ocr_text to \
+                 read its extracted text instead.",
                 document.original_filename,
-                format::file_size(size),
                 format::file_size(MAX_RESOURCE_BYTES)
             ),
             None,
         )
     };
+    // Cheap early reject from the recorded size.
     if document.file_size > MAX_RESOURCE_BYTES {
-        return Err(too_large(document.file_size));
+        return Err(too_large(Some(document.file_size)));
     }
 
-    let data = server
+    // The recorded size describes the uploaded bytes and the stored file can
+    // differ, so the read itself is bounded: it stops one byte past the limit.
+    let data = match server
         .state
         .file_service
-        .read_file(&document.file_path)
+        .read_file_limited(&document.file_path, MAX_RESOURCE_BYTES as u64)
         .await
-        .map_err(|e| format::internal(&format!("read file of document {document_id}"), e))?;
-    // The stored size can be stale; check what was actually read.
-    if data.len() as i64 > MAX_RESOURCE_BYTES {
-        return Err(too_large(data.len() as i64));
-    }
+        .map_err(|e| format::internal(&format!("read file of document {document_id}"), e))?
+    {
+        LimitedRead::Within(data) => data,
+        LimitedRead::TooLarge => return Err(too_large(None)),
+    };
 
     let contents = if document.mime_type.starts_with("text/") {
         match String::from_utf8(data) {

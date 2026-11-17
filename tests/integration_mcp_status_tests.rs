@@ -281,6 +281,39 @@ async fn resource_read_returns_own_files_only() {
     assert!(body["error"].is_object(), "{body}");
 }
 
+/// The 10 MiB resource limit bounds the read itself: a stored file larger
+/// than the size recorded for it (e.g. an image re-encoded on rotation) is
+/// refused, rather than loaded and only then measured.
+#[tokio::test]
+async fn resource_read_refuses_a_stored_file_larger_than_its_recorded_size() {
+    let upload_dir = tempfile::tempdir().expect("temp upload dir");
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(upload_dir.path().to_str().unwrap()),
+    )
+    .await;
+    let owner = ctx.auth_helper().create_test_user().await;
+    let id = create_file_document(&ctx, user_id(&owner), "scan.png", "image/png", b"small").await;
+
+    // Grow the stored file past the limit; the recorded size stays 5 bytes.
+    let document = ctx
+        .state()
+        .db
+        .get_document_by_id(id, user_id(&owner), readur::models::UserRole::User)
+        .await
+        .unwrap()
+        .unwrap();
+    let limit = readur::mcp::tools::resources::MAX_RESOURCE_BYTES as usize;
+    std::fs::write(&document.file_path, vec![0u8; limit + 1]).expect("grow stored file");
+    assert_eq!(document.file_size, 5);
+
+    let uri = format!("readur://documents/{id}");
+    let (_, body) = read_resource(&ctx, &login(&ctx, &owner).await, &uri).await;
+    let message = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("is over the"), "{body}");
+    assert!(message.contains("get_document_ocr_text"), "{body}");
+    assert!(body["result"].is_null(), "{body}");
+}
+
 #[tokio::test]
 async fn sync_status_rejects_non_uuid_source_id() {
     let ctx = TestContext::new().await;
