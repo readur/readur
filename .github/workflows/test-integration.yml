@@ -89,12 +89,12 @@ jobs:
           echo "Images pulled successfully. These are now in local Docker cache."
           echo "Testcontainers will use the local cached images."
 
-      - name: Remove local env files to prevent conflicts
+      - name: Remove local .env to prevent conflicts
         run: |
-          # Remove or rename env files so they don't override CI environment variables
+          # The server loads .env (dotenvy) and would let it override CI variables.
+          # .env.test is left in place: only run-tests.sh loads it, and the tooling
+          # tests read it as a tracked file.
           [ -f .env ] && mv .env .env.backup || true
-          [ -f .env.test ] && mv .env.test .env.test.backup || true
-          echo "Removed local env files to ensure CI env vars take precedence"
 
       - name: Generate throwaway JWT secret
         run: |

@@ -677,3 +677,29 @@ COMPOSE_FILE="docker-compose.test.yml"
         &scripts
     ));
 }
+
+/// CI once renamed .env.test out of the way "so it would not override CI variables". Nothing
+/// but run-tests.sh loads it (the server reads only .env), and these tests read it as a
+/// tracked file, so a workflow that moves or deletes it breaks them only in CI.
+#[test]
+fn workflows_leave_the_dotenv_tooling_in_place() {
+    let workflows = markdown::tracked_files(&repo_path(".github/workflows"), "yml");
+    assert!(!workflows.is_empty(), "no workflows found");
+    for workflow in workflows {
+        let text = std::fs::read_to_string(&workflow).unwrap();
+        for line in text.lines().map(str::trim) {
+            if line.starts_with('#') {
+                continue;
+            }
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let moves_or_deletes = words.iter().any(|w| matches!(*w, "mv" | "rm"));
+            for file in DOTENV_TOOLING {
+                assert!(
+                    !(moves_or_deletes && words.contains(file)),
+                    "{} moves or deletes {file}: {line}",
+                    relative(&workflow)
+                );
+            }
+        }
+    }
+}
