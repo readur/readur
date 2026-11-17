@@ -456,25 +456,11 @@ Content-Type: application/json
 #### Label-Based Search
 
 ```bash
-GET /api/search?query=invoice&labels=urgent,review
+GET /api/search/enhanced?query=invoice&tags=urgent,review
 Authorization: Bearer <jwt_token>
 ```
 
-#### Advanced Label Queries
-
-```bash
-POST /api/search/advanced
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "query": "budget",
-  "filters": {
-    "labels": ["Q1 2024", "Finance"],
-    "label_logic": "AND"
-  }
-}
-```
+`tags` takes label names and `label_ids` label IDs, both comma-separated; a document matches when it carries any of the listed labels. To require several labels at once, search for one and narrow the results by the others in the web interface. See [Search Parameters](api-reference.md#search-parameters) for every filter.
 
 ## Next Steps
 

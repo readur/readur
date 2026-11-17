@@ -219,7 +219,7 @@ pub struct SearchRequest {
     pub offset: Option<i64>,
     /// Whether to include text snippets with search matches (default: true)
     pub include_snippets: Option<bool>,
-    /// Length of text snippets in characters (default: 200)
+    /// Approximate length of text snippets in bytes, 1 to 2000 (default: 200)
     pub snippet_length: Option<i32>,
     /// Search algorithm to use (default: simple)
     pub search_mode: Option<SearchMode>,
@@ -321,6 +321,18 @@ impl FuzzyThreshold {
 
     pub fn value(self) -> f32 {
         self.0
+    }
+
+    /// The text `pg_trgm.word_similarity_threshold` is set to.
+    pub fn setting(self) -> String {
+        self.0.to_string()
+    }
+
+    /// The cutoff as Postgres holds it once `setting` is applied: a double
+    /// parsed from that text (not the widened `f32`, which differs in the
+    /// low digits, e.g. 0.57).
+    pub fn cutoff(self) -> f64 {
+        self.setting().parse().unwrap_or(f64::from(self.0))
     }
 }
 

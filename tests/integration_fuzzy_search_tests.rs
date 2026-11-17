@@ -331,6 +331,122 @@ async fn threshold_does_not_leak_into_other_modes_or_users() {
     assert_eq!(result["structuredContent"]["total"], json!(1), "{result}");
 }
 
+/// The highlighted words of each found document, by key: every highlight range of every snippet,
+/// as text. Ranges are byte offsets into the snippet text.
+fn highlights(lib: &Library, documents: &Value) -> HashMap<&'static str, Vec<String>> {
+    documents
+        .as_array()
+        .unwrap_or_else(|| panic!("no documents array: {documents}"))
+        .iter()
+        .map(|doc| {
+            let words = doc["snippets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|snippet| {
+                    let text = snippet["text"].as_str().unwrap().to_string();
+                    snippet["highlight_ranges"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(move |range| {
+                            let start = range["start"].as_u64().unwrap() as usize;
+                            let end = range["end"].as_u64().unwrap() as usize;
+                            text[start..end].to_string()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            (lib.key_by_id[doc["id"].as_str().unwrap()], words)
+        })
+        .collect()
+}
+
+impl Library {
+    /// Highlights of a REST enhanced search and of the MCP `enhanced_search` tool for the same
+    /// query and mode, after checking they agree.
+    async fn rest_and_mcp_highlights(
+        &self,
+        query: &str,
+        mode: &str,
+    ) -> HashMap<&'static str, Vec<String>> {
+        let uri = format!(
+            "/api/search/enhanced?query={}&search_mode={mode}&limit=100",
+            query.replace(' ', "%20")
+        );
+        let (status, body) = self.request("GET", &uri, None).await;
+        assert_eq!(status, StatusCode::OK, "{uri}: {body}");
+        let rest = highlights(self, &body["documents"]);
+        let result = self
+            .ctx
+            .mcp_call_tool(
+                &self.token,
+                "enhanced_search",
+                json!({ "query": query, "search_mode": mode, "limit": 100 }),
+            )
+            .await;
+        assert_eq!(result["isError"], json!(false), "{query:?}: {result}");
+        let mcp = highlights(self, &result["structuredContent"]["documents"]);
+        assert_eq!(
+            rest, mcp,
+            "{query:?} ({mode}): REST and MCP highlight differently"
+        );
+        rest
+    }
+}
+
+fn words(list: &[&str]) -> Vec<String> {
+    list.iter().map(|w| w.to_string()).collect()
+}
+
+#[tokio::test]
+async fn fuzzy_snippets_highlight_the_words_that_matched() {
+    let lib = invoice_library().await;
+    // Every document a misspelt query finds comes back with a snippet showing why: the word the
+    // trigram cutoff matched, which is spelled differently from the query.
+    let found = lib.rest_and_mcp_highlights("invoce", "fuzzy").await;
+    assert_eq!(found.len(), 3, "{found:?}");
+    assert_eq!(found["long_invoice"], words(&["invoice"]));
+    assert_eq!(found["short_invoice"], words(&["invoice"]));
+    assert_eq!(found["short_typo"], words(&["invoce"]));
+
+    // A multi-word query highlights the near-misses of each of its words.
+    let found = lib.rest_and_mcp_highlights("invoce totl", "fuzzy").await;
+    assert_eq!(found["short_invoice"], words(&["invoice", "total"]));
+}
+
+#[tokio::test]
+async fn fuzzy_snippets_use_the_users_threshold() {
+    let lib = invoice_library().await;
+    // word_similarity('invoce', 'invoice') is 0.571: below a 0.6 cutoff "invoice" is neither a
+    // match nor highlighted, so the remaining hit highlights only the exact spelling.
+    lib.set_threshold(0.6).await;
+    let found = lib.rest_and_mcp_highlights("invoce", "fuzzy").await;
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found["short_typo"], words(&["invoce"]));
+
+    // At 0.57 the same word both matches and is highlighted.
+    lib.set_threshold(0.57).await;
+    let found = lib.rest_and_mcp_highlights("invoce", "fuzzy").await;
+    assert_eq!(found["short_invoice"], words(&["invoice"]));
+}
+
+#[tokio::test]
+async fn non_fuzzy_snippets_highlight_the_query_as_typed() {
+    let lib = invoice_library().await;
+    for mode in ["simple", "phrase", "boolean"] {
+        let found = lib.rest_and_mcp_highlights("invoice", mode).await;
+        assert_eq!(found.len(), 2, "{mode}: {found:?}");
+        assert_eq!(found["long_invoice"], words(&["invoice"]), "{mode}");
+        assert_eq!(found["short_invoice"], words(&["invoice"]), "{mode}");
+    }
+    // Simple mode highlights substrings as typed, not near-misses, even with a fuzzy setting.
+    lib.set_threshold(0.1).await;
+    let found = lib.rest_and_mcp_highlights("total", "simple").await;
+    assert_eq!(found["short_typo"], words(&["total"]));
+    assert_eq!(found["short_invoice"], words(&["total"]));
+}
+
 /// The fuzzy condition can be answered from `idx_documents_content_trgm`: the index exists over
 /// exactly the expression the search uses, and the planner picks it for `<%`.
 #[tokio::test]

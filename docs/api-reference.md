@@ -452,84 +452,151 @@ POST /api/documents/{id}/retry-ocr
 
 ### Search Endpoints
 
+All search endpoints take a bearer token and only see the documents the caller may see (their own; administrators see every document). See the [Advanced Search Guide](advanced-search.md) for the search modes, query syntax and worked examples.
+
+| Endpoint | What it does |
+|----------|--------------|
+| `GET /api/search` | Simple-mode search, newest first by default, without ranking or snippets |
+| `GET /api/search/enhanced` | Search in any mode, ranked by relevance, with highlighted snippets |
+| `GET /api/search/timeline` | The number of matching documents per month, for the same parameters as a search |
+| `GET /api/search/facets` | The caller's MIME types and label names, with document counts |
+
+#### Search Parameters
+
+`GET /api/search`, `GET /api/search/enhanced` and `GET /api/search/timeline` take these query parameters. All are optional, but a search needs a `query` of at least 2 characters or at least one filter. Unknown parameters are ignored. URL-encode values (`%20` for a space).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | (empty) | Search text, matched against the document content and OCR text. At most 1000 bytes |
+| `search_mode` | string | `simple` | `simple` (every word), `phrase` (adjacent words in order), `boolean` (operators) or `fuzzy` (similar spelling, cutoff from the caller's fuzzy search threshold setting). `GET /api/search` always searches in simple mode |
+| `limit` | integer | `25` | Page size, 1 to 1000 |
+| `offset` | integer | `0` | Number of results to skip |
+| `include_snippets` | boolean | `true` | Return snippets (enhanced search only) |
+| `snippet_length` | integer | `200` | Approximate snippet size in bytes, 1 to 2000 |
+| `sort_by` | string | relevance | `created_at`, `updated_at`, `filename`, `file_size`, `ocr_status`, `mime_type` or `ocr_confidence`. Without it, enhanced search orders by relevance and `GET /api/search` newest first |
+| `sort_order` | string | `desc` | `asc` or `desc` |
+| `tags` | comma-separated strings | | Documents carrying any label with one of these names |
+| `mime_types` | comma-separated strings | | Documents of any of these MIME types |
+| `label_ids` | comma-separated UUIDs | | Documents carrying any of these labels; an invalid UUID is a 400 |
+| `source_ids` | comma-separated UUIDs | | Documents ingested from any of these sources |
+| `source_types` | comma-separated strings | | Documents from any of these source types; `direct_upload` also matches documents without a source |
+| `ocr_status` | string | | `pending` (also documents without a status), `processing`, `completed` or `failed` |
+| `created_from` | RFC 3339 timestamp | | Documents created at or after this instant |
+| `created_to` | RFC 3339 timestamp | | Documents created at or before this instant |
+
+Filters combine with AND. A query that is too short or too long, an out-of-range `limit`, `offset` or `snippet_length`, an unknown `search_mode`, `sort_by` or `ocr_status`, or `created_from` later than `created_to` is a `400 Bad Request`. `GET /api/search` answers errors with a JSON body (`{"error": "...", "code": "SEARCH_QUERY_TOO_SHORT", "status": 400}`) and refuses more than 10000 matches with `413` (`SEARCH_TOO_MANY_RESULTS`); the other endpoints answer with the status code alone.
+
+The examples below run against a library of three documents: a PDF "invoice for march" (added 2024-03-10, labelled Finance), a PNG "scanned invoice" (2024-03-20) and a PNG "invoice copy" (2024-06-01).
+
 #### Search Documents
 
 ```http
-GET /api/search
+GET /api/search?query=invoice&limit=10
 ```
 
-**Query Parameters:**
-- `q`: Search query (required)
-- `page`: Page number
-- `per_page`: Items per page
-- `filters`: JSON-encoded filters
-- `highlight`: Enable highlighting (default: true)
+Simple-mode search. Returns the response below with `search_rank` set to `null`, no `snippets`, no `suggestions` and `query_time_ms` set to `0`.
 
-`GET /api/search` always matches all words (simple mode). Fuzzy (similar spelling) matching is `GET /api/search/enhanced?search_mode=fuzzy`, which uses the caller's fuzzy search threshold setting; see the [Advanced Search Guide](advanced-search.md#search-api) for the exact parameters.
+#### Enhanced Search
+
+```http
+GET /api/search/enhanced?query=invoce&search_mode=fuzzy&mime_types=application/pdf
+```
+
+Search in any mode, ranked by relevance (`search_rank`; in fuzzy mode the pg_trgm word similarity of the query to the closest stretch of the text), with snippets. Each snippet's `highlight_ranges` mark the matched words: the query's words as typed, or in fuzzy mode the words spelled within the threshold of a query word (so `invoce` highlights `invoice`). `start_offset` and `end_offset` locate the snippet in the document text and `highlight_ranges` locate matches in the snippet, all as UTF-8 byte offsets.
 
 **Response:** `200 OK`
 ```json
 {
-  "results": [
+  "documents": [
     {
-      "document_id": "uuid",
-      "title": "Document Title",
-      "score": 0.95,
-      "highlights": [
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "filename": "march_invoice.pdf",
+      "original_filename": "march_invoice.pdf",
+      "file_size": 2048,
+      "mime_type": "application/pdf",
+      "tags": [],
+      "labels": [
         {
-          "field": "content",
-          "snippet": "...matched <mark>text</mark> here..."
+          "id": "6f1c2a8e-3b7d-4c1e-9a2f-0d4b5e6f7a8b",
+          "user_id": "0b9e8d7c-6a5f-4e3d-2c1b-0a9f8e7d6c5b",
+          "name": "Finance",
+          "description": null,
+          "color": "#0969da",
+          "background_color": null,
+          "icon": null,
+          "created_at": "2024-03-01T08:00:00Z",
+          "updated_at": "2024-03-01T08:00:00Z",
+          "document_count": 0,
+          "source_count": 0
+        }
+      ],
+      "created_at": "2024-03-10T09:00:00Z",
+      "updated_at": "2024-03-10T09:00:00Z",
+      "source_id": null,
+      "source_type": null,
+      "has_ocr_text": true,
+      "ocr_confidence": 95.5,
+      "ocr_word_count": 3,
+      "ocr_processing_time_ms": 1200,
+      "ocr_status": "completed",
+      "search_rank": 0.5714286,
+      "snippets": [
+        {
+          "text": "invoice for march",
+          "start_offset": 0,
+          "end_offset": 17,
+          "highlight_ranges": [{ "start": 0, "end": 7 }]
         }
       ]
     }
   ],
-  "total": 42,
-  "facets": {
-    "mime_types": {
-      "application/pdf": 30,
-      "text/plain": 12
-    },
-    "labels": {
-      "important": 15,
-      "archive": 27
-    }
-  }
+  "total": 1,
+  "query_time_ms": 4,
+  "suggestions": ["\"invoce\"", "invoce*"]
 }
 ```
 
-#### Advanced Search
+`total` counts the matches across all pages. While a document is being OCRed it also carries `ocr_progress_current` and `ocr_progress_total` (pages done and pages in total). `suggestions` are alternative queries (the query as a phrase, and with a trailing `*`) for queries longer than three characters.
+
+#### Search Timeline
 
 ```http
-POST /api/search/advanced
+GET /api/search/timeline?query=invoice
 ```
 
-**Request Body:**
+The number of documents matching the search per UTC creation month, over all matches rather than one page; pagination, snippet and sort parameters are ignored. Months without matches are omitted; oldest first.
+
+**Response:** `200 OK`
+```json
+[
+  { "month": "2024-03", "count": 2 },
+  { "month": "2024-06", "count": 1 }
+]
+```
+
+#### Search Facets
+
+```http
+GET /api/search/facets
+```
+
+The MIME types of the caller's documents and the names of all their labels, each with a document count (most used first, then by name), for building filters. Unused labels, such as the default labels every new account starts with, have a count of 0. Takes no parameters.
+
+**Response:** `200 OK`
 ```json
 {
-  "query": {
-    "must": [
-      {"field": "content", "value": "invoice", "type": "match"}
-    ],
-    "should": [
-      {"field": "title", "value": "2024", "type": "contains"}
-    ],
-    "must_not": [
-      {"field": "labels", "value": "draft", "type": "exact"}
-    ]
-  },
-  "filters": {
-    "date_range": {
-      "from": "2024-01-01",
-      "to": "2024-12-31"
-    },
-    "mime_types": ["application/pdf"],
-    "min_confidence": 0.8
-  },
-  "sort": [
-    {"field": "created_at", "order": "desc"}
+  "mime_types": [
+    { "value": "image/png", "count": 2 },
+    { "value": "application/pdf", "count": 1 }
   ],
-  "page": 1,
-  "per_page": 20
+  "tags": [
+    { "value": "Finance", "count": 1 },
+    { "value": "Archive", "count": 0 },
+    { "value": "Important", "count": 0 },
+    { "value": "Personal", "count": 0 },
+    { "value": "To Review", "count": 0 },
+    { "value": "Work", "count": 0 }
+  ]
 }
 ```
 
@@ -1340,7 +1407,7 @@ curl -X POST http://localhost:8080/api/documents/upload \
   -F "labels=important,invoice"
 
 # Search documents
-curl -X GET "http://localhost:8080/api/search?q=invoice%202024" \
+curl -X GET "http://localhost:8080/api/search/enhanced?query=invoice%202024" \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Get OCR queue status

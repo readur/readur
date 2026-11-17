@@ -184,7 +184,7 @@ Parameters of `GET /api/search` and `GET /api/search/enhanced`, besides the filt
 - `query`: the search text (see [What Search Looks At](#what-search-looks-at))
 - `search_mode`: `simple` (default), `phrase`, `boolean` or `fuzzy`; `GET /api/search` always searches in simple mode
 - `include_snippets`: whether to return snippets (default `true`, enhanced search only)
-- `snippet_length`: snippet size in characters, 1 to 2000 (default 200)
+- `snippet_length`: approximate snippet size in bytes, 1 to 2000 (default 200)
 
 Spaces and other reserved characters in a parameter value must be URL-encoded (`%20` for a space).
 

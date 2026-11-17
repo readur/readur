@@ -7,6 +7,7 @@ mod operations;
 mod search;
 mod search_query;
 mod snippets;
+mod trigram;
 
 // Re-export helper functions for use by other modules if needed
 pub use helpers::*;

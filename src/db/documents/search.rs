@@ -8,7 +8,7 @@ use super::helpers::{
     OCR_PROGRESS_JOIN,
 };
 use super::search_query::BooleanQuery;
-use super::snippets::build_snippets;
+use super::snippets::{build_snippets, Highlight};
 use crate::db::sanitize::strip_nul;
 use crate::db::Database;
 use crate::models::{
@@ -158,7 +158,7 @@ impl Database {
         let mut tx = self.pool.begin().await?;
         if matches!(mode, SearchMode::Fuzzy) {
             sqlx::query("SELECT set_config('pg_trgm.word_similarity_threshold', $1, true)")
-                .bind(fuzzy.value().to_string())
+                .bind(fuzzy.setting())
                 .execute(&mut *tx)
                 .await?;
         }
@@ -282,13 +282,14 @@ impl Database {
         tx.commit().await?;
 
         let terms = highlight_terms(search_query, mode);
+        let highlight = Highlight::for_mode(mode, fuzzy);
         let mut results = Vec::new();
         for row in rows {
             let item = map_row_to_document_with_progress(&row);
             let search_rank: f32 = row.try_get("search_rank").unwrap_or(0.0);
 
             let snippets = if include_snippets && !search_query.is_empty() {
-                self.generate_snippets(&item.document, &terms, snippet_length)
+                self.generate_snippets(&item.document, &terms, snippet_length, highlight)
             } else {
                 Vec::new()
             };
@@ -329,19 +330,21 @@ impl Database {
         Ok(())
     }
 
-    /// Snippets of `document`'s content and OCR text around each
-    /// occurrence of a highlight term (see `highlight_terms`).
-    pub fn generate_snippets(
+    /// Snippets of `document`'s content and OCR text around each match of
+    /// a highlight term (see `highlight_terms`): as typed, or in fuzzy mode
+    /// the words the search's trigram cutoff matched (see `Highlight`).
+    pub(crate) fn generate_snippets(
         &self,
         document: &Document,
         terms: &[String],
         snippet_length: usize,
+        highlight: Highlight,
     ) -> Vec<SearchSnippet> {
         let texts = [
             document.content.as_deref().unwrap_or(""),
             document.ocr_text.as_deref().unwrap_or(""),
         ];
-        build_snippets(&texts, terms, snippet_length)
+        build_snippets(&texts, terms, snippet_length, highlight)
     }
 
     /// Counts total matching documents for pagination (without applying

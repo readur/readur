@@ -553,7 +553,7 @@ MISSING=$(comm -23 \
 
 # 4. Search functionality
 echo -n "Search working: "
-RESULTS=$(curl -s "http://localhost:8080/api/search?q=test" | jq '.results | length')
+RESULTS=$(curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/search?query=test" | jq '.documents | length')
 [ "$RESULTS" -gt 0 ] && echo "✓" || echo "✗"
 
 # 5. OCR queue

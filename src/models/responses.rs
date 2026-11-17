@@ -12,9 +12,9 @@ use super::document::Document;
 pub struct SearchSnippet {
     /// The snippet text content
     pub text: String,
-    /// Starting character position in the original document
+    /// Start of the snippet in the document text, as a UTF-8 byte offset
     pub start_offset: i32,
-    /// Ending character position in the original document
+    /// End of the snippet in the document text, as a UTF-8 byte offset
     pub end_offset: i32,
     /// Ranges within the snippet that should be highlighted
     pub highlight_ranges: Vec<HighlightRange>,
@@ -23,9 +23,9 @@ pub struct SearchSnippet {
 #[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct HighlightRange {
-    /// Start position of highlight within the snippet
+    /// Start of the highlight within the snippet text, as a UTF-8 byte offset
     pub start: i32,
-    /// End position of highlight within the snippet
+    /// End of the highlight within the snippet text, as a UTF-8 byte offset
     pub end: i32,
 }
 

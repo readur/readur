@@ -7,11 +7,11 @@ export type SearchSnippet = {
  */
 text: string, 
 /**
- * Starting character position in the original document
+ * Start of the snippet in the document text, as a UTF-8 byte offset
  */
 start_offset: number, 
 /**
- * Ending character position in the original document
+ * End of the snippet in the document text, as a UTF-8 byte offset
  */
 end_offset: number, 
 /**

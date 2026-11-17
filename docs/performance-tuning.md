@@ -538,7 +538,7 @@ export let options = {
 
 export default function() {
     // Search test
-    let searchRes = http.get('http://localhost:8080/api/search?q=test');
+    let searchRes = http.get('http://localhost:8080/api/search?query=test', { headers: { Authorization: `Bearer ${__ENV.TOKEN}` } });
     check(searchRes, {
         'search status is 200': (r) => r.status === 200,
         'search response time < 500ms': (r) => r.timings.duration < 500,
