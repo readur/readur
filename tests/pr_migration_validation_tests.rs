@@ -882,16 +882,11 @@ mod pr_migration_validation_tests {
         }
     }
 
-    /// Whether any new migration touches `failed_documents`. The integrity check this gates
-    /// (`test_data_transformation_integrity`) verifies the one-time move of failed OCR rows from
-    /// `documents` into `failed_documents`; running it for unrelated migrations (anything with an
-    /// UPDATE ... SET, say) made every such PR fail on rows it never meant to move. Migrations
-    /// that transform other data get their own before/after tests (see
-    /// tests/new_migration_data_tests.rs).
     /// Whether a migration copies rows into failed_documents when it runs, as the original
     /// backfill did. Only statement-level inserts count: a function body (between dollar
     /// quotes) that inserts later, at runtime, does not move existing documents, and its
-    /// behaviour is tested in tests/new_migration_data_tests.rs.
+    /// behaviour is tested in tests/new_migration_data_tests.rs. A DO block is skipped the
+    /// same way; a migration that repairs a few rows in one is tested there too.
     fn migrations_backfill_failed_documents(migrations: &[String]) -> bool {
         migrations.iter().any(|migration_file| {
             std::fs::read_to_string(migration_file)
@@ -901,17 +896,44 @@ mod pr_migration_validation_tests {
     }
 
     fn backfills_failed_documents(sql: &str) -> bool {
-        // Even-numbered pieces are outside $$ ... $$ (or $tag$ ... $tag$) bodies.
-        let dollar_quote = regex::Regex::new(r"\$[A-Za-z_]*\$").unwrap();
-        let sql = sql.to_lowercase();
-        let found = dollar_quote.split(&sql).step_by(2).any(|outside| {
-            outside
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .windows(3)
-                .any(|w| w == ["insert", "into", "failed_documents"])
-        });
-        found
+        let insert = regex::Regex::new(
+            r#"(?i)\binsert\s+into\s+(?:"?public"?\s*\.\s*)?"?failed_documents"?(?:\W|$)"#,
+        )
+        .unwrap();
+        insert.is_match(&statement_level_sql(sql))
+    }
+
+    /// `sql` without comments, string literals and dollar-quoted bodies
+    /// (function bodies, DO blocks), each replaced by a space.
+    fn statement_level_sql(sql: &str) -> String {
+        let mut out = String::with_capacity(sql.len());
+        let mut rest = sql;
+        while let Some(c) = rest.chars().next() {
+            let skipped = if rest.starts_with("--") {
+                rest.find('\n').unwrap_or(rest.len())
+            } else if rest.starts_with("/*") {
+                rest[2..].find("*/").map_or(rest.len(), |end| end + 4)
+            } else if c == '\'' {
+                rest[1..].find('\'').map_or(rest.len(), |end| end + 2)
+            } else if let Some(tag) = dollar_quote_tag(rest) {
+                rest[tag.len()..]
+                    .find(tag)
+                    .map_or(rest.len(), |end| end + 2 * tag.len())
+            } else {
+                out.push(c);
+                rest = &rest[c.len_utf8()..];
+                continue;
+            };
+            out.push(' ');
+            rest = &rest[skipped..];
+        }
+        out
+    }
+
+    /// The opening `$tag$` (or `$$`) at the start of `sql`, if there is one.
+    fn dollar_quote_tag(sql: &str) -> Option<&str> {
+        let tag = regex::Regex::new(r"^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$").unwrap();
+        tag.find(sql).map(|m| m.as_str())
     }
 
     #[test]
@@ -926,8 +948,42 @@ mod pr_migration_validation_tests {
         )
         .unwrap();
         assert!(!backfills_failed_documents(&function_only));
+        let repair = std::fs::read_to_string(
+            "migrations/20261117140000_reset_stuck_ocr_jobs_records_every_exhausted_job.sql",
+        )
+        .unwrap();
+        assert!(!backfills_failed_documents(&repair));
         assert!(!backfills_failed_documents(
             "CREATE TABLE failed_documents (id uuid);"
         ));
+        for statement in [
+            "INSERT INTO failed_documents(user_id) SELECT user_id FROM documents;",
+            "insert into public.failed_documents (user_id) select user_id from documents;",
+            "INSERT INTO \"failed_documents\" (user_id) VALUES (NULL);",
+            "INSERT INTO \"public\".\"failed_documents\"(user_id) VALUES (NULL);",
+            "CREATE FUNCTION f() RETURNS void AS $$ SELECT 1 $$ LANGUAGE sql;\n\
+             INSERT INTO failed_documents (user_id) VALUES (NULL);",
+        ] {
+            assert!(backfills_failed_documents(statement), "{statement}");
+        }
+        for not_a_backfill in [
+            "CREATE FUNCTION f() RETURNS void AS $fn1$ \
+             BEGIN INSERT INTO failed_documents (user_id) VALUES (NULL); END \
+             $fn1$ LANGUAGE plpgsql;",
+            // A digit in the tag must not shift what counts as inside a body.
+            "CREATE FUNCTION f() RETURNS void AS $fn1$ SELECT 1 $fn1$ LANGUAGE sql;\n\
+             CREATE FUNCTION g() RETURNS void AS $$ \
+             BEGIN INSERT INTO failed_documents (user_id) VALUES (NULL); END \
+             $$ LANGUAGE plpgsql;",
+            "-- this used to INSERT INTO failed_documents directly\nSELECT 1;",
+            "/* INSERT INTO failed_documents (user_id) */ SELECT 1;",
+            "SELECT 'INSERT INTO failed_documents';",
+            "INSERT INTO failed_documents_archive (user_id) VALUES (NULL);",
+        ] {
+            assert!(
+                !backfills_failed_documents(not_a_backfill),
+                "{not_a_backfill}"
+            );
+        }
     }
 }
