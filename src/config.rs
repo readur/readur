@@ -49,8 +49,6 @@ pub struct Config {
     pub max_office_document_size_mb: u64,
 
     // Performance
-    pub memory_limit_mb: usize,
-    pub cpu_priority: String,
 
     // OIDC Configuration
     pub oidc_enabled: bool,
@@ -154,8 +152,6 @@ impl Config {
             ),
 
             // Performance Configuration
-            memory_limit_mb: logged_number("MEMORY_LIMIT_MB", env::var("MEMORY_LIMIT_MB"), 512),
-            cpu_priority: logged_string("CPU_PRIORITY", env::var("CPU_PRIORITY"), "normal"),
 
             // OIDC Configuration
             oidc_enabled: logged_switch("OIDC_ENABLED", env::var("OIDC_ENABLED")),

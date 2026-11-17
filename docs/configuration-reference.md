@@ -113,8 +113,6 @@ See [Watch Folder](WATCH_FOLDER.md) and [Per-User Watch Directories](per-user-wa
 | `MAX_PDF_SIZE_MB` | Integer | `100` | Largest PDF that is processed for text | No |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Largest Office document that is processed for text | No |
 | `TEMP_DIR` | String | the platform temporary directory (`TMPDIR`, else `/tmp`) | Directory for temporary files: OCR scratch images, PDF page renders, ocrmypdf output and thumbnails. Created if missing | No |
-| `MEMORY_LIMIT_MB` | Integer | `512` | Reported in the startup log only; it does not limit anything | No |
-| `CPU_PRIORITY` | String | `normal` | Reported in the startup log only; it does not change process priority | No |
 
 ### AI Assistants (MCP)
 

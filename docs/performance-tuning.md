@@ -24,7 +24,7 @@ All server settings are environment variables, read at startup; restart Readur a
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | `100` | Larger Office documents are not processed for text |
 | `OCR_LANGUAGE` | `eng` | Default OCR language. Every extra language in a combination (such as `eng+deu`) makes Tesseract slower |
 
-`MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only printed in the startup log; they do not limit memory or change process priority. Use container limits instead (below).
+Readur has no memory or CPU-priority setting of its own. Use container limits instead (below).
 
 ### Choosing `CONCURRENT_OCR_JOBS`
 

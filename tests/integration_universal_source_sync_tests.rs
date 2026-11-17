@@ -151,8 +151,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         concurrent_ocr_jobs: 2,
         ocr_timeout_seconds: 60,
         max_file_size_mb: 10,
-        memory_limit_mb: 256,
-        cpu_priority: "normal".to_string(),
         oidc_enabled: false,
         oidc_client_id: None,
         oidc_client_secret: None,

@@ -91,8 +91,6 @@ The fuzzy search threshold is not an environment variable: each user sets it und
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEMORY_LIMIT_MB` | `512` | Shown in the startup log only; does not limit memory. Limit the container instead |
-| `CPU_PRIORITY` | `normal` | Shown in the startup log only; does not change process priority |
 
 ### AI Assistants (MCP)
 

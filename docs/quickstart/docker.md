@@ -172,7 +172,7 @@ services:
     cpus: 2.0
 ```
 
-Keep `CONCURRENT_OCR_JOBS` in line with the CPUs and memory you give the container. `MEMORY_LIMIT_MB` does not limit anything.
+Keep `CONCURRENT_OCR_JOBS` in line with the CPUs and memory you give the container.
 
 ### Storage Location
 

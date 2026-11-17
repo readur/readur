@@ -106,7 +106,7 @@ MAX_FILE_SIZE_MB=50
 - `OCR_TIMEOUT_SECONDS` is the time limit for processing one document.
 - `MAX_FILE_SIZE_MB` is the largest accepted upload. `MAX_PDF_SIZE_MB` and `MAX_OFFICE_DOCUMENT_SIZE_MB` (both default `100`) limit which PDFs and Office documents are processed for text.
 
-`MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only reported in the startup log; they do not limit anything. To cap memory or CPU, use container limits.
+Readur has no memory or CPU-priority setting of its own. To cap memory or CPU, use container limits.
 
 ### Watch Folder
 

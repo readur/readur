@@ -379,16 +379,14 @@ What the chart creates:
 - One Deployment with **one replica** and the `Recreate` strategy, running as UID/GID 1000 with an init container that sets the ownership of `/app/uploads` and `/app/watch` to 1000:1000.
 - Startup, readiness and liveness probes on `GET /api/health`, port 8000.
 - A Service on port 8000, and an Ingress when `ingress.main.enabled` is `true` (default class `nginx`, with a 100m body size annotation).
-- A PersistentVolumeClaim for the watch folder (5Gi, `ReadWriteOnce`).
+- PersistentVolumeClaims for the uploads and watch folders (`ReadWriteOnce`), kept after `helm uninstall`. Set `existingClaim` under `persistence.uploads` (or `persistence.watch`) to mount a claim you created instead. Rendering fails if uploads persistence is disabled while S3 storage is not enabled (use `type: emptyDir` to accept losing documents on restart), if a created claim has no size, or if `replicas` is above 1.
 - A Secret named `<release>-auth` with a random initial `ADMIN_PASSWORD`, kept on upgrade and after `helm uninstall`.
 
 What you must provide:
 
 - **PostgreSQL.** The chart does not include a database. Pass `DATABASE_URL` (or the `POSTGRES_*` variables).
-- **A PersistentVolumeClaim for uploads.** The chart currently refuses to render unless the uploads persistence entry names an existing claim (`existingClaim` under `persistence.uploads`, as in the example below), so create one first.
-- **The image.** The chart's default image is `readur/readur:latest`; set `ghcr.io/readur/readur` with a release tag.
 
-Example: create the database secret and the uploads claim:
+Example: create the database secret, and (optionally) your own uploads claim:
 
 ```bash
 kubectl create namespace readur

@@ -84,9 +84,6 @@ pub struct TestAppStateOptions {
 
     /// OCR language (defaults to "eng")
     pub ocr_language: Option<String>,
-
-    /// Memory limit in MB (defaults to 256 for tests)
-    pub memory_limit_mb: Option<usize>,
 }
 
 impl Default for TestAppStateOptions {
@@ -108,7 +105,6 @@ impl Default for TestAppStateOptions {
             db_min_connections: None,
             allowed_file_types: None,
             ocr_language: None,
-            memory_limit_mb: None,
         }
     }
 }
@@ -208,8 +204,6 @@ pub fn create_test_config_with_db(database_url: &str) -> Config {
         max_office_document_size_mb: 100,
 
         // Performance
-        memory_limit_mb: 256,
-        cpu_priority: "normal".to_string(),
 
         // OIDC Configuration (disabled for tests)
         oidc_enabled: false,
@@ -297,10 +291,6 @@ pub fn create_test_config_from_options(options: &TestAppStateOptions) -> Config 
 
     if let Some(ref ocr_language) = options.ocr_language {
         config.ocr_language = ocr_language.clone();
-    }
-
-    if let Some(memory_limit_mb) = options.memory_limit_mb {
-        config.memory_limit_mb = memory_limit_mb as usize;
     }
 
     config

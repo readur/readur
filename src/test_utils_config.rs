@@ -14,7 +14,6 @@ pub struct TestConfigBuilder {
     pub(super) concurrent_ocr_jobs: usize,
     pub(super) ocr_timeout_seconds: u64,
     pub(super) max_file_size_mb: u64,
-    pub(super) memory_limit_mb: u64,
     pub(super) oidc_enabled: bool,
     pub(super) mcp: crate::config::McpConfig,
     /// Whether self-registered accounts start inactive, as they always do in
@@ -31,7 +30,6 @@ impl Default for TestConfigBuilder {
             concurrent_ocr_jobs: 2,
             ocr_timeout_seconds: 60,
             max_file_size_mb: 10,
-            memory_limit_mb: 256,
             oidc_enabled: false,
             mcp: crate::config::McpConfig::default(),
             registration_requires_approval: false,
@@ -113,8 +111,6 @@ impl TestConfigBuilder {
             max_office_document_size_mb: 100,
 
             // Performance
-            memory_limit_mb: self.memory_limit_mb as usize,
-            cpu_priority: "normal".to_string(),
 
             // OIDC Configuration
             oidc_enabled: self.oidc_enabled,

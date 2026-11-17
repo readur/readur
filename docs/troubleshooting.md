@@ -59,7 +59,7 @@ Change the host side of the port mapping (`"8080:8000"`), or the port Readur lis
 - Restart the container after the change; settings are read once at startup.
 - A variable set in the environment (for example by Docker Compose) takes precedence over a `.env` file.
 - An invalid number falls back to the default, with a warning in the startup log.
-- `MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only reported in the log; they do not change anything.
+- Readur has no memory or CPU-priority setting of its own; cap resources with container limits.
 
 ### `JWT_SECRET: ignored` in the log
 

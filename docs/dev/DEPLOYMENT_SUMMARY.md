@@ -33,7 +33,7 @@ OCR_TIMEOUT_SECONDS=300
 MAX_FILE_SIZE_MB=50
 ```
 
-`MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only printed in the startup log; they do not limit anything.
+Readur has no memory or CPU-priority setting of its own; use container limits.
 
 ## Watch folder
 

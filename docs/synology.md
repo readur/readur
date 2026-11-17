@@ -208,7 +208,7 @@ The last lines of the Readur log name the problem (database connection, migratio
 - 2-core NAS or less than 4 GB of RAM: `1`
 - 4-core NAS with 4 GB or more: `2` to `4`
 
-Do not go above the number of cores. `MEMORY_LIMIT_MB` and `CPU_PRIORITY` do not limit anything; to cap Readur's resources, set limits on the container in Container Manager. See [Performance Tuning](performance-tuning.md).
+Do not go above the number of cores. To cap Readur's resources, set limits on the container in Container Manager. See [Performance Tuning](performance-tuning.md).
 
 ## Updating Readur
 

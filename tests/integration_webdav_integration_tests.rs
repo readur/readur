@@ -76,7 +76,6 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
     config.jwt_secret = "test_jwt_secret_for_integration_tests".to_string();
     config.allowed_file_types = vec!["pdf".to_string(), "png".to_string()];
     config.file_stability_check_ms = Some(1000);
-    config.memory_limit_mb = 512;
     config.concurrent_ocr_jobs = 4;
 
     // Create test services

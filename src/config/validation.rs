@@ -55,7 +55,6 @@ impl Config {
             "📑 Max Office document size: {}MB",
             self.max_office_document_size_mb
         );
-        println!("💾 Memory limit: {}MB", self.memory_limit_mb);
 
         // Warning checks
         println!("\n⚠️  CONFIGURATION WARNINGS:");

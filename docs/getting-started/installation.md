@@ -66,7 +66,7 @@ The health endpoint answers:
 
 The chart in `charts/readur` deploys Readur only; it does not deploy PostgreSQL. Provide a database and pass its connection string in `DATABASE_URL`.
 
-The chart mounts an existing PersistentVolumeClaim for documents, named by `existingClaim` under `persistence.uploads` (installation fails without it), and creates a claim for the watch folder. Create the uploads claim first:
+By default the chart creates PersistentVolumeClaims for documents and the watch folder, and uses the image `ghcr.io/readur/readur` at the chart's app version. To use a claim you created instead, name it with `existingClaim` under `persistence.uploads`, for example:
 
 ```yaml
 apiVersion: v1
@@ -88,9 +88,6 @@ controllers:
   main:
     containers:
       readur:
-        image:
-          repository: ghcr.io/readur/readur
-          tag: latest
         env:
           DATABASE_URL: postgresql://readur:your_password@postgres.example.com:5432/readur
           PUBLIC_URL: https://readur.example.com
