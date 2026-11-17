@@ -22,21 +22,45 @@ vi.mock('../../services/api', async () => {
   };
 });
 
-vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
-vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
-vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
-vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
-vi.mock('../../features/document/SharedRoute', async () => ({ default: (await import('./routeProbe')).probe('shared') }));
-vi.mock('../../features/intake', async () => ({ default: (await import('./routeProbe')).probe('intake') }));
-vi.mock('../../features/settings', async () => ({ default: (await import('./routeProbe')).probe('settings') }));
-vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
+vi.mock('../../features/board', async () => ({
+  default: (await import('./routeProbe')).probe('home'),
+}));
+vi.mock('../../features/library', async () => ({
+  default: (await import('./routeProbe')).probe('library'),
+}));
+vi.mock('../../features/library/SearchRoute', async () => ({
+  default: (await import('./routeProbe')).probe('search'),
+}));
+vi.mock('../../features/document', async () => ({
+  default: (await import('./routeProbe')).probe('document'),
+}));
+vi.mock('../../features/document/SharedRoute', async () => ({
+  default: (await import('./routeProbe')).probe('shared'),
+}));
+vi.mock('../../features/intake', async () => ({
+  default: (await import('./routeProbe')).probe('intake'),
+}));
+vi.mock('../../features/settings', async () => ({
+  default: (await import('./routeProbe')).probe('settings'),
+}));
+vi.mock('../../features/auth/CallbackRoute', async () => ({
+  default: (await import('./routeProbe')).probe('callback'),
+}));
 
 /** Auth provider whose login really flips the user, like the app's. */
 function StatefulAuth({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<null | { id: string; username: string; email: string; role: 'user' }>(null);
-  const login = async (username: string) => setUser({ id: '1', username, email: 'a@b.c', role: 'user' });
+  const [user, setUser] = useState<null | {
+    id: string;
+    username: string;
+    email: string;
+    role: 'user';
+  }>(null);
+  const login = async (username: string) =>
+    setUser({ id: '1', username, email: 'a@b.c', role: 'user' });
   return (
-    <AuthContext.Provider value={{ user, loading: false, login, register: vi.fn(), logout: () => setUser(null) }}>
+    <AuthContext.Provider
+      value={{ user, loading: false, login, register: vi.fn(), logout: () => setUser(null) }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -56,7 +80,17 @@ describe('return to the requested route after sign-in', () => {
     render(
       <ThemeModeProvider>
         <FeatureFlagsContext.Provider
-          value={{ flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: false }, loading: false, error: null }}
+          value={{
+            flags: {
+              allowLocalAuth: true,
+              allowRegistration: false,
+              oidcEnabled: false,
+              enablePerUserWatch: false,
+              mcpEnabled: false,
+            },
+            loading: false,
+            error: null,
+          }}
         >
           <MemoryRouter initialEntries={[path]}>
             <StatefulAuth>
@@ -78,13 +112,17 @@ describe('return to the requested route after sign-in', () => {
     renderAt('/documents?q=x');
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeInTheDocument();
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'library entry' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'library entry' })).toBeInTheDocument(),
+    );
     expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/documents?q=x');
   });
 
   it('goes to /home when /login is visited directly', async () => {
     renderAt('/login');
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument(),
+    );
   });
 });

@@ -7,7 +7,14 @@ vi.mock('../../../services/api', async () => (await import('./intakeMocks')).api
 import { FailedOcrPanel } from '../attention/FailedOcrPanel';
 import { isLit, acknowledge } from '../../board/litStore';
 import { documentService, ocrService, ok, serveDefaults } from './intakeMocks';
-import { failedDoc, failedList, ocrDoc, ocrList, renderIntake, resetIntakeState } from './intakeTestUtils';
+import {
+  failedDoc,
+  failedList,
+  ocrDoc,
+  ocrList,
+  renderIntake,
+  resetIntakeState,
+} from './intakeTestUtils';
 
 /** Real document ids differ from the failed-import record ids on purpose. */
 const DOC1 = ocrDoc('doc-1', { filename: 'scan1.pdf', original_filename: 'scan1.pdf' });
@@ -30,11 +37,15 @@ function serveImports(records: Array<Record<string, unknown>>) {
   ocrService.listFailedDocuments.mockImplementation(
     (q: { stage?: string; reason?: string; limit?: number; offset?: number } = {}) => {
       const hits = records.filter(
-        (r) => (!q.stage || r.failure_stage === q.stage) && (!q.reason || r.failure_reason === q.reason),
+        (r) =>
+          (!q.stage || r.failure_stage === q.stage) && (!q.reason || r.failure_reason === q.reason),
       );
       const offset = q.offset ?? 0;
       const page = hits.slice(offset, offset + (q.limit ?? 25));
-      return ok({ ...failedList(page), pagination: { total: hits.length, limit: q.limit ?? 25, offset, total_pages: 1 } });
+      return ok({
+        ...failedList(page),
+        pagination: { total: hits.length, limit: q.limit ?? 25, offset, total_pages: 1 },
+      });
     },
   );
 }
@@ -44,7 +55,9 @@ const importsBoard = () => screen.findByRole('grid', { name: 'Other import failu
 
 async function openDoc(user: ReturnType<typeof userEvent.setup>, name: string) {
   const grid = await board();
-  await user.click(within(grid).getByRole('rowheader', { name: new RegExp(name.replace('.', '\\.')) }));
+  await user.click(
+    within(grid).getByRole('rowheader', { name: new RegExp(name.replace('.', '\\.')) }),
+  );
   return screen.findByRole('dialog', { name });
 }
 
@@ -100,7 +113,9 @@ describe('Failed OCR board', () => {
   });
 
   it('shows a retryable error', async () => {
-    documentService.getFailedOcrDocuments.mockImplementation(() => Promise.reject(new Error('down')));
+    documentService.getFailedOcrDocuments.mockImplementation(() =>
+      Promise.reject(new Error('down')),
+    );
     renderIntake(<FailedOcrPanel />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load failed documents.');
   });
@@ -111,14 +126,34 @@ describe('Failed OCR bulk actions use real document ids', () => {
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
-    await user.click(within(within(grid).getByRole('row', { name: /scan1\.pdf/ })).getByRole('checkbox'));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Retry' }));
+    await user.click(
+      within(within(grid).getByRole('row', { name: /scan1\.pdf/ })).getByRole('checkbox'),
+    );
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Retry',
+      }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Bulk OCR retry' });
-    expect(within(dialog).getByRole('radio', { name: /selected documents \(1 selected\)/ })).toBeChecked();
+    expect(
+      within(dialog).getByRole('radio', { name: /selected documents \(1 selected\)/ }),
+    ).toBeChecked();
     await user.click(within(dialog).getByRole('button', { name: 'Preview' }));
-    await waitFor(() => expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({ mode: 'specific', preview_only: true, document_ids: ['doc-1'] }));
+    await waitFor(() =>
+      expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({
+        mode: 'specific',
+        preview_only: true,
+        document_ids: ['doc-1'],
+      }),
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Retry 2 documents' }));
-    await waitFor(() => expect(documentService.bulkRetryOcr).toHaveBeenLastCalledWith({ mode: 'specific', preview_only: false, document_ids: ['doc-1'] }));
+    await waitFor(() =>
+      expect(documentService.bulkRetryOcr).toHaveBeenLastCalledWith({
+        mode: 'specific',
+        preview_only: false,
+        document_ids: ['doc-1'],
+      }),
+    );
     expect(await screen.findByText('2 of 2 documents queued')).toBeInTheDocument();
   });
 
@@ -126,14 +161,24 @@ describe('Failed OCR bulk actions use real document ids', () => {
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
-    await user.click(within(within(grid).getByRole('row', { name: /scan2\.pdf/ })).getByRole('checkbox'));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Retry' }));
+    await user.click(
+      within(within(grid).getByRole('row', { name: /scan2\.pdf/ })).getByRole('checkbox'),
+    );
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Retry',
+      }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Bulk OCR retry' });
-    await user.click(within(dialog).getByRole('button', { name: /add language|choose languages|languages/i }));
+    await user.click(
+      within(dialog).getByRole('button', { name: /add language|choose languages|languages/i }),
+    );
     await user.click(await within(dialog).findByRole('checkbox', { name: /German/ }));
     await user.click(within(dialog).getByRole('button', { name: 'Preview' }));
     await user.click(await within(dialog).findByRole('button', { name: 'Retry 2 documents' }));
-    await waitFor(() => expect(ocrService.retryWithLanguage).toHaveBeenCalledWith('doc-2', undefined, ['deu']));
+    await waitFor(() =>
+      expect(ocrService.retryWithLanguage).toHaveBeenCalledWith('doc-2', undefined, ['deu']),
+    );
   });
 
   it('deletes the selected documents by document id, only after confirmation', async () => {
@@ -141,68 +186,136 @@ describe('Failed OCR bulk actions use real document ids', () => {
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
     const confirm = screen.getByRole('alertdialog', { name: 'Delete 2 documents?' });
     expect(documentService.bulkDelete).not.toHaveBeenCalled();
     await user.click(within(confirm).getByRole('button', { name: 'Delete documents' }));
-    await waitFor(() => expect(documentService.bulkDelete).toHaveBeenCalledWith(['doc-1', 'doc-2']));
+    await waitFor(() =>
+      expect(documentService.bulkDelete).toHaveBeenCalledWith(['doc-1', 'doc-2']),
+    );
     expect(await screen.findByText('2 of 2 documents deleted')).toBeInTheDocument();
     expect(isLit('attention', KEY1)).toBe(false);
   });
 
   it('reports an error when the server deleted nothing', async () => {
-    documentService.bulkDelete.mockImplementation(() => ok({ deleted_count: 0, failed_count: 2, deleted_documents: [], failed_documents: ['doc-1', 'doc-2'] }));
+    documentService.bulkDelete.mockImplementation(() =>
+      ok({
+        deleted_count: 0,
+        failed_count: 2,
+        deleted_documents: [],
+        failed_documents: ['doc-1', 'doc-2'],
+      }),
+    );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', { name: 'Delete documents' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', {
+        name: 'Delete documents',
+      }),
+    );
     expect(await screen.findByText('No documents were deleted')).toBeInTheDocument();
     expect(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).toBeInTheDocument();
     expect(isLit('attention', KEY1)).toBe(true);
   });
 
   it('reports a partial delete as a problem', async () => {
-    documentService.bulkDelete.mockImplementation(() => ok({ deleted_count: 1, failed_count: 1, deleted_documents: ['doc-1'], failed_documents: ['doc-2'] }));
+    documentService.bulkDelete.mockImplementation(() =>
+      ok({
+        deleted_count: 1,
+        failed_count: 1,
+        deleted_documents: ['doc-1'],
+        failed_documents: ['doc-2'],
+      }),
+    );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', { name: 'Delete documents' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', {
+        name: 'Delete documents',
+      }),
+    );
     const toast = await screen.findByText('1 of 2 documents deleted');
     expect(toast.closest('[role="alert"]')).not.toBeNull();
   });
 
   it('after a partial delete, clears only the deleted document and keeps the other marked and selected', async () => {
-    documentService.bulkDelete.mockImplementation(() => ok({ deleted_count: 1, failed_count: 1, deleted_documents: ['doc-1'], failed_documents: ['doc-2'] }));
+    documentService.bulkDelete.mockImplementation(() =>
+      ok({
+        deleted_count: 1,
+        failed_count: 1,
+        deleted_documents: ['doc-1'],
+        failed_documents: ['doc-2'],
+      }),
+    );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     const key2 = 'document:doc-2@2026-01-03T00:00:00Z';
     expect(isLit('attention', key2)).toBe(true);
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }));
-    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', { name: 'Delete documents' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: 'Delete 2 documents?' })).getByRole('button', {
+        name: 'Delete documents',
+      }),
+    );
     await screen.findByText('1 of 2 documents deleted');
     expect(isLit('attention', KEY1)).toBe(false);
     expect(isLit('attention', key2)).toBe(true);
     const row2 = within(await board()).getByRole('row', { name: /scan2\.pdf/ });
     expect(within(row2).getByRole('checkbox')).toBeChecked();
-    expect(within(within(await board()).getByRole('row', { name: /scan1\.pdf/ })).getByRole('checkbox')).not.toBeChecked();
-    expect(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(
+      within(within(await board()).getByRole('row', { name: /scan1\.pdf/ })).getByRole('checkbox'),
+    ).not.toBeChecked();
+    expect(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('keeps the retry dialog open with an error when nothing was queued', async () => {
     documentService.bulkRetryOcr.mockImplementation((req: { preview_only?: boolean }) =>
-      ok({ success: true, message: '', queued_count: req.preview_only ? 2 : 0, matched_count: 2, documents: [], estimated_total_time_minutes: 1 }),
+      ok({
+        success: true,
+        message: '',
+        queued_count: req.preview_only ? 2 : 0,
+        matched_count: 2,
+        documents: [],
+        estimated_total_time_minutes: 1,
+      }),
     );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Retry' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Retry',
+      }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Bulk OCR retry' });
     await user.click(within(dialog).getByRole('button', { name: 'Preview' }));
     await user.click(await within(dialog).findByRole('button', { name: 'Retry 2 documents' }));
@@ -212,17 +325,30 @@ describe('Failed OCR bulk actions use real document ids', () => {
 
   it('reports a partially queued retry as a problem', async () => {
     documentService.bulkRetryOcr.mockImplementation(() =>
-      ok({ success: true, message: '', queued_count: 1, matched_count: 2, documents: [], estimated_total_time_minutes: 1 }),
+      ok({
+        success: true,
+        message: '',
+        queued_count: 1,
+        matched_count: 2,
+        documents: [],
+        estimated_total_time_minutes: 1,
+      }),
     );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await board();
     await user.click(within(grid).getByRole('checkbox', { name: 'Select All' }));
-    await user.click(within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', { name: 'Retry' }));
+    await user.click(
+      within(screen.getByRole('toolbar', { name: 'Bulk actions' })).getByRole('button', {
+        name: 'Retry',
+      }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Bulk OCR retry' });
     await user.click(within(dialog).getByRole('button', { name: 'Preview' }));
     await user.click(await within(dialog).findByRole('button', { name: 'Retry 2 documents' }));
-    expect(await screen.findByText('Some documents were not queued. Check them and try again.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Some documents were not queued. Check them and try again.'),
+    ).toBeInTheDocument();
   });
 });
 
@@ -261,8 +387,55 @@ describe('Failure details panel (document actions)', () => {
     expect(await screen.findByText('OCR retry queued')).toBeInTheDocument();
   });
 
+  it('says the retry was queued when the server queued a new job', async () => {
+    documentService.retryOcr.mockImplementation(() =>
+      ok({ success: true, queued: true, message: 'Document queued for OCR processing' }),
+    );
+    const user = userEvent.setup();
+    renderIntake(<FailedOcrPanel />);
+    const panel = await openDoc(user, 'scan1.pdf');
+    await user.click(within(panel).getByRole('button', { name: 'Retry OCR' }));
+    expect(await screen.findByText('OCR retry queued')).toBeInTheDocument();
+    expect(screen.queryByText('Already queued for OCR')).not.toBeInTheDocument();
+  });
+
+  it('says the document is already queued, not that the retry failed, when a job was pending', async () => {
+    documentService.retryOcr.mockImplementation(() =>
+      ok({ success: true, queued: false, message: 'The document is already queued for OCR' }),
+    );
+    const user = userEvent.setup();
+    renderIntake(<FailedOcrPanel />);
+    const panel = await openDoc(user, 'scan1.pdf');
+    await user.click(within(panel).getByRole('button', { name: 'Retry OCR' }));
+    expect(await screen.findByText('Already queued for OCR')).toBeInTheDocument();
+    expect(screen.getByText('The document is already queued for OCR')).toBeInTheDocument();
+    expect(screen.queryByText('Could not retry OCR')).not.toBeInTheDocument();
+    expect(screen.queryByText('OCR retry queued')).not.toBeInTheDocument();
+  });
+
+  it('reports an already queued document the same way when retrying with languages', async () => {
+    ocrService.retryWithLanguage.mockImplementation(() =>
+      ok({ success: true, queued: false, message: 'The document is already queued for OCR' }),
+    );
+    const user = userEvent.setup();
+    renderIntake(<FailedOcrPanel />);
+    const panel = await openDoc(user, 'scan1.pdf');
+    await user.click(
+      within(panel).getByRole('button', { name: /add language|choose languages|languages/i }),
+    );
+    await user.click(await within(panel).findByRole('checkbox', { name: /German/ }));
+    await user.click(within(panel).getByRole('button', { name: 'Retry OCR' }));
+    await waitFor(() =>
+      expect(ocrService.retryWithLanguage).toHaveBeenCalledWith('doc-1', undefined, ['deu']),
+    );
+    expect(await screen.findByText('Already queued for OCR')).toBeInTheDocument();
+    expect(screen.queryByText('Could not retry OCR')).not.toBeInTheDocument();
+  });
+
   it('says so when the server refuses the retry', async () => {
-    documentService.retryOcr.mockImplementation(() => ok({ success: false, message: 'Already queued' }));
+    documentService.retryOcr.mockImplementation(() =>
+      ok({ success: false, queued: false, message: 'Refused' }),
+    );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const panel = await openDoc(user, 'scan1.pdf');
@@ -280,7 +453,9 @@ describe('Failure details panel (document actions)', () => {
       filter: { failure_reasons: ['ocr_timeout'] },
     };
     beforeEach(() => {
-      documentService.getRetryRecommendations.mockImplementation(() => ok({ recommendations: [REC], total_recommendations: 1 }));
+      documentService.getRetryRecommendations.mockImplementation(() =>
+        ok({ recommendations: [REC], total_recommendations: 1 }),
+      );
     });
 
     it('asks first, stating the scope and the count, and cancelling retries nothing', async () => {
@@ -288,33 +463,49 @@ describe('Failure details panel (document actions)', () => {
       renderIntake(<FailedOcrPanel />);
       const panel = await openDoc(user, 'scan1.pdf');
       await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
-      const confirm = screen.getByRole('alertdialog', { name: 'Retry 14 documents across your library?' });
-      expect(confirm).toHaveTextContent('This retries every failed document that matches "Timed out", not only scan1.pdf.');
+      const confirm = screen.getByRole('alertdialog', {
+        name: 'Retry 14 documents across your library?',
+      });
+      expect(confirm).toHaveTextContent(
+        'This retries every failed document that matches "Timed out", not only scan1.pdf.',
+      );
       await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
       expect(documentService.bulkRetryOcr).not.toHaveBeenCalled();
     });
 
     it('retries the matching documents once confirmed', async () => {
-      documentService.bulkRetryOcr.mockImplementation(() => ok({ success: true, queued_count: 14, matched_count: 14, documents: [] }));
+      documentService.bulkRetryOcr.mockImplementation(() =>
+        ok({ success: true, queued_count: 14, matched_count: 14, documents: [] }),
+      );
       const user = userEvent.setup();
       renderIntake(<FailedOcrPanel />);
       const panel = await openDoc(user, 'scan1.pdf');
       await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
-      const confirm = screen.getByRole('alertdialog', { name: 'Retry 14 documents across your library?' });
+      const confirm = screen.getByRole('alertdialog', {
+        name: 'Retry 14 documents across your library?',
+      });
       await user.click(within(confirm).getByRole('button', { name: 'Retry 14 documents' }));
       await waitFor(() =>
-        expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({ mode: 'filter', filter: REC.filter, preview_only: false }),
+        expect(documentService.bulkRetryOcr).toHaveBeenCalledWith({
+          mode: 'filter',
+          filter: REC.filter,
+          preview_only: false,
+        }),
       );
       expect(await screen.findByText('14 of 14 documents queued')).toBeInTheDocument();
     });
 
     it('reports nothing queued as a problem, not a success', async () => {
-      documentService.bulkRetryOcr.mockImplementation(() => ok({ success: true, queued_count: 0, matched_count: 14, documents: [] }));
+      documentService.bulkRetryOcr.mockImplementation(() =>
+        ok({ success: true, queued_count: 0, matched_count: 14, documents: [] }),
+      );
       const user = userEvent.setup();
       renderIntake(<FailedOcrPanel />);
       const panel = await openDoc(user, 'scan1.pdf');
       await user.click(await within(panel).findByRole('button', { name: 'Retry 14 documents' }));
-      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Retry 14 documents' }));
+      await user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Retry 14 documents' }),
+      );
       expect(await screen.findByText('Nothing was queued')).toBeInTheDocument();
       expect(screen.queryByText(/documents queued/)).not.toBeInTheDocument();
     });
@@ -325,24 +516,44 @@ describe('Failure details panel (document actions)', () => {
       ok({
         document_id: 'doc-1',
         total_retries: 1,
-        retry_history: [{ id: 'r1', retry_reason: 'manual_retry', priority: 12, queue_id: 'abcdef123456', created_at: '2026-04-01T10:00:00Z', previous_status: 'failed' }],
+        retry_history: [
+          {
+            id: 'r1',
+            retry_reason: 'manual_retry',
+            priority: 12,
+            queue_id: 'abcdef123456',
+            created_at: '2026-04-01T10:00:00Z',
+            previous_status: 'failed',
+          },
+        ],
       }),
     );
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const panel = await openDoc(user, 'scan1.pdf');
     const history = await within(panel).findByRole('grid', { name: 'OCR retry history' });
-    const row = within(history).getAllByRole('row').find((r) => /Manual retry/.test(r.textContent ?? ''));
+    const row = within(history)
+      .getAllByRole('row')
+      .find((r) => /Manual retry/.test(r.textContent ?? ''));
     expect(row).toHaveTextContent('High (12)');
     expect(documentService.getDocumentRetryHistory).toHaveBeenCalledWith('doc-1');
     expect(documentService.view).toHaveBeenCalledWith('doc-1');
-    expect(await within(panel).findByText('The file was not found or has been deleted.')).toBeInTheDocument();
+    expect(
+      await within(panel).findByText('The file was not found or has been deleted.'),
+    ).toBeInTheDocument();
     await user.click(within(panel).getByRole('button', { name: 'Download' }));
     expect(documentService.downloadFile).toHaveBeenCalledWith('doc-1', 'scan1.pdf');
   });
 
   it('copes with zero sizes and missing timestamps', async () => {
-    serveOcr([ocrDoc('bare', { file_size: 0, last_attempt_at: null, updated_at: 'not a date', mime_type: null })]);
+    serveOcr([
+      ocrDoc('bare', {
+        file_size: 0,
+        last_attempt_at: null,
+        updated_at: 'not a date',
+        mime_type: null,
+      }),
+    ]);
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const panel = await openDoc(user, 'bare.pdf');
@@ -374,9 +585,15 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
   });
 
   it('pages across stages with the server totals: full pages, correct total, nothing dropped', async () => {
-    const ingestion = Array.from({ length: 20 }, (_, i) => failedDoc(`ing-${i}`, { failure_stage: 'ingestion', failure_reason: 'file_too_large' }));
-    const storage = Array.from({ length: 10 }, (_, i) => failedDoc(`sto-${i}`, { failure_stage: 'storage', failure_reason: 'other' }));
-    const ocrOnes = Array.from({ length: 40 }, (_, i) => failedDoc(`ocr-${i}`, { failure_stage: 'ocr' }));
+    const ingestion = Array.from({ length: 20 }, (_, i) =>
+      failedDoc(`ing-${i}`, { failure_stage: 'ingestion', failure_reason: 'file_too_large' }),
+    );
+    const storage = Array.from({ length: 10 }, (_, i) =>
+      failedDoc(`sto-${i}`, { failure_stage: 'storage', failure_reason: 'other' }),
+    );
+    const ocrOnes = Array.from({ length: 40 }, (_, i) =>
+      failedDoc(`ocr-${i}`, { failure_stage: 'ocr' }),
+    );
     serveImports([...ocrOnes, ...ingestion, ...storage]);
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
@@ -395,11 +612,15 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
   });
 
   it('shows the empty state only when the server has no non-OCR failures', async () => {
-    serveImports(Array.from({ length: 30 }, (_, i) => failedDoc(`ocr-${i}`, { failure_stage: 'ocr' })));
+    serveImports(
+      Array.from({ length: 30 }, (_, i) => failedDoc(`ocr-${i}`, { failure_stage: 'ocr' })),
+    );
     renderIntake(<FailedOcrPanel />);
     const grid = await importsBoard();
     expect(await within(grid).findByText('No other import failures.')).toBeInTheDocument();
-    expect(within(grid.closest('section') as HTMLElement).queryByRole('button', { name: /next/i })).not.toBeInTheDocument();
+    expect(
+      within(grid.closest('section') as HTMLElement).queryByRole('button', { name: /next/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('filters by stage and reason on the server and clears the filters', async () => {
@@ -409,18 +630,30 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
     await user.click(screen.getByRole('button', { name: /all stages/i }));
     expect(screen.queryByRole('option', { name: 'OCR' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('option', { name: 'Ingestion' }));
-    await waitFor(() => expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ stage: 'ingestion', offset: 0 })));
+    await waitFor(() =>
+      expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(
+        expect.objectContaining({ stage: 'ingestion', offset: 0 }),
+      ),
+    );
     await user.click(screen.getByRole('button', { name: /all reasons/i }));
     await user.click(screen.getByRole('option', { name: 'OCR timed out' }));
-    await waitFor(() => expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(expect.objectContaining({ reason: 'ocr_timeout' })));
+    await waitFor(() =>
+      expect(ocrService.listFailedDocuments).toHaveBeenLastCalledWith(
+        expect.objectContaining({ reason: 'ocr_timeout' }),
+      ),
+    );
     ocrService.listFailedDocuments.mockClear();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
     // "All stages" asks for each non-OCR stage separately, without a reason.
     await waitFor(() => {
       const stages = ocrService.listFailedDocuments.mock.calls.map(([q]) => q.stage);
-      expect(new Set(stages)).toEqual(new Set(['ingestion', 'validation', 'storage', 'processing', 'sync']));
+      expect(new Set(stages)).toEqual(
+        new Set(['ingestion', 'validation', 'storage', 'processing', 'sync']),
+      );
     });
-    expect(ocrService.listFailedDocuments.mock.calls.every(([q]) => q.reason === undefined)).toBe(true);
+    expect(ocrService.listFailedDocuments.mock.calls.every(([q]) => q.reason === undefined)).toBe(
+      true,
+    );
   });
 
   it('opens read-only details with confidence and word count and no document actions', async () => {
@@ -449,18 +682,29 @@ describe('Other import failures (read-only records, ported runtime checks)', () 
   });
 
   it('falls back to the reason when the server sends no category, and handles a missing message', async () => {
-    serveImports([{ ...record, failure_category: undefined, failure_reason: 'pdf_parsing_error', error_message: null }]);
+    serveImports([
+      {
+        ...record,
+        failure_category: undefined,
+        failure_reason: 'pdf_parsing_error',
+        error_message: null,
+      },
+    ]);
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     const grid = await importsBoard();
-    expect(within(grid).getByRole('row', { name: /rec-9\.pdf/ })).toHaveTextContent('PDF could not be read');
+    expect(within(grid).getByRole('row', { name: /rec-9\.pdf/ })).toHaveTextContent(
+      'PDF could not be read',
+    );
     await user.click(within(grid).getByRole('rowheader', { name: /rec-9\.pdf/ }));
     const panel = await screen.findByRole('dialog', { name: 'rec-9.pdf' });
     expect(within(panel).getByText('No error message was recorded.')).toBeInTheDocument();
   });
 
   it('copes with zero values', async () => {
-    serveImports([{ ...record, file_size: 0, ocr_confidence: 0, ocr_word_count: 0, error_message: '' }]);
+    serveImports([
+      { ...record, file_size: 0, ocr_confidence: 0, ocr_word_count: 0, error_message: '' },
+    ]);
     const user = userEvent.setup();
     renderIntake(<FailedOcrPanel />);
     await user.click(within(await importsBoard()).getByRole('rowheader', { name: /rec-9\.pdf/ }));

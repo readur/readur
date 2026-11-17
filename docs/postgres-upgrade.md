@@ -59,11 +59,15 @@ mv ./postgres ./postgres_old_backup
 
 Change the PostgreSQL version to your target version:
 
-```yaml
-# Before
-image: postgres:15
+Before:
 
-# After
+```yaml
+image: postgres:15
+```
+
+After:
+
+```yaml
 image: postgres:16
 ```
 

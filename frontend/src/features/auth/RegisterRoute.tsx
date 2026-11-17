@@ -9,19 +9,22 @@ import { Error as ErrorIcon } from '../../ui/icons';
 import { AuthLayout } from './AuthLayout';
 import { MIN_PASSWORD_LENGTH, validateNewPassword } from './passwordPolicy';
 import styles from './Auth.module.css';
+import { apiErrorMessage } from '../../services/errors';
 
 const HOME_PATH = '/home';
 
 /** Maps a failed registration to a fixed message. */
 export function registerErrorMessage(err: unknown, t: TFunction): string {
-  const response = (err as { response?: { status?: number; data?: { error?: unknown; message?: unknown } } } | null)
-    ?.response;
-  if (response?.status === 403) return t('register.errors.disabled', 'Self-registration is disabled on this server.');
+  const response = (err as { response?: { status?: number } } | null)?.response;
+  if (response?.status === 403)
+    return t('register.errors.disabled', 'Self-registration is disabled on this server.');
   if (response?.status === 429) {
-    return t('register.errors.rateLimited', 'Too many registration attempts. Please try again later.');
+    return t(
+      'register.errors.rateLimited',
+      'Too many registration attempts. Please try again later.',
+    );
   }
-  const serverMessage = response?.data?.error ?? response?.data?.message;
-  return typeof serverMessage === 'string' && serverMessage ? serverMessage : t('register.errors.failed', 'Failed to register');
+  return apiErrorMessage(err) ?? t('register.errors.failed', 'Failed to register');
 }
 
 /**
@@ -40,7 +43,8 @@ export default function RegisterRoute() {
   const [pending, setPending] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
 
-  if (!loading && !(flags.allowLocalAuth && flags.allowRegistration)) return <Navigate to="/login" replace />;
+  if (!loading && !(flags.allowLocalAuth && flags.allowRegistration))
+    return <Navigate to="/login" replace />;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -75,7 +79,10 @@ export default function RegisterRoute() {
         <div className={styles.panel}>
           <p role="status" className={styles.info}>
             <span>
-              {t('register.pendingApproval', 'Account created. An administrator must approve it before you can sign in.')}
+              {t(
+                'register.pendingApproval',
+                'Account created. An administrator must approve it before you can sign in.',
+              )}
             </span>
           </p>
           <Link to="/login" className={styles.backLink}>
@@ -117,7 +124,10 @@ export default function RegisterRoute() {
               isRequired
               value={password}
               onChange={setPassword}
-              description={t('register.passwordHint', { min: MIN_PASSWORD_LENGTH, defaultValue: 'At least {{min}} characters' })}
+              description={t('register.passwordHint', {
+                min: MIN_PASSWORD_LENGTH,
+                defaultValue: 'At least {{min}} characters',
+              })}
             />
             <Button
               type="submit"
@@ -125,7 +135,9 @@ export default function RegisterRoute() {
               isPending={pending}
               isDisabled={!username || !email || !password}
             >
-              {pending ? t('register.actions.creating', 'Creating account...') : t('register.actions.signup', 'Sign up')}
+              {pending
+                ? t('register.actions.creating', 'Creating account...')
+                : t('register.actions.signup', 'Sign up')}
             </Button>
           </form>
           <p className={styles.linkRow}>

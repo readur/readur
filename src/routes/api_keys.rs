@@ -63,7 +63,7 @@ pub async fn create_api_key(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<CreateApiKeyRequest>,
-) -> Result<Json<CreateApiKeyResponse>, ApiKeyError> {
+) -> Result<(StatusCode, Json<CreateApiKeyResponse>), ApiKeyError> {
     let user_id = auth_user.user.id;
 
     // Rate-limit creation per user before doing any work.
@@ -127,10 +127,13 @@ pub async fn create_api_key(
 
     debug!(api_key_id = %api_key.id, user_id = %user_id, "Created API key");
 
-    Ok(Json(CreateApiKeyResponse {
-        api_key: ApiKeyResponse::from(api_key),
-        plaintext,
-    }))
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateApiKeyResponse {
+            api_key: ApiKeyResponse::from(api_key),
+            plaintext,
+        }),
+    ))
 }
 
 /// GET /api/auth/keys — list the caller's keys. Admins may pass `?all=true`

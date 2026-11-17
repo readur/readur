@@ -77,7 +77,7 @@ async fn create_key(ctx: &Ctx, jwt: &str, name: &str, expires_in_days: Option<u3
         None => json!({ "name": name }),
     };
     let (status, body) = ctx.send("POST", "/api/auth/keys", Some(jwt), Some(body)).await;
-    assert_eq!(status, StatusCode::OK, "create failed: {body:?}");
+    assert_eq!(status, StatusCode::CREATED, "create failed: {body:?}");
     body
 }
 
@@ -295,7 +295,7 @@ async fn expired_keys_do_not_count_toward_cap() {
     let (status, body) = ctx
         .send("POST", "/api/auth/keys", Some(&jwt), Some(json!({"name": "fresh"})))
         .await;
-    assert_eq!(status, StatusCode::OK, "expected 200 got {status}: {body:?}");
+    assert_eq!(status, StatusCode::CREATED, "expected 201 got {status}: {body:?}");
 }
 
 #[tokio::test]

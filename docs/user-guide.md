@@ -7,7 +7,7 @@ This guide walks you through everything you need to know to effectively use Read
 - [Getting Started](#getting-started)
 - [Supported File Types](#supported-file-types)
 - [Using the Interface](#using-the-interface)
-  - [Dashboard](#dashboard)
+  - [Dashboard](#dashboard-overview)
   - [Document Management](#document-management)
   - [Advanced Search](#advanced-search)
   - [Sources and Synchronization](#sources-and-synchronization)
@@ -71,9 +71,9 @@ Readur's search capabilities are designed to help you find documents quickly, ev
 
 #### How Search Works
 
-The full-text search looks through all the text extracted from your documents, not just file names. It automatically handles word variations (stemming) and can find matches even when there are minor typos or OCR errors (fuzzy matching). When you search for "running," it will also find documents containing "run" or "runs."
+The full-text search looks through all the text extracted from your documents (including OCR text); it does not search file names or labels, which you narrow down with filters instead. It automatically handles word variations (stemming): when you search for "running," it will also find documents containing "run" or "runs."
 
-For exact phrase searches, put your terms in quotes like `"quarterly report"` to find that specific phrase. To exclude certain terms, use a minus sign: `invoice -draft` will find invoices but exclude any documents containing the word "draft."
+For exact phrase searches, use Exact phrase mode, or put your terms in quotes like `"quarterly report"` in Operators mode. To exclude certain terms, use a minus sign in Operators mode: `invoice -draft` will find invoices but exclude any documents containing the word "draft."
 
 #### Refining Your Search
 
@@ -127,7 +127,23 @@ Readur's search system gives you multiple ways to find documents, from simple ke
 
 ### Different Ways to Search
 
-Simple search works for most situations - just type what you're looking for and Readur automatically handles word variations and minor typos. When you need to find an exact phrase, put it in quotes like `"quarterly report"`. For documents that might have OCR errors or typos, use fuzzy search by adding a tilde: `invoice~` will find "invoice" even if it was read as "invioce." When you need precise control, boolean search lets you combine terms with AND, OR, and NOT operators.
+Simple search (**All words**) works for most situations: type what you're looking for and Readur finds documents containing every word, handling word variations such as plurals. To find an exact phrase, switch the search to **Exact phrase** mode (or use quotes in **Operators** mode, like `"quarterly report"`). **Similar spelling** (fuzzy) mode tolerates typos and OCR slips: it finds documents of any length containing a word spelled close to the query (`invoce` finds "invoice"), ranked by how close the spelling is. How close is close enough is your fuzzy search threshold in Settings. When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT. Search looks at a document's extracted and OCR text, not its file name or labels; use filters for those.
+
+### Boolean (Operators) Search
+
+In Operators mode these symbols and keywords have a meaning; everything else is a search word:
+
+| Write | To find |
+|-------|---------|
+| `invoice paid`, `invoice & paid`, `invoice AND paid` | Documents with both words |
+| `invoice \| receipt`, `invoice OR receipt` | Documents with either word |
+| `contract !draft`, `contract NOT draft`, `contract -draft` | Documents with "contract" but not "draft" |
+| `(budget \| financial) & 2024` | Groups: either word, and also "2024" |
+| `"project status"` | The exact phrase |
+| `proj*` | Words starting with "proj" (project, projects, projection) |
+| `total <-> due` | "due" directly after "total" |
+
+AND binds tighter than OR: `invoice | receipt paid` finds "invoice", or "receipt" together with "paid". `AND`, `OR` and `NOT` work in any case, and a minus only excludes when attached to the next word (`e-mail` is one word). A mistyped query never fails: a dangling operator is ignored and an unclosed parenthesis or quote is closed for you. The [Advanced Search Guide](advanced-search.md#boolean-search-logical-operators) lists every operator.
 
 ### Using the Search Interface
 
@@ -139,7 +155,7 @@ When your search returns too many results, filters help narrow things down. Filt
 
 ### Search Techniques That Work
 
-For exact phrases, always use quotes: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. Use wildcards when you're not sure of exact word endings: `proj*` matches project, projects, and projection. Search specific fields with syntax like `filename:report` or `label:urgent`. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
+For exact phrases, use Exact phrase mode, or quotes in Operators mode: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. In Operators mode, use a trailing `*` when you're not sure of a word's ending: `proj*` matches project, projects, and projection. There is no field syntax such as `filename:report` or `label:urgent`: filter by label, type, status, source or date instead. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
 
 > 🔍 **For detailed search techniques**, see the [Advanced Search Guide](advanced-search.md)
 
@@ -166,12 +182,6 @@ Managing labels is straightforward - you can rename labels and all associated do
 Most successful Readur users develop a consistent labeling strategy that reflects how they actually think about and use their documents. Category-based organization works well for many use cases - you might create labels for different projects, departments, document types, or processing status. For example, a document could have labels like "Project Alpha," "Finance," "Contract," and "Final" all at once.
 
 Time-based organization adds another valuable dimension. Consider creating labels for fiscal periods, project phases, or significant events. This approach makes it easy to find all documents related to a specific time frame, like "Q1 2024" or "Pre-Launch." You can combine time-based labels with category labels for powerful organization schemes.
-
-### Using Smart Collections
-
-Smart Collections are saved searches that automatically update as you add new documents. Instead of manually maintaining lists of documents, you create search criteria and Readur continuously finds documents that match. For instance, you could create a "Current Projects" collection that automatically includes any document labeled with active project names, or a "Pending Review" collection that shows all documents with review-related labels.
-
-These collections become particularly powerful when combined with boolean search logic. A "High Priority Items" collection might search for documents with labels like "urgent" OR "critical" OR "immediate," automatically gathering important documents regardless of which specific urgency label was used.
 
 > 🏷️ **For comprehensive labeling strategies**, see the [Labels and Organization Guide](labels-and-organization.md)
 
@@ -275,9 +285,7 @@ Image preprocessing options help with documents that aren't perfectly scanned. E
 
 ### Configuring Search Behavior
 
-Search settings affect how results appear and behave. Adjust the number of results per page based on your screen size and browsing preferences. The default sort order determines how search results are organized - by relevance, date, or other criteria that match how you typically look for documents.
-
-Snippet length controls how much text appears in search previews, while the fuzzy search threshold determines how tolerant the system is of typos and OCR errors. Higher thresholds find more matches but might include less relevant results, while lower thresholds are more precise but might miss documents with text recognition issues.
+The search page sets the number of results per page, the sort order and the snippet length for each search. The one saved search setting is the fuzzy search threshold (0.0 to 1.0, default 0.5) is how closely a word must be spelled like the query for Similar spelling mode to match it: higher accepts fewer spelling mistakes, 1.0 only the exact spelling, and lower values tolerate more but below about 0.3 start matching unrelated long documents (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
 
 ## API Keys
 

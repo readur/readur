@@ -1,263 +1,149 @@
 # Quick Start Guide
 
-Get Readur running and process your first documents in under 5 minutes.
+Get Readur running with Docker Compose and process your first document.
 
 ## Prerequisites
 
-Ensure you have Docker and Docker Compose installed:
+Docker with the Compose plugin:
+
 ```bash
-docker --version  # Should be 20.10+
-docker-compose --version  # Should be 2.0+
+docker --version
+docker compose version
 ```
 
-## 5-Minute Setup
+## Setup
 
 ### Step 1: Get Readur
 
 ```bash
-# Clone and enter the repository
 git clone https://github.com/readur/readur.git
 cd readur
 ```
 
-### Step 2: Start Services
+### Step 2: Start the Services
 
 ```bash
-# Optional: set your own JWT_SECRET (at least 32 bytes). When unset, a key is
-# generated on first start and stored in the database.
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+# Optional: choose the initial admin password (at least 8 characters).
+# Without it, a random password is generated (see Step 3).
+echo "ADMIN_PASSWORD=choose-a-long-password" > .env
 
-# Start with default configuration
-docker-compose up -d
+# Build the image and start PostgreSQL and Readur
+docker compose up -d --build
 
-# Watch the logs (optional)
-docker-compose logs -f
+# Follow the logs (Ctrl+C stops following)
+docker compose logs -f readur
 ```
 
-Wait about 30 seconds for services to initialize.
+The first build compiles Readur from source and takes a while. Readur is ready when the log shows `✅ HTTP server bound to: 0.0.0.0:8000`. To skip the build, use the published image as described in the [Docker Quick Start](../quickstart/docker.md).
 
-### Step 3: Access the Interface
+### Step 3: Sign In
 
-Open your browser and navigate to:
-```
-http://localhost:8000
-```
+Open `http://localhost:8000` and sign in:
 
-Login with your admin credentials:
 - **Username**: `admin`
-- **Password**: the generated password stored in the container (or your `ADMIN_PASSWORD`, if you set one)
+- **Password**: your `ADMIN_PASSWORD`, or the generated password
 
-On first startup without `ADMIN_PASSWORD`, Readur generates a random admin password and writes it to `/app/uploads/.readur/initial-admin-password` inside the container (it is not written to the logs):
+Without `ADMIN_PASSWORD`, Readur generates a random admin password on first startup and writes it to `/app/uploads/.readur/initial-admin-password` inside the container (it is not written to the logs):
 
 ```bash
-docker-compose exec readur cat /app/uploads/.readur/initial-admin-password
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
 After signing in and changing the password, delete the file.
 
 ### Step 4: Upload Your First Document
 
-#### Via Web Interface
+#### Via the Web Interface
 
-Now you can test Readur's core functionality by uploading a document. Click the **Upload** button in the top navigation, then drag and drop a PDF or image file onto the upload area. After clicking **Upload** to start processing, you'll see the document appear in your document list with a status indicator showing OCR progress. Wait for the indicator to turn green, which means text extraction is complete and the document is searchable.
+Open **Intake** in the navigation and choose **Upload**, then drop a PDF, image or text file onto the upload area. The document is stored and queued for OCR; it appears in the **Library**, and once OCR has finished its text is searchable.
 
-#### Via API (Optional)
-
-If you prefer working with APIs or want to automate document uploads, you can use Readur's REST API. First, authenticate to get an access token:
+#### Via the API
 
 ```bash
-# Authenticate and get a session token (use your admin password)
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+# Log in and keep the session token
+token=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
+  -d '{"username":"admin","password":"your-admin-password"}' | jq -r .token)
 
-# Upload a document using the API
-curl -X POST http://localhost:8000/api/documents/upload \
-  -H "Authorization: Bearer $TOKEN" \
+# Upload a document
+curl -X POST http://localhost:8000/api/documents \
+  -H "Authorization: Bearer $token" \
   -F "file=@your-document.pdf"
 ```
 
-This approach is particularly useful for integrating Readur with other systems or creating automated document processing workflows.
+For scripts and integrations, create an API key under **Settings** → **API Keys** instead of logging in with a password. See the [API Reference](../api-reference.md).
 
-### Step 5: Search Your Documents
+### Step 5: Search
 
-Once the OCR indicator shows green (processing complete), you can test Readur's search capabilities. Use the search bar at the top of any page and enter text you know exists in your uploaded document. Press Enter to see search results, which will show document snippets containing your search terms. Click on any result to view the full document with your search terms highlighted.
+Once OCR has finished, search for a word you know is in the document, from the search box or the **Advanced search** page.
 
 ## Common First Tasks
 
-### Resetting Admin Password
-
-If you lose your admin password or need to reset it, you can use the built-in CLI command:
+### Reset the Admin Password
 
 ```bash
-docker exec readur readur reset-admin-password
+docker compose exec readur /app/readur reset-admin-password
 ```
 
-This generates a new secure password and displays it. You can also set a specific password using the `ADMIN_PASSWORD` environment variable.
+This prints a new random password, or sets the password to `ADMIN_PASSWORD` when that is set in the container's environment.
 
-### Add Your First Source
+### Add a Source
 
-While manual uploads work fine for testing, most users benefit from setting up automatic document imports. Go to **Settings** → **Sources** and click **Add Source** to configure external storage integration. Choose Local Folder if you want to monitor directories on your server, WebDAV for cloud services like Nextcloud or ownCloud, or S3 for cloud object storage.
+Under **Sources**, add a WebDAV server (such as Nextcloud or ownCloud), an S3 bucket, or a folder on the server, and Readur imports its documents on a schedule. Test the connection before saving. See the [Sources Guide](../sources-guide.md).
 
-Each source type requires different connection details - local folders need directory paths, WebDAV sources need server URLs and credentials, while S3 sources require bucket names and access keys. Always test your connection before saving to ensure Readur can access your storage successfully.
+### Create Labels
 
-### Create Document Labels
+Under **Settings** → **Labels**, create labels with a name and colour. You can attach labels to a single document, to several selected documents at once, or while uploading. See [Labels and Organization](../labels-and-organization.md).
 
-Labels help organize your growing document collection by letting you assign categories and tags. Navigate to **Settings** → **Labels**, click **Create Label**, enter a descriptive name, and choose a color for visual identification. Save the label to make it available throughout Readur.
+### Use the Watch Folder
 
-You can apply labels in several ways: from individual document detail pages when reviewing content, through bulk selection when organizing multiple documents at once, or during the upload process to categorize documents immediately. Consistent labeling makes finding documents much easier as your collection grows.
-
-### Set Up Watch Folder
-
-Watch folders provide automatic document import when files are dropped into specific directories. Create a watch directory and configure Docker to mount it into your Readur container:
+The compose file mounts `./readur_watch` on the host as the watch folder `/app/watch`. Files copied there are imported automatically once they have stopped changing:
 
 ```bash
-# Create a local watch directory
-mkdir -p ./data/watch
-
-# Add this volume mapping to your docker-compose.yml:
-volumes:
-  - ./data/watch:/app/watch
-
-# Restart Readur to apply the new volume
-docker-compose restart readur
+cp ~/scans/invoice.pdf ./readur_watch/
 ```
 
-Once configured, any files dropped into `./data/watch` will be automatically imported and processed. This setup is perfect for scanner integration or automated document workflows.
+Only the extensions in `ALLOWED_FILE_TYPES` (default `pdf,txt,doc,docx,png,jpg,jpeg`) are imported, and the repository's compose file sets `MAX_FILE_AGE_HOURS: 24`, so files last modified more than a day ago are skipped. See [Watch Folder](../WATCH_FOLDER.md).
 
-## Essential Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `/` or `Ctrl+K` | Focus search bar |
-| `Ctrl+U` | Open upload dialog |
-| `Esc` | Close dialogs |
-| `G then D` | Go to documents |
-| `G then S` | Go to settings |
-
-## Sample Workflow
-
-### Legal Document Management
-
-Here's how a law firm might configure Readur for contract and invoice management:
-
-```bash
-# Create an organized label structure
-Labels: "Contracts", "Invoices", "Legal", "2024"
-
-# Connect to existing document storage
-Source: /shared/legal-docs (WebDAV)
-Sync: Every 30 minutes
-
-# Optimize OCR for legal documents
-Language: English
-Quality: High
-Concurrent Jobs: 4
-
-# Process existing documents
-Select all PDFs → Upload → Apply "2024" label
-
-# Create smart collections for quick access
-Search: label:Contracts AND date:2024
-Save as: "2024 Contracts"
-```
-
-This setup automatically imports new documents from shared storage, processes them with high-quality OCR, and organizes them with consistent labeling.
-
-### Research Paper Archive
-
-Academic researchers can configure Readur to handle multilingual papers and complex search needs:
-
-```bash
-# Configure for multilingual academic content
-OCR Language: Multiple (eng+deu+fra)
-Max File Size: 100MB
-
-# Create research-focused categories
-Labels: "Published", "Draft", "Review", "Citations"
-
-# Set up automated import from research directories
-Watch Folder: /research/papers
-Process: Auto-OCR and label by folder
-
-# Enable advanced search for academic work
-Boolean search: enabled
-Fuzzy matching: 2 (for OCR errors)
-```
-
-This configuration handles papers in multiple languages, supports large files common in academic work, and provides sophisticated search capabilities for research workflows.
+| `Ctrl+K` (`⌘K` on macOS) | Open the command palette |
+| `/` | Focus the library search box, or open the command palette elsewhere |
+| `Esc` | Close the command palette or a dialog |
 
 ## Performance Tips
 
-### Optimizing OCR Processing Speed
+OCR throughput is set by `CONCURRENT_OCR_JOBS` (default `4`, at most 15) in the `environment:` section of `docker-compose.yml`. Raise it on machines with more CPU cores and memory; lower it on small machines. A single OCR language is faster than several.
 
-If you have adequate CPU resources, increase concurrent processing to handle multiple documents simultaneously:
+To store documents in S3 instead of the local `./readur_uploads` directory, see the [S3 Storage Guide](../s3-storage-guide.md).
 
-```bash
-# Increase concurrent jobs to match your CPU cores
-CONCURRENT_OCR_JOBS=8
-
-# Optimize for your specific document types
-OCR_LANGUAGE=eng  # Single language is faster than auto-detection
-ENABLE_PREPROCESSING=false  # Skip for clean, well-scanned documents
-```
-
-These settings work best when your server has multiple CPU cores and you're processing documents with consistent quality and language.
-
-### Scaling for Large Document Collections
-
-For organizations with thousands of documents, cloud storage and increased resources improve performance:
-
-```bash
-# Use cloud storage for unlimited capacity
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-docs
-
-# Allocate more memory for large processing batches
-MEMORY_LIMIT_MB=4096
-
-# Enable compression to reduce storage costs
-ENABLE_COMPRESSION=true
-```
-
-S3 storage eliminates local disk space constraints, while increased memory limits allow processing larger batches of documents efficiently.
-
-## Troubleshooting Quick Fixes
+## Troubleshooting
 
 ### OCR Not Starting
-```bash
-# Check the queue
-curl http://localhost:8000/api/admin/queue/status
 
-# Restart OCR workers
-docker-compose restart readur
+Check the logs, and as an administrator the OCR queue:
+
+```bash
+docker compose logs readur | grep -i ocr
+curl -H "Authorization: Bearer $token" http://localhost:8000/api/queue/stats
 ```
 
-### Can't Login
-```bash
-# Reset to default password
-docker exec readur python reset_admin_password.py
-```
+### Can't Sign In
 
-### Slow Search
-```bash
-# Rebuild search index
-docker exec readur python rebuild_index.py
-```
+Reset the admin password as shown in [Reset the Admin Password](#reset-the-admin-password).
 
 ## Next Steps
 
-Now that you have Readur running:
-
-1. **[Configure OCR](../multi-language-ocr-guide.md)** for your language
-2. **[Set up Sources](../sources-guide.md)** for automated import
-3. **[Create Labels](../labels-and-organization.md)** for organization
-4. **[Learn Advanced Search](../advanced-search.md)** techniques
-5. **[Configure Backups](../deployment.md#backup-strategy)** for data safety
+1. [Multi-Language OCR](../multi-language-ocr-guide.md)
+2. [Sources Guide](../sources-guide.md)
+3. [Labels and Organization](../labels-and-organization.md)
+4. [Advanced Search](../advanced-search.md)
+5. [Backups](../deployment.md#backup-strategy)
 
 ## Getting Help
 
-- **Documentation**: [Full User Guide](../user-guide.md)
-- **API Reference**: [REST API Docs](../api-reference.md)
-- **Community**: [GitHub Discussions](https://github.com/readur/readur/discussions)
-- **Issues**: [Report Bugs](https://github.com/readur/readur/issues)
+- [User Guide](../user-guide.md)
+- [GitHub Discussions](https://github.com/readur/readur/discussions)
+- [GitHub Issues](https://github.com/readur/readur/issues)

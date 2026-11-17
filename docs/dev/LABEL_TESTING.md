@@ -119,7 +119,7 @@ npm run test -- --run
 cargo tarpaulin --out Html --output-dir target/coverage
 
 # Frontend coverage
-cd frontend && npm run test:coverage
+cd frontend && npm run test:unit:coverage
 ```
 
 ## 🎯 Test Scenarios
@@ -239,7 +239,7 @@ testColorContrast(bgColor: string, textColor: string): number
 ```bash
 # Run quick tests before commit
 cargo test --test integration_labels_tests
-cd frontend && npm run test:quick
+cd frontend && npm run test:unit
 ```
 
 ### CI Pipeline

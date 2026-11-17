@@ -1,8 +1,8 @@
 /*!
  * Universal Source Sync Service Unit Tests
- * 
+ *
  * Tests for the universal source sync service that handles:
- * - Multiple source types (WebDAV, Local Folder, S3) 
+ * - Multiple source types (WebDAV, Local Folder, S3)
  * - Generic sync operations and dispatching
  * - File deduplication and content hashing
  * - OCR queue integration
@@ -10,19 +10,22 @@
  * - Performance optimization and metrics
  */
 
-use std::sync::Arc;
-use std::collections::HashMap;
-use uuid::Uuid;
 use chrono::Utc;
 use serde_json::json;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 use readur::{
-    AppState,
     config::Config,
     db::Database,
-    models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig},
+    models::{
+        LocalFolderSourceConfig, S3SourceConfig, Source, SourceStatus, SourceType,
+        WebDAVSourceConfig,
+    },
     scheduling::source_sync::SourceSyncService,
+    AppState,
 };
 
 /// Create a test WebDAV source
@@ -127,8 +130,11 @@ fn create_test_s3_source() -> Source {
 }
 
 async fn create_test_app_state() -> Arc<AppState> {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
-    
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
+
     let config = Config {
         database_url,
         server_address: "127.0.0.1:8080".to_string(),
@@ -145,8 +151,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         concurrent_ocr_jobs: 2,
         ocr_timeout_seconds: 60,
         max_file_size_mb: 10,
-        memory_limit_mb: 256,
-        cpu_priority: "normal".to_string(),
         oidc_enabled: false,
         oidc_client_id: None,
         oidc_client_secret: None,
@@ -156,20 +160,37 @@ async fn create_test_app_state() -> Arc<AppState> {
         allow_local_auth: None,
         s3_enabled: false,
         s3_config: None,
-            max_pdf_size_mb: 100,
-            max_office_document_size_mb: 100,
+        max_pdf_size_mb: 100,
+        max_office_document_size_mb: 100,
         public_url: None,
         security: Default::default(),
+        mcp: Default::default(),
     };
 
     let db = Database::new(&config.database_url).await.unwrap();
-    
+
     // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
-    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-    
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone(), 100, 100, 300));
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: config.upload_path.clone(),
+    };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config)
+        .await
+        .unwrap();
+    let file_service =
+        std::sync::Arc::new(readur::services::file_service::FileService::with_storage(
+            config.upload_path.clone(),
+            storage_backend,
+        ));
+
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.pool.clone(),
+        2,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
     Arc::new(AppState {
         db,
         config,
@@ -178,9 +199,10 @@ async fn create_test_app_state() -> Arc<AppState> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     })
 }
@@ -189,7 +211,7 @@ async fn create_test_app_state() -> Arc<AppState> {
 async fn test_source_sync_service_creation() {
     let state = create_test_app_state().await;
     let sync_service = SourceSyncService::new(state.clone());
-    
+
     // Test that sync service is created successfully
     // We can't access private fields, but we can test public interface
     assert!(true); // Service creation succeeded
@@ -200,11 +222,11 @@ fn test_source_type_detection() {
     let webdav_source = create_test_webdav_source();
     let local_source = create_test_local_source();
     let s3_source = create_test_s3_source();
-    
+
     assert_eq!(webdav_source.source_type, SourceType::WebDAV);
     assert_eq!(local_source.source_type, SourceType::LocalFolder);
     assert_eq!(s3_source.source_type, SourceType::S3);
-    
+
     // Test string representations
     assert_eq!(webdav_source.source_type.to_string(), "webdav");
     assert_eq!(local_source.source_type.to_string(), "local_folder");
@@ -214,10 +236,10 @@ fn test_source_type_detection() {
 #[test]
 fn test_config_parsing_webdav() {
     let source = create_test_webdav_source();
-    
+
     let config: Result<WebDAVSourceConfig, _> = serde_json::from_value(source.config.clone());
     assert!(config.is_ok(), "WebDAV config should parse successfully");
-    
+
     let webdav_config = config.unwrap();
     assert_eq!(webdav_config.server_url, "https://cloud.example.com");
     assert_eq!(webdav_config.username, "testuser");
@@ -229,10 +251,13 @@ fn test_config_parsing_webdav() {
 #[test]
 fn test_config_parsing_local_folder() {
     let source = create_test_local_source();
-    
+
     let config: Result<LocalFolderSourceConfig, _> = serde_json::from_value(source.config.clone());
-    assert!(config.is_ok(), "Local Folder config should parse successfully");
-    
+    assert!(
+        config.is_ok(),
+        "Local Folder config should parse successfully"
+    );
+
     let local_config = config.unwrap();
     assert_eq!(local_config.watch_folders.len(), 1);
     assert_eq!(local_config.watch_folders[0], "/home/user/documents");
@@ -244,10 +269,10 @@ fn test_config_parsing_local_folder() {
 #[test]
 fn test_config_parsing_s3() {
     let source = create_test_s3_source();
-    
+
     let config: Result<S3SourceConfig, _> = serde_json::from_value(source.config.clone());
     assert!(config.is_ok(), "S3 config should parse successfully");
-    
+
     let s3_config = config.unwrap();
     assert_eq!(s3_config.bucket_name, "test-documents");
     assert_eq!(s3_config.region, "us-east-1");
@@ -263,17 +288,23 @@ fn test_file_deduplication_logic() {
     let file_content_1 = b"This is test file content for deduplication";
     let file_content_2 = b"This is different file content";
     let file_content_3 = b"This is test file content for deduplication"; // Same as 1
-    
+
     let hash_1 = calculate_content_hash(file_content_1);
     let hash_2 = calculate_content_hash(file_content_2);
     let hash_3 = calculate_content_hash(file_content_3);
-    
-    assert_ne!(hash_1, hash_2, "Different content should have different hashes");
+
+    assert_ne!(
+        hash_1, hash_2,
+        "Different content should have different hashes"
+    );
     assert_eq!(hash_1, hash_3, "Same content should have same hashes");
-    
+
     // Test hash format
     assert_eq!(hash_1.len(), 64); // SHA256 hex string length
-    assert!(hash_1.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be valid hex");
+    assert!(
+        hash_1.chars().all(|c| c.is_ascii_hexdigit()),
+        "Hash should be valid hex"
+    );
 }
 
 fn calculate_content_hash(content: &[u8]) -> String {
@@ -293,32 +324,32 @@ fn test_sync_metrics_structure() {
         files_skipped_extension: 3,
         files_failed: 2,
         total_bytes_downloaded: 50_000_000, // 50MB
-        sync_duration_ms: 45_000, // 45 seconds
+        sync_duration_ms: 45_000,           // 45 seconds
         ocr_jobs_queued: 75,
-        errors: vec![
-            SyncError {
-                file_path: "/Documents/failed.pdf".to_string(),
-                error_message: "Network timeout".to_string(),
-                error_code: "TIMEOUT".to_string(),
-            }
-        ],
+        errors: vec![SyncError {
+            file_path: "/Documents/failed.pdf".to_string(),
+            error_message: "Network timeout".to_string(),
+            error_code: "TIMEOUT".to_string(),
+        }],
     };
-    
+
     assert_eq!(metrics.source_type, SourceType::WebDAV);
     assert_eq!(metrics.files_discovered, 100);
     assert_eq!(metrics.files_downloaded, 85);
-    
+
     // Test calculated metrics
-    let total_processed = metrics.files_downloaded + metrics.files_skipped_existing + 
-                         metrics.files_skipped_extension + metrics.files_failed;
+    let total_processed = metrics.files_downloaded
+        + metrics.files_skipped_existing
+        + metrics.files_skipped_extension
+        + metrics.files_failed;
     assert_eq!(total_processed, metrics.files_discovered);
-    
+
     let success_rate = (metrics.files_downloaded as f64 / metrics.files_discovered as f64) * 100.0;
     assert_eq!(success_rate, 85.0);
-    
+
     // Test throughput calculation
-    let mb_per_second = (metrics.total_bytes_downloaded as f64 / 1_000_000.0) / 
-                       (metrics.sync_duration_ms as f64 / 1000.0);
+    let mb_per_second = (metrics.total_bytes_downloaded as f64 / 1_000_000.0)
+        / (metrics.sync_duration_ms as f64 / 1000.0);
     assert!(mb_per_second > 0.0);
 }
 
@@ -348,18 +379,21 @@ struct SyncError {
 fn test_ocr_queue_integration() {
     // Test OCR job creation for different file types
     let test_files = vec![
-        ("document.pdf", true),   // Should queue for OCR
-        ("image.jpg", true),      // Should queue for OCR
-        ("image.png", true),      // Should queue for OCR
-        ("text.txt", false),      // Plain text, no OCR needed
-        ("data.json", false),     // JSON, no OCR needed
-        ("archive.zip", false),   // Archive, no OCR needed
+        ("document.pdf", true), // Should queue for OCR
+        ("image.jpg", true),    // Should queue for OCR
+        ("image.png", true),    // Should queue for OCR
+        ("text.txt", false),    // Plain text, no OCR needed
+        ("data.json", false),   // JSON, no OCR needed
+        ("archive.zip", false), // Archive, no OCR needed
     ];
-    
+
     for (filename, should_queue_ocr) in test_files {
         let needs_ocr = file_needs_ocr(filename);
-        assert_eq!(needs_ocr, should_queue_ocr, 
-                   "OCR queueing decision wrong for: {}", filename);
+        assert_eq!(
+            needs_ocr, should_queue_ocr,
+            "OCR queueing decision wrong for: {}",
+            filename
+        );
     }
 }
 
@@ -380,23 +414,23 @@ fn extract_extension(filename: &str) -> String {
 #[test]
 fn test_sync_cancellation_handling() {
     // Test sync cancellation logic
-    use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
-    
+    use std::sync::Arc;
+
     let cancellation_token = Arc::new(AtomicBool::new(false));
-    
+
     // Test normal operation
     assert!(!cancellation_token.load(Ordering::Relaxed));
-    
+
     // Simulate cancellation request
     cancellation_token.store(true, Ordering::Relaxed);
     assert!(cancellation_token.load(Ordering::Relaxed));
-    
+
     // Test that sync would respect cancellation
     let should_continue = !cancellation_token.load(Ordering::Relaxed);
     assert!(!should_continue, "Sync should stop when cancelled");
-    
+
     // Test cancellation cleanup
     cancellation_token.store(false, Ordering::Relaxed);
     assert!(!cancellation_token.load(Ordering::Relaxed));
@@ -416,11 +450,14 @@ fn test_error_classification() {
         ("Invalid file format", ErrorCategory::Format),
         ("Unknown error", ErrorCategory::Unknown),
     ];
-    
+
     for (error_message, expected_category) in test_errors {
         let category = classify_error(error_message);
-        assert_eq!(category, expected_category, 
-                   "Error classification failed for: {}", error_message);
+        assert_eq!(
+            category, expected_category,
+            "Error classification failed for: {}",
+            error_message
+        );
     }
 }
 
@@ -438,10 +475,14 @@ enum ErrorCategory {
 
 fn classify_error(error_message: &str) -> ErrorCategory {
     let msg = error_message.to_lowercase();
-    
+
     if msg.contains("timeout") || msg.contains("dns") || msg.contains("connection") {
         ErrorCategory::Network
-    } else if msg.contains("401") || msg.contains("403") || msg.contains("unauthorized") || msg.contains("forbidden") {
+    } else if msg.contains("401")
+        || msg.contains("403")
+        || msg.contains("unauthorized")
+        || msg.contains("forbidden")
+    {
         ErrorCategory::Authentication
     } else if msg.contains("404") || msg.contains("not found") {
         ErrorCategory::NotFound
@@ -462,21 +503,24 @@ fn classify_error(error_message: &str) -> ErrorCategory {
 fn test_retry_strategy() {
     // Test retry strategy for different error types
     let retry_configs = vec![
-        (ErrorCategory::Network, 3, true),      // Retry network errors
-        (ErrorCategory::Server, 2, true),       // Retry server errors
+        (ErrorCategory::Network, 3, true),         // Retry network errors
+        (ErrorCategory::Server, 2, true),          // Retry server errors
         (ErrorCategory::Authentication, 0, false), // Don't retry auth errors
-        (ErrorCategory::NotFound, 0, false),    // Don't retry not found
-        (ErrorCategory::Permission, 0, false),  // Don't retry permission errors
-        (ErrorCategory::Format, 0, false),      // Don't retry format errors
+        (ErrorCategory::NotFound, 0, false),       // Don't retry not found
+        (ErrorCategory::Permission, 0, false),     // Don't retry permission errors
+        (ErrorCategory::Format, 0, false),         // Don't retry format errors
     ];
-    
+
     for (error_category, expected_retries, should_retry) in retry_configs {
         let retry_count = get_retry_count_for_error(&error_category);
         let will_retry = retry_count > 0;
-        
+
         assert_eq!(retry_count, expected_retries);
-        assert_eq!(will_retry, should_retry, 
-                   "Retry decision wrong for: {:?}", error_category);
+        assert_eq!(
+            will_retry, should_retry,
+            "Retry decision wrong for: {:?}",
+            error_category
+        );
     }
 }
 
@@ -501,14 +545,32 @@ fn test_sync_performance_monitoring() {
         network_latency_ms: 85,
         error_rate_percent: 2.1,
     };
-    
+
     // Test performance thresholds
-    assert!(performance_data.throughput_mbps > 1.0, "Throughput should be reasonable");
-    assert!(performance_data.files_per_second > 0.5, "File processing rate should be reasonable");
-    assert!(performance_data.memory_usage_mb < 500.0, "Memory usage should be reasonable");
-    assert!(performance_data.cpu_usage_percent < 80.0, "CPU usage should be reasonable");
-    assert!(performance_data.network_latency_ms < 1000, "Network latency should be reasonable");
-    assert!(performance_data.error_rate_percent < 10.0, "Error rate should be low");
+    assert!(
+        performance_data.throughput_mbps > 1.0,
+        "Throughput should be reasonable"
+    );
+    assert!(
+        performance_data.files_per_second > 0.5,
+        "File processing rate should be reasonable"
+    );
+    assert!(
+        performance_data.memory_usage_mb < 500.0,
+        "Memory usage should be reasonable"
+    );
+    assert!(
+        performance_data.cpu_usage_percent < 80.0,
+        "CPU usage should be reasonable"
+    );
+    assert!(
+        performance_data.network_latency_ms < 1000,
+        "Network latency should be reasonable"
+    );
+    assert!(
+        performance_data.error_rate_percent < 10.0,
+        "Error rate should be low"
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -530,19 +592,19 @@ fn test_source_priority_handling() {
         (SourceType::WebDAV, 2),      // Medium priority
         (SourceType::S3, 3),          // Lower priority (remote with potential costs)
     ];
-    
+
     let mut sorted_sources = sources.clone();
     sorted_sources.sort_by_key(|(_, priority)| *priority);
-    
+
     assert_eq!(sorted_sources[0].0, SourceType::LocalFolder);
     assert_eq!(sorted_sources[1].0, SourceType::WebDAV);
     assert_eq!(sorted_sources[2].0, SourceType::S3);
-    
+
     // Test that local sources are processed first
     let local_priority = get_source_priority(&SourceType::LocalFolder);
     let webdav_priority = get_source_priority(&SourceType::WebDAV);
     let s3_priority = get_source_priority(&SourceType::S3);
-    
+
     assert!(local_priority < webdav_priority);
     assert!(webdav_priority < s3_priority);
 }
@@ -557,33 +619,33 @@ fn get_source_priority(source_type: &SourceType) -> u32 {
 
 #[test]
 fn test_concurrent_sync_protection() {
-    use std::sync::{Arc, Mutex};
     use std::collections::HashSet;
-    
+    use std::sync::{Arc, Mutex};
+
     // Test that only one sync per source can run at a time
     let active_syncs: Arc<Mutex<HashSet<Uuid>>> = Arc::new(Mutex::new(HashSet::new()));
-    
+
     let source_id_1 = Uuid::new_v4();
     let source_id_2 = Uuid::new_v4();
-    
+
     // Test adding first sync
     {
         let mut syncs = active_syncs.lock().unwrap();
         assert!(syncs.insert(source_id_1));
     }
-    
+
     // Test adding second sync (different source)
     {
         let mut syncs = active_syncs.lock().unwrap();
         assert!(syncs.insert(source_id_2));
     }
-    
+
     // Test preventing duplicate sync for same source
     {
         let mut syncs = active_syncs.lock().unwrap();
         assert!(!syncs.insert(source_id_1)); // Should fail
     }
-    
+
     // Test cleanup after sync completion
     {
         let mut syncs = active_syncs.lock().unwrap();
@@ -602,20 +664,28 @@ fn test_sync_state_transitions() {
         (SourceStatus::Error, SourceStatus::Syncing),
         (SourceStatus::Error, SourceStatus::Idle),
     ];
-    
+
     for (from_state, to_state) in valid_transitions {
-        assert!(is_valid_state_transition(&from_state, &to_state),
-                "Invalid transition from {:?} to {:?}", from_state, to_state);
+        assert!(
+            is_valid_state_transition(&from_state, &to_state),
+            "Invalid transition from {:?} to {:?}",
+            from_state,
+            to_state
+        );
     }
-    
+
     // Test invalid transitions
     let invalid_transitions = vec![
         (SourceStatus::Idle, SourceStatus::Error), // Can't go directly to error without syncing
     ];
-    
+
     for (from_state, to_state) in invalid_transitions {
-        assert!(!is_valid_state_transition(&from_state, &to_state),
-                "Should not allow transition from {:?} to {:?}", from_state, to_state);
+        assert!(
+            !is_valid_state_transition(&from_state, &to_state),
+            "Should not allow transition from {:?} to {:?}",
+            from_state,
+            to_state
+        );
     }
 }
 
@@ -639,17 +709,26 @@ fn test_bandwidth_limiting() {
         burst_allowance_mb: 50.0,
         current_burst_mb: 25.0,
     };
-    
+
     // Test if download should be throttled
     let should_throttle = bandwidth_limiter.should_throttle_download(5.0); // 5MB download
-    assert!(!should_throttle, "Small download within burst allowance should not be throttled");
-    
+    assert!(
+        !should_throttle,
+        "Small download within burst allowance should not be throttled"
+    );
+
     let should_throttle_large = bandwidth_limiter.should_throttle_download(30.0); // 30MB download
-    assert!(should_throttle_large, "Large download exceeding burst should be throttled");
-    
+    assert!(
+        should_throttle_large,
+        "Large download exceeding burst should be throttled"
+    );
+
     // Test delay calculation
     let delay_ms = bandwidth_limiter.calculate_delay_ms(1_000_000); // 1MB
-    assert!(delay_ms > 0, "Should have some delay when near bandwidth limit");
+    assert!(
+        delay_ms > 0,
+        "Should have some delay when near bandwidth limit"
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -665,12 +744,12 @@ impl BandwidthLimiter {
         self.current_usage_mbps >= self.max_mbps * 0.8 && // Near limit
         download_size_mb > (self.burst_allowance_mb - self.current_burst_mb)
     }
-    
+
     fn calculate_delay_ms(&self, bytes: u64) -> u64 {
         if self.current_usage_mbps < self.max_mbps * 0.8 {
             return 0; // No throttling needed
         }
-        
+
         let mb = bytes as f64 / 1_000_000.0;
         let ideal_time_seconds = mb / self.max_mbps;
         (ideal_time_seconds * 1000.0) as u64

@@ -3,7 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { RetryHistoryModal } from '../../../components/RetryHistoryModal';
 import { documentService } from '../../../services/api';
-import { Button, EmptyState, Skeleton, SlideOver, SplitHandle, Tab, TabList, TabPanel, Tabs, TruncatedText, useToast } from '../../../ui';
+import {
+  Button,
+  EmptyState,
+  Skeleton,
+  SlideOver,
+  SplitHandle,
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  TruncatedText,
+  useToast,
+} from '../../../ui';
 import { acknowledge } from '../../board/litStore';
 import type { LabelData } from '../../labels';
 import { CommentsPanel, useComments } from '../comments/CommentsPanel';
@@ -19,10 +31,15 @@ import { useSourceName } from '../hooks/useSourceName';
 import { DocumentViewer } from '../reading/DocumentViewer';
 import { OcrTextPanel } from '../reading/OcrTextPanel';
 import { SharedLinksManager } from '../sharing/SharedLinksManager';
-import { notifyDocumentsChanged, useDocumentList, type DocumentListProvider } from './DocumentDrawerContext';
+import {
+  notifyDocumentsChanged,
+  useDocumentList,
+  type DocumentListProvider,
+} from './DocumentDrawerContext';
 import { DrawerActions, DrawerHead } from './DrawerHead';
 import { DrawerLabels } from './DrawerLabels';
 import { PREVIEW_MIN, usePreviewHeight } from './usePreviewHeight';
+import { ocrRetryOutcome } from '../../../lib/ocrRetry';
 import styles from './DocumentDrawer.module.css';
 
 export type DocumentTab = 'text' | 'details' | 'comments' | 'links';
@@ -107,7 +124,15 @@ interface DocumentBodyProps {
   onClose: () => void;
 }
 
-function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClose }: DocumentBodyProps) {
+function DocumentBody({
+  id,
+  list,
+  tab,
+  onTabChange,
+  delayPreview,
+  onTitle,
+  onClose,
+}: DocumentBodyProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const [params] = useSearchParams();
@@ -166,7 +191,11 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
 
   if (state === 'loading') {
     return (
-      <div className={styles.loading} role="status" aria-label={t('document.loading', 'Loading document')}>
+      <div
+        className={styles.loading}
+        role="status"
+        aria-label={t('document.loading', 'Loading document')}
+      >
         <Skeleton width="60%" height={16} />
         <Skeleton width="40%" height={28} />
         <Skeleton height={240} />
@@ -181,7 +210,11 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
       <div className={styles.state}>
         <EmptyState
           headingAs="h3"
-          title={notFound ? t('document.notFound', 'Document not found') : t('document.loadFailed', "Couldn't load this document")}
+          title={
+            notFound
+              ? t('document.notFound', 'Document not found')
+              : t('document.loadFailed', "Couldn't load this document")
+          }
           description={
             notFound
               ? t('document.notFoundHint', 'It may have been deleted, or the link is wrong.')
@@ -189,7 +222,9 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
           }
           action={
             <div className={styles.stateActions}>
-              {notFound ? null : <Button onPress={reload}>{t('document.retry', 'Try again')}</Button>}
+              {notFound ? null : (
+                <Button onPress={reload}>{t('document.retry', 'Try again')}</Button>
+              )}
               <Button variant={notFound ? 'primary' : 'secondary'} onPress={onClose}>
                 {t('document.drawer.close', 'Close')}
               </Button>
@@ -206,7 +241,10 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
       const res = await documentService.download(doc.id);
       saveBlob(res.data, doc.original_filename);
     } catch {
-      toast.show({ title: t('document.toast.downloadFailed', "Couldn't download the file"), tone: 'danger' });
+      toast.show({
+        title: t('document.toast.downloadFailed', "Couldn't download the file"),
+        tone: 'danger',
+      });
     } finally {
       setDownloading(false);
     }
@@ -215,12 +253,32 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
   const retryOcr = async () => {
     setRetrying(true);
     try {
-      await documentService.retryOcr(doc.id);
-      toast.show({ title: t('document.toast.retryQueued', 'OCR queued again'), tone: 'success' });
+      const res = await documentService.retryOcr(doc.id);
+      const outcome = ocrRetryOutcome(res?.data);
+      if (outcome === 'refused') {
+        toast.show({
+          title: t('document.toast.retryFailed', "Couldn't queue OCR again"),
+          description: res.data.message,
+          tone: 'danger',
+        });
+        return;
+      }
+      if (outcome === 'alreadyQueued') {
+        toast.show({
+          title: t('document.toast.retryAlreadyQueued', 'Already queued for OCR'),
+          description: res.data.message,
+          tone: 'info',
+        });
+      } else {
+        toast.show({ title: t('document.toast.retryQueued', 'OCR queued again'), tone: 'success' });
+      }
       setAwaitingRetry(true);
       await refresh();
     } catch {
-      toast.show({ title: t('document.toast.retryFailed', "Couldn't queue OCR again"), tone: 'danger' });
+      toast.show({
+        title: t('document.toast.retryFailed', "Couldn't queue OCR again"),
+        tone: 'danger',
+      });
     } finally {
       setRetrying(false);
     }
@@ -236,7 +294,10 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
       setDeleteOpen(false);
       onClose();
     } catch {
-      toast.show({ title: t('document.toast.deleteFailed', "Couldn't delete the document"), tone: 'danger' });
+      toast.show({
+        title: t('document.toast.deleteFailed', "Couldn't delete the document"),
+        tone: 'danger',
+      });
       setDeleting(false);
       setDeleteOpen(false);
     }
@@ -247,7 +308,10 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
     const result = await labels.save(next);
     if (result.ok) return;
     if (result.restored) list?.onChanged?.(doc.id, { labels: result.restored });
-    toast.show({ title: t('document.toast.labelsFailed', "Couldn't save the labels"), tone: 'danger' });
+    toast.show({
+      title: t('document.toast.labelsFailed', "Couldn't save the labels"),
+      tone: 'danger',
+    });
   };
 
   const noPreview = fileKind(doc.mime_type) === 'other';
@@ -255,7 +319,11 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
   return (
     <>
       <DrawerHead document={doc} ocr={ocr} sourceName={sourceName} />
-      <DrawerLabels labels={labels} tags={doc.tags ?? []} onSave={(next) => void saveLabels(next)} />
+      <DrawerLabels
+        labels={labels}
+        tags={doc.tags ?? []}
+        onSave={(next) => void saveLabels(next)}
+      />
 
       <section
         ref={previewRef}
@@ -286,8 +354,15 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
         />
       )}
 
-      <Tabs className={styles.tabs} selectedKey={tab} onSelectionChange={(key: Key) => onTabChange(key as DocumentTab)}>
-        <TabList aria-label={t('document.drawer.tabs', 'About this document')} className={styles.tabList}>
+      <Tabs
+        className={styles.tabs}
+        selectedKey={tab}
+        onSelectionChange={(key: Key) => onTabChange(key as DocumentTab)}
+      >
+        <TabList
+          aria-label={t('document.drawer.tabs', 'About this document')}
+          className={styles.tabList}
+        >
           <Tab id="text">{t('document.tabs.text', 'Text')}</Tab>
           <Tab id="details">{t('document.tabs.details', 'Details')}</Tab>
           <Tab id="comments">
@@ -345,7 +420,11 @@ function DocumentBody({ id, list, tab, onTabChange, delayPreview, onTitle, onClo
         onOpenChange={setDeleteOpen}
         onConfirm={deleteDocument}
       />
-      <ProcessedImageDialog documentId={doc.id} isOpen={processedOpen} onOpenChange={setProcessedOpen} />
+      <ProcessedImageDialog
+        documentId={doc.id}
+        isOpen={processedOpen}
+        onOpenChange={setProcessedOpen}
+      />
       <RetryHistoryModal
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}

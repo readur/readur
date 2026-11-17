@@ -219,7 +219,7 @@ pub struct SearchRequest {
     pub offset: Option<i64>,
     /// Whether to include text snippets with search matches (default: true)
     pub include_snippets: Option<bool>,
-    /// Length of text snippets in characters (default: 200)
+    /// Approximate length of text snippets in bytes, 1 to 2000 (default: 200)
     pub snippet_length: Option<i32>,
     /// Search algorithm to use (default: simple)
     pub search_mode: Option<SearchMode>,
@@ -264,26 +264,81 @@ impl SearchRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub enum SearchMode {
     /// Simple text search with basic word matching
+    #[default]
     #[serde(rename = "simple")]
     Simple,
     /// Exact phrase matching
     #[serde(rename = "phrase")]
     Phrase,
-    /// Fuzzy search using similarity matching (good for typos and partial matches)
+    /// Word-level fuzzy matching: finds documents containing a word (or run
+    /// of words) spelled like the query, ranked by how close it is. The
+    /// cutoff is the user's fuzzy search threshold; see `FuzzyThreshold`.
     #[serde(rename = "fuzzy")]
     Fuzzy,
-    /// Boolean search with AND, OR, NOT operators
+    /// Boolean search: `AND` / `&` / adjacency, `OR` / `|`, `NOT` / `!` /
+    /// leading `-` (keywords in any case), `( )` grouping, "quoted phrases",
+    /// `word:*` / `word*` prefixes and `<->` / `<N>` followed-by. Parsed by
+    /// `db::documents::boolean_to_tsquery`; malformed input never errors.
     #[serde(rename = "boolean")]
     Boolean,
 }
 
-impl Default for SearchMode {
+/// The cutoff of fuzzy search: the minimum pg_trgm `word_similarity` between
+/// the query and the closest stretch of a document's text. 1.0 only accepts
+/// the query's exact spelling; lower values let more spelling differences
+/// through. Comes from the user's `fuzzy_search_threshold` setting.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FuzzyThreshold(f32);
+
+impl FuzzyThreshold {
+    /// Used when the user has no setting (or an unusable one). Admits a
+    /// one-letter slip in a medium-length word ("invoce" scores about 0.57
+    /// against "invoice") while keeping unrelated text out (a long English
+    /// document scores about 0.3 against an absent word by chance).
+    pub const DEFAULT: f32 = 0.5;
+    /// The lowest cutoff applied. Below this nearly every long document
+    /// shares enough letter triples with any query to match, so smaller
+    /// settings are raised to it.
+    pub const MIN: f32 = 0.1;
+    /// The highest cutoff: the query's exact spelling.
+    pub const MAX: f32 = 1.0;
+
+    /// The cutoff for a stored setting. A missing, non-finite or out-of-range
+    /// value (the settings API only accepts 0.0..=1.0) falls back to
+    /// `DEFAULT`; values below `MIN` are raised to it.
+    pub fn from_setting(setting: Option<f32>) -> Self {
+        match setting {
+            Some(value) if value.is_finite() && (0.0..=Self::MAX).contains(&value) => {
+                Self(value.max(Self::MIN))
+            }
+            _ => Self(Self::DEFAULT),
+        }
+    }
+
+    pub fn value(self) -> f32 {
+        self.0
+    }
+
+    /// The text `pg_trgm.word_similarity_threshold` is set to.
+    pub fn setting(self) -> String {
+        self.0.to_string()
+    }
+
+    /// The cutoff as Postgres holds it once `setting` is applied: a double
+    /// parsed from that text (not the widened `f32`, which differs in the
+    /// low digits, e.g. 0.57).
+    pub fn cutoff(self) -> f64 {
+        self.setting().parse().unwrap_or(f64::from(self.0))
+    }
+}
+
+impl Default for FuzzyThreshold {
     fn default() -> Self {
-        SearchMode::Simple
+        Self(Self::DEFAULT)
     }
 }
 
@@ -444,5 +499,45 @@ mod sort_filter_tests {
         let req = parse("query=hello").unwrap();
         assert!(!req.filters().is_active());
         assert_eq!(req.sort_by, None);
+    }
+}
+
+#[cfg(test)]
+mod fuzzy_threshold_tests {
+    use super::FuzzyThreshold;
+
+    #[test]
+    fn missing_or_unusable_settings_fall_back_to_the_default() {
+        for setting in [
+            None,
+            Some(f32::NAN),
+            Some(f32::INFINITY),
+            Some(-0.1),
+            Some(1.01),
+        ] {
+            assert_eq!(
+                FuzzyThreshold::from_setting(setting).value(),
+                FuzzyThreshold::DEFAULT,
+                "{setting:?}"
+            );
+        }
+        assert_eq!(FuzzyThreshold::default().value(), FuzzyThreshold::DEFAULT);
+    }
+
+    #[test]
+    fn valid_settings_are_kept_and_tiny_ones_raised_to_the_floor() {
+        assert_eq!(FuzzyThreshold::from_setting(Some(0.7)).value(), 0.7);
+        assert_eq!(FuzzyThreshold::from_setting(Some(1.0)).value(), 1.0);
+        assert_eq!(
+            FuzzyThreshold::from_setting(Some(FuzzyThreshold::MIN)).value(),
+            FuzzyThreshold::MIN
+        );
+        for tiny in [0.0, 0.05] {
+            assert_eq!(
+                FuzzyThreshold::from_setting(Some(tiny)).value(),
+                FuzzyThreshold::MIN,
+                "{tiny}"
+            );
+        }
     }
 }

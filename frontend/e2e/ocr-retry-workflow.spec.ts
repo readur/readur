@@ -11,15 +11,39 @@ import { TestHelpers } from './utils/test-helpers';
 test.describe('OCR Retry Workflow', () => {
   let helpers: TestHelpers;
 
-  async function seedFailedDocument(name: string): Promise<string> {
-    const id = await helpers.uploadBufferViaAPI(name, Buffer.from(`%PDF-1.4\nnot a real pdf ${name} ${Math.random()}\n`), 'application/pdf');
+  async function seedFailedDocument(
+    name: string,
+    { idle = false }: { idle?: boolean } = {},
+  ): Promise<string> {
+    const id = await helpers.uploadBufferViaAPI(
+      name,
+      Buffer.from(`%PDF-1.4\nnot a real pdf ${name} ${Math.random()}\n`),
+      'application/pdf',
+    );
     const doc = await helpers.waitForOCRComplete(id);
     expect(doc.ocr_status).toBe('failed');
+    // The server retries a failed job on its own first. With `idle`, wait until it gives up, so
+    // no queue job is left and a manual retry is sure to queue a new one.
+    if (idle) await helpers.waitForOcrRetriesExhausted(id);
     return id;
   }
 
+  /** Press Retry OCR once and check the server queued a new job. */
+  async function retryOnce(page: Page, panel: ReturnType<Page['getByRole']>, id: string) {
+    const retry = page.waitForResponse(
+      (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
+      { timeout: TIMEOUTS.medium },
+    );
+    await panel.getByRole('button', { name: 'Retry OCR' }).click();
+    const response = await retry;
+    expect(response.status()).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, queued: true });
+    return response;
+  }
+
   const failedGrid = (page: Page) => page.getByRole('grid', { name: 'Failed documents' });
-  const failedRow = (page: Page, name: string) => failedGrid(page).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) });
+  const failedRow = (page: Page, name: string) =>
+    failedGrid(page).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) });
 
   async function openAttention(page: Page) {
     await helpers.openIntake('attention');
@@ -47,7 +71,7 @@ test.describe('OCR Retry Workflow', () => {
 
   test('should retry individual failed OCR document', async ({ dynamicUserPage: page }) => {
     test.setTimeout(150000);
-    const id = await seedFailedDocument('broken-b.pdf');
+    const id = await seedFailedDocument('broken-b.pdf', { idle: true });
     await openAttention(page);
 
     await failedRow(page, 'broken-b.pdf').getByRole('rowheader').click();
@@ -57,45 +81,30 @@ test.describe('OCR Retry Workflow', () => {
     // Retry with an explicit language (the default-language path has its own test below)
     const languages = panel.getByRole('region', { name: 'Retry with languages' });
     await languages.getByRole('button', { name: /Select OCR languages/ }).click();
-    await languages.getByRole('group', { name: 'Available Languages' }).getByText('English', { exact: true }).click();
+    await languages
+      .getByRole('group', { name: 'Available Languages' })
+      .getByText('English', { exact: true })
+      .click();
 
-    // The server keeps auto-retrying a failed job for a while and refuses a manual retry
-    // (500, "queue item already exists") until it gives up, so press Retry until it is accepted.
-    // The error toasts from refused attempts sit beside the panel, clear of its footer.
-    await expect(async () => {
-      const retry = page.waitForResponse(
-        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
-        { timeout: TIMEOUTS.medium },
-      );
-      await panel.getByRole('button', { name: 'Retry OCR' }).click();
-      expect((await retry).ok()).toBe(true);
-    }).toPass({ timeout: 90000, intervals: [5000] });
+    await retryOnce(page, panel, id);
     await helpers.waitForToast(/OCR retry queued/);
   });
 
-  test('should retry a failed OCR document with the default language', async ({ dynamicUserPage: page }) => {
+  test('should retry a failed OCR document with the default language', async ({
+    dynamicUserPage: page,
+  }) => {
     test.setTimeout(150000);
-    const id = await seedFailedDocument('broken-h.pdf');
+    const id = await seedFailedDocument('broken-h.pdf', { idle: true });
     await openAttention(page);
     await failedRow(page, 'broken-h.pdf').getByRole('rowheader').click();
     const panel = page.getByRole('dialog', { name: 'broken-h.pdf' });
     await expect(panel).toBeVisible();
 
     // No languages picked: the request still carries a JSON body (it used to be empty, which
-    // the server refused with 415). The server may refuse a manual retry with 500 while its own
-    // automatic retries are pending, so press Retry until it is accepted, as above.
-    await expect(async () => {
-      const retry = page.waitForResponse(
-        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
-        { timeout: TIMEOUTS.medium },
-      );
-      await panel.getByRole('button', { name: 'Retry OCR' }).click();
-      const response = await retry;
-      expect(response.status()).not.toBe(415);
-      expect(response.request().headers()['content-type']).toMatch(/^application\/json/);
-      expect(response.request().postDataJSON()).toEqual({});
-      expect(response.ok()).toBe(true);
-    }).toPass({ timeout: 90000, intervals: [5000] });
+    // the server refused with 415).
+    const response = await retryOnce(page, panel, id);
+    expect(response.request().headers()['content-type']).toMatch(/^application\/json/);
+    expect(response.request().postDataJSON()).toEqual({});
     await helpers.waitForToast(/OCR retry queued/);
   });
 
@@ -140,7 +149,9 @@ test.describe('OCR Retry Workflow', () => {
 
     await row.getByRole('rowheader').click();
     const panel = page.getByRole('dialog', { name: 'broken-f.pdf' });
-    await expect(panel.getByRole('group', { name: 'Failure' }).getByRole('term').filter({ hasText: 'Reason' })).toBeVisible();
+    await expect(
+      panel.getByRole('group', { name: 'Failure' }).getByRole('term').filter({ hasText: 'Reason' }),
+    ).toBeVisible();
     const message = panel.getByRole('region', { name: 'Error message' });
     await expect(message).toBeVisible();
     await expect(message).not.toBeEmpty();

@@ -35,9 +35,20 @@ controllers:
     containers:
       readur:
         image:
-          repository: readur/readur
-          tag: latest
+          # The image CI publishes (.github/workflows/docker-build.yml).
+          repository: ghcr.io/readur/readur
+          # Empty means the chart's appVersion, the Readur release this chart
+          # was tested with. Set a release tag (e.g. "3.1.3") to pin another.
+          tag: ""
           pullPolicy: IfNotPresent
+        # Readur needs PostgreSQL, which this chart does not deploy. Set
+        # DATABASE_URL (or the POSTGRES_* variables) here, for example from a
+        # Secret:
+        #   DATABASE_URL:
+        #     valueFrom:
+        #       secretKeyRef:
+        #         name: readur-db
+        #         key: DATABASE_URL
         env:
           # Server Configuration
           SERVER_HOST: "0.0.0.0"
@@ -47,17 +58,20 @@ controllers:
           UPLOAD_PATH: "/app/uploads"
           WATCH_FOLDER: "/app/watch"
           ALLOWED_FILE_TYPES: "pdf,txt,doc,docx,png,jpg,jpeg"
+          # Hard cap on upload size; users can only set a lower per-user limit.
           MAX_FILE_SIZE_MB: "50"
+          # Skip watch-folder files older than this many hours (as
+          # docker-compose.yml does); remove it to import files of any age.
           MAX_FILE_AGE_HOURS: "24"
 
           # OCR Settings
           OCR_LANGUAGE: "eng"
           CONCURRENT_OCR_JOBS: "4"
+          # Default for users without their own OCR timeout. Capped at 600:
+          # queue maintenance resets jobs processing longer than 10 minutes.
           OCR_TIMEOUT_SECONDS: "300"
-
-          # Performance
-          MEMORY_LIMIT_MB: "512"
-          CPU_PRIORITY: "normal"
+          # Scratch space for OCR files, PDF renders and thumbnails.
+          # TEMP_DIR: "/tmp"
 
           # File Watching
           WATCH_INTERVAL_SECONDS: "30"
@@ -73,22 +87,51 @@ controllers:
           # METRICS_TOKEN: ""                     # bearer token for Prometheus scrapes of /metrics
           # ADMIN_EMAIL: "admin@example.com"
 
+          # AI assistants (MCP endpoint at /api/mcp; see docs/mcp-guide.md)
+          # MCP_ENABLED: "true"
+          # MCP_ALLOW_DELETE: "false"             # expose the delete_document tool
+
+          # S3 storage for documents instead of the uploads volume (see
+          # docs/s3-storage-guide.md). Keep the secrets in a Secret (valueFrom).
+          # S3_ENABLED: "true"
+          # S3_BUCKET_NAME: "readur"
+          # S3_REGION: "us-east-1"
+          # S3_ENDPOINT_URL: ""                   # for MinIO and other S3-compatible stores
+          # S3_PREFIX: ""
+
+## Storage. By default the chart creates a PersistentVolumeClaim for each
+## volume; set `existingClaim` to mount a claim you created instead. Claims the
+## chart creates are kept after `helm uninstall` (`retain: true`).
 persistence:
+  # Documents, thumbnails and processed images. Required unless S3 storage is
+  # enabled (S3_ENABLED: "true"); to accept losing documents whenever the pod
+  # restarts, set `type: emptyDir` instead of disabling it.
   uploads:
     enabled: true
     type: persistentVolumeClaim
+    # Name of an existing PVC to mount; empty creates one with the settings below.
+    existingClaim: ""
     storageClass:
     accessMode: ReadWriteOnce
     size: 10Gi
+    retain: true
+    # Keeps the created claim's name "<fullname>-uploads" (e.g. readur-uploads)
+    # whatever other volumes are enabled; the library drops the suffix when it
+    # creates only one claim, so toggling the watch folder would otherwise
+    # swap in a new, empty volume.
+    suffix: uploads
     globalMounts:
       - path: /app/uploads
 
+  # Watch folder: files placed here are imported. Optional.
   watch:
     enabled: true
     type: persistentVolumeClaim
+    existingClaim: ""
     storageClass:
     accessMode: ReadWriteOnce
     size: 5Gi
+    retain: true
     globalMounts:
       - path: /app/watch
 

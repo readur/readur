@@ -19,7 +19,7 @@ use crate::utils::security::generate_secure_password;
 /// Result indicating success or failure
 pub async fn reset_admin_password(db: &Database) -> Result<()> {
     // Get admin username from env var or use default
-    let admin_username = env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
+    let admin_username = crate::seed::admin_username();
 
     // Check if admin user exists
     let admin_user = db

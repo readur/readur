@@ -4,12 +4,12 @@
 
 use chrono::{DateTime, Duration, Utc};
 use readur::models::{CreateSource, FileIngestionInfo, SourceType};
-use readur::scheduling::source_sync::{SourceSyncService, SyncOutcome};
+use readur::scheduling::source_sync::{PipelineRun, SourceSyncService, SyncOutcome};
+use readur::services::webdav::SyncProgress;
 use readur::test_utils::TestContext;
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use readur::services::webdav::SyncProgress;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -65,7 +65,12 @@ async fn harness(dir: &std::path::Path) -> Harness {
         )
         .await
         .unwrap();
-    Harness { ctx, user_id, source_id: source.id, downloads: Arc::new(AtomicUsize::new(0)) }
+    Harness {
+        ctx,
+        user_id,
+        source_id: source.id,
+        downloads: Arc::new(AtomicUsize::new(0)),
+    }
 }
 
 impl Harness {
@@ -76,13 +81,15 @@ impl Harness {
         let downloads = self.downloads.clone();
         SourceSyncService::new(self.ctx.state().clone())
             .run_pipeline(
-                self.user_id,
-                self.source_id,
-                &folders,
-                &["txt".to_string()],
-                false,
-                CancellationToken::new(),
-                &Arc::new(SyncProgress::new()),
+                PipelineRun {
+                    user_id: self.user_id,
+                    source_id: self.source_id,
+                    watch_folders: &folders,
+                    file_extensions: &["txt".to_string()],
+                    enable_background_ocr: false,
+                    cancellation_token: CancellationToken::new(),
+                    progress: &Arc::new(SyncProgress::new()),
+                },
                 move |_| {
                     let files = files.clone();
                     async move { Ok(files.into()) }
@@ -100,7 +107,13 @@ impl Harness {
     }
 
     async fn document_count(&self) -> i64 {
-        self.ctx.state().db.count_documents_for_source(self.user_id, self.source_id).await.unwrap().0
+        self.ctx
+            .state()
+            .db
+            .count_documents_for_source(self.user_id, self.source_id)
+            .await
+            .unwrap()
+            .0
     }
 }
 
@@ -111,7 +124,10 @@ async fn unchanged_files_are_not_downloaded_again() {
     let h = harness(dir.path()).await;
     let modified = Some(Utc::now() - Duration::hours(1));
     let body: &[u8] = b"hello world";
-    let files = vec![listed("a.txt", body.len() as i64, modified), listed("b.txt", body.len() as i64, modified)];
+    let files = vec![
+        listed("a.txt", body.len() as i64, modified),
+        listed("b.txt", body.len() as i64, modified),
+    ];
 
     let first = h.run(files.clone(), body).await;
     assert_eq!(first.processed, 1, "{first:?}"); // b.txt is a content duplicate of a.txt
@@ -123,7 +139,11 @@ async fn unchanged_files_are_not_downloaded_again() {
     assert_eq!(second.processed, 0, "{second:?}");
     assert_eq!(second.unchanged, 1, "{second:?}");
     assert_eq!(second.failed, 0, "{second:?}");
-    assert_eq!(h.downloads.load(Ordering::SeqCst), 3, "only the duplicate (never stored) is downloaded again");
+    assert_eq!(
+        h.downloads.load(Ordering::SeqCst),
+        3,
+        "only the duplicate (never stored) is downloaded again"
+    );
     assert_eq!(h.document_count().await, 1);
 
     let _ = h.ctx.cleanup_and_close().await;
@@ -137,13 +157,17 @@ async fn changed_or_unknown_metadata_downloads_again() {
     let modified = Some(Utc::now() - Duration::hours(1));
     let body: &[u8] = b"hello world";
 
-    let first = h.run(vec![listed("a.txt", body.len() as i64, modified)], body).await;
+    let first = h
+        .run(vec![listed("a.txt", body.len() as i64, modified)], body)
+        .await;
     assert_eq!(first.processed, 1, "{first:?}");
     assert_eq!(h.downloads.load(Ordering::SeqCst), 1);
 
     // Newer modification time: downloaded (then skipped by content hash).
     let newer = Some(Utc::now());
-    let run = h.run(vec![listed("a.txt", body.len() as i64, newer)], body).await;
+    let run = h
+        .run(vec![listed("a.txt", body.len() as i64, newer)], body)
+        .await;
     assert_eq!(run.unchanged, 0, "{run:?}");
     assert_eq!(h.downloads.load(Ordering::SeqCst), 2);
 
@@ -153,7 +177,9 @@ async fn changed_or_unknown_metadata_downloads_again() {
     assert_eq!(h.downloads.load(Ordering::SeqCst), 3);
 
     // No modification time from the source: downloaded.
-    let run = h.run(vec![listed("a.txt", body.len() as i64, None)], body).await;
+    let run = h
+        .run(vec![listed("a.txt", body.len() as i64, None)], body)
+        .await;
     assert_eq!(run.unchanged, 0, "{run:?}");
     assert_eq!(h.downloads.load(Ordering::SeqCst), 4);
 
@@ -170,7 +196,14 @@ async fn second_local_folder_sync_changes_nothing() {
     std::fs::write(dir.path().join("nested/two.txt"), b"two").unwrap();
     let h = harness(dir.path()).await;
     let service = SourceSyncService::new(h.ctx.state().clone());
-    let source = h.ctx.state().db.get_source(h.user_id, h.source_id).await.unwrap().unwrap();
+    let source = h
+        .ctx
+        .state()
+        .db
+        .get_source(h.user_id, h.source_id)
+        .await
+        .unwrap()
+        .unwrap();
 
     let first = service.sync_source(&source, false).await.unwrap();
     assert_eq!(first.processed, 2, "{first:?}");

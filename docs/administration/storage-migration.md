@@ -2,285 +2,190 @@
 
 ## Overview
 
-Readur supports migrating documents between storage backends (Local ↔ S3) using a built-in migration tool. This enterprise-grade utility ensures safe, reliable data migration with comprehensive rollback capabilities.
+Readur stores uploaded documents on the local filesystem (`UPLOAD_PATH`) by default, or in an S3-compatible bucket when S3 storage is enabled. Documents uploaded while local storage was active keep a local file path in the database. The `migrate_to_s3` tool copies those files into the S3 bucket and points the database records at the new S3 objects.
+
+The tool only migrates **local to S3**. There is no tool for moving documents from S3 back to local storage or between buckets.
+
+The full option reference is in [Command-Line Tools](./cli-tools.md#migrate_to_s3). This page describes the procedure.
 
 ## When You Need This
 
-- **Moving from local filesystem to S3 cloud storage**
-- **Switching between S3 buckets or regions**
-- **Disaster recovery scenarios**
-- **Infrastructure upgrades or server migrations**
-- **Scaling to cloud-based storage**
+- You started Readur with local storage and want to switch to S3 storage without losing existing documents.
 
-## Migration Tool Features
+## What the Tool Does
 
-✅ **Dry-run mode** - Test migration without making any changes  
-✅ **Progress tracking** - Resume interrupted migrations from saved state  
-✅ **Rollback capability** - Complete undo functionality if needed  
-✅ **Batch processing** - Efficiently handle large datasets  
-✅ **Associated files** - Automatically migrates thumbnails & processed images  
-✅ **Data integrity** - Verifies successful uploads before cleanup  
-✅ **Selective migration** - Migrate specific users or document sets  
+For every selected document whose stored file path does not start with `s3://`, the tool:
+
+1. Reads the file from the path stored in the database. If it does not exist, the document counts as failed.
+2. Uploads it to the bucket under `documents/<user-id>/<year>/<month>/<document-id>.<extension>` (year and month of the migration run; files larger than the multipart threshold use a multipart upload).
+3. Changes the document's file path in the database to `s3://<key>`.
+4. Uploads the thumbnail `<UPLOAD_PATH>/thumbnails/<document-id>_thumb.jpg` to `thumbnails/<user-id>/<document-id>_thumb.jpg` and the processed image `<UPLOAD_PATH>/processed_images/<document-id>_processed.png` to `processed_images/<user-id>/<document-id>_processed.png`, if those files exist. A failure here is logged as a warning and does not fail the document.
+5. With `--delete-local`, deletes the local original, thumbnail and processed image after they were uploaded.
+
+Documents are processed one at a time, oldest first.
+
+### Which documents are selected
+
+Every document whose file path does not start with `s3://` (with `--user-id ID`, only that user's), oldest first. The tool reads them in pages of 500, so any number of documents is covered in one run. With `--limit N` it stops after N documents.
+
+Documents already in S3 are never selected, so a later run migrates only what is still local (documents added since, and earlier failures), and a run after everything has moved finds nothing to do.
 
 ## Prerequisites
 
-### System Requirements
-- Admin access to your Readur deployment
-- Ability to run commands on the server (Docker exec or direct access)
-- Sufficient disk space for temporary files during migration
-- Network connectivity to target storage (S3)
+- A source checkout of Readur and a Rust toolchain. The tool is not included in the Docker image, which contains only the `readur` server binary.
+- The same environment as the server: database settings (`DATABASE_URL` or the `POSTGRES_*` variables) and `UPLOAD_PATH`.
+- S3 settings: `S3_ENABLED=true` (or `STORAGE_BACKEND=s3`), `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and as needed `S3_REGION` (default `us-east-1`), `S3_ENDPOINT_URL` and `S3_FORCE_PATH_STYLE` for S3-compatible services. If `S3_PREFIX` is set, migrated documents, thumbnails and processed images are written below that prefix, just like new uploads. See the [configuration reference](../configuration-reference.md).
+- Read access to the document files **at the paths stored in the database**. In the Docker setup these are absolute paths under `/app/uploads`, so the tool must run where the uploads directory is available at that same path. Relative paths are resolved against the tool's working directory.
 
-### Before You Start
-1. **Complete database backup**
+### Before you start
+
+1. Back up the database:
    ```bash
-   pg_dump readur > readur_backup_$(date +%Y%m%d).sql
+   pg_dump -h localhost -U readur readur > readur_backup_$(date +%Y%m%d).sql
    ```
-
-2. **File system backup** (if migrating from local storage)
+2. Back up the uploads directory:
    ```bash
-   tar -czf documents_backup_$(date +%Y%m%d).tar.gz /path/to/readur/uploads
+   tar -czf uploads_backup_$(date +%Y%m%d).tar.gz /path/to/uploads
    ```
-
-3. **S3 credentials configured** (for S3 migrations)
-   - Verify bucket access and permissions
-   - Test connectivity with AWS CLI
 
 ## Step-by-Step Migration Process
 
-### Step 1: Configure Target Storage
-
-For S3 migrations, ensure environment variables are set:
+### Step 1: Build the tool
 
 ```bash
-# Required S3 configuration
-export S3_BUCKET_NAME="your-readur-bucket"
+git clone https://github.com/readur/readur.git
+cd readur
+cargo build --release --bin migrate_to_s3
+```
+
+The binary is `target/release/migrate_to_s3`. Alternatively, `cargo run --release --bin migrate_to_s3 -- <options>` builds and runs it in one step.
+
+### Step 2: Set the environment
+
+```bash
+export DATABASE_URL="postgresql://readur:readur@localhost:5432/readur"
+export UPLOAD_PATH="/app/uploads"
+export S3_ENABLED=true
+export S3_BUCKET_NAME="readur-documents"
 export S3_ACCESS_KEY_ID="your-access-key"
 export S3_SECRET_ACCESS_KEY="your-secret-key"
 export S3_REGION="us-east-1"
-
-# Optional: Custom endpoint for S3-compatible services
-export S3_ENDPOINT_URL="https://s3.amazonaws.com"
+# Only for S3-compatible services such as MinIO:
+export S3_ENDPOINT_URL="https://s3.example.com"
 ```
 
-### Step 2: Test with Dry Run
+If `S3_ENABLED` is not `true` (and `STORAGE_BACKEND` is not `s3`), the tool logs `S3 is not enabled in configuration. Set S3_ENABLED=true and provide S3 configuration.` and exits with status 1. If the bucket cannot be listed, it logs `S3 connection failed` and exits with status 1.
 
-**Always start with a dry run** to validate the migration plan:
+### Step 3: Dry run
 
 ```bash
-# Docker deployment
-docker exec readur-app cargo run --bin migrate_to_s3 -- --dry-run
-
-# Direct deployment
 ./target/release/migrate_to_s3 --dry-run
-
-# Dry run for specific user
-docker exec readur-app cargo run --bin migrate_to_s3 -- --dry-run --user-id "uuid-here"
 ```
 
-The dry run will show:
-- Number of documents to migrate
-- Estimated data transfer size
-- Potential issues or conflicts
-- Expected migration time
+A dry run connects to the database and to S3 (and fails the same way if either is unreachable), then lists the documents it would migrate, one log line each, and changes nothing:
 
-### Step 3: Run the Migration
+```text
+INFO migrate_to_s3: 📋 Found 2 documents with local file paths
+INFO migrate_to_s3: 🔍 DRY RUN - Would migrate the following files:
+INFO migrate_to_s3:   - invoice-2024.pdf (User: 3f6c1e2a-8d4b-4c1e-9a77-2b1f0c9d5e10, Size: 184320 bytes)
+INFO migrate_to_s3:   - scan.png (User: 3f6c1e2a-8d4b-4c1e-9a77-2b1f0c9d5e10, Size: 92011 bytes)
+INFO migrate_to_s3: 💡 Run without --dry-run to perform actual migration
+```
 
-Once dry run looks good, execute the actual migration:
+Log lines also carry a timestamp. The log level of this tool is fixed at `info`; `RUST_LOG` does not change it.
+
+### Step 4: Run the migration
 
 ```bash
-# Full migration with rollback enabled (recommended)
-docker exec readur-app cargo run --bin migrate_to_s3 -- --enable-rollback
-
-# Migration with progress tracking
-docker exec readur-app cargo run --bin migrate_to_s3 -- --enable-rollback --verbose
-
-# User-specific migration
-docker exec readur-app cargo run --bin migrate_to_s3 -- --enable-rollback --user-id "uuid-here"
+./target/release/migrate_to_s3
 ```
 
-### Step 4: Monitor Progress
+The tool logs one `📦 Migrating: <filename> (<document-id>) [n/total]` line per document followed by a success or failure line, and finishes with `🎉 Migration completed!` and the number of migrated and failed files. Without `--enable-rollback`, a failed document is recorded and the tool continues with the next one; the run still exits with status 0.
 
-The migration tool provides real-time progress updates:
+Keep the local files (do not pass `--delete-local`) until you have checked the result.
 
-```
-📊 Migration Progress:
-┌─────────────────────────────────────────────────────────────┐
-│ Documents: 1,247 / 2,500 (49.9%)                          │
-│ Data Transferred: 2.3 GB / 4.7 GB                         │
-│ Time Elapsed: 00:15:32                                     │
-│ ETA: 00:16:12                                              │
-│ Current: uploading user_documents/report_2024.pdf         │
-└─────────────────────────────────────────────────────────────┘
-```
+### Step 5: Check the result
 
-### Step 5: Verify Migration
+- Read `migration_state.json` in the directory you ran the tool from (see [State file](#state-file)). Its `failed_migrations` list names every document that was not migrated and why.
+- Count documents still stored locally:
+  ```bash
+  psql -h localhost -U readur readur -c "SELECT COUNT(*) FROM documents WHERE file_path NOT LIKE 's3://%';"
+  ```
+- Run the tool again: documents already in S3 are skipped, so a second run only retries what is left.
 
-After completion, verify the migration was successful:
+### Step 6: Switch the server to S3
 
-```bash
-# Check migration status
-docker exec readur-app cargo run --bin migrate_to_s3 -- --status
-
-# Verify document count matches
-docker exec readur-app psql -d readur -c "SELECT COUNT(*) FROM documents;"
-
-# Test document access through API
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-     "https://your-readur-instance.com/api/documents/sample-uuid/download"
-```
-
-### Step 6: Update Configuration
-
-Update your deployment configuration to use the new storage backend:
+Give the server the same S3 settings, for example in `docker-compose.yml`:
 
 ```yaml
-# docker-compose.yml
-environment:
-  - STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
-  - S3_BUCKET_NAME=your-readur-bucket
-  - S3_ACCESS_KEY_ID=your-access-key
-  - S3_SECRET_ACCESS_KEY=your-secret-key
-  - S3_REGION=us-east-1
+services:
+  readur:
+    environment:
+      S3_ENABLED: "true"
+      S3_BUCKET_NAME: readur-documents
+      S3_ACCESS_KEY_ID: your-access-key
+      S3_SECRET_ACCESS_KEY: your-secret-key
+      S3_REGION: us-east-1
 ```
 
-Restart the application to use the new storage configuration.
+Restart Readur. Documents uploaded by the still-running server while the migration ran are stored locally; run the tool once more after the switch to move them.
+
+The tool only deletes local files of documents it migrates in a run started with `--delete-local`; a later run skips documents already in S3 and does not delete their local copies. Remove those yourself once you are satisfied (keep the `.readur` directory under `UPLOAD_PATH`, which holds Readur's own files such as the generated initial admin password).
 
 ## Advanced Usage
 
-### Resuming Interrupted Migrations
+### State file
 
-If a migration is interrupted, you can resume from the saved state:
+The tool writes `migration_state.json` to its working directory after every 10 successfully migrated documents and at the end of the run. It contains:
 
-```bash
-# Resume from automatically saved state
-docker exec readur-app cargo run --bin migrate_to_s3 -- --resume-from /tmp/migration_state.json
+- `started_at`
+- `completed_migrations`: per document `document_id`, `user_id`, `original_path`, `s3_key`, `migrated_at`, and `associated_files` (each with `file_type` `thumbnail` or `processed_image`, `original_path`, `s3_key`)
+- `failed_migrations`: per document `document_id`, `original_path`, `error`, `failed_at`
+- `total_files`, `processed_files`
 
-# Check what migrations are available to resume
-ls /tmp/migration_state_*.json
-```
+The file is a record for you; the tool never reads it back. Each run overwrites it.
 
-### Rolling Back a Migration
+### Rollback on failure
 
-If you need to undo a migration:
+With `--enable-rollback`, the first failed document stops the run. The tool then undoes every migration completed in this run, newest first: it restores the original file path in the database and deletes the uploaded document, thumbnail and processed image objects from S3. It exits with status 1 (`Migration failed and was rolled back`).
 
-```bash
-# Rollback using saved state file
-docker exec readur-app cargo run --bin migrate_to_s3 -- --rollback /tmp/migration_state.json
+- Errors during the rollback are written to `rollback_errors.json` in the working directory.
+- If the rollback itself fails, the state is saved to `migration_state.json` for manual recovery.
+- Local files removed by `--delete-local` are **not** restored. Do not combine `--delete-local` with `--enable-rollback` unless you have a backup of the uploads directory.
+- There is no command to roll back an earlier, finished run.
 
-# Verify rollback completion
-docker exec readur-app cargo run --bin migrate_to_s3 -- --rollback-status
-```
+### Resuming
 
-### Batch Processing Large Datasets
-
-For very large document collections:
+Because documents already in S3 are skipped, rerunning the tool after an interruption continues with the remaining documents. `--resume-from <document-id>` additionally skips every document older than that one (it starts at that document); an ID that does not exist is an error.
 
 ```bash
-# Process in smaller batches
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --enable-rollback \
-  --batch-size 1000 \
-  --parallel-uploads 5
+./target/release/migrate_to_s3 --resume-from 7d1e4b9a-2c3f-4e5a-8b6c-1d2e3f4a5b6c
 ```
 
-## Migration Scenarios
+### Migrating one user
 
-### Scenario 1: Local to S3 (Most Common)
+Find the user ID:
 
 ```bash
-# 1. Configure S3 credentials
-export S3_BUCKET_NAME="company-readur-docs"
-export S3_ACCESS_KEY_ID="AKIA..."
-export S3_SECRET_ACCESS_KEY="..."
-
-# 2. Test the migration
-docker exec readur-app cargo run --bin migrate_to_s3 -- --dry-run
-
-# 3. Run migration with safety features
-docker exec readur-app cargo run --bin migrate_to_s3 -- --enable-rollback
-
-# 4. Update docker-compose.yml to use S3
-# 5. Restart application
+psql -h localhost -U readur readur -c "SELECT id, username FROM users;"
 ```
 
-### Scenario 2: S3 to Different S3 Bucket
+Then migrate that user's documents:
 
 ```bash
-# 1. Configure new bucket credentials
-export S3_BUCKET_NAME="new-bucket-name"
-
-# 2. Migrate to new bucket
-docker exec readur-app cargo run --bin migrate_to_s3 -- --enable-rollback
-
-# 3. Update configuration
+./target/release/migrate_to_s3 --user-id 3f6c1e2a-8d4b-4c1e-9a77-2b1f0c9d5e10 --limit 5000
 ```
-
-### Scenario 3: Migrating Specific Users
-
-```bash
-# Get user IDs that need migration
-docker exec readur-app psql -d readur -c \
-  "SELECT id, email FROM users WHERE created_at > '2024-01-01';"
-
-# Migrate each user individually
-for user_id in $user_ids; do
-  docker exec readur-app cargo run --bin migrate_to_s3 -- \
-    --enable-rollback --user-id "$user_id"
-done
-```
-
-## Performance Considerations
-
-### Optimization Tips
-
-1. **Network Bandwidth**: Migration speed depends on upload bandwidth to S3
-2. **Parallel Processing**: The tool automatically optimizes concurrent uploads
-3. **Large Files**: Files over 100MB use multipart uploads for better performance
-4. **Memory Usage**: Migration is designed to use minimal memory regardless of file sizes
-
-### Expected Performance
-
-| Document Count | Typical Time | Network Impact |
-|---------------|--------------|----------------|
-| < 1,000       | 5-15 minutes | Low            |
-| 1,000-10,000  | 30-90 minutes| Medium         |
-| 10,000+       | 2-8 hours    | High           |
 
 ## Security Considerations
 
-### Data Protection
-- All transfers use HTTPS/TLS encryption
-- Original files remain until migration is verified
-- Database transactions ensure consistency
-- Rollback preserves original state
-
-### Access Control
-- Migration tool respects existing file permissions
-- S3 bucket policies should match security requirements
-- Consider enabling S3 server-side encryption
-
-### Audit Trail
-- All migration operations are logged
-- State files contain complete operation history
-- Failed operations are tracked for debugging
-
-## Next Steps
-
-After successful migration:
-
-1. **Monitor the application** for any storage-related issues
-2. **Update backup procedures** to include S3 data
-3. **Configure S3 lifecycle policies** for cost optimization
-4. **Set up monitoring** for S3 usage and costs
-5. **Clean up local files** once confident in migration success
+- Pass credentials through environment variables, not on the command line.
+- `migration_state.json` and `rollback_errors.json` contain document IDs, user IDs and file paths; delete them when you no longer need them.
+- Configure bucket policies and server-side encryption on the S3 side as your requirements demand; the tool does not set them.
 
 ## Support
 
 If you encounter issues during migration:
 
-1. Check the [troubleshooting guide](./migration-troubleshooting.md)
-2. Review application logs for detailed error messages
-3. Use the `--verbose` flag for detailed migration output
-4. Keep state files for support debugging
-
-Remember: **Always test migrations in a staging environment first** when possible.
+1. Check the [troubleshooting guide](./migration-troubleshooting.md).
+2. Read the tool's log output and the `error` fields in `migration_state.json`.
+3. Test the migration against a copy of the database and a test bucket first when possible.

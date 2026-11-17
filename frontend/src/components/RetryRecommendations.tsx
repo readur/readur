@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Skeleton } from '../ui';
-import { documentService, type BulkOcrRetryResponse, type OcrRetryRecommendation } from '../services/api';
+import {
+  apiErrorMessage,
+  documentService,
+  type BulkOcrRetryResponse,
+  type OcrRetryRecommendation,
+} from '../services/api';
 import styles from './RetryModals.module.css';
 
 interface RetryRecommendationsProps {
@@ -17,7 +22,10 @@ export function successRateLevel(rate: number): 'high' | 'medium' | 'low' {
 }
 
 /** Groups of failed documents that are likely to succeed if retried now, each with a one-press retry. */
-export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRetrySuccess, onRetryClick }) => {
+export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({
+  onRetrySuccess,
+  onRetryClick,
+}) => {
   const { t } = useTranslation();
   const [recommendations, setRecommendations] = useState<OcrRetryRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,7 +39,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
       const response = await documentService.getRetryRecommendations();
       setRecommendations(response.data?.recommendations ?? []);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = apiErrorMessage(err);
       setError(message || t('intake.recommend.loadFailed', 'Could not load retry recommendations'));
     } finally {
       setLoading(false);
@@ -57,7 +65,7 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
       onRetrySuccess?.(response.data);
       void load();
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = apiErrorMessage(err);
       setError(message || t('intake.recommend.retryFailed', 'Could not start the retry'));
     } finally {
       setRetrying(null);
@@ -78,7 +86,10 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
 
   const list = recommendations ?? [];
   return (
-    <section className={styles.stack} aria-label={t('intake.recommend.title', 'Retry recommendations')}>
+    <section
+      className={styles.stack}
+      aria-label={t('intake.recommend.title', 'Retry recommendations')}
+    >
       <div className={styles.headRow}>
         <h3 className={styles.heading}>{t('intake.recommend.title', 'Retry recommendations')}</h3>
         <Button size="sm" variant="ghost" onPress={() => void load()} isPending={loading}>
@@ -91,14 +102,34 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
         </p>
       ) : null}
       {loading && list.length === 0 ? (
-        <Skeleton lines={2} label={t('intake.recommend.loading', 'Looking for failure patterns…')} />
+        <Skeleton
+          lines={2}
+          label={t('intake.recommend.loading', 'Looking for failure patterns…')}
+        />
       ) : list.length === 0 ? (
         <div className={styles.muted}>
-          <p>{t('intake.recommend.empty', 'No retry recommendations right now. This usually means:')}</p>
+          <p>
+            {t('intake.recommend.empty', 'No retry recommendations right now. This usually means:')}
+          </p>
           <ul className={styles.bullets}>
-            <li>{t('intake.recommend.emptyRetried', 'Failed documents have already been retried several times')}</li>
-            <li>{t('intake.recommend.emptyPattern', 'No failure pattern suggests a retry would succeed')}</li>
-            <li>{t('intake.recommend.emptyTypes', 'No failures of a kind that usually succeeds on retry')}</li>
+            <li>
+              {t(
+                'intake.recommend.emptyRetried',
+                'Failed documents have already been retried several times',
+              )}
+            </li>
+            <li>
+              {t(
+                'intake.recommend.emptyPattern',
+                'No failure pattern suggests a retry would succeed',
+              )}
+            </li>
+            <li>
+              {t(
+                'intake.recommend.emptyTypes',
+                'No failures of a kind that usually succeeds on retry',
+              )}
+            </li>
           </ul>
         </div>
       ) : (
@@ -116,10 +147,19 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
                   pattern: r.reason.replace(/_/g, ' '),
                 })}
               </p>
-              <ul className={styles.criteria} aria-label={t('intake.recommend.criteria', 'Criteria')}>
-                {r.filter.failure_reasons?.map((reason) => <li key={reason}>{reason.replace(/_/g, ' ')}</li>)}
-                {r.filter.mime_types?.map((type) => <li key={type}>{(type.split('/')[1] ?? type).toUpperCase()}</li>)}
-                {r.filter.max_file_size ? <li>{`< ${Math.round(r.filter.max_file_size / (1024 * 1024))} MB`}</li> : null}
+              <ul
+                className={styles.criteria}
+                aria-label={t('intake.recommend.criteria', 'Criteria')}
+              >
+                {r.filter.failure_reasons?.map((reason) => (
+                  <li key={reason}>{reason.replace(/_/g, ' ')}</li>
+                ))}
+                {r.filter.mime_types?.map((type) => (
+                  <li key={type}>{(type.split('/')[1] ?? type).toUpperCase()}</li>
+                ))}
+                {r.filter.max_file_size ? (
+                  <li>{`< ${Math.round(r.filter.max_file_size / (1024 * 1024))} MB`}</li>
+                ) : null}
               </ul>
               <div>
                 <Button
@@ -129,7 +169,9 @@ export const RetryRecommendations: React.FC<RetryRecommendationsProps> = ({ onRe
                   isPending={retrying === r.reason}
                   isDisabled={retrying !== null && retrying !== r.reason}
                 >
-                  {t('intake.recommend.retry', 'Retry {{count}} documents', { count: r.document_count })}
+                  {t('intake.recommend.retry', 'Retry {{count}} documents', {
+                    count: r.document_count,
+                  })}
                 </Button>
               </div>
             </li>

@@ -1,401 +1,134 @@
 # Migration Troubleshooting Guide
 
-## Common Issues and Solutions
+This page covers problems with `migrate_to_s3`, the tool that moves documents from local storage into the S3 storage backend. How to run it, its flags and what it does are described in [Migrating Local Files to S3](../s3-storage-guide.md#migrating-local-files-to-s3). For S3 connection and permission errors in general, see the [S3 Troubleshooting Guide](../s3-troubleshooting.md).
 
-### S3 Access Issues
+## Before you start
 
-#### "Access Denied" Errors
-**Symptoms:**
-- Migration fails with "Access Denied" messages
-- S3 uploads return 403 errors
+- `migrate_to_s3` is built from source (`cargo run --release --bin migrate_to_s3`). It is not included in the Docker image, so `docker exec` into the Readur container cannot run it.
+- Run it with the same environment as the server: database (`DATABASE_URL` or the `POSTGRES_*` variables), `UPLOAD_PATH`, and the S3 variables. It needs network access to PostgreSQL and the bucket, and read access to the document files.
+- It reads each document's `file_path` exactly as stored in the database. Relative paths (for example `./uploads/...`) are resolved from the directory you run the tool in; absolute container paths (for example `/app/uploads/...`) must exist at the same path on the machine running the tool.
+- Back up the database and the uploads directory first, and do a `--dry-run`.
 
-**Causes:**
-- Insufficient IAM permissions
-- Incorrect bucket policy
-- Wrong AWS credentials
+## Startup errors
 
-**Solutions:**
+| Message | Cause and fix |
+|---------|---------------|
+| `S3 is not enabled in configuration. Set S3_ENABLED=true and provide S3 configuration.` | Neither `S3_ENABLED=true` nor `STORAGE_BACKEND=s3` is set in the tool's environment |
+| `S3 configuration not found` | S3 is enabled but `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is empty |
+| `Bucket name is required`, `Access key ID is required`, `Secret access key is required` | Same as above |
+| `❌ S3 connection failed: ...` | The bucket test (list one object, HeadBucket) failed; the text after the colon is the cause. See [Connection test failures](../s3-troubleshooting.md#connection-test-failures) |
+| Database connection errors | The tool cannot reach PostgreSQL with the configured `DATABASE_URL` / `POSTGRES_*` values |
 
-1. **Verify IAM Policy**
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "s3:PutObject",
-           "s3:GetObject",
-           "s3:DeleteObject",
-           "s3:ListBucket",
-           "s3:GetBucketLocation"
-         ],
-         "Resource": [
-           "arn:aws:s3:::your-bucket-name",
-           "arn:aws:s3:::your-bucket-name/*"
-         ]
-       }
-     ]
-   }
-   ```
+## "No local documents found to migrate"
 
-**Test S3 Access:** Verify that your application can successfully connect to and interact with the S3 bucket.
-   ```bash
-   # Test bucket access
-   aws s3 ls s3://your-bucket-name/
-   
-   # Test upload
-   echo "test" | aws s3 cp - s3://your-bucket-name/test.txt
-   
-   # Clean up test file
-   aws s3 rm s3://your-bucket-name/test.txt
-   ```
+The tool only looks at a limited window of documents, newest first:
 
-**Check Environment Variables:** Ensure all required S3 configuration variables are properly set.
-   ```bash
-   # Verify credentials are set
-   docker exec readur-app env | grep S3_
-   
-   # Should show:
-   # S3_BUCKET_NAME=your-bucket
-   # S3_ACCESS_KEY_ID=AKIA...
-   # S3_SECRET_ACCESS_KEY=... (hidden)
-   # S3_REGION=us-east-1
-   ```
+- without `--user-id`: the 500 most recent documents of each user (capped overall by `--limit`);
+- with `--user-id`: the most recent documents of that user, up to `--limit` (default 1000).
 
-#### "Bucket Does Not Exist" Errors
-**Solution:**
-```bash
-# Create the bucket
-aws s3 mb s3://your-bucket-name --region us-east-1
+Documents already in S3 count towards that window before they are filtered out. If a user has more documents than the window and the newest ones are already migrated, the tool reports nothing to do even though older local documents remain. Check:
 
-# Or use different region
-aws s3 mb s3://your-bucket-name --region eu-west-1
+```sql
+SELECT user_id, COUNT(*) AS local_documents
+FROM documents
+WHERE file_path NOT LIKE 's3://%'
+GROUP BY user_id;
 ```
 
-### Migration Interruption Issues
+Then run the tool per user with a limit above that user's total document count:
 
-#### Network Timeout Errors
-**Symptoms:**
-- Migration stops with network timeout messages
-- "Connection reset by peer" errors
-
-**Solutions:**
-
-1. **Resume Migration**
-   ```bash
-   # Find the latest state file
-   docker exec readur-app ls -la /tmp/migration_state_*.json
-   
-   # Resume from state
-   docker exec readur-app cargo run --bin migrate_to_s3 -- \
-     --resume-from /tmp/migration_state_20241201_143022.json
-   ```
-
-**Reduce Batch Size:** Process files in smaller batches to reduce the impact of network interruptions.
-   ```bash
-   # Process smaller batches
-   docker exec readur-app cargo run --bin migrate_to_s3 -- \
-     --enable-rollback --batch-size 500
-   ```
-
-**Check Network Stability:** Test and improve network connectivity to prevent timeout issues.
-   ```bash
-   # Test S3 connectivity
-   ping s3.amazonaws.com
-   
-   # Test sustained transfer
-   aws s3 cp /dev/zero s3://your-bucket/test-10mb --expected-size 10485760
-   ```
-
-#### Server Restart During Migration
-**Solution:**
 ```bash
-# Check for existing state files
-docker exec readur-app find /tmp -name "migration_state_*.json" -mtime -1
-
-# Resume from most recent state
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --resume-from /tmp/migration_state_LATEST.json
+cargo run --release --bin migrate_to_s3 -- \
+  --user-id 550e8400-e29b-41d4-a716-446655440000 \
+  --limit 100000
 ```
 
-### Database Issues
+## Per-document failures
 
-#### "Database Connection Lost"
-**Symptoms:**
-- Migration fails with database connection errors
-- PostgreSQL timeout messages
+A failed document is logged as `❌ Failed to migrate <filename>: <error>` and the tool moves on to the next one. At the end it logs `❌ Failed to migrate: N files` and `💾 Check migration_state.json for details on failures`. The process still exits successfully unless `--enable-rollback` was given.
 
-**Solutions:**
+Common errors:
 
-1. **Check Database Status**
-   ```bash
-   # Test database connection
-   docker exec readur-app psql -d readur -c "SELECT version();"
-   
-   # Check connection limits
-   docker exec readur-app psql -d readur -c \
-     "SELECT setting FROM pg_settings WHERE name = 'max_connections';"
-   ```
+| Error | Cause |
+|-------|-------|
+| `Local file not found: <path>` | The file at the stored `file_path` does not exist from where the tool runs. Run it from the server's working directory, or where the uploads directory is mounted at the same path |
+| `Permission denied` | The user running the tool cannot read the file |
+| `Failed to store file <key>: ...` / `Failed to complete multipart upload for <key>: ...` | The upload failed after 4 attempts; see [Upload and download failures](../s3-troubleshooting.md#upload-and-download-failures) |
 
-**Increase Connection Timeout:** Configure longer timeouts to accommodate longer-running migration operations.
-   ```bash
-   # Add to environment variables
-   export DATABASE_TIMEOUT=300  # 5 minutes
-   ```
+Thumbnails and processed images that fail to upload only produce a warning (`Failed to migrate thumbnail for ...`); the document itself still counts as migrated.
 
-**Check Transaction Locks:** Identify and resolve database locks that may be blocking the migration.
-   ```bash
-   # Look for long-running transactions
-   docker exec readur-app psql -d readur -c \
-     "SELECT pid, state, query_start, query FROM pg_stat_activity WHERE state != 'idle';"
-   ```
+Failed documents keep their local `file_path`, so running the tool again retries them. Documents that were migrated are skipped on the next run because their path starts with `s3://`.
 
-#### "Transaction Rollback" Errors
-**Solution:**
-```bash
-# Check for conflicting processes
-docker exec readur-app psql -d readur -c \
-  "SELECT * FROM pg_locks WHERE NOT granted;"
+## Reading migration_state.json
 
-# Restart migration with fresh transaction
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --enable-rollback --fresh-start
+The tool writes `migration_state.json` in the directory it runs in, every 10 migrated documents and at the end of the run:
+
+```json
+{
+  "started_at": "2026-03-01T10:00:00Z",
+  "completed_migrations": [
+    {
+      "document_id": "123e4567-e89b-12d3-a456-426614174000",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "original_path": "./uploads/documents/123e4567-e89b-12d3-a456-426614174000.pdf",
+      "s3_key": "documents/550e8400-e29b-41d4-a716-446655440000/2026/03/123e4567-e89b-12d3-a456-426614174000.pdf",
+      "migrated_at": "2026-03-01T10:00:02Z",
+      "associated_files": []
+    }
+  ],
+  "failed_migrations": [
+    {
+      "document_id": "987fcdeb-51a2-43f1-b321-123456789abc",
+      "original_path": "./uploads/documents/987fcdeb-51a2-43f1-b321-123456789abc.pdf",
+      "error": "Local file not found: ./uploads/documents/987fcdeb-51a2-43f1-b321-123456789abc.pdf",
+      "failed_at": "2026-03-01T10:00:03Z"
+    }
+  ],
+  "total_files": 2,
+  "processed_files": 2
+}
 ```
 
-### File System Issues
+`original_path` is the `file_path` before migration, which is what you need to undo a migration by hand. Each run overwrites the file, so copy it before running the tool again.
 
-#### "File Not Found" Errors
-**Symptoms:**
-- Migration reports files in database that don't exist on disk
-- Inconsistent file counts
+## Interrupted runs
 
-**Solutions:**
+If the tool is stopped part-way, every document migrated so far already has its `s3://` path in the database. Run the tool again: migrated documents are skipped and the rest are processed. `--resume-from <document UUID>` starts at a given position in the list instead; an ID that is not in the list is silently ignored and the run starts from the beginning.
 
-1. **Audit File Consistency**
-   ```bash
-   # Check for orphaned database records
-   docker exec readur-app cargo run --bin migrate_to_s3 -- --audit-files
-   ```
+A document interrupted between the upload and the database update keeps its local path and is uploaded again on the next run. If the month changed in between, the earlier upload stays in the bucket under the old month's key.
 
-**Clean Up Database:** Remove database records that reference non-existent files to resolve consistency issues.
-   ```bash
-   # Remove orphaned records (BE CAREFUL!)
-   docker exec readur-app psql -d readur -c \
-     "DELETE FROM documents WHERE file_path NOT IN (
-        SELECT DISTINCT file_path FROM documents 
-        WHERE file_path IS NOT NULL
-      );"
-   ```
+## Rollback
 
-#### "Permission Denied" on Local Files
-**Solution:**
-```bash
-# Check file permissions
-docker exec readur-app ls -la /app/uploads/
+With `--enable-rollback`, the first failed document stops the run. The tool then, for every document migrated in this run (most recent first), restores the original `file_path` and deletes the uploaded document, thumbnail and processed-image objects. It exits with `Migration failed and was rolled back`.
 
-# Fix permissions if needed
-docker exec readur-app chown -R readur:readur /app/uploads/
+- Rollback does not restore local files. If `--delete-local` was also given, the restored paths point to files that no longer exist. Do not combine the two flags.
+- If some rollback steps fail, the tool writes `rollback_errors.json` with `rolled_back_count`, `rollback_errors` and the full `original_migration_state`, and logs `Rollback errors saved to rollback_errors.json for manual cleanup`.
+- If the rollback fails as a whole, it saves `migration_state.json` and exits with `Migration failed and rollback also failed. Check migration state file for manual recovery.`
+
+There is no separate command to roll back a completed run. To undo a document by hand, set its `file_path` back to the `original_path` from `migration_state.json` (only if the local file still exists):
+
+```sql
+UPDATE documents
+SET file_path = './uploads/documents/123e4567-e89b-12d3-a456-426614174000.pdf'
+WHERE id = '123e4567-e89b-12d3-a456-426614174000';
 ```
 
-### Performance Issues
+## Validating the result
 
-#### Very Slow Migration
-**Symptoms:**
-- Migration takes much longer than expected
-- Low upload speeds to S3
+```sql
+-- Documents still on local storage
+SELECT COUNT(*) FROM documents WHERE file_path NOT LIKE 's3://%';
 
-**Solutions:**
-
-1. **Check Network Performance**
-   ```bash
-   # Test upload speed to S3
-   dd if=/dev/zero bs=1M count=100 | aws s3 cp - s3://your-bucket/speedtest.dat
-   
-   # Check result and clean up
-   aws s3 rm s3://your-bucket/speedtest.dat
-   ```
-
-**Optimize Migration Settings:** Adjust migration parameters to improve upload performance.
-   ```bash
-   # Increase parallel uploads
-   docker exec readur-app cargo run --bin migrate_to_s3 -- \
-     --enable-rollback --parallel-uploads 10
-   ```
-
-**Use Multipart Upload Threshold:** Configure smaller thresholds for multipart uploads to improve reliability and speed.
-   ```bash
-   # Lower threshold for multipart uploads
-   docker exec readur-app cargo run --bin migrate_to_s3 -- \
-     --enable-rollback --multipart-threshold 50MB
-   ```
-
-#### High Memory Usage
-**Solution:**
-```bash
-# Monitor container memory
-docker stats readur-app
-
-# Reduce batch size if needed
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --enable-rollback --batch-size 100
+-- Documents with an empty path
+SELECT COUNT(*) FROM documents WHERE file_path IS NULL OR file_path = '';
 ```
 
-### Rollback Issues
+Then open a few migrated documents in the UI, or download one through the API with `GET /api/documents/{id}/download` (see the [API Reference](../api-reference.md)). The server must be running with the S3 backend enabled to read `s3://` paths; check its startup log for `✅ File service initialized with s3 storage backend`.
 
-#### "Cannot Rollback - State File Missing"
-**Solution:**
+## Logs
+
+The tool logs to stdout at `info` level (fixed; `RUST_LOG` has no effect on it). Keep the output when reporting a problem:
+
 ```bash
-# Look for backup state files
-docker exec readur-app find /tmp -name "*migration*" -type f
-
-# Manual rollback (use with caution)
-docker exec readur-app psql -d readur -c \
-  "UPDATE documents SET file_path = REPLACE(file_path, 's3://', '/app/uploads/');"
+cargo run --release --bin migrate_to_s3 2>&1 | tee migrate.log
 ```
-
-#### "Partial Rollback Completed"
-**Symptoms:**
-- Some files rolled back, others still in S3
-- Database in inconsistent state
-
-**Solution:**
-```bash
-# Complete the rollback manually
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --force-rollback --state-file /tmp/migration_state_backup.json
-
-# Verify database consistency
-docker exec readur-app cargo run --bin migrate_to_s3 -- --verify-state
-```
-
-## Validation Commands
-
-### Pre-Migration Checks
-```bash
-# Check database connectivity
-docker exec readur-app psql -d readur -c "SELECT COUNT(*) FROM documents;"
-
-# Verify S3 access
-aws s3 ls s3://your-bucket-name/
-
-# Check disk space
-docker exec readur-app df -h /app/uploads/
-```
-
-### Post-Migration Validation
-```bash
-# Compare document counts
-LOCAL_COUNT=$(docker exec readur-app find /app/uploads -type f | wc -l)
-DB_COUNT=$(docker exec readur-app psql -d readur -t -c "SELECT COUNT(*) FROM documents;")
-S3_COUNT=$(aws s3 ls s3://your-bucket/documents/ --recursive | wc -l)
-
-echo "Local files: $LOCAL_COUNT"
-echo "Database records: $DB_COUNT" 
-echo "S3 objects: $S3_COUNT"
-
-# Test random document access
-RANDOM_DOC=$(docker exec readur-app psql -d readur -t -c \
-  "SELECT id FROM documents ORDER BY RANDOM() LIMIT 1;")
-curl -I "https://your-readur-instance.com/api/documents/$RANDOM_DOC/download"
-```
-
-### Health Checks
-```bash
-# Application health
-curl -f https://your-readur-instance.com/health
-
-# Storage backend test
-docker exec readur-app cargo run --bin migrate_to_s3 -- --test-storage
-
-# Database integrity
-docker exec readur-app psql -d readur -c \
-  "SELECT COUNT(*) FROM documents WHERE file_path IS NULL OR file_path = '';"
-```
-
-## Recovery Procedures
-
-### Emergency Stop
-```bash
-# Stop running migration
-docker exec readur-app pkill -f migrate_to_s3
-
-# Check for partial state
-ls /tmp/migration_state_*.json
-
-# Decide: resume, rollback, or restart
-```
-
-### Data Recovery
-```bash
-# Restore from backup (if needed)
-docker exec -i readur-db psql -U readur -d readur < readur_backup.sql
-
-# Restore files from backup
-docker exec readur-app tar -xzf documents_backup.tar.gz -C /
-```
-
-### Clean Start
-```bash
-# Remove all migration state files
-docker exec readur-app rm -f /tmp/migration_state_*.json
-
-# Start fresh migration
-docker exec readur-app cargo run --bin migrate_to_s3 -- \
-  --enable-rollback --fresh-start
-```
-
-## Getting Help
-
-### Log Analysis
-```bash
-# View migration logs
-docker logs readur-app | grep -i migration
-
-# Check application logs
-docker exec readur-app tail -f /var/log/readur/app.log
-
-# Database logs
-docker logs readur-db | tail -100
-```
-
-### Debug Information
-When reporting issues, include:
-
-1. **Migration command used**
-2. **Error messages** (full text)
-3. **State file contents** (if available)
-4. **System information**:
-   ```bash
-   docker --version
-   docker exec readur-app cargo --version
-   docker exec readur-app psql --version
-   ```
-**Environment configuration** (sanitized): Provide your configuration settings with sensitive values hidden.
-   ```bash
-   docker exec readur-app env | grep -E "(S3_|DATABASE_)" | sed 's/=.*/=***/'
-   ```
-
-### Support Checklist
-
-Before requesting support:
-
-- [ ] Checked this troubleshooting guide
-- [ ] Reviewed application logs  
-- [ ] Verified S3 credentials and permissions
-- [ ] Tested basic S3 connectivity
-- [ ] Confirmed database is accessible
-- [ ] Have backup of data before migration
-- [ ] Can provide error messages and command used
-
-## Prevention Tips
-
-1. **Always test in staging first**
-2. **Use dry-run mode before real migration**
-3. **Ensure adequate disk space and memory**
-4. **Verify S3 permissions before starting**
-5. **Keep multiple backup copies**
-6. **Monitor migration progress actively**
-7. **Have rollback plan ready**
-
-Remember: When in doubt, it's better to rollback and investigate than to continue with a problematic migration.

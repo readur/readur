@@ -191,9 +191,7 @@ The **Processing Priority** setting determines your position in the OCR queue, w
 
 **Display Settings:**
 
-Customize how search results appear to match your workflow preferences. **Results Per Page** can be adjusted from 10 to 100 items, allowing you to balance between quick scanning and comprehensive result viewing based on your screen size and preference.
-
-**Snippet Length** controls the amount of context shown around search matches, with options from brief 100-character excerpts to detailed 500-character passages that provide more context. The **Fuzzy Search Threshold** adjusts how tolerant searches are to spelling variations and OCR errors, essential for working with scanned documents.
+The search page chooses the page size and snippet length for each search. The **Fuzzy Search Threshold** (0.0 to 1.0, default 0.5) sets how closely a word must be spelled like the query for Similar spelling search to match it: lower it to tolerate more spelling variations and OCR errors, raise it towards 1.0 to accept only close spellings.
 
 You can enable or disable **Search History** based on privacy preferences and whether you want quick access to previous queries. Additionally, the interface provides **Highlight Colors** customization, **Preview Pane** sizing options, and **Result Grouping** preferences for organizing large result sets.
 
@@ -212,10 +210,6 @@ Configure default behaviors for document uploads to streamline your workflow. **
 
 Personal **File Size Limits** can be set within system maximums, helping manage storage quotas and preventing accidental uploads of extremely large files. The system also supports **Upload Folders** for automatic organization, **Metadata Templates** for consistent tagging, and **Processing Rules** for document-type-specific workflows.
 
-**Storage Preferences:**
-- **Compression**: Enable compression for storage savings
-- **Retention Period**: How long to keep documents (if configured)
-- **Archive Behavior**: Automatic archiving of old documents
 
 #### Interface Preferences
 

@@ -4,12 +4,11 @@
 //! of leaving it pending forever. If the row cannot be removed, the stored
 //! file is kept so the surviving document stays openable.
 
-use anyhow::anyhow;
 use readur::models::{CreateSource, FileIngestionInfo, SourceType};
-use readur::scheduling::source_sync::{SourceSyncService, SyncOutcome};
+use readur::scheduling::source_sync::{PipelineRun, SourceSyncService, SyncOutcome};
+use readur::services::webdav::SyncProgress;
 use readur::test_utils::TestContext;
 use serde_json::json;
-use readur::services::webdav::SyncProgress;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -34,7 +33,11 @@ fn listed(name: &str, size: i64) -> FileIngestionInfo {
     }
 }
 
-async fn local_source(ctx: &TestContext, user_id: Uuid, dir: &std::path::Path) -> readur::models::Source {
+async fn local_source(
+    ctx: &TestContext,
+    user_id: Uuid,
+    dir: &std::path::Path,
+) -> readur::models::Source {
     ctx.state()
         .db
         .create_source(
@@ -58,17 +61,25 @@ async fn local_source(ctx: &TestContext, user_id: Uuid, dir: &std::path::Path) -
 }
 
 /// Runs the pipeline over one listed file whose download returns `body`.
-async fn sync_one(ctx: &TestContext, user_id: Uuid, source_id: Uuid, file: FileIngestionInfo, body: &'static [u8]) -> SyncOutcome {
+async fn sync_one(
+    ctx: &TestContext,
+    user_id: Uuid,
+    source_id: Uuid,
+    file: FileIngestionInfo,
+    body: &'static [u8],
+) -> SyncOutcome {
     let folders = vec!["/".to_string()];
     SourceSyncService::new(ctx.state().clone())
         .run_pipeline(
-            user_id,
-            source_id,
-            &folders,
-            &["txt".to_string()],
-            false,
-            CancellationToken::new(),
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id,
+                source_id,
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: CancellationToken::new(),
+                progress: &Arc::new(SyncProgress::new()),
+            },
             move |_| {
                 let file = file.clone();
                 async move { Ok(vec![file].into()) }
@@ -88,13 +99,28 @@ async fn download_length_must_match_the_listing() {
     let dir = tempfile::tempdir().unwrap();
     let source = local_source(&ctx, admin.user_response.id, dir.path()).await;
 
-    let outcome = sync_one(&ctx, admin.user_response.id, source.id, listed("short.txt", 100), b"only a few bytes").await;
+    let outcome = sync_one(
+        &ctx,
+        admin.user_response.id,
+        source.id,
+        listed("short.txt", 100),
+        b"only a few bytes",
+    )
+    .await;
 
     assert_eq!(outcome.failed, 1, "{outcome:?}");
     assert_eq!(outcome.processed, 0, "{outcome:?}");
     let first_error = outcome.first_error.clone().unwrap_or_default();
     assert!(first_error.contains("size mismatch"), "{first_error}");
-    assert_eq!(ctx.state().db.count_documents_for_source(admin.user_response.id, source.id).await.unwrap().0, 0);
+    assert_eq!(
+        ctx.state()
+            .db
+            .count_documents_for_source(admin.user_response.id, source.id)
+            .await
+            .unwrap()
+            .0,
+        0
+    );
 
     let _ = ctx.cleanup_and_close().await;
 }
@@ -108,7 +134,14 @@ async fn unknown_listed_size_is_not_checked() {
     let dir = tempfile::tempdir().unwrap();
     let source = local_source(&ctx, admin.user_response.id, dir.path()).await;
 
-    let outcome = sync_one(&ctx, admin.user_response.id, source.id, listed("unsized.txt", 0), b"some content").await;
+    let outcome = sync_one(
+        &ctx,
+        admin.user_response.id,
+        source.id,
+        listed("unsized.txt", 0),
+        b"some content",
+    )
+    .await;
 
     assert_eq!(outcome.processed, 1, "{outcome:?}");
     assert_eq!(outcome.failed, 0, "{outcome:?}");
@@ -142,18 +175,47 @@ async fn failed_ocr_enqueue_discards_the_document_for_retry() {
     let outcome = service.sync_source(&source, true).await.unwrap();
     assert_eq!(outcome.failed, 1, "{outcome:?}");
     assert_eq!(outcome.processed, 0, "{outcome:?}");
-    assert!(outcome.first_error.clone().unwrap_or_default().contains("OCR"), "{outcome:?}");
-    assert_eq!(ctx.state().db.count_documents_for_source(user_id, source.id).await.unwrap().0, 0);
+    assert!(
+        outcome
+            .first_error
+            .clone()
+            .unwrap_or_default()
+            .contains("OCR"),
+        "{outcome:?}"
+    );
+    assert_eq!(
+        ctx.state()
+            .db
+            .count_documents_for_source(user_id, source.id)
+            .await
+            .unwrap()
+            .0,
+        0
+    );
 
-    for statement in ["DROP TRIGGER refuse_ocr_queue_insert ON ocr_queue", "DROP FUNCTION refuse_ocr_queue_insert()"] {
+    for statement in [
+        "DROP TRIGGER refuse_ocr_queue_insert ON ocr_queue",
+        "DROP FUNCTION refuse_ocr_queue_insert()",
+    ] {
         sqlx::query(statement).execute(pool).await.unwrap();
     }
 
     let outcome = service.sync_source(&source, true).await.unwrap();
     assert_eq!(outcome.processed, 1, "{outcome:?}");
     assert_eq!(outcome.failed, 0, "{outcome:?}");
-    assert_eq!(ctx.state().db.count_documents_for_source(user_id, source.id).await.unwrap().0, 1);
-    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ocr_queue").fetch_one(pool).await.unwrap();
+    assert_eq!(
+        ctx.state()
+            .db
+            .count_documents_for_source(user_id, source.id)
+            .await
+            .unwrap()
+            .0,
+        1
+    );
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ocr_queue")
+        .fetch_one(pool)
+        .await
+        .unwrap();
     assert_eq!(queued, 1);
 
     let _ = ctx.cleanup_and_close().await;
@@ -185,14 +247,18 @@ async fn failed_row_delete_keeps_the_stored_file() {
         sqlx::query(statement).execute(pool).await.unwrap();
     }
 
-    let outcome = SourceSyncService::new(ctx.state().clone()).sync_source(&source, true).await.unwrap();
+    let outcome = SourceSyncService::new(ctx.state().clone())
+        .sync_source(&source, true)
+        .await
+        .unwrap();
     assert_eq!(outcome.failed, 1, "{outcome:?}");
 
-    let file_path: String = sqlx::query_scalar("SELECT file_path FROM documents WHERE source_id = $1")
-        .bind(source.id)
-        .fetch_one(pool)
-        .await
-        .expect("the document row survives the failed delete");
+    let file_path: String =
+        sqlx::query_scalar("SELECT file_path FROM documents WHERE source_id = $1")
+            .bind(source.id)
+            .fetch_one(pool)
+            .await
+            .expect("the document row survives the failed delete");
     assert!(
         std::path::Path::new(&file_path).exists(),
         "stored file {file_path} must not be deleted while its row exists"

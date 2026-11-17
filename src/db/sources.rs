@@ -136,7 +136,11 @@ impl Database {
         Ok(sources)
     }
 
-    pub async fn update_source(&self, user_id: Uuid, source_id: Uuid, update: &crate::models::UpdateSource) -> Result<crate::models::Source> {
+    /// Applies `update` to one of the user's sources. `None` when the user has no such source (the
+    /// ownership check is the update's own `WHERE`, so a source deleted meanwhile is a miss, not an
+    /// error). A name the user already uses fails with an error
+    /// [`is_source_name_taken`](crate::db::unique_violation::is_source_name_taken) recognises.
+    pub async fn update_source(&self, user_id: Uuid, source_id: Uuid, update: &crate::models::UpdateSource) -> Result<Option<crate::models::Source>> {
         let mut query = String::from("UPDATE sources SET updated_at = NOW()");
         let mut bind_count = 0;
 
@@ -174,9 +178,11 @@ impl Database {
         query_builder = query_builder.bind(source_id);
         query_builder = query_builder.bind(user_id);
 
-        let row = query_builder.fetch_one(&self.pool).await?;
+        let Some(row) = query_builder.fetch_optional(&self.pool).await? else {
+            return Ok(None);
+        };
 
-        Ok(crate::models::Source {
+        Ok(Some(crate::models::Source {
             id: row.get("id"),
             user_id: row.get("user_id"),
             name: row.get("name"),
@@ -196,7 +202,7 @@ impl Database {
             last_validation_at: row.get("last_validation_at"),
             validation_score: row.get("validation_score"),
             validation_issues: row.get("validation_issues"),
-        })
+        }))
     }
 
     pub async fn delete_source(&self, user_id: Uuid, source_id: Uuid) -> Result<bool> {

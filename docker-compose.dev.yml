@@ -53,8 +53,6 @@ services:
       MAX_FILE_SIZE_MB: 50
 
       # Performance
-      MEMORY_LIMIT_MB: 512
-      CPU_PRIORITY: normal
 
       # File watching
       ALLOWED_FILE_TYPES: pdf,txt,doc,docx,png,jpg,jpeg

@@ -20,7 +20,9 @@ use crate::{
     oidc::{OidcUserInfo, PendingLogin},
     utils::{
         client_ip::ClientIp,
-        security::{constant_time_eq, validate_account_username, validate_email, validate_password},
+        security::{
+            constant_time_eq, validate_account_username, validate_email, validate_password,
+        },
     },
     AppState,
 };
@@ -44,12 +46,16 @@ pub fn router() -> Router<Arc<AppState>> {
         .nest("/keys", crate::routes::api_keys::router())
 }
 
+/// An error in the API's shared shape, with the status's generic code.
 fn json_error(status: StatusCode, message: &str) -> Response {
-    (status, Json(serde_json::json!({ "error": message }))).into_response()
+    crate::errors::error_response(status, crate::errors::status_code_name(status), message)
 }
 
 fn rate_limited(retry_after: u64) -> Response {
-    let mut response = json_error(StatusCode::TOO_MANY_REQUESTS, "Too many attempts, try again later");
+    let mut response = json_error(
+        StatusCode::TOO_MANY_REQUESTS,
+        "Too many attempts, try again later",
+    );
     if let Ok(value) = HeaderValue::from_str(&retry_after.to_string()) {
         response.headers_mut().insert(header::RETRY_AFTER, value);
     }
@@ -57,8 +63,16 @@ fn rate_limited(retry_after: u64) -> Response {
 }
 
 fn issue_session(state: &AppState, user: User) -> Response {
-    match create_jwt_with_ttl(&user, &state.config.jwt_secret, state.config.security.jwt_ttl_hours) {
-        Ok(token) => Json(LoginResponse { token, user: user.into() }).into_response(),
+    match create_jwt_with_ttl(
+        &user,
+        &state.config.jwt_secret,
+        state.config.security.jwt_ttl_hours,
+    ) {
+        Ok(token) => Json(LoginResponse {
+            token,
+            user: user.into(),
+        })
+        .into_response(),
         Err(e) => {
             tracing::error!("Failed to create session token: {}", e);
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
@@ -73,6 +87,8 @@ struct AuthConfig {
     allow_registration: bool,
     oidc_enabled: bool,
     enable_per_user_watch: bool,
+    /// The MCP endpoint at `/api/mcp` is served (`MCP_ENABLED`).
+    mcp_enabled: bool,
 }
 
 #[utoipa::path(
@@ -149,6 +165,7 @@ async fn get_auth_config(State(state): State<Arc<AppState>>) -> Json<AuthConfig>
         allow_registration: allow_local_auth && state.config.security.allow_registration,
         oidc_enabled: state.oidc_client.is_some(),
         enable_per_user_watch: state.config.enable_per_user_watch,
+        mcp_enabled: state.config.mcp.enabled,
     })
 }
 
@@ -167,8 +184,11 @@ fn rate_limit_ip(client_ip: ClientIp) -> std::net::IpAddr {
 fn dummy_password_hash() -> &'static str {
     static HASH: OnceLock<String> = OnceLock::new();
     HASH.get_or_init(|| {
-        bcrypt::hash(crate::oidc::random_urlsafe(24), crate::db::users::BCRYPT_COST)
-            .expect("bcrypt hash of random string")
+        bcrypt::hash(
+            crate::oidc::random_urlsafe(24),
+            crate::db::users::BCRYPT_COST,
+        )
+        .expect("bcrypt hash of random string")
     })
 }
 
@@ -214,8 +234,11 @@ async fn login(
     // Always run exactly one bcrypt verification (OIDC-only accounts have no
     // password hash and can never log in locally).
     let stored_hash = user.as_ref().and_then(|u| u.password_hash.as_deref());
-    let password_ok = bcrypt::verify(&login_data.password, stored_hash.unwrap_or(dummy_password_hash()))
-        .unwrap_or(false)
+    let password_ok = bcrypt::verify(
+        &login_data.password,
+        stored_hash.unwrap_or(dummy_password_hash()),
+    )
+    .unwrap_or(false)
         && stored_hash.is_some();
 
     let user = match (user, password_ok) {
@@ -276,7 +299,10 @@ async fn change_password(
 ) -> Response {
     let user = auth_user.user;
     let Some(current_hash) = user.password_hash.as_deref() else {
-        return json_error(StatusCode::BAD_REQUEST, "This account does not use a local password");
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "This account does not use a local password",
+        );
     };
 
     let attempt = match state
@@ -296,7 +322,11 @@ async fn change_password(
         return json_error(StatusCode::BAD_REQUEST, message);
     }
 
-    match state.db.set_user_password(user.id, &request.new_password).await {
+    match state
+        .db
+        .set_user_password(user.id, &request.new_password)
+        .await
+    {
         Ok(updated) => issue_session(&state, updated),
         Err(e) => {
             tracing::error!("Failed to change password: {}", e);
@@ -370,10 +400,17 @@ fn oidc_cookie_is_secure(state: &AppState) -> bool {
 fn oidc_cookie_path(redirect_uri: Option<&str>) -> String {
     let parent = redirect_uri
         .and_then(|uri| url::Url::parse(uri).ok())
-        .and_then(|url| url.path().rsplit_once('/').map(|(parent, _)| parent.to_string()));
+        .and_then(|url| {
+            url.path()
+                .rsplit_once('/')
+                .map(|(parent, _)| parent.to_string())
+        });
     match parent {
         Some(path)
-            if path.starts_with('/') && path.bytes().all(|b| b.is_ascii_graphic() && b != b';' && b != b',') =>
+            if path.starts_with('/')
+                && path
+                    .bytes()
+                    .all(|b| b.is_ascii_graphic() && b != b';' && b != b',') =>
         {
             path
         }
@@ -388,7 +425,11 @@ fn oidc_state_cookie(state: &AppState, value: &str, max_age_secs: i64) -> String
         value,
         oidc_cookie_path(state.config.oidc_redirect_uri.as_deref()),
         max_age_secs,
-        if oidc_cookie_is_secure(state) { "; Secure" } else { "" }
+        if oidc_cookie_is_secure(state) {
+            "; Secure"
+        } else {
+            ""
+        }
     )
 }
 
@@ -420,7 +461,12 @@ async fn oidc_login(State(state): State<Arc<AppState>>, client_ip: ClientIp) -> 
     };
 
     // Each login start stores pending state server-side.
-    if let Err(retry_after) = state.rate_limiters.auth_misc_by_ip.check(&rate_limit_ip(client_ip)).await {
+    if let Err(retry_after) = state
+        .rate_limiters
+        .auth_misc_by_ip
+        .check(&rate_limit_ip(client_ip))
+        .await
+    {
         return rate_limited(retry_after);
     }
 
@@ -438,7 +484,12 @@ async fn oidc_login(State(state): State<Arc<AppState>>, client_ip: ClientIp) -> 
     };
     if let Err(e) = state
         .db
-        .put_auth_ephemeral(&start.state, EPHEMERAL_OIDC_STATE, &payload, Duration::minutes(10))
+        .put_auth_ephemeral(
+            &start.state,
+            EPHEMERAL_OIDC_STATE,
+            &payload,
+            Duration::minutes(10),
+        )
         .await
     {
         tracing::error!("Failed to persist OIDC login state: {}", e);
@@ -490,7 +541,9 @@ impl OidcCallbackError {
         match self {
             Self::ProviderError | Self::AuthFailed => "Authentication failed",
             Self::InvalidState => "Invalid or expired login state",
-            Self::NoAccount => "No account is available for this identity. Contact your administrator.",
+            Self::NoAccount => {
+                "No account is available for this identity. Contact your administrator."
+            }
             Self::AccountDisabled => "This account is disabled or awaiting administrator approval",
             Self::ServerError => "Internal server error",
         }
@@ -557,8 +610,14 @@ async fn complete_oidc_callback(
         return Err(OidcCallbackError::InvalidState);
     }
 
-    let pending: PendingLogin = match state.db.take_auth_ephemeral(&query_state, EPHEMERAL_OIDC_STATE).await {
-        Ok(Some(value)) => serde_json::from_value(value).map_err(|_| OidcCallbackError::InvalidState)?,
+    let pending: PendingLogin = match state
+        .db
+        .take_auth_ephemeral(&query_state, EPHEMERAL_OIDC_STATE)
+        .await
+    {
+        Ok(Some(value)) => {
+            serde_json::from_value(value).map_err(|_| OidcCallbackError::InvalidState)?
+        }
         Ok(None) => return Err(OidcCallbackError::InvalidState),
         Err(e) => {
             tracing::error!("Failed to load OIDC login state: {}", e);
@@ -570,10 +629,13 @@ async fn complete_oidc_callback(
         return Err(OidcCallbackError::ServerError);
     };
 
-    let user_info = oidc_client.complete_login(&code, &pending).await.map_err(|e| {
-        tracing::warn!("OIDC login failed: {}", e);
-        OidcCallbackError::AuthFailed
-    })?;
+    let user_info = oidc_client
+        .complete_login(&code, &pending)
+        .await
+        .map_err(|e| {
+            tracing::warn!("OIDC login failed: {}", e);
+            OidcCallbackError::AuthFailed
+        })?;
 
     let user = resolve_oidc_user(state, &user_info).await?;
 
@@ -585,16 +647,26 @@ async fn complete_oidc_callback(
     // URL fragment (never sent to servers or leaked via Referer). The SPA
     // redeems it at /oidc/exchange.
     let Some(base) = frontend_base_url(state) else {
-        tracing::error!("Cannot determine frontend URL: set PUBLIC_URL or a valid OIDC_REDIRECT_URI");
+        tracing::error!(
+            "Cannot determine frontend URL: set PUBLIC_URL or a valid OIDC_REDIRECT_URI"
+        );
         return Err(OidcCallbackError::ServerError);
     };
 
     let handoff_code = crate::oidc::random_urlsafe(32);
-    let handoff = OidcHandoff { user_id: user.id, token_version: user.token_version };
+    let handoff = OidcHandoff {
+        user_id: user.id,
+        token_version: user.token_version,
+    };
     let stored = match serde_json::to_value(&handoff) {
         Ok(payload) => state
             .db
-            .put_auth_ephemeral(&handoff_code, EPHEMERAL_OIDC_HANDOFF, &payload, Duration::seconds(60))
+            .put_auth_ephemeral(
+                &handoff_code,
+                EPHEMERAL_OIDC_HANDOFF,
+                &payload,
+                Duration::seconds(60),
+            )
             .await
             .map_err(|e| e.to_string()),
         Err(e) => Err(e.to_string()),
@@ -634,7 +706,11 @@ async fn oidc_exchange(
 
     let invalid = || json_error(StatusCode::UNAUTHORIZED, "Invalid or expired code");
 
-    let handoff: OidcHandoff = match state.db.take_auth_ephemeral(&request.code, EPHEMERAL_OIDC_HANDOFF).await {
+    let handoff: OidcHandoff = match state
+        .db
+        .take_auth_ephemeral(&request.code, EPHEMERAL_OIDC_HANDOFF)
+        .await
+    {
         Ok(Some(value)) => match serde_json::from_value(value) {
             Ok(h) => h,
             Err(_) => return invalid(),
@@ -665,11 +741,18 @@ async fn oidc_exchange(
 ///    `OIDC_LINK_EXISTING_BY_EMAIL=true` and the provider asserts the email
 ///    is verified, and that account is not bound to another identity.
 /// 3. Otherwise a new account is created if `OIDC_AUTO_REGISTER=true`.
-async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result<User, OidcCallbackError> {
+async fn resolve_oidc_user(
+    state: &Arc<AppState>,
+    info: &OidcUserInfo,
+) -> Result<User, OidcCallbackError> {
     let internal = || OidcCallbackError::ServerError;
     let forbidden = || OidcCallbackError::NoAccount;
 
-    let Some(issuer) = state.oidc_client.as_ref().map(|c| c.get_discovery().issuer.clone()) else {
+    let Some(issuer) = state
+        .oidc_client
+        .as_ref()
+        .map(|c| c.get_discovery().issuer.clone())
+    else {
         return Err(internal());
     };
 
@@ -687,7 +770,11 @@ async fn resolve_oidc_user(state: &Arc<AppState>, info: &OidcUserInfo) -> Result
     // those and migrate them to the discovered value.
     let configured = state.config.oidc_issuer_url.as_deref().unwrap_or_default();
     for legacy_issuer in legacy_issuer_variants(configured, &issuer) {
-        match state.db.get_user_by_oidc_subject(&info.sub, &legacy_issuer).await {
+        match state
+            .db
+            .get_user_by_oidc_subject(&info.sub, &legacy_issuer)
+            .await
+        {
             Ok(Some(user)) => {
                 return state
                     .db
@@ -762,7 +849,11 @@ fn legacy_issuer_variants(configured: &str, discovered: &str) -> Vec<String> {
     }
     let base = configured.trim_end_matches('/');
     let mut variants: Vec<String> = Vec::new();
-    for candidate in [configured.to_string(), base.to_string(), format!("{}/", base)] {
+    for candidate in [
+        configured.to_string(),
+        base.to_string(),
+        format!("{}/", base),
+    ] {
         if candidate != discovered && !variants.contains(&candidate) {
             variants.push(candidate);
         }
@@ -811,7 +902,11 @@ async fn create_new_oidc_user(
         role: Some(UserRole::User),
     };
 
-    match state.db.create_oidc_user(create_user, &info.sub, issuer, &user_email).await {
+    match state
+        .db
+        .create_oidc_user(create_user, &info.sub, issuer, &user_email)
+        .await
+    {
         Ok(user) => {
             tracing::info!(user_id = %user.id, "Created account for new OIDC identity");
             Ok(user)
@@ -830,18 +925,35 @@ mod tests {
     #[test]
     fn cookie_parsing() {
         let mut h = HeaderMap::new();
-        h.insert(header::COOKIE, "a=1; readur_oidc_state=xyz; b=2".parse().unwrap());
+        h.insert(
+            header::COOKIE,
+            "a=1; readur_oidc_state=xyz; b=2".parse().unwrap(),
+        );
         assert_eq!(read_cookie(&h, OIDC_STATE_COOKIE), Some("xyz"));
         assert_eq!(read_cookie(&h, "missing"), None);
     }
 
     #[test]
     fn oidc_cookie_path_follows_the_redirect_uri() {
-        assert_eq!(oidc_cookie_path(Some("https://h/api/auth/oidc/callback")), "/api/auth/oidc");
-        assert_eq!(oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback")), "/readur/api/auth/oidc");
-        assert_eq!(oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback?x=1")), "/readur/api/auth/oidc");
+        assert_eq!(
+            oidc_cookie_path(Some("https://h/api/auth/oidc/callback")),
+            "/api/auth/oidc"
+        );
+        assert_eq!(
+            oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback")),
+            "/readur/api/auth/oidc"
+        );
+        assert_eq!(
+            oidc_cookie_path(Some("https://h/readur/api/auth/oidc/callback?x=1")),
+            "/readur/api/auth/oidc"
+        );
         // Unusable values fall back to the default path.
-        for uri in [None, Some("not a url"), Some("https://h/callback"), Some("https://h/a;b/callback")] {
+        for uri in [
+            None,
+            Some("not a url"),
+            Some("https://h/callback"),
+            Some("https://h/a;b/callback"),
+        ] {
             assert_eq!(oidc_cookie_path(uri), DEFAULT_OIDC_COOKIE_PATH, "{uri:?}");
         }
     }
@@ -856,7 +968,10 @@ mod tests {
 
     #[test]
     fn legacy_issuer_variants_cover_trailing_slash_forms() {
-        let v = legacy_issuer_variants("https://idp.example/realms/x", "https://idp.example/realms/x");
+        let v = legacy_issuer_variants(
+            "https://idp.example/realms/x",
+            "https://idp.example/realms/x",
+        );
         assert_eq!(v, vec!["https://idp.example/realms/x/".to_string()]);
 
         let v = legacy_issuer_variants("https://idp.example/", "https://idp.example");

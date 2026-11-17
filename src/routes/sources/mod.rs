@@ -1,19 +1,26 @@
-use axum::{routing::{get, post, delete, put}, Router};
-use std::sync::Arc;
 use crate::AppState;
+use axum::{
+    routing::{delete, get, post, put},
+    Router,
+};
+use std::sync::Arc;
 
 pub mod arrivals;
 pub mod crud;
+pub mod deep_scan;
+pub mod estimation;
+pub mod progress_ws;
 pub mod sync;
 pub mod validation;
-pub mod estimation;
 
 // Re-export commonly used functions and types for backward compatibility
 pub use arrivals::*;
 pub use crud::*;
+pub use deep_scan::*;
+pub use estimation::*;
+pub use progress_ws::*;
 pub use sync::*;
 pub use validation::*;
-pub use estimation::*;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -24,19 +31,16 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}", get(get_source))
         .route("/{id}", put(update_source))
         .route("/{id}", delete(delete_source))
-        
         // Sync operations
         .route("/{id}/sync", post(trigger_sync))
         .route("/{id}/sync/stop", post(stop_sync))
         .route("/{id}/sync/progress/ws", get(sync_progress_websocket))
         .route("/{id}/sync/status", get(get_sync_status))
         .route("/{id}/scan/deep", post(trigger_deep_scan))
-        
         // Validation operations
         .route("/{id}/validate", post(validate_source))
         .route("/{id}/test", post(test_connection))
         .route("/test/connection", post(test_connection_with_config))
-        
         // Estimation operations
         .route("/{id}/estimate", post(estimate_crawl))
         .route("/estimate", post(estimate_crawl_with_config))

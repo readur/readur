@@ -17,7 +17,15 @@ __pycache__/
 readur_uploads/
 readur_watch/
 test-results/
+blob-report/
+all-blob-reports/
+playwright-report/
 uploads/
+# Files tests store when given ./test-uploads or ./test-watch as directories
+test-uploads/
+test-watch/
+# pdftotext scratch files of OCR runs whose temp_dir was the tests directory
+tests/quick_text_*.txt
 
 # Misc.
 tmp/

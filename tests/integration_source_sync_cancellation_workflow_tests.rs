@@ -74,7 +74,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client: None,
         sync_progress_tracker,
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     };
     
@@ -97,7 +96,6 @@ async fn create_test_app_state() -> Arc<AppState> {
         oidc_client: None,
         sync_progress_tracker: state_arc.sync_progress_tracker.clone(),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     })
 }

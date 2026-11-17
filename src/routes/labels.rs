@@ -5,87 +5,24 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Row};
 use std::sync::Arc;
-use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::{auth::AuthUser, db::sanitize::ToDb, errors::label::LabelError, AppState};
+use crate::{
+    auth::AuthUser,
+    db::labels::{
+        is_label_name_taken, BulkLabelMode, BulkLabelOutcome, LabelAssignOutcome,
+        LabelRemoveOutcome, LabelReplaceOutcome,
+    },
+    errors::label::LabelError,
+    AppState,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
-#[ts(export)]
-pub struct Label {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub color: String,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    #[serde(default)]
-    pub document_count: i64,
-    #[serde(default)]
-    pub source_count: i64,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct CreateLabel {
-    pub name: String,
-    pub description: Option<String>,
-    #[serde(default = "default_color")]
-    #[ts(optional = nullable)]
-    pub color: String,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-}
-
-fn default_color() -> String {
-    "#0969da".to_string()
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct UpdateLabel {
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub color: Option<String>,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct LabelAssignment {
-    pub label_ids: Vec<Uuid>,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
-#[ts(export, optional_fields)]
-pub struct LabelQuery {
-    #[serde(default)]
-    #[ts(optional = nullable)]
-    pub include_counts: bool,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct BulkUpdateRequest {
-    pub document_ids: Vec<Uuid>,
-    pub label_ids: Vec<Uuid>,
-    #[serde(default = "default_bulk_mode")]
-    #[ts(optional = nullable)]
-    pub mode: String, // "replace", "add", or "remove"
-}
-
-fn default_bulk_mode() -> String {
-    "replace".to_string()
-}
+// The label API's request and response types live in `models::label`; re-exported here because
+// they are this endpoint group's wire format.
+pub use crate::models::label::{
+    BulkUpdateRequest, CreateLabel, Label, LabelAssignment, LabelQuery, UpdateLabel,
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -122,48 +59,15 @@ pub async fn get_labels(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    let labels = if query.include_counts {
-        sqlx::query_as::<_, Label>(
-            r#"
-            SELECT 
-                l.id, l.user_id, l.name, l.description, l.color, 
-                l.background_color, l.icon, l.created_at, l.updated_at,
-                COUNT(DISTINCT dl.document_id) as document_count,
-                COUNT(DISTINCT sl.source_id) as source_count
-            FROM labels l
-            LEFT JOIN document_labels dl ON l.id = dl.label_id
-            LEFT JOIN source_labels sl ON l.id = sl.label_id
-            WHERE l.user_id = $1
-            GROUP BY l.id, l.user_id, l.name, l.description, l.color, 
-                     l.background_color, l.icon, l.created_at, l.updated_at
-            ORDER BY l.name
-            "#,
-        )
-        .bind(user_id)
-    } else {
-        sqlx::query_as::<_, Label>(
-            r#"
-            SELECT 
-                id, user_id, name, description, color, 
-                background_color, icon, created_at, updated_at,
-                0::bigint as document_count, 0::bigint as source_count
-            FROM labels
-            WHERE user_id = $1
-            ORDER BY name
-            "#,
-        )
-        .bind(user_id)
-    }
-    .fetch_all(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch labels: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok(Json(labels))
+    state
+        .db
+        .list_labels(auth_user.user.id, query.include_counts)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            tracing::error!("Failed to fetch labels: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }
 
 #[utoipa::path(
@@ -181,65 +85,23 @@ pub async fn create_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<CreateLabel>,
-) -> Result<Json<Label>, LabelError> {
-    let user_id = auth_user.user.id;
+) -> Result<(StatusCode, Json<Label>), LabelError> {
+    payload.validate()?;
 
-    // Validate name is not empty
-    if payload.name.trim().is_empty() {
-        return Err(LabelError::invalid_name(
-            payload.name.clone(),
-            "Name cannot be empty".to_string(),
-        ));
-    }
+    let label = state
+        .db
+        .create_label(auth_user.user.id, &payload)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create label: {}", e);
+            if is_label_name_taken(&e) {
+                LabelError::duplicate_name(payload.name.clone())
+            } else {
+                LabelError::invalid_name(payload.name.clone(), e.to_string())
+            }
+        })?;
 
-    // Disallow commas in label names (breaks comma-separated search filters)
-    // Note: URL-encoded values (%2c) are decoded by serde before reaching here
-    if payload.name.contains(',') {
-        return Err(LabelError::invalid_name(
-            payload.name.clone(),
-            "Name cannot contain commas".to_string(),
-        ));
-    }
-
-    // Validate color format
-    if !payload.color.starts_with('#') || payload.color.len() != 7 {
-        return Err(LabelError::invalid_color(&payload.color));
-    }
-
-    if let Some(ref bg_color) = payload.background_color {
-        if !bg_color.starts_with('#') || bg_color.len() != 7 {
-            return Err(LabelError::invalid_color(bg_color));
-        }
-    }
-
-    let label = sqlx::query_as::<_, Label>(
-        r#"
-        INSERT INTO labels (user_id, name, description, color, background_color, icon)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING
-            id, user_id, name, description, color, background_color, icon,
-            created_at, updated_at,
-            0::bigint as document_count, 0::bigint as source_count
-        "#,
-    )
-    .bind(user_id)
-    .bind(payload.name.for_db())
-    .bind(payload.description.for_db())
-    .bind(payload.color.for_db())
-    .bind(payload.background_color.for_db())
-    .bind(payload.icon.for_db())
-    .fetch_one(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to create label: {}", e);
-        if e.to_string().contains("duplicate key") {
-            LabelError::duplicate_name(payload.name.clone())
-        } else {
-            LabelError::invalid_name(payload.name.clone(), e.to_string())
-        }
-    })?;
-
-    Ok(Json(label))
+    Ok((StatusCode::CREATED, Json(label)))
 }
 
 #[utoipa::path(
@@ -260,36 +122,16 @@ pub async fn get_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Label>, StatusCode> {
-    let user_id = auth_user.user.id;
+    let label = state
+        .db
+        .get_label_for_user(label_id, auth_user.user.id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch label: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    let label = sqlx::query_as::<_, Label>(
-        r#"
-        SELECT 
-            l.id, l.user_id, l.name, l.description, l.color, 
-            l.background_color, l.icon, l.created_at, l.updated_at,
-            COUNT(DISTINCT dl.document_id) as document_count,
-            COUNT(DISTINCT sl.source_id) as source_count
-        FROM labels l
-        LEFT JOIN document_labels dl ON l.id = dl.label_id
-        LEFT JOIN source_labels sl ON l.id = sl.label_id
-        WHERE l.id = $1 AND l.user_id = $2
-        GROUP BY l.id, l.user_id, l.name, l.description, l.color, 
-                 l.background_color, l.icon, l.created_at, l.updated_at
-        "#,
-    )
-    .bind(label_id)
-    .bind(user_id)
-    .fetch_optional(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch label: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    match label {
-        Some(label) => Ok(Json(label)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+    label.map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
 #[utoipa::path(
@@ -313,90 +155,23 @@ pub async fn update_label(
     auth_user: AuthUser,
     Json(payload): Json<UpdateLabel>,
 ) -> Result<Json<Label>, LabelError> {
-    let user_id = auth_user.user.id;
+    payload.validate()?;
 
-    // Validate name if provided
-    if let Some(ref name) = payload.name {
-        if name.trim().is_empty() {
-            return Err(LabelError::invalid_name(
-                name.clone(),
-                "Name cannot be empty".to_string(),
-            ));
-        }
-        // Disallow commas in label names (breaks comma-separated search filters)
-        // Note: URL-encoded values (%2c) are decoded by serde before reaching here
-        if name.contains(',') {
-            return Err(LabelError::invalid_name(
-                name.clone(),
-                "Name cannot contain commas".to_string(),
-            ));
-        }
-    }
-
-    // Validate color formats if provided
-    if let Some(ref color) = payload.color {
-        if !color.starts_with('#') || color.len() != 7 {
-            return Err(LabelError::invalid_color(color));
-        }
-    }
-
-    if let Some(ref bg_color) = payload.background_color {
-        if !bg_color.starts_with('#') || bg_color.len() != 7 {
-            return Err(LabelError::invalid_color(bg_color));
-        }
-    }
-
-    // Check if label exists and user has permission
-    let existing = sqlx::query("SELECT id FROM labels WHERE id = $1 AND user_id = $2")
-        .bind(label_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
+    let label = state
+        .db
+        .update_label(label_id, auth_user.user.id, &payload)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to check label existence: {}", e);
-            LabelError::NotFound
+            tracing::error!("Failed to update label: {}", e);
+            let name = payload.name.clone().unwrap_or_default();
+            if is_label_name_taken(&e) {
+                LabelError::duplicate_name(name)
+            } else {
+                LabelError::invalid_name(name, e.to_string())
+            }
         })?;
 
-    if existing.is_none() {
-        return Err(LabelError::NotFound);
-    }
-
-    // Use COALESCE to update only provided fields
-    let label = sqlx::query_as::<_, Label>(
-        r#"
-        UPDATE labels
-        SET
-            name = COALESCE($2, name),
-            description = COALESCE($3, description),
-            color = COALESCE($4, color),
-            background_color = COALESCE($5, background_color),
-            icon = COALESCE($6, icon),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING
-            id, user_id, name, description, color, background_color, icon,
-            created_at, updated_at,
-            0::bigint as document_count, 0::bigint as source_count
-        "#,
-    )
-    .bind(label_id)
-    .bind(payload.name.for_db())
-    .bind(payload.description.for_db())
-    .bind(payload.color.for_db())
-    .bind(payload.background_color.for_db())
-    .bind(payload.icon.for_db())
-    .fetch_one(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to update label: {}", e);
-        if e.to_string().contains("duplicate key") {
-            LabelError::duplicate_name(payload.name.clone().unwrap_or_default())
-        } else {
-            LabelError::invalid_name(payload.name.clone().unwrap_or_default(), e.to_string())
-        }
-    })?;
-
-    Ok(Json(label))
+    label.map(Json).ok_or(LabelError::NotFound)
 }
 
 #[utoipa::path(
@@ -417,22 +192,19 @@ pub async fn delete_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    let result = sqlx::query("DELETE FROM labels WHERE id = $1 AND user_id = $2")
-        .bind(label_id)
-        .bind(user_id)
-        .execute(state.db.get_pool())
+    let deleted = state
+        .db
+        .delete_label_for_user(label_id, auth_user.user.id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete label: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
+    if deleted {
         Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
 }
 
@@ -454,44 +226,16 @@ pub async fn get_document_labels(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    // Verify document ownership
-    let doc = sqlx::query("SELECT id FROM documents WHERE id = $1 AND user_id = $2")
-        .bind(document_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
+    let labels = state
+        .db
+        .get_document_labels_for_user(document_id, auth_user.user.id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to verify document ownership: {}", e);
+            tracing::error!("Failed to fetch document labels: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if doc.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let labels = sqlx::query_as::<_, Label>(
-        r#"
-        SELECT 
-            l.id, l.user_id, l.name, l.description, l.color, 
-            l.background_color, l.icon, l.created_at, l.updated_at,
-            0::bigint as document_count, 0::bigint as source_count
-        FROM labels l
-        INNER JOIN document_labels dl ON l.id = dl.label_id
-        WHERE dl.document_id = $1
-        ORDER BY l.name
-        "#,
-    )
-    .bind(document_id)
-    .fetch_all(state.db.get_pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to fetch document labels: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok(Json(labels))
+    labels.map(Json).ok_or(StatusCode::NOT_FOUND)
 }
 
 #[utoipa::path(
@@ -515,81 +259,20 @@ pub async fn update_document_labels(
     auth_user: AuthUser,
     Json(payload): Json<LabelAssignment>,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    // Verify document ownership
-    let doc = sqlx::query("SELECT id FROM documents WHERE id = $1 AND user_id = $2")
-        .bind(document_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
+    let outcome = state
+        .db
+        .replace_document_labels_for_user(document_id, &payload.label_ids, auth_user.user.id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to verify document ownership: {}", e);
+            tracing::error!("Failed to update document labels: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if doc.is_none() {
-        return Err(StatusCode::NOT_FOUND);
+    match outcome {
+        LabelReplaceOutcome::Replaced(labels) => Ok(Json(labels)),
+        LabelReplaceOutcome::DocumentNotFound => Err(StatusCode::NOT_FOUND),
+        LabelReplaceOutcome::LabelNotFound => Err(StatusCode::BAD_REQUEST),
     }
-
-    // Verify all labels exist and are accessible
-    if !payload.label_ids.is_empty() {
-        let label_count =
-            sqlx::query("SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND user_id = $2")
-                .bind(&payload.label_ids)
-                .bind(user_id)
-                .fetch_one(state.db.get_pool())
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to verify labels: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-
-        let count: i64 = label_count.try_get("count").unwrap_or(0);
-        if count as usize != payload.label_ids.len() {
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    }
-
-    // Begin transaction
-    let mut tx = state.db.get_pool().begin().await.map_err(|e| {
-        tracing::error!("Failed to begin transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Remove existing labels
-    sqlx::query("DELETE FROM document_labels WHERE document_id = $1")
-        .bind(document_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to remove existing labels: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    // Add new labels
-    for label_id in &payload.label_ids {
-        sqlx::query(
-            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)",
-        )
-        .bind(document_id)
-        .bind(label_id)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to add label: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    }
-
-    tx.commit().await.map_err(|e| {
-        tracing::error!("Failed to commit transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Return updated labels
-    get_document_labels(Path(document_id), State(state), auth_user).await
 }
 
 #[utoipa::path(
@@ -603,8 +286,8 @@ pub async fn update_document_labels(
     ),
     responses(
         (status = 201, description = "Label added to document"),
+        (status = 200, description = "The label was already on the document; nothing changed"),
         (status = 404, description = "Document or label not found"),
-        (status = 409, description = "Label already assigned"),
     )
 )]
 pub async fn add_document_label(
@@ -612,53 +295,20 @@ pub async fn add_document_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    // Verify document ownership
-    let doc = sqlx::query("SELECT id FROM documents WHERE id = $1 AND user_id = $2")
-        .bind(document_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
+    let outcome = state
+        .db
+        .add_document_label_for_user(document_id, label_id, auth_user.user.id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to verify document ownership: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    if doc.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    // Verify label exists and is accessible
-    let label = sqlx::query("SELECT id FROM labels WHERE id = $1 AND user_id = $2")
-        .bind(label_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to verify label: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    if label.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let result = sqlx::query(
-        "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)",
-    )
-    .bind(document_id)
-    .bind(label_id)
-    .bind(user_id)
-    .execute(state.db.get_pool())
-    .await;
-
-    match result {
-        Ok(_) => Ok(StatusCode::CREATED),
-        Err(e) if e.to_string().contains("duplicate key") => Ok(StatusCode::OK), // Already assigned
-        Err(e) => {
             tracing::error!("Failed to add document label: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    match outcome {
+        LabelAssignOutcome::Added => Ok(StatusCode::CREATED),
+        LabelAssignOutcome::AlreadyAssigned => Ok(StatusCode::OK),
+        LabelAssignOutcome::DocumentNotFound | LabelAssignOutcome::LabelNotFound => {
+            Err(StatusCode::NOT_FOUND)
         }
     }
 }
@@ -682,38 +332,20 @@ pub async fn remove_document_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> Result<StatusCode, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    // Verify document ownership
-    let doc = sqlx::query("SELECT id FROM documents WHERE id = $1 AND user_id = $2")
-        .bind(document_id)
-        .bind(user_id)
-        .fetch_optional(state.db.get_pool())
+    let outcome = state
+        .db
+        .remove_document_label_for_user(document_id, label_id, auth_user.user.id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to verify document ownership: {}", e);
+            tracing::error!("Failed to remove document label: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    if doc.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let result =
-        sqlx::query("DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2")
-            .bind(document_id)
-            .bind(label_id)
-            .execute(state.db.get_pool())
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to remove document label: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
-    if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+    match outcome {
+        LabelRemoveOutcome::Removed => Ok(StatusCode::NO_CONTENT),
+        LabelRemoveOutcome::NotAssigned | LabelRemoveOutcome::DocumentNotFound => {
+            Err(StatusCode::NOT_FOUND)
+        }
     }
 }
 
@@ -733,132 +365,29 @@ pub async fn bulk_update_document_labels(
     auth_user: AuthUser,
     Json(payload): Json<BulkUpdateRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let user_id = auth_user.user.id;
+    let mode = BulkLabelMode::parse(&payload.mode).ok_or(StatusCode::BAD_REQUEST)?;
 
-    // Validate mode
-    if !["replace", "add", "remove"].contains(&payload.mode.as_str()) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    let outcome = state
+        .db
+        .bulk_update_document_labels_for_user(
+            &payload.document_ids,
+            &payload.label_ids,
+            mode,
+            auth_user.user.id,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to bulk update document labels: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    // Verify document ownership
-    let doc_count =
-        sqlx::query("SELECT COUNT(*) as count FROM documents WHERE id = ANY($1) AND user_id = $2")
-            .bind(&payload.document_ids)
-            .bind(user_id)
-            .fetch_one(state.db.get_pool())
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to verify document ownership: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
-    let count: i64 = doc_count.try_get("count").unwrap_or(0);
-    if count as usize != payload.document_ids.len() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    // Verify labels exist and are accessible (if any labels provided)
-    if !payload.label_ids.is_empty() {
-        let label_count =
-            sqlx::query("SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND user_id = $2")
-                .bind(&payload.label_ids)
-                .bind(user_id)
-                .fetch_one(state.db.get_pool())
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to verify labels: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-
-        let count: i64 = label_count.try_get("count").unwrap_or(0);
-        if count as usize != payload.label_ids.len() {
-            return Err(StatusCode::BAD_REQUEST);
+    match outcome {
+        BulkLabelOutcome::Updated => Ok(Json(serde_json::json!({
+            "message": format!("Labels {}d successfully", payload.mode),
+            "documents_updated": payload.document_ids.len()
+        }))),
+        BulkLabelOutcome::DocumentNotFound | BulkLabelOutcome::LabelNotFound => {
+            Err(StatusCode::BAD_REQUEST)
         }
     }
-
-    // Begin transaction
-    let mut tx = state.db.get_pool().begin().await.map_err(|e| {
-        tracing::error!("Failed to begin transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    match payload.mode.as_str() {
-        "replace" => {
-            // Remove all existing labels for these documents
-            sqlx::query("DELETE FROM document_labels WHERE document_id = ANY($1)")
-                .bind(&payload.document_ids)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to remove existing labels: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-
-            // Add new labels
-            if !payload.label_ids.is_empty() {
-                for document_id in &payload.document_ids {
-                    for label_id in &payload.label_ids {
-                        sqlx::query(
-                            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
-                        )
-                        .bind(document_id)
-                        .bind(label_id)
-                        .bind(user_id)
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(|e| {
-                            tracing::error!("Failed to add label: {}", e);
-                            StatusCode::INTERNAL_SERVER_ERROR
-                        })?;
-                    }
-                }
-            }
-        }
-        "add" => {
-            if !payload.label_ids.is_empty() {
-                for document_id in &payload.document_ids {
-                    for label_id in &payload.label_ids {
-                        sqlx::query(
-                            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
-                        )
-                        .bind(document_id)
-                        .bind(label_id)
-                        .bind(user_id)
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(|e| {
-                            tracing::error!("Failed to add label: {}", e);
-                            StatusCode::INTERNAL_SERVER_ERROR
-                        })?;
-                    }
-                }
-            }
-        }
-        "remove" => {
-            if !payload.label_ids.is_empty() {
-                sqlx::query(
-                    "DELETE FROM document_labels WHERE document_id = ANY($1) AND label_id = ANY($2)"
-                )
-                .bind(&payload.document_ids)
-                .bind(&payload.label_ids)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to remove labels: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-            }
-        }
-        _ => return Err(StatusCode::BAD_REQUEST),
-    }
-
-    tx.commit().await.map_err(|e| {
-        tracing::error!("Failed to commit transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok(Json(serde_json::json!({
-        "message": format!("Labels {}d successfully", payload.mode),
-        "documents_updated": payload.document_ids.len()
-    })))
 }

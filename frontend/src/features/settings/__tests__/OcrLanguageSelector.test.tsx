@@ -36,20 +36,37 @@ describe('OcrLanguageSelector', () => {
   it('reports a new choice and notes it will become the default', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    const { rerender } = render(<OcrLanguageSelector value="deu" onChange={onChange} label="Retry language" />);
-    await user.selectOptions(await screen.findByRole('combobox', { name: 'Retry language' }), 'eng');
+    const { rerender } = render(
+      <OcrLanguageSelector value="deu" onChange={onChange} label="Retry language" />,
+    );
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Retry language' }),
+      'eng',
+    );
     expect(onChange).toHaveBeenCalledWith('eng');
     rerender(<OcrLanguageSelector value="eng" onChange={onChange} label="Retry language" />);
-    expect(screen.getByText(/Selecting "English" will update your default language/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Selecting "English" will update your default language/),
+    ).toBeInTheDocument();
   });
 
   it('shows helper text as the description', async () => {
-    render(<OcrLanguageSelector value="eng" onChange={vi.fn()} helperText="Leave empty to use your default" />);
-    expect(await screen.findByRole('combobox')).toHaveAccessibleDescription('Leave empty to use your default');
+    render(
+      <OcrLanguageSelector
+        value="eng"
+        onChange={vi.fn()}
+        helperText="Leave empty to use your default"
+      />,
+    );
+    expect(await screen.findByRole('combobox')).toHaveAccessibleDescription(
+      'Leave empty to use your default',
+    );
   });
 
   it('falls back to English with a retry when languages fail to load', async () => {
-    vi.mocked(ocrService.getAvailableLanguages).mockRejectedValueOnce(httpError(500, { message: 'tesseract missing' }));
+    vi.mocked(ocrService.getAvailableLanguages).mockRejectedValueOnce(
+      httpError(500, { error: 'tesseract missing', code: 'INTERNAL_SERVER_ERROR', status: 500 }),
+    );
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(<OcrLanguageSelector onChange={onChange} />);

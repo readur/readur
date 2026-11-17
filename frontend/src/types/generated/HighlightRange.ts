@@ -2,10 +2,10 @@
 
 export type HighlightRange = { 
 /**
- * Start position of highlight within the snippet
+ * Start of the highlight within the snippet text, as a UTF-8 byte offset
  */
 start: number, 
 /**
- * End position of highlight within the snippet
+ * End of the highlight within the snippet text, as a UTF-8 byte offset
  */
 end: number, };

@@ -4,8 +4,11 @@ pub mod error;
 pub mod failure_reason;
 pub mod health;
 pub mod image_ocr;
+pub mod priority;
 pub mod queue;
+pub mod tesseract_params;
 pub mod tests;
+pub mod user_settings;
 pub mod xml_extractor;
 
 use crate::ocr::error::OcrError;
@@ -31,7 +34,7 @@ pub struct OcrConfig {
 impl Default for OcrConfig {
     fn default() -> Self {
         Self {
-            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+            temp_dir: crate::config::temp_dir_string(),
         }
     }
 }
@@ -40,7 +43,7 @@ impl OcrService {
     pub fn new() -> Self {
         Self {
             health_checker: OcrHealthChecker::new(),
-            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+            temp_dir: crate::config::temp_dir_string(),
         }
     }
 
@@ -113,24 +116,26 @@ impl OcrService {
             }
 
             // Create temporary file for text extraction
-            let temp_dir = std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string());
-            let temp_text_path = format!("{}/pdf_text_{}.txt", temp_dir, std::process::id());
+            // A per-call sidecar: concurrent extractions must not share it
+            let temp_text =
+                crate::utils::temp_files::TempPath::unique(&self.temp_dir, "pdf_text", "txt");
+            let temp_text_path = temp_text.as_str();
 
             // Progressive extraction with fallback strategies
             // Strategy 1: pdftotext for existing text (fastest)
             let mut output = tokio::process::Command::new("pdftotext")
                 .arg("-layout") // Preserve layout
                 .arg(file_path)
-                .arg(&temp_text_path)
+                .arg(temp_text_path)
+                .kill_on_drop(true)
                 .output()
                 .await?;
 
             if output.status.success() {
                 // Check if we got substantial text
-                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
+                if let Ok(text) = tokio::fs::read_to_string(temp_text_path).await {
                     let word_count = text.split_whitespace().count();
                     if word_count > 5 {
-                        let _ = tokio::fs::remove_file(&temp_text_path).await;
                         return Ok(text.trim().to_string());
                     }
                 }
@@ -141,18 +146,16 @@ impl OcrService {
                 output = tokio::process::Command::new("ocrmypdf")
                     .arg("--skip-text") // Don't re-OCR — just extract existing text layer
                     .arg("--sidecar") // Extract text to sidecar file
-                    .arg(&temp_text_path)
+                    .arg(temp_text_path)
                     .arg(file_path)
                     .arg("-") // Dummy output
+                    .kill_on_drop(true)
                     .output()
                     .await?;
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     let stdout = String::from_utf8_lossy(&output.stdout);
-
-                    // Clean up temp file on error
-                    let _ = tokio::fs::remove_file(&temp_text_path).await;
 
                     // Last resort: try direct text extraction
                     match self.extract_text_from_pdf_bytes(file_path).await {
@@ -186,10 +189,7 @@ impl OcrService {
             }
 
             // Read the extracted text
-            let text = tokio::fs::read_to_string(&temp_text_path).await?;
-
-            // Clean up temporary file
-            let _ = tokio::fs::remove_file(&temp_text_path).await;
+            let text = tokio::fs::read_to_string(temp_text_path).await?;
 
             Ok(text.trim().to_string())
         }

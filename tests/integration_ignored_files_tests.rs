@@ -3,13 +3,10 @@ mod tests {
     use anyhow::Result;
     use readur::db::ignored_files::{
         create_ignored_file, list_ignored_files, get_ignored_file_by_id, delete_ignored_file,
-        is_file_ignored, count_ignored_files, bulk_delete_ignored_files,
-        create_ignored_file_from_document
+        find_ignored_file,
     };
-    use readur::models::{CreateIgnoredFile, IgnoredFilesQuery, User, UserRole, Document, AuthProvider};
+    use readur::models::{CreateIgnoredFile, IgnoredFilesQuery};
     use readur::test_utils::{TestContext, TestAuthHelper};
-    use uuid::Uuid;
-    use chrono::Utc;
 
 
     #[tokio::test]
@@ -203,7 +200,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_is_file_ignored() {
+    async fn test_find_ignored_file() {
         let ctx = TestContext::new().await;
         
         // Ensure cleanup happens even if test fails
@@ -227,99 +224,18 @@ mod tests {
 
             create_ignored_file(&ctx.state.db.pool, ignored_file).await.unwrap();
 
-            // Test with exact match
-            let result = is_file_ignored(
-                &ctx.state.db.pool,
-                "test_hash",
-                Some("webdav"),
-                Some("/webdav/test.pdf")
-            ).await;
-            assert!(result.is_ok());
-            assert!(result.unwrap());
+            // Found by the owner's id and the content hash only
+            let result = find_ignored_file(&ctx.state.db.pool, user.user_response.id, "test_hash").await;
+            assert!(result.unwrap().is_some());
 
-            // Test with just hash
-            let result = is_file_ignored(&ctx.state.db.pool, "test_hash", None, None).await;
-            assert!(result.is_ok());
-            assert!(result.unwrap());
+            // Another user's content with the same hash is not ignored
+            let other = auth_helper.create_test_user().await;
+            let result = find_ignored_file(&ctx.state.db.pool, other.user_response.id, "test_hash").await;
+            assert!(result.unwrap().is_none());
 
-            // Test with non-existing hash
-            let result = is_file_ignored(&ctx.state.db.pool, "non_existing", None, None).await;
-            assert!(result.is_ok());
-            assert!(!result.unwrap());
-            
-            Ok(())
-        }.await;
-        
-        // Always cleanup database connections and test data
-        if let Err(e) = ctx.cleanup_and_close().await {
-            eprintln!("Warning: Test cleanup failed: {}", e);
-        }
-        
-        result.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_create_ignored_file_from_document() {
-        let ctx = TestContext::new().await;
-        
-        // Ensure cleanup happens even if test fails
-        let result: Result<()> = async {
-            let auth_helper = TestAuthHelper::new(ctx.app.clone());
-            let user = auth_helper.create_test_user().await;
-            let document = ctx.state.db.create_document(readur::models::Document {
-                id: Uuid::new_v4(),
-                filename: "test_document.pdf".to_string(),
-                original_filename: "test_document.pdf".to_string(),
-                file_path: "/uploads/test_document.pdf".to_string(),
-                file_size: 1024000,
-                mime_type: "application/pdf".to_string(),
-                content: Some("Test document content".to_string()),
-                ocr_text: Some("This is extracted OCR text from the test document.".to_string()),
-                ocr_confidence: Some(95.5),
-                ocr_word_count: Some(150),
-                ocr_processing_time_ms: Some(1200),
-                ocr_status: Some("completed".to_string()),
-                ocr_error: None,
-                ocr_completed_at: Some(Utc::now()),
-                tags: vec!["test".to_string(), "document".to_string()],
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-                user_id: user.user_response.id,
-                file_hash: Some("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string()),
-                original_created_at: None,
-                original_modified_at: None,
-                source_path: None,
-                source_type: None,
-                source_id: None,
-                file_permissions: None,
-                file_owner: None,
-                file_group: None,
-                source_metadata: None,
-                ocr_retry_count: None,
-                ocr_failure_reason: None,
-            }).await.unwrap();
-
-            let result = create_ignored_file_from_document(
-                &ctx.state.db.pool,
-                document.id,
-                user.user_response.id,
-                Some("deleted by user".to_string()),
-                Some("webdav".to_string()),
-                Some("/webdav/test.pdf".to_string()),
-                Some("webdav-server-1".to_string()),
-            ).await;
-
-            assert!(result.is_ok());
-            let ignored_file = result.unwrap();
-            assert!(ignored_file.is_some());
-
-            let ignored_file = ignored_file.unwrap();
-            assert_eq!(ignored_file.filename, document.filename);
-            assert_eq!(ignored_file.file_size, document.file_size);
-            assert_eq!(ignored_file.mime_type, document.mime_type);
-            assert_eq!(ignored_file.ignored_by, user.user_response.id);
-            assert_eq!(ignored_file.source_type, Some("webdav".to_string()));
-            assert_eq!(ignored_file.reason, Some("deleted by user".to_string()));
+            // Unknown content is not ignored
+            let result = find_ignored_file(&ctx.state.db.pool, user.user_response.id, "non_existing").await;
+            assert!(result.unwrap().is_none());
             
             Ok(())
         }.await;

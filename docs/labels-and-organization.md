@@ -5,7 +5,7 @@ Readur's labeling system provides powerful document organization and categorizat
 ## Table of Contents
 
 - [Overview](#overview)
-- [Label Types](#label-types)
+- [Your Labels](#your-labels)
 - [Creating and Managing Labels](#creating-and-managing-labels)
 - [Assigning Labels to Documents](#assigning-labels-to-documents)
 - [Label-Based Search and Filtering](#label-based-search-and-filtering)
@@ -404,77 +404,44 @@ Projects/
 
 ### Label Management API
 
-#### Creating Labels
+Labels belong to the user who creates them. The [API Reference](api-reference.md#labels) documents the request and response formats; the most used calls are:
 
 ```bash
-POST /api/labels
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+# Create a label (name and color are required)
+curl -X POST https://readur.example.com/api/labels \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Project Documentation", "color": "#2196F3"}'
 
-{
-  "name": "Project Documentation",
-  "color": "#2196F3"
-}
+# List your labels, with document counts
+curl "https://readur.example.com/api/labels?include_counts=true" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Replace a document's labels with the given label IDs
+curl -X PUT https://readur.example.com/api/labels/documents/$DOCUMENT_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"label_ids": ["'$LABEL_ID'"]}'
+
+# Add or remove one label
+curl -X POST https://readur.example.com/api/labels/documents/$DOCUMENT_ID/labels/$LABEL_ID \
+  -H "Authorization: Bearer $TOKEN"
+curl -X DELETE https://readur.example.com/api/labels/documents/$DOCUMENT_ID/labels/$LABEL_ID \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-#### Listing Labels
-
-```bash
-GET /api/labels
-Authorization: Bearer <jwt_token>
-```
-
-Response:
-```json
-{
-  "labels": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Project Documentation",
-      "color": "#2196F3",
-      "document_count": 42,
-      "created_at": "2024-01-01T00:00:00Z"
-    }
-  ]
-}
-```
-
-#### Assigning Labels to Documents
-
-```bash
-PATCH /api/documents/{document_id}
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "labels": ["Project Documentation", "Q1 2024", "High Priority"]
-}
-```
+`POST /api/labels/bulk/documents` adds, removes or replaces labels on many documents at once.
 
 ### Search Integration
 
 #### Label-Based Search
 
 ```bash
-GET /api/search?query=invoice&labels=urgent,review
+GET /api/search/enhanced?query=invoice&tags=urgent,review
 Authorization: Bearer <jwt_token>
 ```
 
-#### Advanced Label Queries
-
-```bash
-POST /api/search/advanced
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-
-{
-  "query": "budget",
-  "filters": {
-    "labels": ["Q1 2024", "Finance"],
-    "label_logic": "AND"
-  }
-}
-```
+`tags` takes label names and `label_ids` label IDs, both comma-separated; a document matches when it carries any of the listed labels. To require several labels at once, search for one and narrow the results by the others in the web interface. See [Search Parameters](api-reference.md#search-parameters) for every filter.
 
 ## Next Steps
 

@@ -18,6 +18,7 @@ site/
 test_data/
 test_files/
 test-uploads/
+test-watch/
 test-results/
 tests/
 

@@ -1,0 +1,32 @@
+# The setup docs/deployment.md describes: an existing uploads claim and a
+# database URL from a Secret.
+controllers:
+  main:
+    containers:
+      readur:
+        image:
+          tag: "3.1.3"
+        env:
+          DATABASE_URL:
+            valueFrom:
+              secretKeyRef:
+                name: readur-db
+                key: DATABASE_URL
+persistence:
+  uploads:
+    existingClaim: readur-uploads
+ingress:
+  main:
+    enabled: true
+    hosts:
+      - host: readur.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            service:
+              identifier: main
+              port: http
+    tls:
+      - secretName: readur-tls
+        hosts:
+          - readur.example.com

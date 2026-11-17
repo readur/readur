@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BoardTable, Button, Dialog, Skeleton, type BoardColumn } from '../ui';
-import { documentService, type DocumentRetryHistoryItem } from '../services/api';
+import { apiErrorMessage, documentService, type DocumentRetryHistoryItem } from '../services/api';
 import styles from './RetryModals.module.css';
 
 interface RetryHistoryModalProps {
@@ -20,7 +20,9 @@ const RETRY_REASON_KEYS: Record<string, [string, string]> = {
   auto_retry: ['intake.retry.reason.auto', 'Automatic retry'],
 };
 
-export function priorityLevel(priority: number): 'veryHigh' | 'high' | 'medium' | 'low' | 'veryLow' {
+export function priorityLevel(
+  priority: number,
+): 'veryHigh' | 'high' | 'medium' | 'low' | 'veryLow' {
   if (priority >= 15) return 'veryHigh';
   if (priority >= 12) return 'high';
   if (priority >= 8) return 'medium';
@@ -43,7 +45,7 @@ function useRetryHistory(documentId: string, enabled: boolean) {
       setHistory(response.data?.retry_history || []);
       setTotal(response.data?.total_retries || 0);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = apiErrorMessage(err);
       setError(message || 'failed');
       setHistory([]);
       setTotal(0);
@@ -60,10 +62,16 @@ function useRetryHistory(documentId: string, enabled: boolean) {
 }
 
 /** Retry attempts of one document, newest first. Used in the modal and in the failure details panel. */
-export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean }> = ({ documentId, enabled = true }) => {
+export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean }> = ({
+  documentId,
+  enabled = true,
+}) => {
   const { t, i18n } = useTranslation();
   const { history, total, loading, error, load } = useRetryHistory(documentId, enabled);
-  const dateFormat = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+  const dateFormat = new Intl.DateTimeFormat(i18n.language, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 
   const priorityWord = (priority: number) => {
     switch (priorityLevel(priority)) {
@@ -81,7 +89,13 @@ export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean 
   };
 
   const columns: BoardColumn<DocumentRetryHistoryItem>[] = [
-    { id: 'when', label: t('intake.retry.col.when', 'When'), mono: true, width: 170, render: (i) => dateFormat.format(new Date(i.created_at)) },
+    {
+      id: 'when',
+      label: t('intake.retry.col.when', 'When'),
+      mono: true,
+      width: 170,
+      render: (i) => dateFormat.format(new Date(i.created_at)),
+    },
     {
       id: 'reason',
       label: t('intake.retry.col.reason', 'Reason'),
@@ -94,7 +108,9 @@ export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean 
       id: 'previous',
       label: t('intake.retry.col.previous', 'Before'),
       render: (i) =>
-        [i.previous_status, i.previous_failure_reason?.replace(/_/g, ' ')].filter(Boolean).join(' · ') || '—',
+        [i.previous_status, i.previous_failure_reason?.replace(/_/g, ' ')]
+          .filter(Boolean)
+          .join(' · ') || '—',
     },
     {
       id: 'priority',
@@ -120,7 +136,9 @@ export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean 
     <div className={styles.stack}>
       {error ? (
         <p className={styles.error} role="alert">
-          {error === 'failed' ? t('intake.retry.loadFailed', 'Could not load the retry history.') : error}
+          {error === 'failed'
+            ? t('intake.retry.loadFailed', 'Could not load the retry history.')
+            : error}
         </p>
       ) : null}
       {!error && history.length === 0 ? (
@@ -158,7 +176,12 @@ export const RetryHistoryList: React.FC<{ documentId: string; enabled?: boolean 
   );
 };
 
-export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({ open, onClose, documentId, documentName }) => {
+export const RetryHistoryModal: React.FC<RetryHistoryModalProps> = ({
+  open,
+  onClose,
+  documentId,
+  documentName,
+}) => {
   const { t } = useTranslation();
   return (
     <Dialog

@@ -2,6 +2,9 @@ use anyhow::Result;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::db::{sanitize::ToDb, unique_violation::violates_unique_constraint, Database};
+use crate::models::label::{CreateLabel, Label, UpdateLabel};
+
 /// The labels every new account starts with: name, description, colour. They are ordinary labels
 /// the user owns, so they can be renamed, recoloured or deleted.
 pub const DEFAULT_LABELS: [(&str, &str, &str); 5] = [
@@ -27,4 +30,626 @@ pub async fn seed_default_labels(conn: &mut PgConnection, user_id: Uuid) -> Resu
         .await?;
     }
     Ok(())
+}
+
+/// The constraint that keeps each user's label names unique
+/// (`migrations/20250620100017_add_labels_system.sql`).
+pub const LABEL_NAME_UNIQUE_CONSTRAINT: &str = "unique_user_label_name";
+
+/// Whether a failed label insert/update collided with a name the user already has.
+///
+/// Decided from the structured error Postgres sends, never from its message text: the server
+/// translates messages per `lc_messages`, but the SQLSTATE (23505, `unique_violation`) and the
+/// constraint name are fixed. Only the label-name constraint counts; any other unique violation
+/// is a genuine failure and must not be reported to the user as a name clash.
+pub fn is_label_name_taken(error: &sqlx::Error) -> bool {
+    violates_unique_constraint(error, LABEL_NAME_UNIQUE_CONSTRAINT)
+}
+
+/// Outcome of assigning a label to a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelAssignOutcome {
+    Added,
+    AlreadyAssigned,
+    DocumentNotFound,
+    LabelNotFound,
+}
+
+/// Outcome of removing a label from a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelRemoveOutcome {
+    Removed,
+    NotAssigned,
+    DocumentNotFound,
+}
+
+/// Outcome of replacing a document's labels with a new set.
+#[derive(Debug, Clone)]
+pub enum LabelReplaceOutcome {
+    /// The document now carries exactly these labels.
+    Replaced(Vec<Label>),
+    DocumentNotFound,
+    /// Some requested label is not the user's (or is listed twice); nothing was changed.
+    LabelNotFound,
+}
+
+/// What a bulk label update does to every listed document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulkLabelMode {
+    /// Each document ends up with exactly the listed labels.
+    Replace,
+    /// The listed labels are added; labels the documents already carry stay.
+    Add,
+    /// The listed labels are taken off; the rest stay.
+    Remove,
+}
+
+impl BulkLabelMode {
+    /// The mode named by the REST API's `mode` field; `None` for anything else.
+    pub fn parse(mode: &str) -> Option<Self> {
+        match mode {
+            "replace" => Some(Self::Replace),
+            "add" => Some(Self::Add),
+            "remove" => Some(Self::Remove),
+            _ => None,
+        }
+    }
+}
+
+/// Outcome of a bulk label update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulkLabelOutcome {
+    /// Every listed document was updated.
+    Updated,
+    /// Some listed document is not the user's (or is listed twice); nothing was changed.
+    DocumentNotFound,
+    /// Some listed label is not the user's (or is listed twice); nothing was changed.
+    LabelNotFound,
+}
+
+/// Label columns as a document's label list reports them (no usage counts).
+pub(crate) const DOCUMENT_LABELS_SQL: &str = r#"
+    SELECT
+        l.id, l.user_id, l.name, l.description, l.color,
+        l.background_color, l.icon, l.created_at, l.updated_at,
+        0::bigint as document_count, 0::bigint as source_count
+    FROM labels l
+    JOIN document_labels dl ON l.id = dl.label_id
+    WHERE dl.document_id = $1
+    ORDER BY l.name
+"#;
+
+/// Label queries for one user. Labels and label assignments belong to the user who owns them:
+/// every function here scopes by `user_id`, whatever that user's role.
+impl Database {
+    /// The user's labels by name, optionally with how many documents and sources use each.
+    pub async fn list_labels(&self, user_id: Uuid, include_counts: bool) -> Result<Vec<Label>> {
+        let labels = if include_counts {
+            sqlx::query_as::<_, Label>(
+                r#"
+                SELECT
+                    l.id, l.user_id, l.name, l.description, l.color,
+                    l.background_color, l.icon, l.created_at, l.updated_at,
+                    COUNT(DISTINCT dl.document_id) as document_count,
+                    COUNT(DISTINCT sl.source_id) as source_count
+                FROM labels l
+                LEFT JOIN document_labels dl ON l.id = dl.label_id
+                LEFT JOIN source_labels sl ON l.id = sl.label_id
+                WHERE l.user_id = $1
+                GROUP BY l.id, l.user_id, l.name, l.description, l.color,
+                         l.background_color, l.icon, l.created_at, l.updated_at
+                ORDER BY l.name
+                "#,
+            )
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Label>(
+                r#"
+                SELECT
+                    id, user_id, name, description, color, background_color, icon,
+                    created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
+                FROM labels
+                WHERE user_id = $1
+                ORDER BY name
+                "#,
+            )
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        Ok(labels)
+    }
+
+    /// One of the user's labels with its usage counts.
+    pub async fn get_label_for_user(&self, label_id: Uuid, user_id: Uuid) -> Result<Option<Label>> {
+        let label = sqlx::query_as::<_, Label>(
+            r#"
+            SELECT
+                l.id, l.user_id, l.name, l.description, l.color,
+                l.background_color, l.icon, l.created_at, l.updated_at,
+                COUNT(DISTINCT dl.document_id) as document_count,
+                COUNT(DISTINCT sl.source_id) as source_count
+            FROM labels l
+            LEFT JOIN document_labels dl ON l.id = dl.label_id
+            LEFT JOIN source_labels sl ON l.id = sl.label_id
+            WHERE l.id = $1 AND l.user_id = $2
+            GROUP BY l.id, l.user_id, l.name, l.description, l.color,
+                     l.background_color, l.icon, l.created_at, l.updated_at
+            "#,
+        )
+        .bind(label_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(label)
+    }
+
+    /// Inserts a label for the user. Call [`CreateLabel::validate`] first; a name the user
+    /// already has fails with an error [`is_label_name_taken`] recognises.
+    pub async fn create_label(
+        &self,
+        user_id: Uuid,
+        label: &CreateLabel,
+    ) -> std::result::Result<Label, sqlx::Error> {
+        sqlx::query_as::<_, Label>(
+            r#"
+            INSERT INTO labels (user_id, name, description, color, background_color, icon)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING
+                id, user_id, name, description, color, background_color, icon,
+                created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
+            "#,
+        )
+        .bind(user_id)
+        .bind(label.name.for_db())
+        .bind(label.description.for_db())
+        .bind(label.color.for_db())
+        .bind(label.background_color.for_db())
+        .bind(label.icon.for_db())
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    /// Updates the fields `changes` sets on one of the user's labels, leaving the rest as they
+    /// are. `None` when the user has no such label. Call [`UpdateLabel::validate`] first.
+    pub async fn update_label(
+        &self,
+        label_id: Uuid,
+        user_id: Uuid,
+        changes: &UpdateLabel,
+    ) -> std::result::Result<Option<Label>, sqlx::Error> {
+        sqlx::query_as::<_, Label>(
+            r#"
+            UPDATE labels
+            SET
+                name = COALESCE($3, name),
+                description = COALESCE($4, description),
+                color = COALESCE($5, color),
+                background_color = COALESCE($6, background_color),
+                icon = COALESCE($7, icon),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1 AND user_id = $2
+            RETURNING
+                id, user_id, name, description, color, background_color, icon,
+                created_at, updated_at, 0::bigint as document_count, 0::bigint as source_count
+            "#,
+        )
+        .bind(label_id)
+        .bind(user_id)
+        .bind(changes.name.for_db())
+        .bind(changes.description.for_db())
+        .bind(changes.color.for_db())
+        .bind(changes.background_color.for_db())
+        .bind(changes.icon.for_db())
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// Deletes one of the user's labels (its assignments go with it, by cascade). `false` when the
+    /// user has no such label: the ownership check is the delete's own `WHERE`, so a label of
+    /// another user is never touched and there is nothing to race with.
+    pub async fn delete_label_for_user(&self, label_id: Uuid, user_id: Uuid) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM labels WHERE id = $1 AND user_id = $2")
+            .bind(label_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Whether `user_id` owns the document. Label assignments follow document ownership, so
+    /// admins cannot relabel other users' documents either.
+    pub async fn user_owns_document(&self, document_id: Uuid, user_id: Uuid) -> Result<bool> {
+        let owned = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM documents WHERE id = $1 AND user_id = $2)",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(owned)
+    }
+
+    /// True when every id in `label_ids` is a label owned by `user_id`.
+    pub async fn user_owns_labels(&self, label_ids: &[Uuid], user_id: Uuid) -> Result<bool> {
+        if label_ids.is_empty() {
+            return Ok(true);
+        }
+        let mut unique = label_ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM labels WHERE id = ANY($1) AND user_id = $2")
+                .bind(&unique)
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(count as usize == unique.len())
+    }
+
+    /// Attaches labels to one of `user_id`'s documents, skipping ones it already has.
+    ///
+    /// Ownership is enforced by the statement itself: only labels and a document `user_id` owns
+    /// are joined into the insert, so an id that is someone else's (or no longer exists) is
+    /// skipped, never attached. The rows are locked `FOR KEY SHARE` (what the foreign keys take),
+    /// so a label or document deleted concurrently is either skipped or waits for this insert,
+    /// instead of failing it with a foreign-key violation. Callers that must reject foreign
+    /// labels up front still check with [`Database::user_owns_labels`] first.
+    pub async fn add_labels_to_document(
+        &self,
+        document_id: Uuid,
+        label_ids: &[Uuid],
+        user_id: Uuid,
+    ) -> Result<()> {
+        if label_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            r#"
+            WITH doc AS (
+                SELECT id FROM documents WHERE id = $1 AND user_id = $3 FOR KEY SHARE
+            ),
+            lbl AS (
+                SELECT id FROM labels WHERE id = ANY($2) AND user_id = $3 ORDER BY id FOR KEY SHARE
+            )
+            INSERT INTO document_labels (document_id, label_id, assigned_by)
+            SELECT doc.id, lbl.id, $3 FROM doc CROSS JOIN lbl
+            ON CONFLICT (document_id, label_id) DO NOTHING
+            "#,
+        )
+        .bind(document_id)
+        .bind(label_ids)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// The labels on one of the user's documents; `None` when the user has no such document.
+    pub async fn get_document_labels_for_user(
+        &self,
+        document_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<Vec<Label>>> {
+        if !self.user_owns_document(document_id, user_id).await? {
+            return Ok(None);
+        }
+        Ok(Some(self.get_document_labels(document_id).await?))
+    }
+
+    /// Puts one of the user's labels on one of the user's documents.
+    ///
+    /// One statement checks both ownerships and inserts, so there is no gap between the check
+    /// and the write and only one round trip. Both rows are locked `FOR KEY SHARE` (the lock the
+    /// foreign keys take): a label or document deleted concurrently is either already gone (and
+    /// reported not found) or waits for this insert, so the race never surfaces as a
+    /// foreign-key error. Concurrent calls for the same pair are settled by the
+    /// `(document_id, label_id)` unique constraint: exactly one reports `Added`, the rest
+    /// `AlreadyAssigned`.
+    pub async fn add_document_label_for_user(
+        &self,
+        document_id: Uuid,
+        label_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<LabelAssignOutcome> {
+        let (owns_document, owns_label, inserted) = sqlx::query_as::<_, (bool, bool, bool)>(
+            r#"
+            WITH doc AS (
+                SELECT id FROM documents WHERE id = $1 AND user_id = $3 FOR KEY SHARE
+            ),
+            lbl AS (
+                SELECT id FROM labels WHERE id = $2 AND user_id = $3 FOR KEY SHARE
+            ),
+            ins AS (
+                INSERT INTO document_labels (document_id, label_id, assigned_by)
+                SELECT doc.id, lbl.id, $3 FROM doc CROSS JOIN lbl
+                ON CONFLICT (document_id, label_id) DO NOTHING
+                RETURNING 1
+            )
+            SELECT
+                EXISTS(SELECT 1 FROM doc),
+                EXISTS(SELECT 1 FROM lbl),
+                EXISTS(SELECT 1 FROM ins)
+            "#,
+        )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(assign_outcome(owns_document, owns_label, inserted))
+    }
+
+    /// Takes a label off one of the user's documents. Like
+    /// [`Database::add_document_label_for_user`], the ownership check and the delete are one
+    /// statement.
+    pub async fn remove_document_label_for_user(
+        &self,
+        document_id: Uuid,
+        label_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<LabelRemoveOutcome> {
+        let (owns_document, deleted) = sqlx::query_as::<_, (bool, bool)>(
+            r#"
+            WITH doc AS (
+                SELECT EXISTS(SELECT 1 FROM documents WHERE id = $1 AND user_id = $3) AS owned
+            ),
+            del AS (
+                DELETE FROM document_labels
+                WHERE document_id = $1 AND label_id = $2 AND (SELECT owned FROM doc)
+                RETURNING 1
+            )
+            SELECT (SELECT owned FROM doc), EXISTS(SELECT 1 FROM del)
+            "#,
+        )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(remove_outcome(owns_document, deleted))
+    }
+
+    /// Replaces the labels on one of the user's documents with `label_ids`, all or nothing.
+    ///
+    /// Runs in one transaction that locks the document row (`FOR UPDATE`, so concurrent
+    /// replacements of the same document run one after the other) and the requested label rows
+    /// (`FOR SHARE`, so none can be deleted before the commit). Every write repeats the
+    /// ownership condition, so nothing outside the user's documents and labels can be touched
+    /// whatever happens between statements. The returned list is read inside the same
+    /// transaction, so it is exactly what was committed.
+    pub async fn replace_document_labels_for_user(
+        &self,
+        document_id: Uuid,
+        label_ids: &[Uuid],
+        user_id: Uuid,
+    ) -> Result<LabelReplaceOutcome> {
+        let mut tx = self.pool.begin().await?;
+
+        let owns_document = sqlx::query_scalar::<_, i32>(
+            "SELECT 1 FROM documents WHERE id = $1 AND user_id = $2 FOR UPDATE",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if !owns_document {
+            return Ok(LabelReplaceOutcome::DocumentNotFound);
+        }
+
+        let owned_labels = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM labels WHERE id = ANY($1) AND user_id = $2 FOR SHARE",
+        )
+        .bind(label_ids)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        // A repeated id also fails this check, as it always has: the set must name each label once.
+        if owned_labels.len() != label_ids.len() {
+            return Ok(LabelReplaceOutcome::LabelNotFound);
+        }
+
+        sqlx::query(
+            "DELETE FROM document_labels dl USING documents d
+             WHERE dl.document_id = $1 AND d.id = dl.document_id AND d.user_id = $2",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO document_labels (document_id, label_id, assigned_by)
+             SELECT d.id, l.id, $2
+             FROM documents d JOIN labels l ON l.user_id = d.user_id
+             WHERE d.id = $1 AND d.user_id = $2 AND l.id = ANY($3)",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .bind(label_ids)
+        .execute(&mut *tx)
+        .await?;
+
+        let labels = sqlx::query_as::<_, Label>(DOCUMENT_LABELS_SQL)
+            .bind(document_id)
+            .fetch_all(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(LabelReplaceOutcome::Replaced(labels))
+    }
+
+    /// Applies `mode` with `label_ids` to every document in `document_ids`, all or nothing.
+    ///
+    /// One transaction: the documents are locked `FOR UPDATE` and the labels `FOR SHARE`, both in
+    /// id order, so concurrent bulk updates (and single-document replacements) over overlapping
+    /// documents run one after the other instead of interleaving or deadlocking, and no listed
+    /// label can be deleted before the commit. Every write repeats the ownership condition, so
+    /// nothing outside the user's documents and labels is touched whatever happens between
+    /// statements. As before, every id must be listed once: a repeated id fails the check.
+    pub async fn bulk_update_document_labels_for_user(
+        &self,
+        document_ids: &[Uuid],
+        label_ids: &[Uuid],
+        mode: BulkLabelMode,
+        user_id: Uuid,
+    ) -> Result<BulkLabelOutcome> {
+        let mut tx = self.pool.begin().await?;
+
+        let owned_documents = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM documents WHERE id = ANY($1) AND user_id = $2 ORDER BY id FOR UPDATE",
+        )
+        .bind(document_ids)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        if owned_documents.len() != document_ids.len() {
+            return Ok(BulkLabelOutcome::DocumentNotFound);
+        }
+
+        let owned_labels = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM labels WHERE id = ANY($1) AND user_id = $2 ORDER BY id FOR SHARE",
+        )
+        .bind(label_ids)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        if owned_labels.len() != label_ids.len() {
+            return Ok(BulkLabelOutcome::LabelNotFound);
+        }
+
+        if mode == BulkLabelMode::Replace {
+            sqlx::query(
+                "DELETE FROM document_labels dl USING documents d
+                 WHERE dl.document_id = ANY($1) AND d.id = dl.document_id AND d.user_id = $2",
+            )
+            .bind(document_ids)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if mode == BulkLabelMode::Remove {
+            sqlx::query(
+                "DELETE FROM document_labels dl USING documents d, labels l
+                 WHERE dl.document_id = ANY($1) AND dl.label_id = ANY($2)
+                   AND d.id = dl.document_id AND d.user_id = $3
+                   AND l.id = dl.label_id AND l.user_id = $3",
+            )
+            .bind(document_ids)
+            .bind(label_ids)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "INSERT INTO document_labels (document_id, label_id, assigned_by)
+                 SELECT d.id, l.id, $3
+                 FROM documents d JOIN labels l ON l.user_id = d.user_id
+                 WHERE d.id = ANY($1) AND d.user_id = $3 AND l.id = ANY($2)
+                 ON CONFLICT (document_id, label_id) DO NOTHING",
+            )
+            .bind(document_ids)
+            .bind(label_ids)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(BulkLabelOutcome::Updated)
+    }
+}
+
+/// Classifies [`Database::add_document_label_for_user`]'s result. A foreign document wins over
+/// a foreign label, so a caller probing someone else's document learns nothing about labels.
+fn assign_outcome(owns_document: bool, owns_label: bool, inserted: bool) -> LabelAssignOutcome {
+    match (owns_document, owns_label, inserted) {
+        (false, _, _) => LabelAssignOutcome::DocumentNotFound,
+        (true, false, _) => LabelAssignOutcome::LabelNotFound,
+        (true, true, true) => LabelAssignOutcome::Added,
+        (true, true, false) => LabelAssignOutcome::AlreadyAssigned,
+    }
+}
+
+/// Classifies [`Database::remove_document_label_for_user`]'s result.
+fn remove_outcome(owns_document: bool, deleted: bool) -> LabelRemoveOutcome {
+    match (owns_document, deleted) {
+        (false, _) => LabelRemoveOutcome::DocumentNotFound,
+        (true, true) => LabelRemoveOutcome::Removed,
+        (true, false) => LabelRemoveOutcome::NotAssigned,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::unique_violation::fake_db_error as db_error;
+
+    #[test]
+    fn name_clash_is_recognised_whatever_the_server_language() {
+        // What a server with lc_messages = 'de_DE' sends: no English words at all.
+        let german = db_error(
+            "doppelter Schlüsselwert verletzt Unique-Constraint »unique_user_label_name«",
+            true,
+            Some(LABEL_NAME_UNIQUE_CONSTRAINT),
+        );
+        assert!(is_label_name_taken(&german));
+    }
+
+    #[test]
+    fn english_duplicate_key_text_alone_is_not_a_name_clash() {
+        // The old text match would have said yes to all of these.
+        let not_unique = db_error(
+            "duplicate key value violates unique constraint \"unique_user_label_name\"",
+            false,
+            Some(LABEL_NAME_UNIQUE_CONSTRAINT),
+        );
+        assert!(!is_label_name_taken(&not_unique));
+
+        let other_constraint = db_error(
+            "duplicate key value violates unique constraint \"labels_pkey\"",
+            true,
+            Some("labels_pkey"),
+        );
+        assert!(!is_label_name_taken(&other_constraint));
+
+        let no_constraint = db_error("duplicate key value violates unique constraint", true, None);
+        assert!(!is_label_name_taken(&no_constraint));
+
+        let not_a_database_error = sqlx::Error::Protocol("duplicate key".into());
+        assert!(!is_label_name_taken(&not_a_database_error));
+    }
+
+    #[test]
+    fn assign_outcome_reports_a_foreign_document_before_a_foreign_label() {
+        use LabelAssignOutcome::*;
+        assert_eq!(assign_outcome(false, false, false), DocumentNotFound);
+        assert_eq!(assign_outcome(false, true, false), DocumentNotFound);
+        assert_eq!(assign_outcome(true, false, false), LabelNotFound);
+        assert_eq!(assign_outcome(true, true, true), Added);
+        assert_eq!(assign_outcome(true, true, false), AlreadyAssigned);
+    }
+
+    #[test]
+    fn bulk_mode_accepts_exactly_the_three_documented_modes() {
+        assert_eq!(
+            BulkLabelMode::parse("replace"),
+            Some(BulkLabelMode::Replace)
+        );
+        assert_eq!(BulkLabelMode::parse("add"), Some(BulkLabelMode::Add));
+        assert_eq!(BulkLabelMode::parse("remove"), Some(BulkLabelMode::Remove));
+        for other in ["", "Replace", "ADD", "delete", " add", "remove "] {
+            assert_eq!(BulkLabelMode::parse(other), None, "{other:?}");
+        }
+    }
+
+    #[test]
+    fn remove_outcome_reports_a_foreign_document_first() {
+        use LabelRemoveOutcome::*;
+        assert_eq!(remove_outcome(false, false), DocumentNotFound);
+        assert_eq!(remove_outcome(true, true), Removed);
+        assert_eq!(remove_outcome(true, false), NotAssigned);
+    }
 }

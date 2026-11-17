@@ -2,15 +2,36 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router-dom';
-import { currentUrl, lastSearchParams, lastTimelineParams, renderSearch, settle } from './libraryTestUtils';
-import { DOCS, documentService, doc, hit, searchResponse, searchService, setupLibraryMocks } from './serviceMocks';
+import {
+  currentUrl,
+  lastSearchParams,
+  lastTimelineParams,
+  renderSearch,
+  settle,
+} from './libraryTestUtils';
+import {
+  DOCS,
+  documentService,
+  doc,
+  hit,
+  searchResponse,
+  searchService,
+  setupLibraryMocks,
+} from './serviceMocks';
 
 vi.mock('../../../services/api', async () => (await import('./serviceMocks')).apiModule());
-vi.mock('../../../services/api/labels', async () => (await import('./serviceMocks')).labelsModule());
-vi.mock('../../../components/BulkRetryModal', async () => (await import('./serviceMocks')).retryModalModule());
+vi.mock('../../../services/api/labels', async () =>
+  (await import('./serviceMocks')).labelsModule(),
+);
+vi.mock('../../../components/BulkRetryModal', async () =>
+  (await import('./serviceMocks')).retryModalModule(),
+);
 
 const searchbox = () => screen.getByRole('searchbox', { name: 'Search documents' });
-const HITS = [hit(DOCS[0], 'Invoice for March, total due', [[0, 7]]), hit(DOCS[1], 'Lease agreement', [])];
+const HITS = [
+  hit(DOCS[0], 'Invoice for March, total due', [[0, 7]]),
+  hit(DOCS[1], 'Lease agreement', []),
+];
 const result = (name: RegExp) => screen.findByRole('link', { name });
 
 describe('Search page', () => {
@@ -24,9 +45,14 @@ describe('Search page', () => {
       renderSearch();
       await settle();
       expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-      expect(screen.getByRole('heading', { level: 1, name: 'Advanced search' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Advanced search' }),
+      ).toBeInTheDocument();
       expect(searchbox()).toHaveFocus();
-      expect(searchbox()).toHaveAttribute('placeholder', 'Search every document by name or by the words inside it');
+      expect(searchbox()).toHaveAttribute(
+        'placeholder',
+        'Search every document by name or by the words inside it',
+      );
     });
 
     test('offers the filters: type, collection, source, added and status', async () => {
@@ -41,7 +67,9 @@ describe('Search page', () => {
     test('before a search it explains what can be searched and sends nothing', async () => {
       renderSearch();
       await settle();
-      expect(screen.getByRole('heading', { name: 'Find anything in your documents' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Find anything in your documents' }),
+      ).toBeInTheDocument();
       expect(searchService.enhancedSearch).not.toHaveBeenCalled();
       expect(searchService.getTimeline).not.toHaveBeenCalled();
       expect(documentService.listFiltered).not.toHaveBeenCalled();
@@ -186,7 +214,9 @@ describe('Search page', () => {
         ]),
       );
       renderSearch('/search?q=scan');
-      expect(await screen.findByRole('heading', { level: 2, name: /September 2026/ })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 2, name: /September 2026/ }),
+      ).toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 2, name: /March 2024/ })).toBeInTheDocument();
     });
 
@@ -208,15 +238,35 @@ describe('Search page', () => {
     test('shows the two passages with the most matches, without repeats', async () => {
       const multi = hit(DOCS[0], 'first tax', [[6, 9]]);
       multi.snippets = [
-        { text: 'first tax', start_offset: 0, end_offset: 9, highlight_ranges: [{ start: 6, end: 9 }] },
-        { text: 'tax and more tax', start_offset: 100, end_offset: 116, highlight_ranges: [{ start: 0, end: 3 }, { start: 13, end: 16 }] },
-        { text: 'and more tax again', start_offset: 104, end_offset: 122, highlight_ranges: [{ start: 9, end: 12 }] },
+        {
+          text: 'first tax',
+          start_offset: 0,
+          end_offset: 9,
+          highlight_ranges: [{ start: 6, end: 9 }],
+        },
+        {
+          text: 'tax and more tax',
+          start_offset: 100,
+          end_offset: 116,
+          highlight_ranges: [
+            { start: 0, end: 3 },
+            { start: 13, end: 16 },
+          ],
+        },
+        {
+          text: 'and more tax again',
+          start_offset: 104,
+          end_offset: 122,
+          highlight_ranges: [{ start: 9, end: 12 }],
+        },
         { text: 'no match here', start_offset: 300, end_offset: 313, highlight_ranges: [] },
       ];
       searchService.enhancedSearch.mockResolvedValue(searchResponse([multi], 1));
       renderSearch('/search?q=tax');
       const item = (await result(/invoice-march/)).closest('li') as HTMLElement;
-      const passages = within(item).getAllByRole('listitem').map((li) => li.textContent);
+      const passages = within(item)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
       expect(passages).toEqual(['first tax', 'tax and more tax']);
     });
 
@@ -253,9 +303,16 @@ describe('Search page', () => {
     });
 
     test('too many matches asks the user to refine', async () => {
-      searchService.enhancedSearch.mockRejectedValue({ response: { status: 413, data: { error_code: 'SEARCH_TOO_MANY_RESULTS' } } });
+      searchService.enhancedSearch.mockRejectedValue({
+        response: {
+          status: 413,
+          data: { error: 'Too many results', code: 'SEARCH_TOO_MANY_RESULTS', status: 413 },
+        },
+      });
       renderSearch('/search?q=the');
-      expect(await screen.findByRole('heading', { name: 'Too many matches — refine your search' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { name: 'Too many matches — refine your search' }),
+      ).toBeInTheDocument();
     });
 
     test('an error offers to try again', async () => {
@@ -293,7 +350,10 @@ describe('Search page', () => {
       renderSearch('/search?q=invoice');
       const chart = await screen.findByRole('group', { name: 'Matches by month' });
       const bars = within(chart).getAllByRole('button');
-      expect(bars.map((b) => b.getAttribute('aria-label'))).toEqual(['January 2024: 2 matches', 'March 2024: 5 matches']);
+      expect(bars.map((b) => b.getAttribute('aria-label'))).toEqual([
+        'January 2024: 2 matches',
+        'March 2024: 5 matches',
+      ]);
     });
 
     test('pressing a month narrows the dates to it; "Show all dates" widens them again', async () => {
@@ -301,9 +361,14 @@ describe('Search page', () => {
       searchService.getTimeline.mockResolvedValue({ data: MONTHS });
       renderSearch('/search?q=invoice');
       await user.click(await screen.findByRole('button', { name: 'March 2024: 5 matches' }));
-      await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice&from=2024-03-01&to=2024-03-31'));
+      await waitFor(() =>
+        expect(currentUrl()).toBe('/search?q=invoice&from=2024-03-01&to=2024-03-31'),
+      );
       expect(await screen.findByText(/in March 2024/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'March 2024: 5 matches' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'March 2024: 5 matches' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
       await user.click(screen.getByRole('button', { name: 'Show all dates' }));
       await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice'));
     });
@@ -347,7 +412,9 @@ describe('Search page', () => {
       await user.click(screen.getByRole('checkbox', { name: 'Select invoice-march.pdf' }));
       await user.clear(searchbox());
       await user.type(searchbox(), 'lease{Enter}');
-      await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Bulk actions' })).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.queryByRole('toolbar', { name: 'Bulk actions' })).not.toBeInTheDocument(),
+      );
     });
   });
 
@@ -380,7 +447,9 @@ describe('Search page', () => {
       const user = userEvent.setup();
       renderSearch();
       const help = await openHelp(user);
-      expect(within(help).getByText(/file names and the text read from each document/)).toBeInTheDocument();
+      expect(
+        within(help).getByText(/the text read from each document, not file names or labels/),
+      ).toBeInTheDocument();
     });
 
     test('lists the match modes with an explanation each', async () => {
@@ -390,7 +459,9 @@ describe('Search page', () => {
       const modes = within(help).getByRole('radiogroup', { name: 'Match' });
       expect(within(modes).getAllByRole('radio')).toHaveLength(4);
       expect(within(modes).getByRole('radio', { name: /all words/i })).toBeChecked();
-      expect(within(help).getByText('Also finds near misses and typos')).toBeInTheDocument();
+      expect(
+        within(help).getByText('Finds words spelled close to yours; Settings decides how close'),
+      ).toBeInTheDocument();
     });
 
     test('changing the mode writes it to the URL and the search uses it', async () => {
@@ -413,14 +484,21 @@ describe('Search page', () => {
       await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice+%26+paid&mode=boolean'));
       expect(screen.queryByRole('dialog', { name: 'Search help' })).not.toBeInTheDocument();
       expect(searchbox()).toHaveValue('invoice & paid');
-      await waitFor(() => expect(lastSearchParams()).toMatchObject({ query: 'invoice & paid', search_mode: 'boolean' }));
+      await waitFor(() =>
+        expect(lastSearchParams()).toMatchObject({
+          query: 'invoice & paid',
+          search_mode: 'boolean',
+        }),
+      );
     });
 
     test('a simple example leaves the mode unset', async () => {
       const user = userEvent.setup();
       renderSearch('/search?mode=phrase');
       const help = await openHelp(user);
-      await user.click(within(help).getByRole('button', { name: /^invoice documents that mention/i }));
+      await user.click(
+        within(help).getByRole('button', { name: /^invoice documents that mention/i }),
+      );
       await waitFor(() => expect(currentUrl()).toBe('/search?q=invoice'));
     });
 
@@ -429,8 +507,12 @@ describe('Search page', () => {
       renderSearch();
       await openHelp(user);
       await user.keyboard('{Escape}');
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search help' })).not.toBeInTheDocument());
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Search help' })).toHaveFocus());
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Search help' })).not.toBeInTheDocument(),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Search help' })).toHaveFocus(),
+      );
     });
   });
 });

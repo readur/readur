@@ -1,15 +1,15 @@
 use anyhow::Result;
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use uuid::Uuid;
-use sha2::{Sha256, Digest};
 
 use readur::{
-    AppState,
-    db::Database,
     config::Config,
-    models::{FileIngestionInfo, CreateWebDAVFile, Document},
+    db::Database,
+    models::{CreateWebDAVFile, Document, FileIngestionInfo},
     test_helpers::create_test_config_with_db,
+    AppState,
 };
 
 // Helper function to calculate file hash
@@ -117,24 +117,42 @@ async fn create_test_user(db: &Database, username: &str) -> Result<Uuid> {
 }
 
 async fn create_test_app_state() -> Result<Arc<AppState>> {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
 
     let mut config = create_test_config_with_db(&database_url);
     config.server_address = "127.0.0.1:8000".to_string();
     config.jwt_secret = "test-secret".to_string();
-    config.upload_path = "./test-uploads".to_string();
-    config.watch_folder = "./test-watch".to_string();
+    // Files go to the OS temp dir, never the repository; the returned state
+    // has no owner to clean up after it, so the directory is kept for the OS.
+    let scratch = tempfile::tempdir()?.keep();
+    config.upload_path = scratch.join("uploads").to_string_lossy().into_owned();
+    config.watch_folder = scratch.join("watch").to_string_lossy().into_owned();
     let db = Database::new(&config.database_url).await?;
-    
+
     // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: config.upload_path.clone(),
+    };
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await?;
-    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-    
-    let queue_service = std::sync::Arc::new(
-        readur::ocr::queue::OcrQueueService::new(db.clone(), db.get_pool().clone(), 1, file_service.clone(), 100, 100, 300)
-    );
-    
+    let file_service =
+        std::sync::Arc::new(readur::services::file_service::FileService::with_storage(
+            config.upload_path.clone(),
+            storage_backend,
+        ));
+
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.get_pool().clone(),
+        1,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
+
     Ok(Arc::new(AppState {
         db: db.clone(),
         config,
@@ -143,9 +161,10 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: std::sync::Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     }))
 }
@@ -154,34 +173,44 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
 async fn test_webdav_sync_duplicate_detection_skips_duplicate() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     // Test content
     let test_content = b"This is test PDF content for duplicate detection";
     let file_hash = calculate_file_hash(test_content);
-    
+
     // Create existing document with same hash
     let existing_doc = create_test_document(user_id, "existing.pdf", file_hash.clone());
     state.db.create_document(existing_doc).await?;
-    
+
     // Setup mock WebDAV service
     let mut webdav_service = MockWebDAVService::new();
     webdav_service.add_test_file("/test/duplicate.pdf", test_content.to_vec());
-    
+
     // Create file info for the duplicate file
-    let file_info = create_test_file_info("duplicate.pdf", "/test/duplicate.pdf", test_content.len() as i64);
-    
+    let file_info = create_test_file_info(
+        "duplicate.pdf",
+        "/test/duplicate.pdf",
+        test_content.len() as i64,
+    );
+
     // Create a mock process_single_file function (since the actual one is private)
     // We'll test the duplicate detection logic directly
-    
+
     // Check if duplicate exists using the new efficient method
-    let duplicate_check = state.db.get_document_by_user_and_hash(user_id, &file_hash).await?;
-    
-    assert!(duplicate_check.is_some(), "Should find existing document with same hash");
-    
+    let duplicate_check = state
+        .db
+        .get_document_by_user_and_hash(user_id, &file_hash)
+        .await?;
+
+    assert!(
+        duplicate_check.is_some(),
+        "Should find existing document with same hash"
+    );
+
     let found_doc = duplicate_check.unwrap();
     assert_eq!(found_doc.file_hash, Some(file_hash));
     assert_eq!(found_doc.user_id, user_id);
-    
+
     // Verify that WebDAV tracking would record this as a duplicate
     let webdav_file = CreateWebDAVFile {
         user_id,
@@ -194,7 +223,7 @@ async fn test_webdav_sync_duplicate_detection_skips_duplicate() -> Result<()> {
         sync_status: "duplicate_content".to_string(),
         sync_error: None,
     };
-    
+
     let created_webdav_file = state.db.create_or_update_webdav_file(&webdav_file).await?;
     assert_eq!(created_webdav_file.sync_status, "duplicate_content");
     assert_eq!(created_webdav_file.document_id, Some(found_doc.id));
@@ -206,18 +235,24 @@ async fn test_webdav_sync_duplicate_detection_skips_duplicate() -> Result<()> {
 async fn test_webdav_sync_duplicate_detection_processes_unique() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     // Test content
     let test_content = b"This is unique PDF content that should be processed";
     let file_hash = calculate_file_hash(test_content);
-    
+
     // Verify no existing document with this hash
-    let duplicate_check = state.db.get_document_by_user_and_hash(user_id, &file_hash).await?;
-    assert!(duplicate_check.is_none(), "Should not find any existing document with this hash");
-    
+    let duplicate_check = state
+        .db
+        .get_document_by_user_and_hash(user_id, &file_hash)
+        .await?;
+    assert!(
+        duplicate_check.is_none(),
+        "Should not find any existing document with this hash"
+    );
+
     // This indicates the file would be processed normally
     // In the actual sync, this would proceed to save the file and create a new document
-    
+
     Ok(())
 }
 
@@ -226,23 +261,32 @@ async fn test_webdav_sync_duplicate_different_users() -> Result<()> {
     let state = create_test_app_state().await?;
     let user1_id = create_test_user(&state.db, "webdav_user1").await?;
     let user2_id = create_test_user(&state.db, "webdav_user2").await?;
-    
+
     // Test content
     let test_content = b"Shared content between different users";
     let file_hash = calculate_file_hash(test_content);
-    
+
     // Create document for user1 with this hash
     let user1_doc = create_test_document(user1_id, "user1.pdf", file_hash.clone());
     state.db.create_document(user1_doc).await?;
-    
+
     // Check that user2 doesn't see user1's document as duplicate
-    let duplicate_check = state.db.get_document_by_user_and_hash(user2_id, &file_hash).await?;
-    assert!(duplicate_check.is_none(), "User2 should not see user1's document as duplicate");
-    
+    let duplicate_check = state
+        .db
+        .get_document_by_user_and_hash(user2_id, &file_hash)
+        .await?;
+    assert!(
+        duplicate_check.is_none(),
+        "User2 should not see user1's document as duplicate"
+    );
+
     // User2 should be able to create their own document with same hash
     let user2_doc = create_test_document(user2_id, "user2.pdf", file_hash.clone());
     let result = state.db.create_document(user2_doc).await;
-    assert!(result.is_ok(), "User2 should be able to create document with same hash");
+    assert!(
+        result.is_ok(),
+        "User2 should be able to create document with same hash"
+    );
 
     Ok(())
 }
@@ -251,15 +295,19 @@ async fn test_webdav_sync_duplicate_different_users() -> Result<()> {
 async fn test_webdav_sync_etag_change_detection() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     let webdav_path = "/test/updated.pdf";
     let old_etag = "old-etag-123";
     let new_etag = "new-etag-456";
-    
+
     // Create a document first
-    let test_doc = create_test_document(user_id, "updated.pdf", "etag_test_hash_1234567890".to_string());
+    let test_doc = create_test_document(
+        user_id,
+        "updated.pdf",
+        "etag_test_hash_1234567890".to_string(),
+    );
     let created_doc = state.db.create_document(test_doc).await?;
-    
+
     // Create initial WebDAV file record
     let initial_webdav_file = CreateWebDAVFile {
         user_id,
@@ -272,16 +320,22 @@ async fn test_webdav_sync_etag_change_detection() -> Result<()> {
         sync_status: "synced".to_string(),
         sync_error: None,
     };
-    
-    state.db.create_or_update_webdav_file(&initial_webdav_file).await?;
-    
+
+    state
+        .db
+        .create_or_update_webdav_file(&initial_webdav_file)
+        .await?;
+
     // Check existing WebDAV file
-    let existing_file = state.db.get_webdav_file_by_path(user_id, webdav_path).await?;
+    let existing_file = state
+        .db
+        .get_webdav_file_by_path(user_id, webdav_path)
+        .await?;
     assert!(existing_file.is_some());
-    
+
     let existing_file = existing_file.unwrap();
     assert_eq!(existing_file.etag, old_etag);
-    
+
     // Simulate file with new ETag (indicating change)
     let file_info = FileIngestionInfo {
         name: "updated.pdf".to_string(),
@@ -300,9 +354,12 @@ async fn test_webdav_sync_etag_change_detection() -> Result<()> {
         group: None,
         metadata: None,
     };
-    
+
     // ETag comparison should detect change
-    assert_ne!(existing_file.etag, file_info.etag, "ETag change should be detected");
+    assert_ne!(
+        existing_file.etag, file_info.etag,
+        "ETag change should be detected"
+    );
 
     Ok(())
 }
@@ -311,17 +368,20 @@ async fn test_webdav_sync_etag_change_detection() -> Result<()> {
 async fn test_webdav_sync_hash_collision_prevention() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     // Create document with specific hash
     let test_hash = "abcd1234567890123456789012345678901234567890123456789012345678";
     let document = create_test_document(user_id, "original.pdf", test_hash.to_string());
     state.db.create_document(document).await?;
-    
+
     // Try to create another document with same hash (should fail due to unique constraint)
     let duplicate_document = create_test_document(user_id, "duplicate.pdf", test_hash.to_string());
     let result = state.db.create_document(duplicate_document).await;
-    
-    assert!(result.is_err(), "Should not be able to create duplicate hash for same user");
+
+    assert!(
+        result.is_err(),
+        "Should not be able to create duplicate hash for same user"
+    );
 
     Ok(())
 }
@@ -330,25 +390,37 @@ async fn test_webdav_sync_hash_collision_prevention() -> Result<()> {
 async fn test_webdav_sync_file_content_vs_metadata_change() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     // Original content and hash
     let original_content = b"Original file content";
     let original_hash = calculate_file_hash(original_content);
-    
+
     // Create original document
     let original_doc = create_test_document(user_id, "test.pdf", original_hash.clone());
     state.db.create_document(original_doc).await?;
-    
+
     // Same content but different metadata (name, etc.) - should still be detected as duplicate
-    let duplicate_check = state.db.get_document_by_user_and_hash(user_id, &original_hash).await?;
-    assert!(duplicate_check.is_some(), "Same content should be detected as duplicate regardless of filename");
-    
+    let duplicate_check = state
+        .db
+        .get_document_by_user_and_hash(user_id, &original_hash)
+        .await?;
+    assert!(
+        duplicate_check.is_some(),
+        "Same content should be detected as duplicate regardless of filename"
+    );
+
     // Different content - should not be duplicate
     let different_content = b"Different file content";
     let different_hash = calculate_file_hash(different_content);
-    
-    let unique_check = state.db.get_document_by_user_and_hash(user_id, &different_hash).await?;
-    assert!(unique_check.is_none(), "Different content should not be detected as duplicate");
+
+    let unique_check = state
+        .db
+        .get_document_by_user_and_hash(user_id, &different_hash)
+        .await?;
+    assert!(
+        unique_check.is_none(),
+        "Different content should not be detected as duplicate"
+    );
 
     Ok(())
 }
@@ -357,18 +429,21 @@ async fn test_webdav_sync_file_content_vs_metadata_change() -> Result<()> {
 async fn test_webdav_sync_error_handling_invalid_hash() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     // Test with invalid hash formats
     let invalid_g_hash = "g".repeat(64);
     let invalid_hashes = vec![
-        "", // Empty
-        "short", // Too short
+        "",                        // Empty
+        "short",                   // Too short
         "invalid_characters_!@#$", // Invalid characters
-        &invalid_g_hash, // Invalid hex (contains 'g')
+        &invalid_g_hash,           // Invalid hex (contains 'g')
     ];
-    
+
     for invalid_hash in invalid_hashes {
-        let result = state.db.get_document_by_user_and_hash(user_id, invalid_hash).await;
+        let result = state
+            .db
+            .get_document_by_user_and_hash(user_id, invalid_hash)
+            .await;
         // Should handle gracefully - either return None or proper error
         match result {
             Ok(doc) => assert!(doc.is_none(), "Invalid hash should not match any document"),
@@ -383,24 +458,27 @@ async fn test_webdav_sync_error_handling_invalid_hash() -> Result<()> {
 async fn test_webdav_sync_concurrent_duplicate_detection() -> Result<()> {
     let state = create_test_app_state().await?;
     let user_id = create_test_user(&state.db, "webdav_test").await?;
-    
+
     let test_content = b"Concurrent test content";
     let file_hash = calculate_file_hash(test_content);
-    
+
     // Simulate concurrent duplicate checks
     let mut handles = Vec::new();
-    
+
     for i in 0..5 {
         let state_clone = state.clone();
         let hash_clone = file_hash.clone();
-        
+
         let handle = tokio::spawn(async move {
-            state_clone.db.get_document_by_user_and_hash(user_id, &hash_clone).await
+            state_clone
+                .db
+                .get_document_by_user_and_hash(user_id, &hash_clone)
+                .await
         });
-        
+
         handles.push(handle);
     }
-    
+
     // Wait for all concurrent operations
     let mut all_none = true;
     for handle in handles {
@@ -409,9 +487,12 @@ async fn test_webdav_sync_concurrent_duplicate_detection() -> Result<()> {
             all_none = false;
         }
     }
-    
+
     // Since no document exists with this hash, all should return None
-    assert!(all_none, "All concurrent checks should return None for non-existent hash");
+    assert!(
+        all_none,
+        "All concurrent checks should return None for non-existent hash"
+    );
 
     Ok(())
 }

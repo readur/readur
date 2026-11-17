@@ -6,9 +6,9 @@ use axum::{
     Router,
 };
 use sqlx::Row;
-use std::{sync::Arc, error::Error};
+use std::sync::Arc;
 
-use crate::{auth::AdminUser, AppState};
+use crate::{auth::AdminUser, models::QueueStatsResponse, AppState};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -37,22 +37,15 @@ pub fn router() -> Router<Arc<AppState>> {
 async fn get_queue_stats(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<QueueStatsResponse>, StatusCode> {
     let queue_service = &*state.queue_service;
-    
+
     let stats = queue_service
         .get_stats()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    Ok(Json(serde_json::json!({
-        "pending": stats.pending_count,
-        "processing": stats.processing_count,
-        "failed": stats.failed_count,
-        "completed_today": stats.completed_today,
-        "avg_wait_time_minutes": stats.avg_wait_time_minutes,
-        "oldest_pending_minutes": stats.oldest_pending_minutes,
-    })))
+
+    Ok(Json(QueueStatsResponse::from(stats)))
 }
 
 #[utoipa::path(
@@ -74,16 +67,16 @@ async fn requeue_failed(
     _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let queue_service = &*state.queue_service;
-    
+
     let count = match queue_service.requeue_failed_items().await {
         Ok(count) => count,
         Err(e) => {
             let error_msg = format!("Failed to requeue failed items: {:?}", e);
             tracing::error!("{}", error_msg);
-            
+
             // Print to stderr so we can see it in test output
             eprintln!("REQUEUE ERROR: {}", error_msg);
-            
+
             // Try to get the source chain
             eprintln!("Error chain:");
             let mut source = e.source();
@@ -93,11 +86,11 @@ async fn requeue_failed(
                 source = err.source();
                 depth += 1;
             }
-            
+
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-    
+
     Ok(Json(serde_json::json!({
         "requeued_count": count,
     })))
@@ -120,9 +113,8 @@ async fn pause_ocr_processing(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    
     state.queue_service.pause();
-    
+
     Ok(Json(serde_json::json!({
         "status": "paused",
         "message": "OCR processing has been paused"
@@ -146,9 +138,8 @@ async fn resume_ocr_processing(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    
     state.queue_service.resume();
-    
+
     Ok(Json(serde_json::json!({
         "status": "resumed",
         "message": "OCR processing has been resumed"
@@ -172,9 +163,8 @@ async fn get_ocr_status(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    
     let is_paused = state.queue_service.is_paused();
-    
+
     Ok(Json(serde_json::json!({
         "is_paused": is_paused,
         "status": if is_paused { "paused" } else { "running" }
@@ -199,7 +189,6 @@ async fn enqueue_pending_documents(
     State(state): State<Arc<AppState>>,
     _admin: AdminUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    
     // Find all documents with pending OCR status that aren't already in the queue
     let pending_documents = sqlx::query(
         r#"
@@ -216,40 +205,41 @@ async fn enqueue_pending_documents(
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     if pending_documents.is_empty() {
         return Ok(Json(serde_json::json!({
             "queued_count": 0,
             "message": "No pending documents found to queue"
         })));
     }
-    
+
     // Prepare batch insert data
     let documents_to_queue: Vec<(uuid::Uuid, i32, i64)> = pending_documents
         .into_iter()
         .map(|row| {
             let document_id: uuid::Uuid = row.get("id");
             let file_size: i64 = row.get("file_size");
-            
+
             // Calculate priority based on file size
             let priority = match file_size {
-                0..=1048576 => 10,          // <= 1MB: highest priority
-                ..=5242880 => 8,            // 1-5MB: high priority  
-                ..=10485760 => 6,           // 5-10MB: medium priority
-                ..=52428800 => 4,           // 10-50MB: low priority
-                _ => 2,                     // > 50MB: lowest priority
+                ..=1_048_576 => 10,           // <= 1MB: highest priority
+                1_048_577..=5_242_880 => 8,   // 1-5MB: high priority
+                5_242_881..=10_485_760 => 6,  // 5-10MB: medium priority
+                10_485_761..=52_428_800 => 4, // 10-50MB: low priority
+                _ => 2,                       // > 50MB: lowest priority
             };
-            
+
             (document_id, priority, file_size)
         })
         .collect();
-    
+
     // Batch enqueue documents
-    let queue_ids = state.queue_service
+    let queue_ids = state
+        .queue_service
         .enqueue_documents_batch(documents_to_queue)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(Json(serde_json::json!({
         "queued_count": queue_ids.len(),
         "message": format!("Successfully queued {} pending documents for OCR processing", queue_ids.len()),

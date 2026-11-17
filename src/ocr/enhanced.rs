@@ -12,12 +12,18 @@ use imageproc::{
     distance_transform::Norm,
 };
 #[cfg(feature = "ocr")]
-use tesseract::{Tesseract, PageSegMode, OcrEngineMode};
+use super::tesseract_params::{configure_tesseract, mean_confidence};
+#[cfg(feature = "ocr")]
+use super::tesseract_params::{ocrmypdf_strategy_with_params, write_tesseract_config, TesseractParams};
+use super::user_settings::{ocr_timeout, with_ocr_timeout};
 
 use std::sync::Arc;
 use crate::models::Settings;
 use crate::services::file_service::FileService;
 use super::xml_extractor::XmlOfficeExtractor;
+use crate::utils::temp_files::TempPath;
+#[cfg(feature = "ocr")]
+use crate::utils::temp_files::{remove_quietly, TempPageImages};
 
 /// Callback for reporting OCR progress (current_page, total_pages).
 /// Called synchronously; implementations should use tokio::spawn for async work.
@@ -54,43 +60,18 @@ pub fn ocrmypdf_strategy2_args() -> Vec<&'static str> {
 /// The text must come from this run's sidecar. Re-reading the OCR'd PDF with a
 /// second `ocrmypdf --skip-text --sidecar` pass skips every page (they now carry
 /// a text layer) and the sidecar holds only "[OCR skipped on page(s) N]".
-pub fn ocrmypdf_ocr_command_args(
-    strategy_args: &[&str],
+pub fn ocrmypdf_ocr_command_args<S: AsRef<str>>(
+    strategy_args: &[S],
     sidecar_path: &str,
     input_path: &str,
     output_path: &str,
 ) -> Vec<String> {
-    let mut args: Vec<String> = strategy_args.iter().map(|a| a.to_string()).collect();
+    let mut args: Vec<String> = strategy_args.iter().map(|a| a.as_ref().to_string()).collect();
     args.push("--sidecar".to_string());
     args.push(sidecar_path.to_string());
     args.push(input_path.to_string());
     args.push(output_path.to_string());
     args
-}
-
-/// RAII guard for automatic cleanup of temporary files
-struct FileCleanupGuard {
-    file_path: String,
-}
-
-impl FileCleanupGuard {
-    fn new(file_path: &str) -> Self {
-        Self {
-            file_path: file_path.to_string(),
-        }
-    }
-}
-
-impl Drop for FileCleanupGuard {
-    fn drop(&mut self) {
-        if std::path::Path::new(&self.file_path).exists() {
-            if let Err(e) = std::fs::remove_file(&self.file_path) {
-                warn!("Failed to clean up temporary file '{}': {}", self.file_path, e);
-            } else {
-                debug!("Cleaned up temporary file: {}", self.file_path);
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +106,9 @@ impl EnhancedOcrService {
 
 
     pub fn new(temp_dir: String, file_service: FileService, max_pdf_size_mb: u64, max_office_document_size_mb: u64, ocr_timeout_seconds: u64) -> Self {
+        // Every extractor writes its scratch files here (TEMP_DIR may name a
+        // directory that does not exist yet); a failure surfaces on first write.
+        let _ = std::fs::create_dir_all(&temp_dir);
         Self {
             temp_dir,
             file_service,
@@ -143,30 +127,28 @@ impl EnhancedOcrService {
         
         let mut preprocessing_applied = Vec::new();
         
-        // Load and preprocess the image
-        let (processed_image_path, preprocess_steps) = if settings.enable_image_preprocessing {
+        // Load and preprocess the image; the preprocessed copy is a temp file
+        let (processed_image, preprocess_steps) = if settings.enable_image_preprocessing {
             let (processed_path, steps) = self.preprocess_image(file_path, settings).await?;
-            (processed_path, steps)
+            (Some(TempPath::new(processed_path)), steps)
         } else {
-            (file_path.to_string(), Vec::new())
+            (None, Vec::new())
         };
+        let processed_image_path = processed_image.as_ref().map_or(file_path, TempPath::as_str).to_string();
         
         preprocessing_applied.extend(preprocess_steps);
 
         // Move CPU-intensive OCR operations to blocking thread pool
         let processed_image_path_clone = processed_image_path.clone();
         let settings_clone = settings.clone();
-        let temp_dir = self.temp_dir.clone();
         
         let ocr_result = tokio::task::spawn_blocking(move || -> Result<(String, f32)> {
-            // Configure Tesseract with optimal settings
-            let mut tesseract = Self::configure_tesseract_static(&processed_image_path_clone, &settings_clone)?;
-            
-            // Extract text with confidence
+            // Every Tesseract option the owner's settings select (language,
+            // engine and segmentation modes, DPI, character lists)
+            let params = TesseractParams::from_settings(&settings_clone);
+            let mut tesseract = configure_tesseract(&processed_image_path_clone, &params)?;
             let text = tesseract.get_text()?.trim().to_string();
-            let confidence = Self::calculate_overall_confidence_static(&mut tesseract)?;
-            
-            Ok((text, confidence))
+            Ok((text, mean_confidence(&mut tesseract)))
         }).await??;
 
         let (text, confidence) = ocr_result;
@@ -179,12 +161,12 @@ impl EnhancedOcrService {
             word_count, confidence, processing_time
         );
         
-        // Return the processed image path if different from original (caller will handle cleanup/saving)
-        let result_processed_image_path = if processed_image_path != file_path {
-            Some(processed_image_path.clone())
-        } else {
-            None
-        };
+        // The preprocessed image is handed to the caller, who then owns it,
+        // only when it is to be saved for review; otherwise its guard removes
+        // it here and no path to a deleted file is returned
+        let result_processed_image_path = processed_image
+            .filter(|_| settings.save_processed_images)
+            .map(TempPath::keep);
         
         let result = OcrResult {
             text,
@@ -194,14 +176,7 @@ impl EnhancedOcrService {
             preprocessing_applied,
             processed_image_path: result_processed_image_path,
         };
-        
-        // Clean up temporary files if not saved for review
-        if let Some(ref temp_path) = result.processed_image_path {
-            if !settings.save_processed_images {
-                let _ = tokio::fs::remove_file(temp_path).await;
-            }
-        }
-        
+
         Ok(result)
     }
 
@@ -222,7 +197,7 @@ impl EnhancedOcrService {
         }
         
         // Aggressively upscale low-resolution images for better OCR
-        processed_img = self.smart_resize_for_ocr(processed_img, settings.ocr_dpi)?;
+        processed_img = self.smart_resize_for_ocr(processed_img, settings)?;
         
         // Convert to grayscale for better OCR
         let gray_img = processed_img.to_luma8();
@@ -288,14 +263,10 @@ impl EnhancedOcrService {
         }
         
         // Save processed image to temporary file
-        let temp_filename = format!("processed_{}_{}.png", 
-            std::process::id(), 
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
-        );
-        let temp_path = format!("{}/{}", self.temp_dir, temp_filename);
-        
+        let temp_path = TempPath::unique(&self.temp_dir, "processed", "png");
         let dynamic_processed = DynamicImage::ImageLuma8(processed_gray);
-        dynamic_processed.save(&temp_path)?;
+        dynamic_processed.save(temp_path.as_str())?;
+        let temp_path = temp_path.keep();
         
         info!("Processed image saved to: {}", temp_path);
         Ok((temp_path, preprocessing_applied))
@@ -336,91 +307,6 @@ impl EnhancedOcrService {
         needs_enhancement
     }
     
-    /// Build language combination string for Tesseract (e.g., "eng+spa")
-    fn build_language_combination(&self, settings: &Settings) -> String {
-        if settings.preferred_languages.len() > 1 {
-            // Use preferred_languages with primary_language first
-            let mut languages = settings.preferred_languages.clone();
-            
-            // Ensure primary language is first
-            languages.retain(|lang| lang != &settings.primary_language);
-            languages.insert(0, settings.primary_language.clone());
-            
-            // Join with + for Tesseract multi-language format
-            languages.join("+")
-        } else if !settings.preferred_languages.is_empty() {
-            // Single language from preferred_languages
-            settings.preferred_languages[0].clone()
-        } else {
-            // Fallback to ocr_language field for backward compatibility
-            settings.ocr_language.clone()
-        }
-    }
-
-    /// Configure Tesseract with optimal settings
-    #[cfg(feature = "ocr")]
-    fn configure_tesseract(&self, image_path: &str, settings: &Settings) -> Result<Tesseract> {
-        let language_combination = self.build_language_combination(settings);
-        let mut tesseract = Tesseract::new(None, Some(&language_combination))?;
-        
-        // Set the image
-        tesseract = tesseract.set_image(image_path)?;
-        
-        // Configure Page Segmentation Mode (PSM)
-        let psm = match settings.ocr_page_segmentation_mode {
-            0 => PageSegMode::PsmOsdOnly,
-            1 => PageSegMode::PsmAutoOsd,
-            2 => PageSegMode::PsmAutoOnly,
-            3 => PageSegMode::PsmAuto,
-            4 => PageSegMode::PsmSingleColumn,
-            5 => PageSegMode::PsmSingleBlockVertText,
-            6 => PageSegMode::PsmSingleBlock,
-            7 => PageSegMode::PsmSingleLine,
-            8 => PageSegMode::PsmSingleWord,
-            9 => PageSegMode::PsmCircleWord,
-            10 => PageSegMode::PsmSingleChar,
-            11 => PageSegMode::PsmSparseText,
-            12 => PageSegMode::PsmSparseTextOsd,
-            13 => PageSegMode::PsmRawLine,
-            _ => PageSegMode::PsmAuto, // Default fallback
-        };
-        tesseract.set_page_seg_mode(psm);
-        
-        // Configure OCR Engine Mode (OEM)
-        let _oem = match settings.ocr_engine_mode {
-            0 => OcrEngineMode::TesseractOnly,
-            1 => OcrEngineMode::LstmOnly,
-            2 => OcrEngineMode::TesseractLstmCombined,
-            3 => OcrEngineMode::Default,
-            _ => OcrEngineMode::Default, // Default fallback
-        };
-        
-        // Note: set_engine_mode may not be available in the current tesseract crate version
-        // We'll configure this differently if needed
-        
-        // Basic configuration - skip advanced settings that might cause issues
-        // Only set essential variables that are widely supported
-        
-        Ok(tesseract)
-    }
-    
-    /// Calculate overall confidence score using Tesseract's mean confidence
-    #[cfg(feature = "ocr")]
-    fn calculate_overall_confidence(&self, tesseract: &mut Tesseract) -> Result<f32> {
-        // Use Tesseract's built-in mean confidence calculation
-        let confidence = tesseract.mean_text_conf();
-        
-        // Convert from i32 to f32 and ensure it's within valid range
-        let confidence_f32 = confidence as f32;
-        
-        // Clamp confidence to valid range (0.0 to 100.0)
-        let clamped_confidence = confidence_f32.max(0.0).min(100.0);
-        
-        debug!("Tesseract confidence: {} -> {:.1}%", confidence, clamped_confidence);
-        
-        Ok(clamped_confidence)
-    }
-    
     /// Detect and correct image orientation
     #[cfg(feature = "ocr")]
     fn detect_and_correct_orientation(&self, img: DynamicImage) -> Result<DynamicImage> {
@@ -436,42 +322,21 @@ impl EnhancedOcrService {
         }
     }
     
-    /// Smart resize for OCR - optimize image size for best OCR performance
+    /// Resize for OCR: small images up, large ones down, within the owner's
+    /// maximum image size and upscale factor (see `preprocess_dimensions`).
     #[cfg(feature = "ocr")]
-    fn smart_resize_for_ocr(&self, img: DynamicImage, _target_dpi: i32) -> Result<DynamicImage> {
+    fn smart_resize_for_ocr(&self, img: DynamicImage, settings: &Settings) -> Result<DynamicImage> {
         let (width, height) = img.dimensions();
-        let max_dimension = width.max(height);
-        let min_dimension = width.min(height);
-        
-        // Calculate optimal dimensions for OCR
-        let mut new_width = width;
-        let mut new_height = height;
-        
-        // Scale DOWN large images for better OCR performance and memory efficiency
-        if max_dimension > 2048 {
-            let scale_factor = 2048.0 / max_dimension as f32;
-            new_width = (width as f32 * scale_factor) as u32;
-            new_height = (height as f32 * scale_factor) as u32;
-            info!("Scaling down large image ({}x{}) by factor {:.2}x to {}x{} for optimal OCR", 
-                  width, height, scale_factor, new_width, new_height);
+        let (new_width, new_height) =
+            super::tesseract_params::preprocess_dimensions(width, height, settings);
+        if (new_width, new_height) == (width, height) {
+            return Ok(img);
         }
-        // Scale UP very small images that would produce poor OCR results
-        else if min_dimension < 300 {
-            let scale_factor = 600.0 / min_dimension as f32;
-            new_width = (width as f32 * scale_factor) as u32;
-            new_height = (height as f32 * scale_factor) as u32;
-            info!("Scaling up small image ({}x{}) by factor {:.2}x to {}x{} for better OCR", 
-                  width, height, scale_factor, new_width, new_height);
-        }
-        
-        if new_width != width || new_height != height {
-            // Use Lanczos3 for best quality upscaling
-            Ok(img.resize(new_width, new_height, image::imageops::FilterType::Lanczos3))
-        } else {
-            Ok(img)
-        }
+        info!("Resizing image {}x{} to {}x{} for OCR", width, height, new_width, new_height);
+        // Lanczos3 for the best quality when scaling up
+        Ok(img.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3))
     }
-    
+
     /// Analyze image quality metrics
     #[cfg(feature = "ocr")]
     fn analyze_image_quality(&self, img: &ImageBuffer<Luma<u8>, Vec<u8>>) -> ImageQualityStats {
@@ -850,12 +715,8 @@ impl EnhancedOcrService {
         let (width, height) = img.dimensions();
         let mut sharpened = ImageBuffer::new(width, height);
         
-        // Unsharp mask kernel - enhances edges
-        let kernel = [
-            [0.0, -1.0, 0.0],
-            [-1.0, 5.0, -1.0],
-            [0.0, -1.0, 0.0],
-        ];
+        // Edge-enhancing kernel scaled by the owner's sharpening strength
+        let kernel = super::tesseract_params::sharpening_kernel(settings.ocr_sharpening_strength);
         
         for y in 1..height-1 {
             for x in 1..width-1 {
@@ -1092,56 +953,49 @@ impl EnhancedOcrService {
             ));
         }
         
-        // Generate temporary file path for OCR'd PDF
-        let temp_ocr_filename = format!("ocr_{}_{}.pdf", 
-            std::process::id(), 
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
-        );
-        let temp_ocr_path = format!("{}/{}", self.temp_dir, temp_ocr_filename);
-        let temp_text_path = format!("{}.txt", temp_ocr_path);
+        // Temporary output PDF and sidecar text for this run
+        let temp_ocr = TempPath::unique(&self.temp_dir, "ocr", "pdf");
+        let temp_text = TempPath::new(format!("{}.txt", temp_ocr.as_str()));
+        let (temp_ocr_path, temp_text_path) = (temp_ocr.as_str(), temp_text.as_str());
 
-        // Run ocrmypdf with progressive fallback strategies
-        let ocrmypdf_result = tokio::time::timeout(
-            std::time::Duration::from_secs(self.ocr_timeout_seconds),
-            tokio::task::spawn_blocking({
-                let file_path = file_path.to_string();
-                let temp_ocr_path = temp_ocr_path.clone();
-                let temp_text_path = temp_text_path.clone();
-                move || {
-                    // Strategy 1: Standard OCR with cleaning
-                    let mut result = std::process::Command::new("ocrmypdf")
-                        .args(ocrmypdf_ocr_command_args(&ocrmypdf_strategy1_args(), &temp_text_path, &file_path, &temp_ocr_path))
-                        .output();
-                    
-                    if result.is_ok() && result.as_ref().unwrap().status.success() {
-                        return result;
-                    }
-                    
-                    // Strategy 2: If standard OCR fails, try with error recovery
-                    eprintln!("Standard OCR failed, trying recovery mode...");
-                    result = std::process::Command::new("ocrmypdf")
-                        .args(ocrmypdf_ocr_command_args(&ocrmypdf_strategy2_args(), &temp_text_path, &file_path, &temp_ocr_path))
-                        .output();
-                    
-                    if result.is_ok() && result.as_ref().unwrap().status.success() {
-                        return result;
-                    }
+        // The owner's language, engine and segmentation modes and character
+        // lists replace the strategies' defaults
+        let params = TesseractParams::from_settings(settings);
+        let config_file = write_tesseract_config(&params, &self.temp_dir).await?.map(TempPath::new);
+        let timeout = ocr_timeout(settings);
 
-                    // Both strategies failed - return the last result for error reporting
-                    eprintln!("All OCR strategies failed for file: {}", file_path);
-                    result
+        // Run ocrmypdf with progressive fallback strategies. A timeout drops the
+        // run, and kill_on_drop stops the ocrmypdf process with it.
+        let run = async {
+            let mut last = None;
+            for (name, strategy) in [("standard", ocrmypdf_strategy1_args()), ("recovery", ocrmypdf_strategy2_args())] {
+                let args = ocrmypdf_ocr_command_args(
+                    &ocrmypdf_strategy_with_params(&strategy, &params, config_file.as_ref().map(TempPath::as_str)),
+                    temp_text_path,
+                    file_path,
+                    temp_ocr_path,
+                );
+                let output = tokio::process::Command::new("ocrmypdf")
+                    .args(&args)
+                    .kill_on_drop(true)
+                    .output()
+                    .await?;
+                if output.status.success() {
+                    return Ok::<_, anyhow::Error>(output);
                 }
-            })
-        ).await;
-
-        let ocrmypdf_output = match ocrmypdf_result {
-            Ok(Ok(output)) => output?,
-            Ok(Err(e)) => return Err(anyhow!("Failed to join ocrmypdf task: {}", e)),
-            Err(_) => return Err(anyhow!("ocrmypdf timed out after 5 minutes for file '{}'", file_path)),
+                warn!("ocrmypdf {} strategy failed for '{}'", name, file_path);
+                last = Some(output);
+            }
+            Ok(last.expect("at least one strategy ran"))
+        };
+        let ocrmypdf_output = match tokio::time::timeout(timeout, run).await {
+            Ok(output) => output?,
+            Err(_) => {
+                return Err(anyhow!("ocrmypdf timed out after {:?} for file '{}'", timeout, file_path));
+            }
         };
 
         if !ocrmypdf_output.status.success() {
-            let _ = tokio::fs::remove_file(&temp_text_path).await;
             let stderr = String::from_utf8_lossy(&ocrmypdf_output.stderr);
             let stdout = String::from_utf8_lossy(&ocrmypdf_output.stdout);
             return Err(anyhow!(
@@ -1162,16 +1016,12 @@ impl EnhancedOcrService {
         }
         
         // Read the text ocrmypdf wrote to the sidecar during the OCR run
-        let sidecar_text = tokio::fs::read_to_string(&temp_text_path).await;
-        let _ = tokio::fs::remove_file(&temp_text_path).await;
+        let sidecar_text = tokio::fs::read_to_string(temp_text_path).await;
         let ocr_text_result = sidecar_text
             .map_err(|e| anyhow!("Failed to read ocrmypdf sidecar text for '{}': {}", file_path, e))?
             .trim()
             .to_string();
 
-        // Clean up temporary file
-        let _ = tokio::fs::remove_file(&temp_ocr_path).await;
-        
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = self.count_words_safely(&ocr_text_result);
         
@@ -1193,12 +1043,9 @@ impl EnhancedOcrService {
     async fn extract_pdf_text_quick(&self, file_path: &str) -> Result<(String, u64)> {
         let start_time = std::time::Instant::now();
 
-        // Generate temporary file path for text extraction
-        let temp_text_filename = format!("quick_text_{}_{}.txt",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
-        );
-        let temp_text_path = format!("{}/{}", self.temp_dir, temp_text_filename);
+        // A per-call sidecar: concurrent jobs must not read or delete each other's
+        let temp_text = TempPath::unique(&self.temp_dir, "quick_text", "txt");
+        let temp_text_path = temp_text.as_str();
 
         // Strategy 1: Fast text extraction using pdftotext (for existing text)
         debug!("Trying pdftotext for existing text extraction: {}", file_path);
@@ -1206,7 +1053,8 @@ impl EnhancedOcrService {
         let pdftotext_result = tokio::process::Command::new("pdftotext")
             .arg("-layout")  // Preserve layout
             .arg(file_path)
-            .arg(&temp_text_path)
+            .arg(temp_text_path)
+            .kill_on_drop(true)
             .output()
             .await;
 
@@ -1216,8 +1064,7 @@ impl EnhancedOcrService {
                 debug!("pdftotext stderr: {}", String::from_utf8_lossy(&output.stderr));
             }
             if output.status.success() {
-                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                if let Ok(text) = tokio::fs::read_to_string(temp_text_path).await {
                     let word_count = text.split_whitespace().count();
                     debug!("pdftotext extracted {} words from temp file", word_count);
 
@@ -1246,16 +1093,16 @@ impl EnhancedOcrService {
         let ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
             .arg("--skip-text") // Don't re-OCR — just extract existing text layer
             .arg("--sidecar")
-            .arg(&temp_text_path)
+            .arg(temp_text_path)
             .arg(file_path)
             .arg("-")  // Dummy output (we only want sidecar)
+            .kill_on_drop(true)
             .output()
             .await;
 
         if let Ok(output) = &ocrmypdf_result {
             if output.status.success() {
-                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                if let Ok(text) = tokio::fs::read_to_string(temp_text_path).await {
                     let word_count = text.split_whitespace().count();
                     if word_count > 5 {
                         let processing_time = start_time.elapsed().as_millis() as u64;
@@ -1360,20 +1207,19 @@ impl EnhancedOcrService {
 
     /// Convert PDF pages to PNG images using pdftoppm
     #[cfg(feature = "ocr")]
-    async fn extract_pdf_pages_as_images(&self, file_path: &str) -> Result<Vec<String>> {
-        let temp_prefix = format!("{}/pdf_page_{}_{}",
-            self.temp_dir,
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
-        );
+    pub(crate) async fn extract_pdf_pages_as_images(&self, file_path: &str, params: &TesseractParams) -> Result<TempPageImages> {
+        // A directory of this render's own: its guard removes every page pdftoppm
+        // writes, even if this future is dropped mid-render, without scanning the
+        // shared temp dir
+        let mut pages = TempPageImages::create(&self.temp_dir, "pdf_pages").await?;
+        let temp_prefix = pages.prefix().to_string_lossy().into_owned();
 
-        // Convert all pages to PNG at 300 DPI for good OCR quality
+        // Render every page as PNG at the owner's OCR DPI (killed on timeout)
         let output = tokio::process::Command::new("pdftoppm")
-            .arg("-png")
-            .arg("-r")
-            .arg("300")
+            .args(params.pdftoppm_args())
             .arg(file_path)
             .arg(&temp_prefix)
+            .kill_on_drop(true)
             .output()
             .await?;
 
@@ -1389,7 +1235,8 @@ impl EnhancedOcrService {
             return Err(anyhow!("pdftoppm did not produce any image files"));
         }
 
-        Ok(image_paths)
+        pages.set_paths(image_paths);
+        Ok(pages)
     }
 
     /// Extract text from PDF by converting pages to images and OCRing each page
@@ -1407,7 +1254,10 @@ impl EnhancedOcrService {
         }
 
         // Convert pages to images
-        let image_paths = self.extract_pdf_pages_as_images(file_path).await?;
+        let image_paths = self.extract_pdf_pages_as_images(file_path, &TesseractParams::from_settings(settings)).await?;
+        // A page's preprocessed image is never saved for review, so each page's
+        // extraction removes its own
+        let page_settings = Settings { save_processed_images: false, ..settings.clone() };
 
         // OCR each page
         let mut all_text = String::new();
@@ -1423,7 +1273,7 @@ impl EnhancedOcrService {
                 cb((i + 1) as i32, page_count as i32);
             }
 
-            match self.extract_text_from_image(image_path, settings).await {
+            match self.extract_text_from_image(image_path, &page_settings).await {
                 Ok(result) => {
                     if !all_text.is_empty() && !result.text.is_empty() {
                         all_text.push_str("\n\n--- Page Break ---\n\n");
@@ -1439,7 +1289,7 @@ impl EnhancedOcrService {
             }
 
             // Clean up page image immediately after processing
-            let _ = tokio::fs::remove_file(image_path).await;
+            remove_quietly(std::path::Path::new(image_path));
         }
 
         if successful_pages == 0 {
@@ -1494,7 +1344,12 @@ impl EnhancedOcrService {
             filename, mime_type, file_size_mb, file_path
         );
 
-        self.extract_text(file_path, mime_type, settings, progress_callback).await
+        // The owner's OCR timeout bounds the whole extraction, whichever engine runs
+        with_ocr_timeout(
+            ocr_timeout(settings),
+            self.extract_text(file_path, mime_type, settings, progress_callback),
+        )
+        .await
     }
 
     /// Extract text from Office documents (DOCX, DOC, Excel) using XML extraction
@@ -1516,7 +1371,10 @@ impl EnhancedOcrService {
         
         // Use XML extraction as the primary method
         let xml_extractor = XmlOfficeExtractor::new(self.temp_dir.clone());
-        let xml_result = xml_extractor.extract_text_from_office(file_path, mime_type).await?;
+        let timeout_seconds = settings.office_extraction_timeout_seconds.max(1) as u64;
+        let xml_result = xml_extractor
+            .extract_text_from_office_with_timeout(file_path, mime_type, timeout_seconds)
+            .await?;
         
         let total_time = start_time.elapsed().as_millis() as u64;
         
@@ -1548,16 +1406,10 @@ impl EnhancedOcrService {
                 .and_then(|e| e.to_str())
                 .unwrap_or("bin");
             tokio::fs::create_dir_all(&self.temp_dir).await?;
-            let temp_path = format!(
-                "{}/ocr_download_{}.{}",
-                self.temp_dir,
-                uuid::Uuid::new_v4(),
-                extension
-            );
-            tokio::fs::write(&temp_path, &data).await?;
-            let _cleanup = FileCleanupGuard::new(&temp_path);
+            let temp_path = TempPath::unique(&self.temp_dir, "ocr_download", extension);
+            tokio::fs::write(temp_path.as_str(), &data).await?;
             return self
-                .extract_text_from_local_path(&temp_path, mime_type, settings, progress_callback)
+                .extract_text_from_local_path(temp_path.as_str(), mime_type, settings, progress_callback)
                 .await;
         }
 
@@ -1823,83 +1675,6 @@ fn is_valid_pdf(data: &[u8]) -> bool {
     false
 }
 
-impl EnhancedOcrService {
-    /// Static version of configure_tesseract for use in spawn_blocking
-    #[cfg(feature = "ocr")]
-    fn configure_tesseract_static(image_path: &str, settings: &Settings) -> Result<Tesseract> {
-        let language_combination = Self::build_language_combination_static(settings);
-        let mut tesseract = Tesseract::new(None, Some(&language_combination))?;
-        
-        // Set the image
-        tesseract = tesseract.set_image(image_path)?;
-        
-        // Configure Page Segmentation Mode (PSM)
-        let psm = match settings.ocr_page_segmentation_mode {
-            0 => PageSegMode::PsmOsdOnly,
-            1 => PageSegMode::PsmAutoOsd,
-            2 => PageSegMode::PsmAutoOnly,
-            3 => PageSegMode::PsmAuto,
-            4 => PageSegMode::PsmSingleColumn,
-            5 => PageSegMode::PsmSingleBlockVertText,
-            6 => PageSegMode::PsmSingleBlock,
-            7 => PageSegMode::PsmSingleLine,
-            8 => PageSegMode::PsmSingleWord,
-            9 => PageSegMode::PsmCircleWord,
-            10 => PageSegMode::PsmSingleChar,
-            11 => PageSegMode::PsmSparseText,
-            12 => PageSegMode::PsmSparseTextOsd,
-            13 => PageSegMode::PsmRawLine,
-            _ => PageSegMode::PsmAuto, // Default fallback
-        };
-        tesseract.set_page_seg_mode(psm);
-        
-        // Configure OCR Engine Mode (OEM)  
-        let _oem = match settings.ocr_engine_mode {
-            0 => OcrEngineMode::TesseractOnly,
-            1 => OcrEngineMode::LstmOnly,
-            2 => OcrEngineMode::TesseractOnly, // Fallback since TesseractLstm doesn't exist
-            3 => OcrEngineMode::Default,
-            _ => OcrEngineMode::Default, // Default fallback
-        };
-        
-        Ok(tesseract)
-    }
-    
-    /// Static version of calculate_overall_confidence for use in spawn_blocking
-    #[cfg(feature = "ocr")]
-    fn calculate_overall_confidence_static(tesseract: &mut Tesseract) -> Result<f32> {
-        // Use Tesseract's built-in mean confidence calculation
-        let confidence = tesseract.mean_text_conf();
-        
-        // Convert from i32 to f32 and ensure it's within valid range
-        let confidence_f32 = confidence as f32;
-        
-        // Clamp confidence to valid range (0.0 to 100.0)
-        let clamped_confidence = confidence_f32.max(0.0).min(100.0);
-        
-        debug!("Tesseract confidence: {} -> {:.1}%", confidence, clamped_confidence);
-        
-        Ok(clamped_confidence)
-    }
-    
-    /// Static version of build_language_combination for use in spawn_blocking
-    fn build_language_combination_static(settings: &Settings) -> String {
-        if settings.preferred_languages.len() > 1 {
-            // Use preferred_languages with primary_language first
-            let mut languages = settings.preferred_languages.clone();
-            
-            // Ensure primary language is first
-            languages.retain(|lang| lang != &settings.primary_language);
-            languages.insert(0, settings.primary_language.clone());
-            
-            // Join with + for Tesseract multi-language format
-            languages.join("+")
-        } else if !settings.preferred_languages.is_empty() {
-            // Single language from preferred_languages
-            settings.preferred_languages[0].clone()
-        } else {
-            // Fallback to ocr_language field for backward compatibility
-            settings.ocr_language.clone()
-        }
-    }
-}
+#[cfg(all(test, feature = "ocr"))]
+#[path = "enhanced_temp_files_tests.rs"]
+mod temp_files_tests;

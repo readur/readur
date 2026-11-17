@@ -53,7 +53,11 @@ export async function settle(): Promise<void> {
 
 /** Fresh storage and an empty change-tracking store. */
 export function resetIntakeState(): void {
-  Object.defineProperty(window, 'localStorage', { value: new MemoryStorage(), configurable: true, writable: true });
+  Object.defineProperty(window, 'localStorage', {
+    value: new MemoryStorage(),
+    configurable: true,
+    writable: true,
+  });
   acknowledgeAll();
   flushLit();
 }
@@ -75,7 +79,15 @@ export interface RenderIntakeOptions {
   signedIn?: boolean;
 }
 
-export function renderIntake(ui: ReactNode, { path = '/intake', role = 'admin', perUserWatch = false, signedIn = true }: RenderIntakeOptions = {}) {
+export function renderIntake(
+  ui: ReactNode,
+  {
+    path = '/intake',
+    role = 'admin',
+    perUserWatch = false,
+    signedIn = true,
+  }: RenderIntakeOptions = {},
+) {
   const auth = {
     user: signedIn ? { id: '1', username: 'ada', email: 'ada@example.com', role } : null,
     loading: false,
@@ -84,7 +96,13 @@ export function renderIntake(ui: ReactNode, { path = '/intake', role = 'admin', 
     logout: vi.fn(),
   };
   const flags = {
-    flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: perUserWatch },
+    flags: {
+      allowLocalAuth: true,
+      allowRegistration: false,
+      oidcEnabled: false,
+      enablePerUserWatch: perUserWatch,
+      mcpEnabled: false,
+    },
     loading: false,
     error: null,
   };

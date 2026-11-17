@@ -131,18 +131,20 @@ For programmatic integration, **JSON Format** delivers structured data that's ea
 Programmatic access to analytics data:
 
 ```bash
-# Get document statistics
-GET /api/analytics/documents
+# Database, OCR, document, user and system figures (administrators only)
+GET /api/metrics
 
-# Get processing metrics
-GET /api/analytics/processing
+# The same figures in Prometheus text format (administrators only)
+GET /metrics
 
-# Get user activity data
-GET /api/analytics/users
+# OCR queue counts (administrators only)
+GET /api/queue/stats
 
-# Get system performance
-GET /api/analytics/system
+# Daily document arrivals per ingestion lane
+GET /api/sources/arrivals?days=30
 ```
+
+See the [API Reference](api-reference.md) for the response formats.
 
 ## Dashboard Customization
 

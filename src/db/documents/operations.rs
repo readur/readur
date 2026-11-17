@@ -9,7 +9,9 @@ use crate::db::constraint_validation::ConstraintValidator;
 use crate::db::sanitize::ToDb;
 
 impl Database {
-    /// Deletes a single document with role-based access control
+    /// Deletes a single document with role-based access control, recording
+    /// nothing else: for discarding a document the server itself created.
+    /// User-requested deletions go through `delete_document_by_user`.
     pub async fn delete_document(&self, document_id: Uuid, user_id: Uuid, user_role: UserRole) -> Result<bool> {
         let mut query = QueryBuilder::<Postgres>::new("DELETE FROM documents WHERE id = ");
         query.push_bind(document_id);
@@ -20,39 +22,85 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Bulk deletes multiple documents with role-based access control
-    pub async fn bulk_delete_documents(&self, document_ids: &[Uuid], user_id: Uuid, user_role: UserRole) -> Result<(Vec<Uuid>, Vec<Uuid>)> {
+    /// Deletes documents on a user's request, with role-based access control.
+    /// Returns `(deleted, not deleted)` ids; an id is not deleted when it does
+    /// not exist or the caller cannot see it.
+    ///
+    /// A deleted document that a source sync imported is put on its owner's
+    /// ignored-files list in the same statement, so the next sync does not
+    /// import the file again (see `DocumentIngestionService::ingest_document`).
+    /// Taking it off the list lets the next sync import it. Internal clean-up
+    /// of a half-created document uses `delete_document`, which records
+    /// nothing.
+    pub async fn bulk_delete_documents(
+        &self,
+        document_ids: &[Uuid],
+        user_id: Uuid,
+        user_role: UserRole,
+        reason: &str,
+    ) -> Result<(Vec<Uuid>, Vec<Uuid>)> {
         if document_ids.is_empty() {
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let mut tx = self.pool.begin().await?;
-        let mut deleted_ids = Vec::new();
-        let mut failed_ids = Vec::new();
+        let mut query = QueryBuilder::<Postgres>::new(
+            "WITH deleted AS (DELETE FROM documents WHERE id = ANY(",
+        );
+        query.push_bind(document_ids.to_vec());
+        query.push(")");
+        apply_role_based_filter(&mut query, user_id, user_role);
+        query.push(
+            r#" RETURNING id, user_id, filename, original_filename, file_path, file_size,
+                          mime_type, file_hash, source_id, source_path
+            ),
+            ignored AS (
+                INSERT INTO ignored_files (
+                    file_hash, filename, original_filename, file_path, file_size, mime_type,
+                    source_type, source_path, source_identifier, ignored_by, reason
+                )
+                SELECT d.file_hash, LEFT(d.filename, 500), LEFT(d.original_filename, 500),
+                       d.file_path, d.file_size, LEFT(d.mime_type, 255),
+                       s.source_type, d.source_path, d.source_id::text, d.user_id, "#,
+        );
+        query.push_bind(reason.for_db());
+        query.push(
+            r#"
+                FROM deleted d
+                JOIN sources s ON s.id = d.source_id
+                WHERE d.file_hash IS NOT NULL
+            )
+            SELECT id FROM deleted"#,
+        );
 
-        for &doc_id in document_ids {
-            let mut query = QueryBuilder::<Postgres>::new("DELETE FROM documents WHERE id = ");
-            query.push_bind(doc_id);
-            
-            apply_role_based_filter(&mut query, user_id, user_role);
-            query.push(" RETURNING id");
-
-            match query.build().fetch_optional(&mut *tx).await {
-                Ok(Some(row)) => {
-                    let deleted_id: Uuid = row.get("id");
-                    deleted_ids.push(deleted_id);
-                }
-                Ok(None) => {
-                    failed_ids.push(doc_id);
-                }
-                Err(_) => {
-                    failed_ids.push(doc_id);
-                }
-            }
-        }
-
-        tx.commit().await?;
+        let deleted_ids: Vec<Uuid> = query
+            .build()
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(|row| row.get("id"))
+            .collect();
+        let failed_ids = document_ids
+            .iter()
+            .filter(|id| !deleted_ids.contains(id))
+            .copied()
+            .collect();
         Ok((deleted_ids, failed_ids))
+    }
+
+    /// Deletes one document on a user's request; see `bulk_delete_documents`
+    /// for the ignored-files record. Returns `false` when the caller has no
+    /// such document.
+    pub async fn delete_document_by_user(
+        &self,
+        document_id: Uuid,
+        user_id: Uuid,
+        user_role: UserRole,
+        reason: &str,
+    ) -> Result<bool> {
+        let (deleted, _) = self
+            .bulk_delete_documents(&[document_id], user_id, user_role, reason)
+            .await?;
+        Ok(!deleted.is_empty())
     }
 
     /// Finds documents with OCR confidence below threshold

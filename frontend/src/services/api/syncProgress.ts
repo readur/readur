@@ -1,6 +1,22 @@
-export type { SyncProgressInfo } from '../../types/generated'
+export type { SyncProgressInfo } from '../../types/generated';
 
-import type { WebSocketMessage } from './types'
+import type { WebSocketMessage } from './types';
+
+/**
+ * The sync progress WebSocket URL, on the page's own origin: `wss:` on an `https:` page,
+ * `ws:` otherwise. In production the same origin serves both. In development the Vite
+ * dev server proxies the socket to the backend and sends the host the browser addressed in
+ * `X-Forwarded-Host`; the backend's Origin check honours that header only from a peer in
+ * `TRUSTED_PROXIES` (loopback is trusted by default), so a dev backend that overrides it
+ * without loopback answers the handshake with 403.
+ */
+export function buildWebSocketUrl(
+  sourceId: string,
+  location: Pick<Location, 'protocol' | 'host'> = window.location,
+): string {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${location.host}/api/sources/${encodeURIComponent(sourceId)}/sync/progress/ws`;
+}
 
 export class SyncProgressWebSocket {
   private ws: WebSocket | null = null;
@@ -14,20 +30,9 @@ export class SyncProgressWebSocket {
 
   constructor(sourceId: string) {
     this.sourceId = sourceId;
-    this.url = this.buildWebSocketUrl(sourceId);
+    this.url = buildWebSocketUrl(sourceId);
   }
 
-  private buildWebSocketUrl(sourceId: string): string {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    
-    // In development, frontend (5173) and backend (8000) run on different ports
-    // WebSocket connections can't use Vite proxy, so we need to connect directly to backend
-    const isDevelopment = import.meta.env.DEV || window.location.port === '5173';
-    const host = isDevelopment ? 'localhost:8000' : window.location.host;
-    
-    return `${protocol}//${host}/api/sources/${sourceId}/sync/progress/ws`;
-  }
-  
   private getAuthProtocol(): string | undefined {
     const token = localStorage.getItem('token');
     return token ? `bearer.${token}` : undefined;
@@ -38,9 +43,7 @@ export class SyncProgressWebSocket {
       try {
         // Create WebSocket connection with secure authentication via protocol header
         const authProtocol = this.getAuthProtocol();
-        this.ws = authProtocol 
-          ? new WebSocket(this.url, [authProtocol])
-          : new WebSocket(this.url);
+        this.ws = authProtocol ? new WebSocket(this.url, [authProtocol]) : new WebSocket(this.url);
 
         this.ws.onopen = () => {
           console.log(`WebSocket connected to sync progress for source: ${this.sourceId}`);
@@ -52,7 +55,7 @@ export class SyncProgressWebSocket {
         this.ws.onmessage = (event) => {
           try {
             const message: WebSocketMessage = JSON.parse(event.data);
-            
+
             switch (message.type) {
               case 'progress':
                 this.emit('progress', message.data);
@@ -83,7 +86,7 @@ export class SyncProgressWebSocket {
         this.ws.onclose = (event) => {
           console.log(`WebSocket closed for source ${this.sourceId}:`, event.code, event.reason);
           this.emit('connectionStatus', 'disconnected');
-          
+
           if (!this.isManuallyClosing && this.shouldReconnect(event.code)) {
             this.scheduleReconnect();
           }
@@ -95,7 +98,6 @@ export class SyncProgressWebSocket {
           this.emit('error', { error: 'WebSocket connection error' });
           reject(error);
         };
-
       } catch (error) {
         console.error('Failed to create WebSocket:', error);
         this.emit('connectionStatus', 'error');
@@ -120,13 +122,15 @@ export class SyncProgressWebSocket {
 
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
-    
-    console.log(`Attempting to reconnect WebSocket in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    console.log(
+      `Attempting to reconnect WebSocket in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
+    );
     this.emit('connectionStatus', 'reconnecting');
 
     setTimeout(() => {
       if (!this.isManuallyClosing) {
-        this.connect().catch(error => {
+        this.connect().catch((error) => {
           console.error('Reconnection failed:', error);
         });
       }
@@ -142,13 +146,13 @@ export class SyncProgressWebSocket {
 
   removeEventListener(eventType: string, callback: (data: any) => void): void {
     if (this.listeners[eventType]) {
-      this.listeners[eventType] = this.listeners[eventType].filter(cb => cb !== callback);
+      this.listeners[eventType] = this.listeners[eventType].filter((cb) => cb !== callback);
     }
   }
 
   private emit(eventType: string, data: any): void {
     if (this.listeners[eventType]) {
-      this.listeners[eventType].forEach(callback => callback(data));
+      this.listeners[eventType].forEach((callback) => callback(data));
     }
   }
 

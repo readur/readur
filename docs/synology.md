@@ -1,350 +1,250 @@
 # Synology NAS Deployment Guide
 
-This guide covers deploying Readur on Synology NAS devices running DSM 7.x using Container Manager (Docker).
+This guide covers running Readur on a Synology NAS with DSM 7 and Container Manager (called Docker on DSM versions before 7.2).
 
 ## Prerequisites
 
-- Synology NAS with DSM 7.0 or later
-- Container Manager package installed (available in Package Center)
-- SSH access (optional, for troubleshooting)
-- Basic familiarity with Docker and docker-compose
+- A Synology NAS with an x86-64 (amd64) or 64-bit ARM (arm64) CPU. The Readur image is published for `linux/amd64` and `linux/arm64` only, so models with a 32-bit ARM CPU cannot run it.
+- Container Manager installed from Package Center.
+- SSH access (Control Panel > Terminal & SNMP) for reading the initial password, backups and troubleshooting.
 
 ## Quick Start
 
-1. Create directories via File Station:
-   - `/volume1/docker/readur/uploads`
-   - `/volume1/docker/readur/watch`
-
-2. Create a new Project in Container Manager with the docker-compose configuration below
-
-3. Access Readur at `http://your-nas-ip:8000`
+1. In File Station, create the folders `docker/readur/uploads` and `docker/readur/watch` (on `volume1` these are `/volume1/docker/readur/uploads` and `/volume1/docker/readur/watch`).
+2. In Container Manager, create a project with the compose file below.
+3. Open `http://<nas-ip>:8000` and sign in as `admin` with the initial password (see [Step 4](#step-4-sign-in)).
 
 ## Recommended Docker Compose Configuration
 
 ```yaml
 services:
   readur:
-    image: ghcr.io/readur/readur:main
+    image: ghcr.io/readur/readur:latest
     container_name: readur
     ports:
       - "8000:8000"
     environment:
-      # Database connection - uses internal Docker network port (5432)
-      # Even though we expose 5433 externally, containers communicate internally on 5432
+      # Readur reaches PostgreSQL over the project's Docker network,
+      # by service name and container port.
       DATABASE_URL: postgresql://readur:readur@postgres:5432/readur
 
-      # Or use individual variables instead of DATABASE_URL:
-      # POSTGRES_HOST: postgres
-      # POSTGRES_PORT: 5432        # Internal Docker network port
-      # POSTGRES_DB: readur
-      # POSTGRES_USER: readur
-      # POSTGRES_PASSWORD: readur
-
-      # Security - optional. When empty, a signing key is generated on first start
-      # and stored in the database. To manage it yourself, add a line with
-      # JWT_SECRET=<output of: openssl rand -hex 32>
-      # to a .env file next to this file.
-      JWT_SECRET: ${JWT_SECRET:-}
-
-      # File paths
       UPLOAD_PATH: /app/uploads
       WATCH_FOLDER: /app/watch
 
-      # File processing
+      # Watch folder
       ALLOWED_FILE_TYPES: pdf,png,jpg,jpeg,tiff,bmp,gif,txt,doc,docx
-      WATCH_INTERVAL_SECONDS: 30
-      FILE_STABILITY_CHECK_MS: 1000
-      MAX_FILE_AGE_HOURS: 168
+      WATCH_INTERVAL_SECONDS: "30"
+      FILE_STABILITY_CHECK_MS: "1000"
 
-      # OCR settings
+      # OCR
       OCR_LANGUAGE: eng
-      CONCURRENT_OCR_JOBS: 2        # Reduce for lower-end NAS models
-      OCR_TIMEOUT_SECONDS: 300
-      MAX_FILE_SIZE_MB: 50
-
+      CONCURRENT_OCR_JOBS: "2"
+      OCR_TIMEOUT_SECONDS: "300"
+      MAX_FILE_SIZE_MB: "50"
     volumes:
       - /volume1/docker/readur/uploads:/app/uploads
-      - /volume1/docker/readur/watch:/app/watch:ro    # Read-only watch folder
+      - /volume1/docker/readur/watch:/app/watch:ro
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
 
   postgres:
-    image: postgres:16    # Pin specific version to avoid update issues
+    image: postgres:18
     container_name: readur-postgres
-    # Exclude from WUD and Watchtower auto-updates to prevent version incompatibility
-    labels:
-      - "wud.trigger.exclude=docker.autoupdate"
-      - "com.centurylinklabs.watchtower.monitor-only=true"
     environment:
       POSTGRES_USER: readur
       POSTGRES_PASSWORD: readur
       POSTGRES_DB: readur
-    ports:
-      # IMPORTANT: Synology DSM may use port 5432 internally
-      # We expose on 5433 to avoid conflicts
-      # Format: HOST_PORT:CONTAINER_PORT
-      # - Readur connects via Docker network on 5432 (container port)
-      # - External tools (pgAdmin, etc.) connect via 5433 (host port)
-      - "5433:5432"
+      PGDATA: /var/lib/postgresql/data
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Use named volume, not host path
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U readur"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    labels:
+      # Keep auto-update tools away from the database
+      - "wud.trigger.exclude=docker.autoupdate"
+      - "com.centurylinklabs.watchtower.monitor-only=true"
 
 volumes:
-  postgres_data:    # Named volume avoids permission issues
+  postgres_data:
 ```
+
+Change the database password (in both `POSTGRES_PASSWORD` and `DATABASE_URL`) before the first start; the postgres image applies it only when it creates the database. For a fixed version, replace `latest` with a release tag such as `3.1.3`.
+
+`JWT_SECRET` is not needed: Readur generates a signing key on first start and stores it in the database.
 
 ## Understanding the Configuration
 
 ### Port Mapping
 
-| Service | Container Port | Host Port | Notes |
+| Service | Container port | Host port | Notes |
 |---------|---------------|-----------|-------|
-| Readur | 8000 | 8000 | Web UI and API |
-| PostgreSQL | 5432 | 5433 | Database (5433 avoids DSM conflict) |
+| Readur | 8000 | 8000 | Web interface and API |
+| PostgreSQL | 5432 | not published | Only Readur needs it, over the project network |
 
-**Why port 5433 for PostgreSQL?**
-
-Synology DSM may use port 5432 internally for its own services. By mapping to 5433 on the host, we avoid conflicts while keeping the standard 5432 port inside the Docker network.
-
-> **Important:** You do NOT need to change `DATABASE_URL` - Readur connects to PostgreSQL via the internal Docker network on port 5432. The 5433 mapping is only for external access (e.g., connecting with pgAdmin from your computer).
+DSM runs its own PostgreSQL for some packages, so host port 5432 may be taken. The database does not need a host port at all. If you want to reach it from another computer (for example with pgAdmin), publish it on a free port such as `"5433:5432"`; `DATABASE_URL` stays on `postgres:5432` either way, because containers talk to each other on container ports.
 
 ### Volume Mounts
 
 | Mount | Purpose | Notes |
 |-------|---------|-------|
-| `/volume1/docker/readur/uploads` | Processed documents | Read/write access needed |
-| `/volume1/docker/readur/watch` | Watch folder for new files | Mounted read-only (`:ro`) for safety |
-| `postgres_data` | Database storage | Named volume (avoids permission issues) |
+| `/volume1/docker/readur/uploads` | Stored documents, thumbnails, the initial admin password file | Must be writable |
+| `/volume1/docker/readur/watch` | Watch folder: files put here are imported | Mounted read-only (`:ro`); Readur never modifies or deletes them |
+| `postgres_data` | Database | Named volume |
 
-### Why Named Volumes for PostgreSQL?
+### Why a Named Volume for PostgreSQL?
 
-Synology DSM has strict permission controls that can prevent PostgreSQL from initializing when using host path mounts. Named Docker volumes work around this issue because Docker manages the permissions internally.
+PostgreSQL needs to own its data directory and set strict permissions on it, which DSM's shared-folder permissions can prevent on a host path (`initdb: could not change permissions of directory`). A named volume is managed by Docker and avoids this.
+
+With `postgres:18` the volume is mounted at `/var/lib/postgresql` with `PGDATA` set, as in the repository's `docker-compose.yml`. If you already run an older major version (for example `postgres:16`, mounted at `/var/lib/postgresql/data`), keep that version and mount point; moving to a new major version needs the [PostgreSQL Upgrade Guide](postgres-upgrade.md).
 
 ## Deployment Steps
 
 ### Step 1: Create Directories
 
-Using File Station:
+In File Station, open the `docker` shared folder (create it if it does not exist), create `readur`, and inside it `uploads` and `watch`. Or over SSH:
 
-1. Navigate to the `docker` shared folder (create it if it doesn't exist)
-2. Create folder: `readur`
-3. Inside `readur`, create: `uploads` and `watch`
-
-Or via SSH:
 ```bash
-mkdir -p /volume1/docker/readur/uploads
-mkdir -p /volume1/docker/readur/watch
+mkdir -p /volume1/docker/readur/uploads /volume1/docker/readur/watch
 ```
 
-### Step 2: Set Permissions
+### Step 2: Permissions
 
-Ensure the Docker user can read/write to these directories:
-
-1. Right-click the `readur` folder in File Station
-2. Select Properties > Permission
-3. Add permission for "Everyone" with Read/Write access (or configure more restrictively as needed)
+The Readur container runs as root, so it can write to `uploads` without changing the folder's permissions. If you add `user:` to the `readur` service, give that user write access to `uploads` and read access to `watch`.
 
 ### Step 3: Deploy via Container Manager
 
-1. Open **Container Manager** from DSM
-2. Go to **Project** > **Create**
-3. Name: `readur`
-4. Path: `/volume1/docker/readur`
-5. Source: Select "Create docker-compose.yml"
-6. Paste the docker-compose configuration above
-7. Click **Next** and then **Done**
+1. Open **Container Manager**, go to **Project** and click **Create**.
+2. Name: `readur`; path: `/volume1/docker/readur`.
+3. Source: create a `docker-compose.yml` and paste the configuration above.
+4. Finish the wizard; the project is built and started.
 
-### Step 4: Verify Deployment
+### Step 4: Sign In
 
-1. Wait for containers to start (check Project status)
-2. Access Readur at `http://your-nas-ip:8000`
-3. Create an account and start uploading documents
+1. Wait until both containers are running and `readur` is healthy.
+2. Read the generated admin password over SSH:
+
+    ```bash
+    sudo cat /volume1/docker/readur/uploads/.readur/initial-admin-password
+    ```
+
+3. Open `http://<nas-ip>:8000`, sign in as `admin`, change the password (Settings > Account), and delete the file.
+
+To choose the initial password yourself, set `ADMIN_PASSWORD` in the `readur` environment before the first start. Self-registration is off; create further accounts in Settings > Users.
 
 ## Synology-Specific Considerations
 
 | Issue | Solution |
 |-------|----------|
-| **Port 5432 conflict** | DSM may use 5432 internally. Map to `5433:5432` instead. Readur still connects internally on 5432. |
-| **Permission errors on postgres data** | Use named volumes (`postgres_data:`) instead of host paths |
-| **"postgres: not found" error** | Pin specific version (e.g., `postgres:16`) and re-pull image |
-| **Watch folder permissions** | Mount with `:ro` flag; create folders via File Station first |
-| **External DB access** | Use port 5433 from Synology host (e.g., pgAdmin). Container-to-container uses 5432. |
-| **Low memory NAS** | Reduce `CONCURRENT_OCR_JOBS` to 1 or 2 |
-| **ARM-based NAS** | Most images support ARM64; verify container starts correctly |
+| Port 5432 already in use | Do not publish the PostgreSQL port, or publish it as `5433:5432` |
+| Permission errors on PostgreSQL data | Use a named volume instead of a host path |
+| PostgreSQL broken after an automatic update | Pin the major version and exclude the container from auto-updates (see below) |
+| Slow processing or high memory use | Lower `CONCURRENT_OCR_JOBS` (see [Performance](#performance)) |
+| HTTPS | Use DSM's reverse proxy (Control Panel > Login Portal > Advanced > Reverse Proxy) to forward an HTTPS host name to `http://localhost:8000`, and set `PUBLIC_URL` to that address. Add the WebSocket headers in the rule's custom headers so live sync progress works |
 
 ## Troubleshooting
 
 ### PostgreSQL Permission Error
 
-```
+```text
 initdb: error: could not change permissions of directory "/var/lib/postgresql/data"
 ```
 
-**Cause:** DSM's permission model prevents PostgreSQL from setting up its data directory on a host-mounted path.
+The PostgreSQL data is on a host path. Use the named volume from the configuration above.
 
-**Solution:** Use a named Docker volume instead of a host path mount:
+### PostgreSQL Fails After an Update
 
-```yaml
-volumes:
-  - postgres_data:/var/lib/postgresql/data  # Correct
-  # NOT: /volume1/docker/readur/postgres:/var/lib/postgresql/data
-```
+If you use an auto-update tool such as What's Up Docker or Watchtower, or an unpinned `postgres` tag, PostgreSQL may have been moved to a new major version. A data directory only works with the major version that created it.
 
-### "postgres: not found" Error
+Set the `postgres` image back to the major version that created the data (for example `postgres:16`) and start the project again; the data is intact. The `labels` in the configuration above tell What's Up Docker and Watchtower to leave the database container alone.
 
-```
-/usr/local/bin/docker-entrypoint.sh: exec: postgres: not found
-```
-
-**Cause:** Corrupted image download, version mismatch, or auto-update tools (WUD/Watchtower) upgraded PostgreSQL to an incompatible version.
-
-**Solution:** Remove and re-pull the postgres image:
+If the image itself seems damaged (for example `exec: postgres: not found`), pull it again; this does not touch the data volume:
 
 ```bash
-# SSH into your Synology
-ssh admin@your-nas-ip
-
-# Stop the project
 cd /volume1/docker/readur
-docker compose down -v
-
-# Remove and re-pull the image
-docker rmi postgres:16
-docker pull postgres:16
-
-# Restart
-docker compose up -d
+sudo docker compose down
+sudo docker pull postgres:18
+sudo docker compose up -d
 ```
 
-### Auto-Update Tools Breaking PostgreSQL
-
-If you use container auto-update tools like [WUD (What's Up Docker)](https://github.com/getwud/wud) or [Watchtower](https://github.com/containrrr/watchtower), they may automatically update PostgreSQL to a version incompatible with Readur.
-
-**Symptoms:**
-- Readur was working but suddenly stopped after an auto-update
-- PostgreSQL container fails to start
-- Errors like "postgres: not found" appear
-
-**Solution:** Exclude the PostgreSQL container from auto-updates by adding labels:
-
-```yaml
-postgres:
-    image: postgres:16
-    # Exclude from WUD and Watchtower auto-updates
-    labels:
-      - "wud.trigger.exclude=docker.autoupdate"
-      - "com.centurylinklabs.watchtower.monitor-only=true"
-    container_name: readur-postgres
-    environment:
-      POSTGRES_USER: readur
-      POSTGRES_PASSWORD: readur
-      POSTGRES_DB: readur
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-```
-
-These labels tell WUD and Watchtower to skip updating the PostgreSQL container, keeping it at the pinned version.
+Never add `-v` to `docker compose down`: it deletes the named volume and with it the database.
 
 ### Container Keeps Restarting
 
-**Check logs:**
 ```bash
-docker logs readur
-docker logs readur-postgres
+sudo docker logs readur
+sudo docker logs readur-postgres
 ```
 
-**Common causes:**
-- Database not ready (wait for healthcheck)
-- Invalid environment variables
-- Permission issues on mounted volumes
+The last lines of the Readur log name the problem (database connection, migrations, storage); see [Troubleshooting](troubleshooting.md#startup-problems).
 
-### Cannot Connect to Web UI
+### Cannot Connect to the Web Interface
 
-1. Verify container is running: `docker ps`
-2. Check if port 8000 is blocked by DSM firewall
-3. Try accessing via `http://localhost:8000` from SSH
+1. Check that the container is running: `sudo docker ps`.
+2. Check that the DSM firewall allows port 8000.
+3. From an SSH session on the NAS, try `curl http://localhost:8000/api/health`; it returns `{"status":"ok"}` when Readur is up.
 
-### Database Connection Timeout
+### Database Connection Fails
 
-If Readur can't connect to PostgreSQL:
+1. Check that `readur-postgres` is healthy: `sudo docker ps`.
+2. `DATABASE_URL` must use the service name `postgres` and port 5432, not `localhost` or the published host port.
+3. The user and password must match what the database was created with; see `sudo docker logs readur-postgres`.
 
-1. Ensure postgres container is healthy: `docker ps`
-2. Verify DATABASE_URL uses `postgres` (service name), not `localhost`
-3. Check postgres logs: `docker logs readur-postgres`
+## Performance
 
-## Performance Tuning for Synology
+`CONCURRENT_OCR_JOBS` sets how many documents are OCRed at the same time; each running job keeps about one CPU core busy.
 
-### Low-End NAS (DS218, DS220j, DS223j)
+- 2-core NAS or less than 4 GB of RAM: `1`
+- 4-core NAS with 4 GB or more: `2` to `4`
 
-```yaml
-environment:
-  CONCURRENT_OCR_JOBS: 1
-  MEMORY_LIMIT_MB: 256
-  MAX_FILE_SIZE_MB: 25
-```
-
-### Mid-Range NAS (DS220+, DS420+, DS720+)
-
-```yaml
-environment:
-  CONCURRENT_OCR_JOBS: 2
-  MEMORY_LIMIT_MB: 512
-  MAX_FILE_SIZE_MB: 50
-```
-
-### High-End NAS (DS920+, DS1520+, DS1621+)
-
-```yaml
-environment:
-  CONCURRENT_OCR_JOBS: 4
-  MEMORY_LIMIT_MB: 1024
-  MAX_FILE_SIZE_MB: 100
-```
+Do not go above the number of cores. To cap Readur's resources, set limits on the container in Container Manager. See [Performance Tuning](performance-tuning.md).
 
 ## Updating Readur
 
-To update to a new version:
+With the `latest` tag:
 
 ```bash
 cd /volume1/docker/readur
-docker compose pull
-docker compose up -d
+sudo docker compose pull readur
+sudo docker compose up -d
 ```
 
-Or via Container Manager:
-1. Go to Project > readur
-2. Click **Action** > **Build**
-3. Enable "Pull image" and click **Build**
+With a pinned tag, change the tag in `docker-compose.yml` first. Database migrations run automatically when the new version starts. Take a backup before updating.
 
 ## Backing Up
 
 ### Database Backup
 
 ```bash
-docker exec -t readur-postgres pg_dumpall -U readur > /volume1/docker/readur/backup.sql
+sudo docker exec readur-postgres pg_dump -U readur -Fc readur > /volume1/docker/readur/readur.dump
 ```
+
+Restore it with `pg_restore` into an empty database, with Readur stopped (see [Backup Strategy](deployment.md#backup-strategy)).
 
 ### Full Backup
 
-Back up these locations:
-- `/volume1/docker/readur/uploads` - Your documents
-- `/volume1/docker/readur/watch` - Watch folder (if you store files there)
-- Database dump (see above)
+Back up together:
 
-For PostgreSQL major version upgrades, see the [PostgreSQL Upgrade Guide](postgres-upgrade.md).
+- the database dump (above);
+- `/volume1/docker/readur/uploads`, which holds the stored documents;
+- `/volume1/docker/readur/watch`, if you keep originals there.
+
+Hyper Backup can include the `docker/readur` folder; run the database dump first (for example as a scheduled task in Control Panel > Task Scheduler) so that the dump is part of the backup.
 
 ## Further Reading
 
 - [Deployment Guide](deployment.md) - General deployment information
-- [Watch Folder Guide](WATCH_FOLDER.md) - Configure automatic file processing
+- [Watch Folder Guide](WATCH_FOLDER.md) - Automatic import from a folder
 - [PostgreSQL Upgrade Guide](postgres-upgrade.md) - Database version migrations
 - [Backup and Recovery](backup-recovery.md) - Backup strategies

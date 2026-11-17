@@ -1,360 +1,173 @@
 # Authentication Configuration
 
-## Overview
+Readur signs users in with a local username and password, with single sign-on through an OpenID Connect (OIDC) provider, or both. Scripts and integrations use personal API keys. There is no LDAP, SAML or built-in multi-factor authentication; if you need those, put them in your OIDC identity provider (most providers can front an LDAP directory and enforce MFA) and sign in to Readur through OIDC.
 
-Readur supports multiple authentication methods to integrate with your existing identity infrastructure. This guide covers configuration for local authentication, OIDC/SSO, LDAP, and multi-factor authentication.
+All authentication settings are environment variables, read at startup; see the [Configuration Reference](../configuration-reference.md#security-and-access-control) for the complete list.
 
-## Authentication Methods
+## Local Accounts
 
-### Local Authentication
+Local username/password login is on by default (`ALLOW_LOCAL_AUTH=true`). Passwords are stored as bcrypt hashes and must be at least 8 characters and at most 72 bytes long; there are no password rules to configure.
 
-Default authentication using Readur's built-in user management.
+### The Initial Administrator
 
-#### Basic Configuration
+On first startup, when no account named `ADMIN_USERNAME` exists, Readur creates it with the `admin` role:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ADMIN_USERNAME` | `admin` | Username of the initial administrator |
+| `ADMIN_EMAIL` | `<username>@localhost` | Email of the initial administrator |
+| `ADMIN_PASSWORD` | - | Password (at least 8 characters) |
+| `ADMIN_PASSWORD_FILE` | `<UPLOAD_PATH>/.readur/initial-admin-password` | Where a generated password is written |
+
+If `ADMIN_PASSWORD` is unset, a random 24-character password is generated and written to `ADMIN_PASSWORD_FILE` (mode `0600`); it is not written to the logs. In the Docker image the file is `/app/uploads/.readur/initial-admin-password`:
 
 ```bash
-# In .env file
-AUTH_METHOD=local
-ALLOW_REGISTRATION=false  # Self-registration (default: false)
-REQUIRE_EMAIL_VERIFICATION=true
-PASSWORD_MIN_LENGTH=12
-PASSWORD_REQUIRE_SPECIAL=true
-PASSWORD_REQUIRE_NUMBERS=true
-JWT_TTL_HOURS=12  # Login token lifetime (1-720, default 12)
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
-#### User Management
+To regain access to the administrator account later, run `readur reset-admin-password` (see [CLI Tools](../administration/cli-tools.md)).
 
-Create and manage users via the API:
+### Creating Accounts
 
-The initial admin account is created on first startup from `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` (default `<username>@localhost`) and `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, a random password is written to `initial-admin-password` in the `.readur` directory inside the upload directory (see `ADMIN_PASSWORD_FILE`) rather than to the logs.
+Administrators create accounts in **Settings → Users**, or through the API:
 
 ```bash
-# Create a user via the admin API
 curl -X POST http://localhost:8000/api/users \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $token" \
   -H "Content-Type: application/json" \
-  -d '{
-    "username": "john",
-    "email": "john@company.com",
-    "password": "UserPass456!",
-    "role": "user"
-  }'
-
-# Users can also self-register if enabled:
-# Set ALLOW_REGISTRATION=true in environment
+  -d '{"username": "john", "email": "john@example.com", "password": "a-long-password", "role": "user"}'
 ```
 
-When `ALLOW_REGISTRATION=true`, `POST /api/auth/register` creates accounts with the **User** role in a disabled state. An administrator approves an account by activating it in **Settings > User Management** (or `PUT /api/users/{id}` with `{"is_active": true}`); until then the account cannot sign in.
+`role` is `user` (the default) or `admin`.
 
-Signed-in users can change their own password with `POST /api/auth/password`.
+### Self-Registration
 
-### OIDC/OAuth2 (Recommended)
+Self-registration is off by default. With `ALLOW_REGISTRATION=true` (and local login allowed), the login page offers registration and `POST /api/auth/register` creates accounts with the `user` role in an inactive state. An administrator approves an account by activating it in **Settings → Users** (or with `PUT /api/users/{id}` and `{"is_active": true}`); until then it cannot sign in.
 
-Integrate with enterprise identity providers for single sign-on.
+### Changing Passwords
 
-#### Generic OIDC Configuration
+Signed-in users change their own password in **Settings → Account** (`POST /api/auth/password`). This ends all of their other sessions.
 
-```bash
-# In .env file
-AUTH_METHOD=oidc
-OIDC_ISSUER=https://auth.company.com
-OIDC_CLIENT_ID=readur-app
-OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://readur.company.com/auth/callback
-OIDC_SCOPE=openid profile email
-OIDC_USER_CLAIM=email
-OIDC_GROUPS_CLAIM=groups
-OIDC_ADMIN_GROUP=readur-admins
-PUBLIC_URL=https://readur.company.com       # base URL for the post-login redirect
-OIDC_LINK_EXISTING_BY_EMAIL=false           # see below
-```
+## Single Sign-On with OIDC
 
-`PUBLIC_URL` sets the base URL Readur redirects to after login; if unset, the origin of `OIDC_REDIRECT_URI` is used. Request headers are not used to derive it. By default an OIDC login is not linked to an existing local account with the same email. Set `OIDC_LINK_EXISTING_BY_EMAIL=true` to link them; linking only happens when the identity provider reports `email_verified: true`. See [OIDC Setup](../oidc-setup.md) for details.
-
-#### Keycloak Integration
+Readur works with any OIDC provider that publishes a discovery document (Keycloak, Authentik, Auth0, Azure AD / Entra ID, Google and others). It uses the authorization code flow with PKCE and requests the scopes `openid email profile`.
 
 ```bash
-AUTH_METHOD=oidc
-OIDC_ISSUER=https://keycloak.company.com/realms/master
+OIDC_ENABLED=true
 OIDC_CLIENT_ID=readur
-OIDC_CLIENT_SECRET=abc123def456
-OIDC_REDIRECT_URI=https://readur.company.com/auth/callback
-OIDC_SCOPE=openid profile email roles
-OIDC_USER_CLAIM=preferred_username
-OIDC_GROUPS_CLAIM=realm_access.roles
-OIDC_ADMIN_GROUP=readur-admin
-OIDC_AUTO_CREATE_USERS=true
+OIDC_CLIENT_SECRET=your-client-secret   # omit for a public (PKCE-only) client
+OIDC_ISSUER_URL=https://auth.example.com/realms/main
+OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
+PUBLIC_URL=https://readur.example.com
+OIDC_AUTO_REGISTER=true
 ```
 
-#### Auth0 Integration
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OIDC_ENABLED` | `false` | Turn OIDC login on |
+| `OIDC_CLIENT_ID` | - | Client ID registered with the provider |
+| `OIDC_CLIENT_SECRET` | - | Client secret; without it Readur acts as a public client |
+| `OIDC_ISSUER_URL` | - | The provider's issuer URL; endpoints are discovered from it |
+| `OIDC_REDIRECT_URI` | - | Callback URL ending in `/api/auth/oidc/callback`, registered with the provider exactly as written |
+| `OIDC_AUTO_REGISTER` | `false` | Create an account on the first login of an unknown user |
+| `OIDC_LINK_EXISTING_BY_EMAIL` | `false` | Link an OIDC login to an existing account with the same email, only when the provider reports `email_verified: true` |
+| `PUBLIC_URL` | - | Base URL the browser returns to after login; defaults to the origin of `OIDC_REDIRECT_URI` |
+| `ALLOW_LOCAL_AUTH` | `true` | `false` turns off username/password login, leaving OIDC only |
+
+Accounts created through OIDC get the `user` role and have no password; Readur does not read group or role claims, so an administrator promotes accounts in **Settings → Users**. With `OIDC_AUTO_REGISTER=false`, an unknown user is refused with the error `no_account` on the login page until an administrator creates or links the account.
+
+If the provider cannot be reached or its discovery document does not match `OIDC_ISSUER_URL`, the server still starts with OIDC disabled and logs the reason. The server refuses to start only when OIDC is disabled and `ALLOW_LOCAL_AUTH=false`, because then nobody could sign in.
+
+The [OIDC Setup Guide](../oidc-setup.md) has provider-specific steps and troubleshooting.
+
+## Sessions
+
+A successful login returns a session token, a JWT valid for `JWT_TTL_HOURS` hours (default 12, allowed 1-720). There are no refresh tokens; when a session expires, the user signs in again. The web interface keeps the token in the browser's local storage and sends it as `Authorization: Bearer <token>`. Logging out (`POST /api/auth/logout`) and changing the password end all of the user's sessions.
+
+Tokens are signed with `JWT_SECRET` when it is set to a value of at least 32 bytes. When it is unset, Readur generates a signing key on first start and stores it in the database, shared by every server using that database. A `JWT_SECRET` that is too short or a published example value is ignored with a startup warning, and the stored key is used instead (`READUR_INSECURE_DEV_MODE=true` makes the server use it anyway; for throwaway development only).
 
 ```bash
-AUTH_METHOD=oidc
-OIDC_ISSUER=https://company.auth0.com/
-OIDC_CLIENT_ID=your-client-id
-OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://readur.company.com/auth/callback
-OIDC_SCOPE=openid profile email
-OIDC_AUDIENCE=https://readur.company.com/api
-OIDC_USER_CLAIM=email
-OIDC_GROUPS_CLAIM=https://readur.com/groups
-```
-
-#### Azure AD Integration
-
-```bash
-AUTH_METHOD=oidc
-OIDC_ISSUER=https://login.microsoftonline.com/{tenant-id}/v2.0
-OIDC_CLIENT_ID=application-id
-OIDC_CLIENT_SECRET=client-secret
-OIDC_REDIRECT_URI=https://readur.company.com/auth/callback
-OIDC_SCOPE=openid profile email User.Read
-OIDC_USER_CLAIM=upn
-OIDC_GROUPS_CLAIM=groups
-OIDC_ADMIN_GROUP=readur-administrators
-OIDC_TOKEN_ENDPOINT_AUTH_METHOD=client_secret_post
-```
-
-#### Google Workspace Integration
-
-```bash
-AUTH_METHOD=oidc
-OIDC_ISSUER=https://accounts.google.com
-OIDC_CLIENT_ID=your-client-id.apps.googleusercontent.com
-OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://readur.company.com/auth/callback
-OIDC_SCOPE=openid profile email
-OIDC_USER_CLAIM=email
-OIDC_HOSTED_DOMAIN=company.com  # Restrict to company domain
-```
-
-### LDAP Authentication
-
-> **Note:** LDAP authentication is not currently implemented. This section is reserved for a planned future feature. Use OIDC/OAuth2 to integrate with LDAP-backed identity providers (most IdPs like Keycloak and Azure AD can front LDAP directories).
-
-### SAML2 Authentication
-
-> **Note:** SAML2 authentication is not currently implemented. This section is reserved for a planned future feature. Use OIDC/OAuth2 instead, which is supported by all major identity providers.
-
-## Multi-Factor Authentication
-
-> **Note:** Built-in MFA (TOTP, WebAuthn) is not currently implemented. To enforce MFA, configure it at your OIDC identity provider level — most providers (Keycloak, Auth0, Azure AD, Google Workspace) support MFA policies that will apply when users authenticate to Readur via SSO.
-
-## Role-Based Access Control (RBAC)
-
-### Roles
-
-Readur has two built-in roles:
-
-| Role | Description |
-|------|------------|
-| **Admin** | Full access to all documents, users, settings, and system configuration. Can manage all shared links and moderate all comments. |
-| **User** | Access to own documents only. Can create shared links for own documents, comment on accessible documents, and manage own profile. |
-
-New users created via local registration default to the **User** role. Admins can promote users via the user management API.
-
-When using OIDC, role assignment happens at user creation/login time based on your IdP configuration. You can configure an admin group claim to automatically assign the Admin role to members of a specific group in your identity provider.
-
-## Session Management
-
-Readur uses JWT tokens for authentication. Tokens are valid for `JWT_TTL_HOURS` hours from issuance (default 12, allowed range 1-720). There are no refresh tokens — users must re-authenticate after token expiry. Logging out (`POST /api/auth/logout`) revokes all of the user's sessions, not only the current one.
-
-```bash
-# JWT configuration
-JWT_SECRET=<output of: openssl rand -hex 32>  # Optional, min 32 bytes when set
-JWT_TTL_HOURS=12                              # Optional
-```
-
-When `JWT_SECRET` is unset, a signing key is generated on first start and stored in the database. A value shorter than 32 bytes or a published example value (such as the one in older `docker-compose.yml` templates) is ignored with a startup warning, and the stored key is used instead. To manage the secret yourself, generate one with:
-```bash
+# Generate your own secret
 openssl rand -hex 32
+
+# Or replace the key stored in the database (signs everyone out; restart the server afterwards)
+readur rotate-jwt-secret
 ```
 
-For throwaway local development only, `READUR_INSECURE_DEV_MODE=true` makes the server use a weak `JWT_SECRET` instead of ignoring it. Do not set it in production.
+## API Keys
 
-Tokens are stored in the browser's `localStorage` and sent as `Authorization: Bearer <token>` headers on API requests.
-
-## Security Headers
-
-Configure security headers for authentication:
+For scripts, integrations and AI assistants, each user can create personal API keys in **Settings → API keys** (or with `POST /api/auth/keys`). A key looks like `readur_pat_...`, is shown once when created, and is sent exactly like a session token:
 
 ```bash
-# Security headers
-SECURITY_HEADERS_ENABLED=true
-SECURITY_CSP="default-src 'self'; script-src 'self' 'unsafe-inline'"
-SECURITY_HSTS_SECONDS=31536000
-SECURITY_HSTS_INCLUDE_SUBDOMAINS=true
-SECURITY_X_FRAME_OPTIONS=DENY
-SECURITY_X_CONTENT_TYPE_OPTIONS=nosniff
-SECURITY_REFERRER_POLICY=strict-origin-when-cross-origin
+curl http://localhost:8000/api/documents \
+  -H "Authorization: Bearer readur_pat_..."
 ```
 
-## API Authentication
+A key acts with all the permissions of its owner. It may expire after 1 to 365 days or never, can be revoked at any time, and is not affected by logging out. Each user may hold up to 20 active keys. See [API Key Endpoints](../api-reference.md#api-key-endpoints) for the full API.
 
-For programmatic access (scripts, integrations), authenticate using the same JWT flow as the web UI:
+For a quick script without an API key, exchange a username and password for a session token:
 
 ```bash
-# Obtain a token
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+token=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "your-password"}' | jq -r '.token')
 
-# Use the token in subsequent requests
-curl http://localhost:8000/api/documents \
-  -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8000/api/documents -H "Authorization: Bearer $token"
 ```
 
-Tokens expire after 24 hours. There is no refresh token mechanism — obtain a new token when needed.
+## Roles
 
-> **Note:** Dedicated API key authentication (service-to-service with scoped keys) is not currently implemented. Use JWT tokens for all API access.
+| Role | Access |
+|------|--------|
+| `admin` | Everything, including user management, server configuration, the OCR queue and metrics |
+| `user` | Their own documents, labels, sources, shared links, settings and API keys |
+
+Self-registered and OIDC-created accounts get the `user` role.
+
+## Brute-Force Protection
+
+Failed logins are rate limited per username and client address, and a limited request gets `429 Too Many Requests` with a `Retry-After` header. The limits are fixed; see [Rate Limiting](../api-reference.md#rate-limiting). Behind a reverse proxy, set `TRUSTED_PROXIES` so the real client address is taken from `X-Forwarded-For` (see [Reverse Proxy Configuration](reverse-proxy.md)).
+
+## Security Headers
+
+Readur adds these headers to every response that does not set its own; they are not configurable:
+
+| Header | Value |
+|--------|-------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `no-referrer` |
+| `Content-Security-Policy` | A policy for the bundled web interface (scripts from the same origin only, no framing by other sites) |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+| `Strict-Transport-Security` | `max-age=31536000`, only when `PUBLIC_URL` starts with `https://` |
+
+Uploaded files are served with a restrictive sandboxing `Content-Security-Policy` (except PDFs), and active content such as HTML and SVG is always sent as a download.
+
+Cross-origin requests are refused unless their origin is listed in `CORS_ALLOWED_ORIGINS`; the bundled web interface is same-origin and needs no entry.
 
 ## Troubleshooting
 
-### OIDC Issues
-
-#### Discovery Failed
+**Checking which sign-in methods are active:**
 
 ```bash
-# Test OIDC discovery
-curl https://auth.company.com/.well-known/openid-configuration
-
-# Check network connectivity
-docker-compose exec readur curl https://auth.company.com
+curl http://localhost:8000/api/auth/config
 ```
 
-#### Token Validation Errors
+`oidc_enabled` is `true` only when the OIDC client initialized at startup; `allow_local_auth` and `allow_registration` reflect the corresponding settings.
+
+**OIDC does not appear on the login page:** look for the OIDC lines in the startup log (`docker compose logs readur`), and check that the server can fetch the discovery document:
 
 ```bash
-# Enable debug logging
-OIDC_DEBUG=true
-LOG_LEVEL=DEBUG
-
-# Check token claims
-docker-compose exec readur python manage.py debug_oidc_token
+docker compose exec readur curl -s https://auth.example.com/realms/main/.well-known/openid-configuration
 ```
 
-### LDAP Issues
+**Users are signed out after a restart:** a `JWT_SECRET` that changes between restarts invalidates all sessions. Leave it unset (the key stored in the database is kept) or set a fixed value.
 
-#### Connection Failed
-
-```bash
-# Test LDAP connection
-ldapsearch -x -H ldap://ldap.company.com:389 \
-  -D "cn=readur,ou=services,dc=company,dc=com" \
-  -W -b "dc=company,dc=com" "(uid=testuser)"
-
-# Test from container
-docker-compose exec readur ldapsearch -x -H $LDAP_SERVER
-```
-
-#### User Not Found
-
-```bash
-# Debug LDAP queries
-LDAP_DEBUG=true
-LOG_LEVEL=DEBUG
-
-# Test LDAP user filter directly
-ldapsearch -x -H $LDAP_SERVER \
-  -D "$LDAP_BIND_DN" \
-  -w "$LDAP_BIND_PASSWORD" \
-  -b "$LDAP_BASE_DN" \
-  "(uid=testuser)"
-```
-
-### Session Issues
-
-#### Sessions Expiring Too Quickly
-
-```bash
-# Check Redis connectivity
-docker-compose exec readur redis-cli -h redis ping
-
-# Monitor session creation
-docker-compose exec readur redis-cli monitor | grep session
-```
-
-## Best Practices
-
-### Security Recommendations
-
-1. **Always use HTTPS** in production
-2. **Enable MFA** for administrative accounts
-3. **Regular password rotation** for service accounts
-4. **Audit authentication logs** regularly
-5. **Use external IdP** when possible
-6. **Implement rate limiting** on authentication endpoints
-7. **Monitor failed login attempts**
-
-### Integration Testing
-
-Test authentication before production:
-
-```bash
-# Test OIDC flow via health endpoint
-curl http://localhost:8000/api/health/auth/oidc
-
-# Test LDAP connection
-curl -X POST http://localhost:8000/api/auth/test \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "ldap",
-    "username": "testuser",
-    "password": "testpass"
-  }'
-
-# Verify user groups via API
-curl http://localhost:8000/api/users/testuser@company.com/groups \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-```
-
-### Monitoring
-
-Set up authentication monitoring:
-
-```bash
-# Monitor failed login attempts via logs
-docker-compose logs readur | grep -E "(auth|login|failed)" | tail -n 100
-
-# Check active sessions in database
-docker-compose exec readur psql -U readur -d readur -c \
-  "SELECT username, last_login, session_count FROM users WHERE last_login > NOW() - INTERVAL '24 hours';"
-
-# Monitor authentication metrics (requires METRICS_TOKEN or an admin token)
-curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics | grep -E "(auth|login|session)"
-```
-
-## Migration from Other Systems
-
-### Migrating Users
-
-```bash
-# Export users from old system
-old_system_export_users > users.json
-
-# Import to Readur via bulk API
-curl -X POST http://localhost:8000/api/users/import \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d @users.json
-
-# Or create users one by one via API
-while IFS=, read -r username email role; do
-  curl -X POST http://localhost:8000/api/users \
-    -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"username\": \"$username\",
-      \"email\": \"$email\",
-      \"role\": \"$role\"
-    }"
-done < users.csv
-```
+**More detail in the logs:** set `RUST_LOG=debug` and restart.
 
 ## Related Documentation
 
+- [OIDC Setup Guide](../oidc-setup.md)
 - [User Management Guide](../user-management-guide.md)
 - [Security Best Practices](../security-guide.md)
-- [OIDC Setup](../oidc-setup.md)
 - [API Reference](../api-reference.md)

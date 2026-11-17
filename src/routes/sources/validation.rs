@@ -109,7 +109,7 @@ pub async fn test_connection_with_config(
 }
 
 pub(super) fn secret_reuse_refused(refused: SecretReuseRefused) -> Response {
-    (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": refused.to_string() }))).into_response()
+    crate::errors::error_response(StatusCode::BAD_REQUEST, "SECRET_REUSE_REFUSED", refused.to_string())
 }
 
 fn test_result(success: bool, message: impl Into<String>) -> Json<serde_json::Value> {

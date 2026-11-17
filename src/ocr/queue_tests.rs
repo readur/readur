@@ -1,9 +1,12 @@
 //! Unit tests for `crate::ocr::queue`, kept in a sibling file so the module
-//! itself stays under its file-length baseline.
+//! itself stays under the 1000-line file-length cap.
 
 use super::*;
 use sqlx::postgres::PgPoolOptions;
 
+// `FileService::new` is deprecated for production wiring; a local service is
+// all these tests need.
+#[allow(deprecated)]
 fn queue_with(max_concurrent_jobs: usize) -> OcrQueueService {
     // A lazy pool never connects, so no database is needed.
     let pool = PgPoolOptions::new()
@@ -32,4 +35,11 @@ async fn uses_configured_concurrency() {
 async fn clamps_concurrency_to_supported_range() {
     assert_eq!(queue_with(0).max_concurrent_jobs, 1);
     assert_eq!(queue_with(50).max_concurrent_jobs, MAX_CONCURRENT_OCR_JOBS);
+}
+
+#[test]
+fn only_a_queued_outcome_carries_a_job_id() {
+    let id = Uuid::new_v4();
+    assert_eq!(EnqueueOutcome::Queued(id).queue_id(), Some(id));
+    assert_eq!(EnqueueOutcome::AlreadyQueued.queue_id(), None);
 }

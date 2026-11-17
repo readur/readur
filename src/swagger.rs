@@ -5,6 +5,10 @@ use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
+    models::label::{
+        BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
+        LabelQuery, UpdateLabel,
+    },
     models::source::{
         WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus, WebDAVTestConnection,
     },
@@ -21,10 +25,6 @@ use crate::{
     },
     routes::{
         documents::BulkDeleteRequest,
-        labels::{
-            BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
-            LabelQuery, UpdateLabel,
-        },
         metrics::{
             DatabaseMetrics, DocumentMetrics, GeneralSystemMetrics, OcrMetrics, SystemMetrics,
             UserMetrics,
@@ -54,6 +54,7 @@ use crate::{
         crate::routes::documents::ocr::get_document_ocr,
         crate::routes::documents::debug::get_processed_image,
         crate::routes::documents::ocr::retry_ocr,
+        crate::routes::documents::ocr::cancel_ocr,
         crate::routes::documents::debug::get_document_debug_info,
         crate::routes::documents::failed::get_failed_ocr_documents,
         crate::routes::documents::failed::view_failed_document,
@@ -110,8 +111,8 @@ use crate::{
         crate::routes::sources::crud::delete_source,
         crate::routes::sources::sync::trigger_sync,
         crate::routes::sources::sync::stop_sync,
-        crate::routes::sources::sync::trigger_deep_scan,
-        crate::routes::sources::sync::sync_progress_websocket,
+        crate::routes::sources::deep_scan::trigger_deep_scan,
+        crate::routes::sources::progress_ws::sync_progress_websocket,
         crate::routes::sources::sync::get_sync_status,
         crate::routes::sources::validation::test_connection,
         crate::routes::sources::validation::validate_source,
@@ -188,9 +189,11 @@ use crate::{
             // Document schemas
             BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
+            crate::routes::documents::RetryOcrResponse,
+            crate::routes::documents::CancelOcrResponse,
             // OCR schemas
-            crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
+            crate::models::AvailableLanguagesResponse, crate::models::LanguageInfo,
+            crate::ocr::api::OcrHealthResponse, crate::errors::ApiErrorBody,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo
         )
@@ -221,8 +224,11 @@ use crate::{
             email = "support@readur.dev"
         )
     ),
+    // Every path already carries its full prefix ("/api/...", "/metrics"),
+    // so the server is the site root: a "/api" server made Swagger UI call
+    // "/api/api/...".
     servers(
-        (url = "/api", description = "API base path")
+        (url = "/", description = "This Readur server")
     )
 )]
 pub struct ApiDoc;

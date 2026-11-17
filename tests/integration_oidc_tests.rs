@@ -56,7 +56,9 @@ async fn setup_with(configure: impl FnOnce(&mut readur::config::Config)) -> Oidc
     config.oidc_auto_register = Some(true);
     configure(&mut config);
 
-    let oidc_client = OidcClient::new(&config).await.expect("OIDC client should initialise");
+    let oidc_client = OidcClient::new(&config)
+        .await
+        .expect("OIDC client should initialise");
 
     let state = Arc::new(AppState {
         db: ctx.state.db.clone(),
@@ -68,7 +70,6 @@ async fn setup_with(configure: impl FnOnce(&mut readur::config::Config)) -> Oidc
         oidc_client: Some(Arc::new(oidc_client)),
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
 
@@ -76,7 +77,12 @@ async fn setup_with(configure: impl FnOnce(&mut readur::config::Config)) -> Oidc
         .nest("/api/auth", readur::routes::auth::router())
         .with_state(state.clone());
 
-    OidcTestApp { app, state, provider, _ctx: ctx }
+    OidcTestApp {
+        app,
+        state,
+        provider,
+        _ctx: ctx,
+    }
 }
 
 async fn setup() -> OidcTestApp {
@@ -96,7 +102,9 @@ async fn send(app: &Router, request: Request<Body>) -> axum::response::Response 
 }
 
 async fn body_json(response: axum::response::Response) -> Value {
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     serde_json::from_slice(&bytes).unwrap_or(Value::Null)
 }
 
@@ -112,19 +120,38 @@ fn location(response: &axum::response::Response) -> String {
 
 /// The callback sends the browser back to the web UI with a fixed error code.
 fn assert_callback_error(response: &axum::response::Response, code: &str) {
-    assert_eq!(response.status(), StatusCode::SEE_OTHER, "expected redirect for {}", code);
-    assert_eq!(location(response), format!("http://localhost:8000/auth/callback#error={}", code));
-    let cleared = response.headers().get("set-cookie").unwrap().to_str().unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::SEE_OTHER,
+        "expected redirect for {}",
+        code
+    );
+    assert_eq!(
+        location(response),
+        format!("http://localhost:8000/auth/callback#error={}", code)
+    );
+    let cleared = response
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert!(cleared.contains("Max-Age=0"));
 }
 
 async fn start_login(t: &OidcTestApp) -> LoginStart {
     let response = send(
         &t.app,
-        Request::get("/api/auth/oidc/login").body(Body::empty()).unwrap(),
+        Request::get("/api/auth/oidc/login")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
-    assert!(response.status().is_redirection(), "login should redirect, got {}", response.status());
+    assert!(
+        response.status().is_redirection(),
+        "login should redirect, got {}",
+        response.status()
+    );
 
     let set_cookie = response
         .headers()
@@ -146,7 +173,9 @@ async fn start_login(t: &OidcTestApp) -> LoginStart {
         .to_string();
 
     let url = url::Url::parse(&location(&response)).unwrap();
-    assert!(url.as_str().starts_with(&format!("{}/auth", t.provider.uri())));
+    assert!(url
+        .as_str()
+        .starts_with(&format!("{}/auth", t.provider.uri())));
     let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
     assert_eq!(params["client_id"], CLIENT_ID);
     assert_eq!(params["response_type"], "code");
@@ -173,7 +202,12 @@ fn id_token(t: &OidcTestApp, claims: Value) -> String {
     for (k, v) in claims.as_object().unwrap() {
         full[k] = v.clone();
     }
-    encode(&Header::default(), &full, &EncodingKey::from_secret(CLIENT_SECRET.as_bytes())).unwrap()
+    encode(
+        &Header::default(),
+        &full,
+        &EncodingKey::from_secret(CLIENT_SECRET.as_bytes()),
+    )
+    .unwrap()
 }
 
 async fn mock_token_endpoint(t: &OidcTestApp, id_token: String) {
@@ -211,7 +245,11 @@ async fn exchange(t: &OidcTestApp, code: &str) -> axum::response::Response {
 }
 
 fn unique(prefix: &str) -> String {
-    format!("{}{}", prefix, &uuid::Uuid::new_v4().simple().to_string()[..10])
+    format!(
+        "{}{}",
+        prefix,
+        &uuid::Uuid::new_v4().simple().to_string()[..10]
+    )
 }
 
 #[tokio::test]
@@ -232,7 +270,9 @@ async fn login_without_oidc_configured_is_rejected() {
     let ctx = TestContext::new().await;
     let response = send(
         &ctx.app,
-        Request::get("/api/auth/oidc/login").body(Body::empty()).unwrap(),
+        Request::get("/api/auth/oidc/login")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -268,33 +308,53 @@ async fn callback_happy_path_creates_user_and_issues_single_use_code() {
     )
     .await;
     let status = response.status();
-    assert!(status.is_redirection(), "expected redirect, got {} {:?}", status, body_json(response).await);
+    assert!(
+        status.is_redirection(),
+        "expected redirect, got {} {:?}",
+        status,
+        body_json(response).await
+    );
 
     // The state cookie is cleared on the way out.
-    let cleared = response.headers().get("set-cookie").unwrap().to_str().unwrap().to_string();
+    let cleared = response
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     assert!(cleared.contains("Max-Age=0"));
 
     let target = location(&response);
     let prefix = "http://localhost:8000/auth/callback#code=";
-    assert!(target.starts_with(prefix), "unexpected redirect target {}", target);
+    assert!(
+        target.starts_with(prefix),
+        "unexpected redirect target {}",
+        target
+    );
     let code = &target[prefix.len()..];
     assert!(!code.is_empty());
 
     // PKCE: the token request carried the verifier matching the challenge.
     let requests = t.provider.received_requests().await.unwrap();
     let token_request = requests.iter().find(|r| r.url.path() == "/token").unwrap();
-    let form: HashMap<String, String> = url::form_urlencoded::parse(&token_request.body).into_owned().collect();
+    let form: HashMap<String, String> = url::form_urlencoded::parse(&token_request.body)
+        .into_owned()
+        .collect();
     assert_eq!(form["grant_type"], "authorization_code");
     assert_eq!(form["code"], "provider-code");
     let verifier = &form["code_verifier"];
-    let challenge = base64ct::Base64UrlUnpadded::encode_string(&Sha256::digest(verifier.as_bytes()));
+    let challenge =
+        base64ct::Base64UrlUnpadded::encode_string(&Sha256::digest(verifier.as_bytes()));
     assert_eq!(challenge, login.code_challenge);
 
     // Redeem the handoff code for a session.
     let response = exchange(&t, code).await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = body_json(response).await;
-    let token = body["token"].as_str().expect("exchange should return a token");
+    let token = body["token"]
+        .as_str()
+        .expect("exchange should return a token");
     assert!(!token.is_empty());
     assert_eq!(body["user"]["username"], username.as_str());
 
@@ -312,7 +372,13 @@ async fn callback_happy_path_creates_user_and_issues_single_use_code() {
     let again = exchange(&t, code).await;
     assert_eq!(again.status(), StatusCode::UNAUTHORIZED);
 
-    let user = t.state.db.get_user_by_username(&username).await.unwrap().unwrap();
+    let user = t
+        .state
+        .db
+        .get_user_by_username(&username)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(user.email, email);
     assert_eq!(user.oidc_subject.as_deref(), Some(subject.as_str()));
     assert_eq!(user.role, UserRole::User);
@@ -347,7 +413,12 @@ async fn callback_requires_matching_state_cookie() {
     let no_state = callback(&t, "code=c", Some(&login.cookie_value)).await;
     assert_callback_error(&no_state, "invalid_state");
 
-    let no_code = callback(&t, &format!("state={}", login.state), Some(&login.cookie_value)).await;
+    let no_code = callback(
+        &t,
+        &format!("state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&no_code, "invalid_state");
 
     // An unknown state is rejected even when cookie and query agree.
@@ -386,7 +457,13 @@ async fn callback_rejects_wrong_nonce() {
     )
     .await;
     assert_callback_error(&response, "auth_failed");
-    assert!(t.state.db.get_user_by_username(&username).await.unwrap().is_none());
+    assert!(t
+        .state
+        .db
+        .get_user_by_username(&username)
+        .await
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]
@@ -404,17 +481,30 @@ async fn callback_rejects_token_response_without_valid_id_token() {
         .up_to_n_times(1)
         .mount(&t.provider)
         .await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "auth_failed");
 
     // id_token for a different audience.
     let login = start_login(&t).await;
     mock_token_endpoint(
         &t,
-        id_token(&t, json!({ "sub": unique("sub-"), "nonce": login.nonce, "aud": "someone-else" })),
+        id_token(
+            &t,
+            json!({ "sub": unique("sub-"), "nonce": login.nonce, "aud": "someone-else" }),
+        ),
     )
     .await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "auth_failed");
 }
 
@@ -451,7 +541,12 @@ async fn callback_does_not_link_existing_local_account_by_default() {
     )
     .await;
 
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "no_account");
 
     let after = t.state.db.get_user_by_id(local.id).await.unwrap().unwrap();
@@ -483,18 +578,35 @@ async fn callback_links_verified_email_when_enabled() {
         id_token(&t, json!({ "sub": unique("sub-"), "nonce": login.nonce, "email": email, "email_verified": false })),
     )
     .await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "no_account");
 
     let subject = unique("sub-");
     let login = start_login(&t).await;
     mock_token_endpoint(
         &t,
-        id_token(&t, json!({ "sub": subject, "nonce": login.nonce, "email": email, "email_verified": true })),
+        id_token(
+            &t,
+            json!({ "sub": subject, "nonce": login.nonce, "email": email, "email_verified": true }),
+        ),
     )
     .await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert!(response.status().is_redirection(), "expected redirect, got {}", response.status());
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    assert!(
+        response.status().is_redirection(),
+        "expected redirect, got {}",
+        response.status()
+    );
 
     let after = t.state.db.get_user_by_id(local.id).await.unwrap().unwrap();
     assert_eq!(after.oidc_subject.as_deref(), Some(subject.as_str()));
@@ -523,7 +635,12 @@ async fn callback_provider_errors_redirect_with_fixed_codes() {
         .respond_with(ResponseTemplate::new(400).set_body_json(json!({ "error": "invalid_grant" })))
         .mount(&t.provider)
         .await;
-    let response = callback(&t, &format!("code=bad&state={}", login.state), Some(&login.cookie_value)).await;
+    let response = callback(
+        &t,
+        &format!("code=bad&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "auth_failed");
 }
 
@@ -555,8 +672,17 @@ async fn callback_reports_disabled_accounts() {
         .unwrap();
 
     let login = start_login(&t).await;
-    mock_token_endpoint(&t, id_token(&t, json!({ "sub": subject, "nonce": login.nonce }))).await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
+    mock_token_endpoint(
+        &t,
+        id_token(&t, json!({ "sub": subject, "nonce": login.nonce })),
+    )
+    .await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
     assert_callback_error(&response, "account_disabled");
 }
 
@@ -572,7 +698,9 @@ async fn callback_without_frontend_address_returns_json_errors() {
 
     let response = send(
         &app,
-        Request::get("/api/auth/oidc/callback?error=access_denied").body(Body::empty()).unwrap(),
+        Request::get("/api/auth/oidc/callback?error=access_denied")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -583,7 +711,9 @@ async fn callback_without_frontend_address_returns_json_errors() {
 async fn accounts_stored_under_the_configured_issuer_are_migrated() {
     // Earlier releases stored the issuer as configured, here with a trailing
     // slash that the provider's discovery document does not have.
-    let t = setup_with(|c| c.oidc_issuer_url = c.oidc_issuer_url.as_ref().map(|u| format!("{}/", u))).await;
+    let t =
+        setup_with(|c| c.oidc_issuer_url = c.oidc_issuer_url.as_ref().map(|u| format!("{}/", u)))
+            .await;
     let subject = unique("sub-");
     let username = unique("legacy_");
     let legacy_issuer = format!("{}/", t.provider.uri());
@@ -605,12 +735,28 @@ async fn accounts_stored_under_the_configured_issuer_are_migrated() {
         .unwrap();
 
     let login = start_login(&t).await;
-    mock_token_endpoint(&t, id_token(&t, json!({ "sub": subject, "nonce": login.nonce }))).await;
-    let response = callback(&t, &format!("code=c&state={}", login.state), Some(&login.cookie_value)).await;
-    assert!(location(&response).contains("#code="), "unexpected redirect {}", location(&response));
+    mock_token_endpoint(
+        &t,
+        id_token(&t, json!({ "sub": subject, "nonce": login.nonce })),
+    )
+    .await;
+    let response = callback(
+        &t,
+        &format!("code=c&state={}", login.state),
+        Some(&login.cookie_value),
+    )
+    .await;
+    assert!(
+        location(&response).contains("#code="),
+        "unexpected redirect {}",
+        location(&response)
+    );
 
     let after = t.state.db.get_user_by_id(user.id).await.unwrap().unwrap();
-    assert_eq!(after.oidc_issuer.as_deref(), Some(t.provider.uri().as_str()));
+    assert_eq!(
+        after.oidc_issuer.as_deref(),
+        Some(t.provider.uri().as_str())
+    );
 }
 
 #[tokio::test]
@@ -633,7 +779,9 @@ async fn client_refuses_a_discovery_document_for_another_issuer() {
     config.oidc_client_secret = Some(CLIENT_SECRET.to_string());
     config.oidc_issuer_url = Some(provider.uri());
     config.oidc_redirect_uri = Some(REDIRECT_URI.to_string());
-    let err = OidcClient::new(&config).await.expect_err("mismatched issuer must be refused");
+    let err = OidcClient::new(&config)
+        .await
+        .expect_err("mismatched issuer must be refused");
     assert!(err.to_string().contains("does not match"), "{}", err);
 }
 

@@ -24,6 +24,11 @@
           "type": "json",
           "path": "frontend/package-lock.json",
           "jsonpath": "$.packages[''].version"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/readur/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }

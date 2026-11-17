@@ -1,0 +1,2 @@
+# Chart defaults only (what a bare `helm install` renders).
+{}
