@@ -251,7 +251,8 @@ mod engine {
 pub use engine::{configure_tesseract, engine_mode, mean_confidence, page_seg_mode};
 
 /// Writes `params`' Tesseract config file (if any) into `temp_dir` and
-/// returns its path; the caller removes it.
+/// returns its path; the caller removes it. A write that fails or is dropped
+/// part-way leaves no file behind.
 pub async fn write_tesseract_config(
     params: &TesseractParams,
     temp_dir: &str,
@@ -259,9 +260,13 @@ pub async fn write_tesseract_config(
     let Some(contents) = params.tesseract_config_file() else {
         return Ok(None);
     };
-    let path = format!("{}/tesseract_{}.cfg", temp_dir, uuid::Uuid::new_v4());
-    tokio::fs::write(&path, contents).await?;
-    Ok(Some(path))
+    let path = crate::utils::temp_files::TempPath::new(format!(
+        "{}/tesseract_{}.cfg",
+        temp_dir,
+        uuid::Uuid::new_v4()
+    ));
+    tokio::fs::write(path.as_str(), contents).await?;
+    Ok(Some(path.keep()))
 }
 
 #[cfg(test)]

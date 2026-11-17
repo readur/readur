@@ -21,6 +21,9 @@ use std::sync::Arc;
 use crate::models::Settings;
 use crate::services::file_service::FileService;
 use super::xml_extractor::XmlOfficeExtractor;
+use crate::utils::temp_files::TempPath;
+#[cfg(feature = "ocr")]
+use crate::utils::temp_files::{remove_quietly, TempPageImages};
 
 /// Callback for reporting OCR progress (current_page, total_pages).
 /// Called synchronously; implementations should use tokio::spawn for async work.
@@ -69,31 +72,6 @@ pub fn ocrmypdf_ocr_command_args<S: AsRef<str>>(
     args.push(input_path.to_string());
     args.push(output_path.to_string());
     args
-}
-
-/// RAII guard for automatic cleanup of temporary files
-struct FileCleanupGuard {
-    file_path: String,
-}
-
-impl FileCleanupGuard {
-    fn new(file_path: &str) -> Self {
-        Self {
-            file_path: file_path.to_string(),
-        }
-    }
-}
-
-impl Drop for FileCleanupGuard {
-    fn drop(&mut self) {
-        if std::path::Path::new(&self.file_path).exists() {
-            if let Err(e) = std::fs::remove_file(&self.file_path) {
-                warn!("Failed to clean up temporary file '{}': {}", self.file_path, e);
-            } else {
-                debug!("Cleaned up temporary file: {}", self.file_path);
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -149,13 +127,14 @@ impl EnhancedOcrService {
         
         let mut preprocessing_applied = Vec::new();
         
-        // Load and preprocess the image
-        let (processed_image_path, preprocess_steps) = if settings.enable_image_preprocessing {
+        // Load and preprocess the image; the preprocessed copy is a temp file
+        let (processed_image, preprocess_steps) = if settings.enable_image_preprocessing {
             let (processed_path, steps) = self.preprocess_image(file_path, settings).await?;
-            (processed_path, steps)
+            (Some(TempPath::new(processed_path)), steps)
         } else {
-            (file_path.to_string(), Vec::new())
+            (None, Vec::new())
         };
+        let processed_image_path = processed_image.as_ref().map_or(file_path, TempPath::as_str).to_string();
         
         preprocessing_applied.extend(preprocess_steps);
 
@@ -182,12 +161,11 @@ impl EnhancedOcrService {
             word_count, confidence, processing_time
         );
         
-        // Return the processed image path if different from original (caller will handle cleanup/saving)
-        let result_processed_image_path = if processed_image_path != file_path {
-            Some(processed_image_path.clone())
-        } else {
-            None
-        };
+        // Return the processed image path (caller will handle cleanup/saving);
+        // it is only kept on disk when it is saved for review
+        let result_processed_image_path = processed_image.map(|image| {
+            if settings.save_processed_images { image.keep() } else { image.as_str().to_string() }
+        });
         
         let result = OcrResult {
             text,
@@ -197,14 +175,7 @@ impl EnhancedOcrService {
             preprocessing_applied,
             processed_image_path: result_processed_image_path,
         };
-        
-        // Clean up temporary files if not saved for review
-        if let Some(ref temp_path) = result.processed_image_path {
-            if !settings.save_processed_images {
-                let _ = tokio::fs::remove_file(temp_path).await;
-            }
-        }
-        
+
         Ok(result)
     }
 
@@ -291,10 +262,10 @@ impl EnhancedOcrService {
         }
         
         // Save processed image to temporary file
-        let temp_path = format!("{}/processed_{}.png", self.temp_dir, uuid::Uuid::new_v4());
-        
+        let temp_path = TempPath::new(format!("{}/processed_{}.png", self.temp_dir, uuid::Uuid::new_v4()));
         let dynamic_processed = DynamicImage::ImageLuma8(processed_gray);
-        dynamic_processed.save(&temp_path)?;
+        dynamic_processed.save(temp_path.as_str())?;
+        let temp_path = temp_path.keep();
         
         info!("Processed image saved to: {}", temp_path);
         Ok((temp_path, preprocessing_applied))
@@ -982,14 +953,14 @@ impl EnhancedOcrService {
         }
         
         // Temporary output PDF and sidecar text for this run
-        let temp_ocr_path = format!("{}/ocr_{}.pdf", self.temp_dir, uuid::Uuid::new_v4());
-        let temp_text_path = format!("{}.txt", temp_ocr_path);
+        let temp_ocr = TempPath::new(format!("{}/ocr_{}.pdf", self.temp_dir, uuid::Uuid::new_v4()));
+        let temp_text = TempPath::new(format!("{}.txt", temp_ocr.as_str()));
+        let (temp_ocr_path, temp_text_path) = (temp_ocr.as_str(), temp_text.as_str());
 
         // The owner's language, engine and segmentation modes and character
         // lists replace the strategies' defaults
         let params = TesseractParams::from_settings(settings);
-        let config_file = write_tesseract_config(&params, &self.temp_dir).await?;
-        let _config_cleanup = config_file.as_deref().map(FileCleanupGuard::new);
+        let config_file = write_tesseract_config(&params, &self.temp_dir).await?.map(TempPath::new);
         let timeout = ocr_timeout(settings);
 
         // Run ocrmypdf with progressive fallback strategies. A timeout drops the
@@ -998,10 +969,10 @@ impl EnhancedOcrService {
             let mut last = None;
             for (name, strategy) in [("standard", ocrmypdf_strategy1_args()), ("recovery", ocrmypdf_strategy2_args())] {
                 let args = ocrmypdf_ocr_command_args(
-                    &ocrmypdf_strategy_with_params(&strategy, &params, config_file.as_deref()),
-                    &temp_text_path,
+                    &ocrmypdf_strategy_with_params(&strategy, &params, config_file.as_ref().map(TempPath::as_str)),
+                    temp_text_path,
                     file_path,
-                    &temp_ocr_path,
+                    temp_ocr_path,
                 );
                 let output = tokio::process::Command::new("ocrmypdf")
                     .args(&args)
@@ -1019,14 +990,11 @@ impl EnhancedOcrService {
         let ocrmypdf_output = match tokio::time::timeout(timeout, run).await {
             Ok(output) => output?,
             Err(_) => {
-                let _ = tokio::fs::remove_file(&temp_text_path).await;
-                let _ = tokio::fs::remove_file(&temp_ocr_path).await;
                 return Err(anyhow!("ocrmypdf timed out after {:?} for file '{}'", timeout, file_path));
             }
         };
 
         if !ocrmypdf_output.status.success() {
-            let _ = tokio::fs::remove_file(&temp_text_path).await;
             let stderr = String::from_utf8_lossy(&ocrmypdf_output.stderr);
             let stdout = String::from_utf8_lossy(&ocrmypdf_output.stdout);
             return Err(anyhow!(
@@ -1047,16 +1015,12 @@ impl EnhancedOcrService {
         }
         
         // Read the text ocrmypdf wrote to the sidecar during the OCR run
-        let sidecar_text = tokio::fs::read_to_string(&temp_text_path).await;
-        let _ = tokio::fs::remove_file(&temp_text_path).await;
+        let sidecar_text = tokio::fs::read_to_string(temp_text_path).await;
         let ocr_text_result = sidecar_text
             .map_err(|e| anyhow!("Failed to read ocrmypdf sidecar text for '{}': {}", file_path, e))?
             .trim()
             .to_string();
 
-        // Clean up temporary file
-        let _ = tokio::fs::remove_file(&temp_ocr_path).await;
-        
         let processing_time = start_time.elapsed().as_millis() as u64;
         let word_count = self.count_words_safely(&ocr_text_result);
         
@@ -1083,7 +1047,8 @@ impl EnhancedOcrService {
             std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
         );
-        let temp_text_path = format!("{}/{}", self.temp_dir, temp_text_filename);
+        let temp_text = TempPath::new(format!("{}/{}", self.temp_dir, temp_text_filename));
+        let temp_text_path = temp_text.as_str();
 
         // Strategy 1: Fast text extraction using pdftotext (for existing text)
         debug!("Trying pdftotext for existing text extraction: {}", file_path);
@@ -1091,7 +1056,8 @@ impl EnhancedOcrService {
         let pdftotext_result = tokio::process::Command::new("pdftotext")
             .arg("-layout")  // Preserve layout
             .arg(file_path)
-            .arg(&temp_text_path)
+            .arg(temp_text_path)
+            .kill_on_drop(true)
             .output()
             .await;
 
@@ -1101,8 +1067,7 @@ impl EnhancedOcrService {
                 debug!("pdftotext stderr: {}", String::from_utf8_lossy(&output.stderr));
             }
             if output.status.success() {
-                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                if let Ok(text) = tokio::fs::read_to_string(temp_text_path).await {
                     let word_count = text.split_whitespace().count();
                     debug!("pdftotext extracted {} words from temp file", word_count);
 
@@ -1131,16 +1096,16 @@ impl EnhancedOcrService {
         let ocrmypdf_result = tokio::process::Command::new("ocrmypdf")
             .arg("--skip-text") // Don't re-OCR — just extract existing text layer
             .arg("--sidecar")
-            .arg(&temp_text_path)
+            .arg(temp_text_path)
             .arg(file_path)
             .arg("-")  // Dummy output (we only want sidecar)
+            .kill_on_drop(true)
             .output()
             .await;
 
         if let Ok(output) = &ocrmypdf_result {
             if output.status.success() {
-                if let Ok(text) = tokio::fs::read_to_string(&temp_text_path).await {
-                    let _ = tokio::fs::remove_file(&temp_text_path).await;
+                if let Ok(text) = tokio::fs::read_to_string(temp_text_path).await {
                     let word_count = text.split_whitespace().count();
                     if word_count > 5 {
                         let processing_time = start_time.elapsed().as_millis() as u64;
@@ -1245,8 +1210,10 @@ impl EnhancedOcrService {
 
     /// Convert PDF pages to PNG images using pdftoppm
     #[cfg(feature = "ocr")]
-    pub(crate) async fn extract_pdf_pages_as_images(&self, file_path: &str, params: &TesseractParams) -> Result<Vec<String>> {
+    pub(crate) async fn extract_pdf_pages_as_images(&self, file_path: &str, params: &TesseractParams) -> Result<TempPageImages> {
         let temp_prefix = format!("{}/pdf_page_{}", self.temp_dir, uuid::Uuid::new_v4());
+        // Owns every page pdftoppm writes, even if this future is dropped mid-render
+        let mut pages = TempPageImages::new(&temp_prefix, "png");
 
         // Render every page as PNG at the owner's OCR DPI (killed on timeout)
         let output = tokio::process::Command::new("pdftoppm")
@@ -1269,7 +1236,8 @@ impl EnhancedOcrService {
             return Err(anyhow!("pdftoppm did not produce any image files"));
         }
 
-        Ok(image_paths)
+        pages.set_paths(image_paths);
+        Ok(pages)
     }
 
     /// Extract text from PDF by converting pages to images and OCRing each page
@@ -1312,6 +1280,8 @@ impl EnhancedOcrService {
                     total_confidence += result.confidence;
                     total_words += result.word_count;
                     successful_pages += 1;
+                    // A page's preprocessed image is not saved for review
+                    drop(result.processed_image_path.map(TempPath::new));
                 }
                 Err(e) => {
                     warn!("Failed to OCR page {}: {}", i + 1, e);
@@ -1319,7 +1289,7 @@ impl EnhancedOcrService {
             }
 
             // Clean up page image immediately after processing
-            let _ = tokio::fs::remove_file(image_path).await;
+            remove_quietly(std::path::Path::new(image_path));
         }
 
         if successful_pages == 0 {
@@ -1442,10 +1412,10 @@ impl EnhancedOcrService {
                 uuid::Uuid::new_v4(),
                 extension
             );
-            tokio::fs::write(&temp_path, &data).await?;
-            let _cleanup = FileCleanupGuard::new(&temp_path);
+            let temp_path = TempPath::new(temp_path);
+            tokio::fs::write(temp_path.as_str(), &data).await?;
             return self
-                .extract_text_from_local_path(&temp_path, mime_type, settings, progress_callback)
+                .extract_text_from_local_path(temp_path.as_str(), mime_type, settings, progress_callback)
                 .await;
         }
 
@@ -1710,3 +1680,7 @@ fn is_valid_pdf(data: &[u8]) -> bool {
     
     false
 }
+
+#[cfg(all(test, feature = "ocr"))]
+#[path = "enhanced_temp_files_tests.rs"]
+mod temp_files_tests;

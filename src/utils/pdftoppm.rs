@@ -22,10 +22,8 @@ pub fn page_number(file_name: &str, prefix_name: &str, ext: &str) -> Option<u32>
     digits.parse().ok()
 }
 
-/// The page images pdftoppm wrote for `prefix` (the output root it was given,
-/// without extension), ordered by page number.
-pub async fn list_page_images(prefix: &str, ext: &str) -> std::io::Result<Vec<PathBuf>> {
-    let prefix = Path::new(prefix);
+/// The directory pdftoppm writes into and the file-name stem of its pages.
+fn split_prefix(prefix: &Path) -> std::io::Result<(&Path, &str)> {
     let dir = match prefix.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
@@ -36,7 +34,18 @@ pub async fn list_page_images(prefix: &str, ext: &str) -> std::io::Result<Vec<Pa
             "pdftoppm prefix has no file name",
         )
     })?;
+    Ok((dir, prefix_name))
+}
 
+fn sorted(mut pages: Vec<(u32, PathBuf)>) -> Vec<PathBuf> {
+    pages.sort_by_key(|(page, _)| *page);
+    pages.into_iter().map(|(_, path)| path).collect()
+}
+
+/// The page images pdftoppm wrote for `prefix` (the output root it was given,
+/// without extension), ordered by page number.
+pub async fn list_page_images(prefix: &str, ext: &str) -> std::io::Result<Vec<PathBuf>> {
+    let (dir, prefix_name) = split_prefix(Path::new(prefix))?;
     let mut pages = Vec::new();
     let mut entries = tokio::fs::read_dir(dir).await?;
     while let Some(entry) = entries.next_entry().await? {
@@ -45,8 +54,21 @@ pub async fn list_page_images(prefix: &str, ext: &str) -> std::io::Result<Vec<Pa
             pages.push((page, entry.path()));
         }
     }
-    pages.sort_by_key(|(page, _)| *page);
-    Ok(pages.into_iter().map(|(_, path)| path).collect())
+    Ok(sorted(pages))
+}
+
+/// [`list_page_images`] for synchronous contexts such as `Drop`.
+pub fn list_page_images_blocking(prefix: &Path, ext: &str) -> std::io::Result<Vec<PathBuf>> {
+    let (dir, prefix_name) = split_prefix(prefix)?;
+    let mut pages = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if let Some(page) = name.to_str().and_then(|n| page_number(n, prefix_name, ext)) {
+            pages.push((page, entry.path()));
+        }
+    }
+    Ok(sorted(pages))
 }
 
 #[cfg(test)]
