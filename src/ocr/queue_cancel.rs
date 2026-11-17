@@ -1,26 +1,31 @@
-//! Cancelling a document's OCR, and the guarded writes that make a cancel
-//! safe against a worker finishing the same job.
+//! Cancelling a document's OCR, and the claim-guarded record of a failed
+//! attempt.
 //!
-//! A cancel deletes the document's active job. A worker that is running the
-//! job keeps going (Tesseract cannot be interrupted mid-page), but every
-//! write of its outcome -- the OCR text, a failed attempt -- first locks the
-//! job row and requires it to still be `'processing'`. The cancel locks the
-//! same rows before deleting them, and both sides lock the job row before
-//! the document row, so a cancel and a finishing worker serialize on the job
-//! row without deadlocking: whichever commits first wins, and the other sees
-//! that and writes nothing.
+//! A cancel deletes the document's active job, then signals the worker
+//! running it (if it runs in this process) to stop at once; a worker in
+//! another process notices on its next heartbeat. Whatever the worker is
+//! doing, every write of its outcome is guarded by its claim (see
+//! `queue_claim.rs`): the cancel locks the job rows before deleting them, and
+//! a finishing worker locks its job row -- job row before document row, on
+//! both sides -- so the two serialize without deadlocking: whichever commits
+//! first wins, and the other sees that and writes nothing.
 //!
-//! A cancelled document is left at `ocr_status = 'failed'` with
-//! `ocr_failure_reason = 'cancelled'`: not 'pending' (no job would ever run
-//! it), and 'failed' is the state a retry already starts from, so the user
-//! can queue it again. A document whose OCR already completed keeps its text.
+//! What the document is left as depends on what it was: a document without
+//! OCR text is left at `ocr_status = 'failed'` with `ocr_failure_reason =
+//! 'cancelled'` -- not 'pending' (no job would ever run it), and 'failed' is
+//! the state a retry already starts from. A document whose OCR had already
+//! completed (a re-OCR was cancelled) stays 'completed' with its text.
 
 use anyhow::Result;
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::Row;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use super::{enqueue::LOCK_ACTIVE_JOBS_SQL, OcrQueueService};
+use super::{
+    claim::{lock_claimed_job, ClaimLoss, JobClaim},
+    enqueue::LOCK_ACTIVE_JOBS_SQL,
+    OcrQueueService,
+};
 
 /// `ocr_failure_reason` of a document whose OCR the user cancelled.
 pub const CANCELLED_FAILURE_REASON: &str = "cancelled";
@@ -28,13 +33,38 @@ pub const CANCELLED_FAILURE_REASON: &str = "cancelled";
 /// `ocr_error` of a document whose OCR the user cancelled.
 pub const CANCELLED_ERROR_MESSAGE: &str = "OCR cancelled by user";
 
+/// The state a cancel leaves the document's OCR in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CancelledDocument {
+    /// The document had no OCR text: it is now `'failed'` with reason
+    /// [`CANCELLED_FAILURE_REASON`], ready to be retried.
+    Failed,
+    /// An earlier OCR had completed (this was a re-OCR): the document is
+    /// still `'completed'` and keeps its text.
+    KeptCompleted,
+}
+
+impl CancelledDocument {
+    /// The document's `ocr_status` after the cancel.
+    pub fn ocr_status(self) -> &'static str {
+        match self {
+            Self::Failed => "failed",
+            Self::KeptCompleted => "completed",
+        }
+    }
+}
+
 /// What a cancel did.
 #[must_use = "a document with nothing to cancel was left untouched; decide whether that matters"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CancelOutcome {
     /// The document's active job was removed. `was_running` is true when a
-    /// worker had already claimed it; that worker's result is discarded.
-    Cancelled { was_running: bool },
+    /// worker had already claimed it; that worker is stopped and writes
+    /// nothing. `document` is the state the document was left in.
+    Cancelled {
+        was_running: bool,
+        document: CancelledDocument,
+    },
     /// The document had no pending or running OCR job.
     NothingToCancel,
 }
@@ -46,13 +76,35 @@ impl CancelOutcome {
     }
 }
 
+/// OCR output of a failed attempt worth keeping in its failure record.
+#[derive(Debug, Clone)]
+pub(super) struct PartialOcr {
+    pub text: String,
+    pub confidence: f32,
+    pub word_count: i32,
+}
+
+/// A failed attempt of a claimed job, as [`OcrQueueService::record_failed_attempt`]
+/// records it.
+#[derive(Debug, Clone, Default)]
+pub(super) struct FailedAttempt<'a> {
+    pub error_message: &'a str,
+    /// When set, the document is marked `'failed'` with this
+    /// `ocr_failure_reason`; otherwise it is left as it is.
+    pub document_failure_reason: Option<&'a str>,
+    /// When set, a `failed_documents` record with this reason is added.
+    pub record_reason: Option<&'a str>,
+    pub partial: Option<PartialOcr>,
+}
+
 impl OcrQueueService {
     /// Cancels the document's queued or running OCR.
     ///
     /// A pending job is removed before any worker claims it. A running job
-    /// is removed too, and the worker running it discards its result when
-    /// it finishes. Cancelling twice, or a document with no active job, is
-    /// [`CancelOutcome::NothingToCancel`].
+    /// is removed too, and its worker is stopped: at once when it runs in
+    /// this process, by its next heartbeat otherwise -- and either way its
+    /// claim is gone, so it writes nothing. Cancelling twice, or a document
+    /// with no active job, is [`CancelOutcome::NothingToCancel`].
     pub async fn cancel_document(&self, document_id: Uuid) -> Result<CancelOutcome> {
         let mut tx = self.pool.begin().await?;
         let jobs = sqlx::query(LOCK_ACTIVE_JOBS_SQL)
@@ -82,46 +134,63 @@ impl OcrQueueService {
         .bind(CANCELLED_ERROR_MESSAGE)
         .execute(&mut *tx)
         .await?;
+        let status: Option<String> =
+            sqlx::query_scalar("SELECT ocr_status FROM documents WHERE id = $1")
+                .bind(document_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .flatten();
         tx.commit().await?;
+        // Only after the commit: a stopped worker finds its claim gone.
+        self.running_jobs.cancel(&ids);
 
+        let document = if status.as_deref() == Some("completed") {
+            CancelledDocument::KeptCompleted
+        } else {
+            CancelledDocument::Failed
+        };
         info!(
-            "Cancelled OCR for document {} (job was {})",
+            "Cancelled OCR for document {} (job was {}; document is {})",
             document_id,
-            if was_running { "running" } else { "queued" }
+            if was_running { "running" } else { "queued" },
+            document.ocr_status()
         );
-        Ok(CancelOutcome::Cancelled { was_running })
+        Ok(CancelOutcome::Cancelled {
+            was_running,
+            document,
+        })
     }
 
-    /// Records a failed attempt of a job a worker is running: optionally
-    /// marks the document failed with `document_failure_reason`, and puts
-    /// the job back to 'pending' (or 'failed' when it has no attempts left).
+    /// Records a failed attempt of a claimed job: optionally marks the
+    /// document failed, puts the job back to 'pending' (or 'failed' when it
+    /// has no attempts left), and optionally adds a `failed_documents`
+    /// record.
     ///
-    /// Returns false, writing nothing, when the job is no longer running --
-    /// it was cancelled -- so a cancelled document never gets the worker's
-    /// failure written over it.
-    pub(super) async fn fail_running_job(
+    /// When the claim no longer owns the job -- it was cancelled, or reset
+    /// and claimed again -- nothing is written and the loss is returned, so
+    /// neither a cancelled document nor another worker's job is touched.
+    pub(super) async fn record_failed_attempt(
         &self,
-        job_id: Uuid,
-        document_id: Uuid,
-        error_message: &str,
-        document_failure_reason: Option<&str>,
-    ) -> Result<bool> {
+        claim: &JobClaim,
+        attempt_number: i32,
+        attempt: FailedAttempt<'_>,
+    ) -> Result<Result<(), ClaimLoss>> {
         let mut tx = self.pool.begin().await?;
-        if !lock_running_job(&mut tx, job_id).await? {
+        if let Err(loss) = lock_claimed_job(&mut tx, claim).await? {
             tx.rollback().await?;
             info!(
-                "OCR job {} for document {} was cancelled; discarding its failure",
-                job_id, document_id
+                "OCR job {} for document {} no longer owned ({:?}); discarding its failure",
+                claim.job_id, claim.document_id, loss
             );
-            return Ok(false);
+            return Ok(Err(loss));
         }
-        if let Some(reason) = document_failure_reason {
+        if let Some(reason) = attempt.document_failure_reason {
             sqlx::query(
                 "UPDATE documents SET ocr_status = 'failed', ocr_failure_reason = $3, \
                  ocr_error = $2, updated_at = NOW() WHERE id = $1",
             )
-            .bind(document_id)
-            .bind(crate::db::sanitize::DbText(error_message))
+            .bind(claim.document_id)
+            .bind(crate::db::sanitize::DbText(attempt.error_message))
             .bind(reason)
             .execute(&mut *tx)
             .await?;
@@ -129,11 +198,12 @@ impl OcrQueueService {
         let status: Option<String> = sqlx::query_scalar(
             "UPDATE ocr_queue SET status = CASE WHEN attempts >= max_attempts \
              THEN 'failed' ELSE 'pending' END, \
-             error_message = $2, started_at = NULL, worker_id = NULL \
+             error_message = $2, started_at = NULL, worker_id = NULL, \
+             claim_id = NULL, heartbeat_at = NULL \
              WHERE id = $1 RETURNING status",
         )
-        .bind(job_id)
-        .bind(crate::db::sanitize::DbText(error_message))
+        .bind(claim.job_id)
+        .bind(crate::db::sanitize::DbText(attempt.error_message))
         .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
@@ -141,24 +211,24 @@ impl OcrQueueService {
         if status.as_deref() == Some("failed") {
             error!(
                 "OCR job {} permanently failed after max attempts: {}",
-                job_id, error_message
+                claim.job_id, attempt.error_message
             );
         }
-        Ok(true)
+        if let Some(reason) = attempt.record_reason {
+            let partial = attempt.partial;
+            if let Err(e) = self
+                .create_failed_document_from_ocr_error(
+                    claim.document_id,
+                    reason,
+                    attempt.error_message,
+                    attempt_number,
+                    partial,
+                )
+                .await
+            {
+                error!("Failed to record failed OCR attempt: {}", e);
+            }
+        }
+        Ok(Ok(()))
     }
-}
-
-/// Locks the job row inside `tx` if the job is still running; false when it
-/// is gone or no longer 'processing' (cancelled).
-pub(crate) async fn lock_running_job(
-    tx: &mut Transaction<'_, Postgres>,
-    job_id: Uuid,
-) -> Result<bool> {
-    let locked: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM ocr_queue WHERE id = $1 AND status = 'processing' FOR UPDATE",
-    )
-    .bind(job_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    Ok(locked.is_some())
 }

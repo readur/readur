@@ -12,6 +12,7 @@ use readur::test_db::TestDatabase;
 
 const OCR_QUEUE_DUPLICATES_VIA_INDEX: i64 = 20261116000001;
 const FUZZY_THRESHOLD_WORD_SIMILARITY: i64 = 20261116120000;
+const OCR_QUEUE_CLAIM_AND_HEARTBEAT: i64 = 20261117120000;
 
 /// The newest migration version older than `version`.
 fn version_before(version: i64) -> i64 {
@@ -173,6 +174,101 @@ async fn fuzzy_threshold_defaults_move_to_the_word_level_scale() {
     assert_eq!(default, Some(0.5));
 }
 
+/// A job running when the migration applies gets its start as its last
+/// heartbeat and no claim (no new worker owns it); stale-job recovery then
+/// judges it by that heartbeat. The guardrail `reset_stuck_ocr_jobs` stops
+/// resetting a live job, and a live job's document, by start time.
+#[tokio::test]
+async fn ocr_queue_jobs_gain_claims_and_heartbeats() {
+    let (_db, pool) = database_at(version_before(OCR_QUEUE_CLAIM_AND_HEARTBEAT)).await;
+    let user = insert_user(&pool).await;
+    let running = insert_document(&pool, user).await;
+    let waiting = insert_document(&pool, user).await;
+    for (document, status) in [(running, "processing"), (waiting, "pending")] {
+        sqlx::query(
+            "INSERT INTO ocr_queue (document_id, priority, file_size, status, started_at, attempts) \
+             VALUES ($1, 5, 1, $2, CASE WHEN $2 = 'processing' THEN NOW() - INTERVAL '40 minutes' END, 1)",
+        )
+        .bind(document)
+        .bind(status)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    finish_migrations(&pool).await;
+
+    let (claim, beat_is_start): (Option<Uuid>, bool) = sqlx::query_as(
+        "SELECT claim_id, heartbeat_at = started_at FROM ocr_queue WHERE document_id = $1",
+    )
+    .bind(running)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(claim, None);
+    assert!(beat_is_start, "a running job's last heartbeat is its start");
+    let waiting_beat: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT heartbeat_at FROM ocr_queue WHERE document_id = $1")
+            .bind(waiting)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(waiting_beat, None, "a queued job has no heartbeat");
+
+    // A live job claimed 40 minutes ago, heartbeating now: not stuck.
+    sqlx::query("UPDATE ocr_queue SET heartbeat_at = NOW() WHERE document_id = $1")
+        .bind(running)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE documents SET ocr_status = 'processing', updated_at = NOW() - INTERVAL '40 minutes' \
+         WHERE id = $1",
+    )
+    .bind(running)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reset: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs(30)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reset, 0, "a heartbeating job is not stuck");
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT ocr_status FROM documents WHERE id = $1")
+            .bind(running)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status.as_deref(), Some("processing"));
+
+    // Silent for the threshold: reset, its document with it.
+    sqlx::query(
+        "UPDATE ocr_queue SET heartbeat_at = NOW() - INTERVAL '31 minutes' WHERE document_id = $1",
+    )
+    .bind(running)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reset: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs(30)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reset, 1);
+    let (job_status, doc_status): (String, Option<String>) = sqlx::query_as(
+        "SELECT q.status, d.ocr_status FROM ocr_queue q JOIN documents d ON d.id = q.document_id \
+         WHERE q.document_id = $1",
+    )
+    .bind(running)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (job_status.as_str(), doc_status.as_deref()),
+        ("pending", Some("pending"))
+    );
+}
+
 #[test]
 fn the_migrations_under_test_exist() {
     let versions: Vec<i64> = sqlx::migrate!("./migrations")
@@ -182,6 +278,7 @@ fn the_migrations_under_test_exist() {
     for version in [
         OCR_QUEUE_DUPLICATES_VIA_INDEX,
         FUZZY_THRESHOLD_WORD_SIMILARITY,
+        OCR_QUEUE_CLAIM_AND_HEARTBEAT,
     ] {
         assert!(
             versions.contains(&version),

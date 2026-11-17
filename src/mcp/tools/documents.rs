@@ -450,7 +450,7 @@ impl ReadurMcp {
     }
 
     #[tool(
-        description = "Cancel a document's queued or running OCR. A running job's result is discarded when it finishes. The document is left with OCR status 'failed' (reason 'cancelled') and can be queued again with retry_document_ocr. Reports cancelled=false when there was nothing to cancel.",
+        description = "Cancel a document's queued or running OCR. A running job is stopped and its result discarded. Reports document_status afterwards: a document without OCR text becomes 'failed' (reason 'cancelled') and can be queued again with retry_document_ocr; a document whose earlier OCR completed (a re-OCR was cancelled) stays 'completed' and keeps its text. Reports cancelled=false when there was nothing to cancel.",
         annotations(
             title = "Cancel Document OCR",
             read_only_hint = false,

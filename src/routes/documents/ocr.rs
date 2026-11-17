@@ -151,7 +151,7 @@ pub async fn get_ocr_status_batch(
         ("id" = uuid::Uuid, Path, description = "Document ID")
     ),
     responses(
-        (status = 200, description = "Request handled: `cancelled` is true when a queued or running OCR job was cancelled (the document is left 'failed' with reason 'cancelled' and can be retried), false when there was nothing to cancel", body = super::types::CancelOcrResponse),
+        (status = 200, description = "Request handled: `cancelled` is true when a queued or running OCR job was cancelled (a running worker is stopped and writes nothing), false when there was nothing to cancel. `document_status` is the document's OCR status afterwards: 'failed' (reason 'cancelled', retryable) for a document without OCR text, 'completed' for a re-OCR whose earlier text is kept", body = super::types::CancelOcrResponse),
         (status = 404, description = "Document not found"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")

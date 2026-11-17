@@ -68,7 +68,9 @@ impl OcrQueueService {
                     attempts = 0,
                     error_message = NULL,
                     started_at = NULL,
-                    worker_id = NULL
+                    worker_id = NULL,
+                    claim_id = NULL,
+                    heartbeat_at = NULL
                 WHERE status = 'failed'
                   AND attempts < max_attempts
                   AND NOT EXISTS (
@@ -106,7 +108,9 @@ impl OcrQueueService {
                 attempts = 0,
                 error_message = NULL,
                 started_at = NULL,
-                worker_id = NULL
+                worker_id = NULL,
+                claim_id = NULL,
+                heartbeat_at = NULL
             WHERE status = 'failed'
               AND attempts < max_attempts
             "#,
@@ -140,18 +144,24 @@ impl OcrQueueService {
         Ok(result.rows_affected() as i64)
     }
 
-    /// Handle stale processing items (worker crashed). A job with no
-    /// attempts left fails instead: as 'pending' it would never be dequeued
-    /// yet would block the document from being queued again.
+    /// Recovers jobs whose worker died: 'processing' jobs with no heartbeat
+    /// for `stale_minutes`. A live worker heartbeats every
+    /// [`super::HEARTBEAT_INTERVAL`] however long its OCR runs, so it is never
+    /// reset under itself; the claim is cleared either way, so a worker that
+    /// was merely frozen writes nothing when it wakes. A job with no attempts
+    /// left fails instead: as 'pending' it would never be dequeued yet would
+    /// block the document from being queued again.
     pub async fn recover_stale_items(&self, stale_minutes: i32) -> Result<i64> {
         let result = sqlx::query(
             r#"
             UPDATE ocr_queue
             SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
                 started_at = NULL,
-                worker_id = NULL
+                worker_id = NULL,
+                claim_id = NULL,
+                heartbeat_at = NULL
             WHERE status = 'processing'
-              AND started_at < NOW() - INTERVAL '1 minute' * $1
+              AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 minute' * $1
             "#,
         )
         .bind(stale_minutes)

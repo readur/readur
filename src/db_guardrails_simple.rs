@@ -11,6 +11,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::db::sanitize::ToDb;
+use crate::ocr::queue::{lock_claimed_job, ClaimLoss, JobClaim};
 
 /// An OCR result to write onto a document.
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +34,9 @@ pub enum OcrWriteOutcome {
     Rejected,
     /// The queue job was cancelled; nothing was written.
     JobCancelled,
+    /// The queue job was reset and claimed again: another worker owns it
+    /// now. Nothing was written.
+    ClaimLost,
 }
 
 /// Simplified transaction manager focused on preventing OCR corruption
@@ -68,22 +72,24 @@ impl DocumentTransactionManager {
         Ok(self.write_ocr(None, &write).await? == OcrWriteOutcome::Written)
     }
 
-    /// Writes a worker's OCR result for queue job `job_id`, only while that
-    /// job is still running. The job row is locked before the document row
-    /// (the order a cancel locks them in too), so a concurrent cancel either
-    /// commits first -- and this writes nothing, returning `JobCancelled` --
-    /// or waits until this commits and then finds no job to cancel.
+    /// Writes a worker's OCR result for its claimed queue job, only while
+    /// the claim still owns the job. The job row is locked before the
+    /// document row (the order a cancel locks them in too), so a concurrent
+    /// cancel either commits first -- and this writes nothing, returning
+    /// `JobCancelled` -- or waits until this commits and then finds no job to
+    /// cancel. A job reset and claimed by another worker is `ClaimLost`, and
+    /// that worker's job row is left alone.
     pub async fn update_ocr_for_job(
         &self,
-        job_id: Uuid,
+        claim: &JobClaim,
         write: &OcrWrite<'_>,
     ) -> Result<OcrWriteOutcome> {
-        self.write_ocr(Some(job_id), write).await
+        self.write_ocr(Some(claim), write).await
     }
 
     async fn write_ocr(
         &self,
-        job_id: Option<Uuid>,
+        claim: Option<&JobClaim>,
         write: &OcrWrite<'_>,
     ) -> Result<OcrWriteOutcome> {
         let OcrWrite {
@@ -96,15 +102,18 @@ impl DocumentTransactionManager {
         } = *write;
         let mut tx = self.pool.begin().await?;
 
-        // 0. A cancelled job's result is discarded.
-        if let Some(job_id) = job_id {
-            if !crate::ocr::queue::lock_running_job(&mut tx, job_id).await? {
+        // 0. A job the claim no longer owns has its result discarded.
+        if let Some(claim) = claim {
+            if let Err(loss) = lock_claimed_job(&mut tx, claim).await? {
                 tx.rollback().await?;
                 info!(
-                    "OCR job {} for document {} was cancelled; discarding its result",
-                    job_id, document_id
+                    "OCR job {} for document {} no longer owned ({:?}); discarding its result",
+                    claim.job_id, document_id, loss
                 );
-                return Ok(OcrWriteOutcome::JobCancelled);
+                return Ok(match loss {
+                    ClaimLoss::Cancelled => OcrWriteOutcome::JobCancelled,
+                    ClaimLoss::Reclaimed => OcrWriteOutcome::ClaimLost,
+                });
             }
         }
 
@@ -195,17 +204,25 @@ impl DocumentTransactionManager {
             return Ok(OcrWriteOutcome::Rejected);
         }
 
-        // 6. Remove from OCR queue atomically
-        let _queue_removed = sqlx::query(
-            r#"
-            DELETE FROM ocr_queue 
-            WHERE document_id = $1 
-              AND status = 'processing'
-            "#,
-        )
-        .bind(document_id)
-        .execute(&mut *tx)
-        .await?;
+        // 6. Remove the job from the OCR queue: the claimed job itself (its
+        //    row is locked and owned), or without a claim the document's
+        //    running job.
+        match claim {
+            Some(claim) => {
+                sqlx::query("DELETE FROM ocr_queue WHERE id = $1")
+                    .bind(claim.job_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM ocr_queue WHERE document_id = $1 AND status = 'processing'",
+                )
+                .bind(document_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
 
         // Note: We don't fail if queue removal fails - it might have been cleaned up already
 
