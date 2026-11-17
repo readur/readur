@@ -714,3 +714,59 @@ pub async fn retry_document_ocr(
         message: "Document queued for OCR processing".to_string(),
     })
 }
+
+/// Outcome of a request to cancel a document's OCR.
+#[derive(Debug, serde::Serialize)]
+pub struct OcrCancelOutcome {
+    /// False when the document had no queued or running OCR job.
+    pub cancelled: bool,
+    /// True when a worker was already running the cancelled job; its result
+    /// is discarded when it finishes.
+    pub was_running: bool,
+    pub message: String,
+}
+
+/// Cancels a document's queued or running OCR. A cancelled document is left
+/// 'failed' (reason 'cancelled'), so it can be retried. A missing or foreign
+/// document is `NotFound`.
+pub async fn cancel_document_ocr(
+    state: &AppState,
+    user: &User,
+    document_id: Uuid,
+) -> Result<OcrCancelOutcome, DocumentError> {
+    let document = state
+        .db
+        .get_document_by_id(document_id, user.id, user.role)
+        .await
+        .map_err(|e| {
+            error!("Database error getting document {}: {}", document_id, e);
+            DocumentError::InternalServerError("Failed to load document")
+        })?
+        .ok_or(DocumentError::NotFound)?;
+
+    let outcome = state
+        .queue_service
+        .cancel_document(document.id)
+        .await
+        .map_err(|e| {
+            error!("Failed to cancel OCR for document {}: {}", document_id, e);
+            DocumentError::InternalServerError("Failed to cancel OCR")
+        })?;
+    Ok(match outcome {
+        crate::ocr::queue::CancelOutcome::Cancelled { was_running } => OcrCancelOutcome {
+            cancelled: true,
+            was_running,
+            message: if was_running {
+                "OCR processing was cancelled; the running job's result will be discarded"
+            } else {
+                "Queued OCR was cancelled"
+            }
+            .to_string(),
+        },
+        crate::ocr::queue::CancelOutcome::NothingToCancel => OcrCancelOutcome {
+            cancelled: false,
+            was_running: false,
+            message: "The document has no queued or running OCR to cancel".to_string(),
+        },
+    })
+}

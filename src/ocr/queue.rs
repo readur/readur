@@ -11,11 +11,13 @@ use uuid::Uuid;
 
 use crate::{
     db::Database,
-    db_guardrails_simple::DocumentTransactionManager,
+    db_guardrails_simple::{DocumentTransactionManager, OcrWrite, OcrWriteOutcome},
     monitoring::request_throttler::RequestThrottler,
     ocr::{enhanced::EnhancedOcrService, failure_reason::classify_ocr_error},
 };
 
+#[path = "queue_cancel.rs"]
+mod cancel;
 #[path = "queue_enqueue.rs"]
 mod enqueue;
 #[path = "queue_maintenance.rs"]
@@ -24,7 +26,16 @@ mod maintenance;
 mod processed_image;
 #[path = "queue_stats.rs"]
 mod stats;
+pub(crate) use cancel::lock_running_job;
+pub use cancel::{CancelOutcome, CANCELLED_ERROR_MESSAGE, CANCELLED_FAILURE_REASON};
 pub use enqueue::EnqueueOutcome;
+
+/// Removes the temporary preprocessed image OCR left behind, if any.
+async fn discard_processed_image(ocr_result: &crate::ocr::enhanced::OcrResult) {
+    if let Some(ref temp_path) = ocr_result.processed_image_path {
+        let _ = tokio::fs::remove_file(temp_path).await;
+    }
+}
 
 /// Upper bound on concurrent OCR jobs, to avoid exhausting the background DB pool.
 const MAX_CONCURRENT_OCR_JOBS: usize = 15;
@@ -297,38 +308,6 @@ impl OcrQueueService {
         Ok(())
     }
 
-    /// Mark an item as failed
-    async fn mark_failed(&self, item_id: Uuid, error: &str) -> Result<()> {
-        let result = sqlx::query(
-            r#"
-            UPDATE ocr_queue
-            SET status = CASE
-                    WHEN attempts >= max_attempts THEN 'failed'
-                    ELSE 'pending'
-                END,
-                error_message = $2,
-                started_at = NULL,
-                worker_id = NULL
-            WHERE id = $1
-            RETURNING status
-            "#,
-        )
-        .bind(item_id)
-        .bind(crate::db::sanitize::DbText(error))
-        .fetch_one(&self.pool)
-        .await?;
-
-        let status: Option<String> = result.get("status");
-        if status == Some("failed".to_string()) {
-            error!(
-                "OCR job {} permanently failed after max attempts: {}",
-                item_id, error
-            );
-        }
-
-        Ok(())
-    }
-
     /// Process a single queue item
     pub async fn process_item(
         &self,
@@ -416,36 +395,29 @@ impl OcrQueueService {
                             warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words",
                                   filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
 
-                            // Create failed document record using helper function
-                            let _ = self
-                                .create_failed_document_from_ocr_error(
+                            // A cancelled job writes nothing; otherwise record the
+                            // failed attempt, then the failed-document entry.
+                            if self
+                                .fail_running_job(
+                                    item.id,
                                     item.document_id,
-                                    "low_ocr_confidence",
                                     &error_msg,
-                                    item.attempts,
-                                    Some(ocr_result.text.clone()),
-                                    Some(ocr_result.confidence),
-                                    Some(ocr_result.word_count as i32),
+                                    Some("low_ocr_confidence"),
                                 )
-                                .await;
-
-                            // Mark as failed for quality issues with proper failure reason
-                            sqlx::query(
-                                r#"
-                                UPDATE documents
-                                SET ocr_status = 'failed',
-                                    ocr_failure_reason = 'low_ocr_confidence',
-                                    ocr_error = $2,
-                                    updated_at = NOW()
-                                WHERE id = $1
-                                "#,
-                            )
-                            .bind(item.document_id)
-                            .bind(crate::db::sanitize::DbText(&error_msg))
-                            .execute(&self.pool)
-                            .await?;
-
-                            self.mark_failed(item.id, &error_msg).await?;
+                                .await?
+                            {
+                                let _ = self
+                                    .create_failed_document_from_ocr_error(
+                                        item.document_id,
+                                        "low_ocr_confidence",
+                                        &error_msg,
+                                        item.attempts,
+                                        Some(ocr_result.text.clone()),
+                                        Some(ocr_result.confidence),
+                                        Some(ocr_result.word_count as i32),
+                                    )
+                                    .await;
+                            }
                             return Ok(());
                         }
 
@@ -455,23 +427,31 @@ impl OcrQueueService {
 
                             match self
                                 .transaction_manager
-                                .update_ocr_with_validation(
-                                    item.document_id,
-                                    &filename,
-                                    &ocr_result.text,
-                                    ocr_result.confidence as f64,
-                                    ocr_result.word_count as i32,
-                                    processing_time_ms,
+                                .update_ocr_for_job(
+                                    item.id,
+                                    &OcrWrite {
+                                        document_id: item.document_id,
+                                        expected_filename: &filename,
+                                        ocr_text: &ocr_result.text,
+                                        confidence: ocr_result.confidence as f64,
+                                        word_count: ocr_result.word_count as i32,
+                                        processing_time_ms,
+                                    },
                                 )
                                 .await
                             {
-                                Ok(true) => {
+                                Ok(OcrWriteOutcome::Written) => {
                                     info!(
                                         "✅ Transaction-safe OCR update successful for document {}",
                                         item.document_id
                                     );
                                 }
-                                Ok(false) => {
+                                Ok(OcrWriteOutcome::JobCancelled) => {
+                                    // The user cancelled this job while it ran.
+                                    discard_processed_image(&ocr_result).await;
+                                    return Ok(());
+                                }
+                                Ok(OcrWriteOutcome::Rejected) => {
                                     let error_msg = "OCR update failed validation (document may have been modified)";
                                     warn!("{} for document {}", error_msg, item.document_id);
 
@@ -479,20 +459,29 @@ impl OcrQueueService {
                                     let (failure_reason, _should_suppress) =
                                         classify_ocr_error(error_msg);
 
-                                    // Create failed document record using helper function
-                                    let _ = self
-                                        .create_failed_document_from_ocr_error(
+                                    // A cancelled job writes nothing; otherwise record the
+                                    // failed attempt, then the failed-document entry.
+                                    if self
+                                        .fail_running_job(
+                                            item.id,
                                             item.document_id,
-                                            failure_reason,
                                             error_msg,
-                                            item.attempts,
-                                            None,
-                                            None,
                                             None,
                                         )
-                                        .await;
-
-                                    self.mark_failed(item.id, error_msg).await?;
+                                        .await?
+                                    {
+                                        let _ = self
+                                            .create_failed_document_from_ocr_error(
+                                                item.document_id,
+                                                failure_reason,
+                                                error_msg,
+                                                item.attempts,
+                                                None,
+                                                None,
+                                                None,
+                                            )
+                                            .await;
+                                    }
                                     return Ok(());
                                 }
                                 Err(e) => {
@@ -504,20 +493,29 @@ impl OcrQueueService {
                                     let (failure_reason, _should_suppress) =
                                         classify_ocr_error(&error_msg);
 
-                                    // Create failed document record using helper function
-                                    let _ = self
-                                        .create_failed_document_from_ocr_error(
+                                    // A cancelled job writes nothing; otherwise record the
+                                    // failed attempt, then the failed-document entry.
+                                    if self
+                                        .fail_running_job(
+                                            item.id,
                                             item.document_id,
-                                            failure_reason,
                                             &error_msg,
-                                            item.attempts,
-                                            None,
-                                            None,
                                             None,
                                         )
-                                        .await;
-
-                                    self.mark_failed(item.id, &error_msg).await?;
+                                        .await?
+                                    {
+                                        let _ = self
+                                            .create_failed_document_from_ocr_error(
+                                                item.document_id,
+                                                failure_reason,
+                                                &error_msg,
+                                                item.attempts,
+                                                None,
+                                                None,
+                                                None,
+                                            )
+                                            .await;
+                                    }
                                     return Ok(());
                                 }
                             }
@@ -531,36 +529,29 @@ impl OcrQueueService {
                             // Use classification function to determine proper failure reason
                             let (failure_reason, _should_suppress) = classify_ocr_error(&error_msg);
 
-                            // Create failed document record using helper function
-                            let _ = self
-                                .create_failed_document_from_ocr_error(
+                            // A cancelled job writes nothing; otherwise record the
+                            // failed attempt, then the failed-document entry.
+                            if self
+                                .fail_running_job(
+                                    item.id,
                                     item.document_id,
-                                    failure_reason,
                                     &error_msg,
-                                    item.attempts,
-                                    None,
-                                    None,
-                                    None,
+                                    Some("no_extractable_text"),
                                 )
-                                .await;
-
-                            // Mark document as failed for no extractable text
-                            sqlx::query(
-                                r#"
-                                UPDATE documents
-                                SET ocr_status = 'failed',
-                                    ocr_failure_reason = 'no_extractable_text',
-                                    ocr_error = $2,
-                                    updated_at = NOW()
-                                WHERE id = $1
-                                "#,
-                            )
-                            .bind(item.document_id)
-                            .bind(crate::db::sanitize::DbText(&error_msg))
-                            .execute(&self.pool)
-                            .await?;
-
-                            self.mark_failed(item.id, &error_msg).await?;
+                                .await?
+                            {
+                                let _ = self
+                                    .create_failed_document_from_ocr_error(
+                                        item.document_id,
+                                        failure_reason,
+                                        &error_msg,
+                                        item.attempts,
+                                        None,
+                                        None,
+                                        None,
+                                    )
+                                    .await;
+                            }
                             return Ok(());
                         }
 
@@ -595,9 +586,7 @@ impl OcrQueueService {
                         }
 
                         // Clean up temporary processed image file if it exists
-                        if let Some(ref temp_path) = ocr_result.processed_image_path {
-                            let _ = tokio::fs::remove_file(temp_path).await;
-                        }
+                        discard_processed_image(&ocr_result).await;
 
                         let processing_time_ms = start_time.elapsed().as_millis() as i32;
                         self.mark_completed(item.id, processing_time_ms).await?;
@@ -629,43 +618,37 @@ impl OcrQueueService {
                                   filename, item.id, item.document_id, failure_reason, e);
                         }
 
-                        // Create failed document record using helper function
-                        let _ = self
-                            .create_failed_document_from_ocr_error(
+                        // A cancelled job writes nothing; otherwise record the
+                        // failed attempt, then the failed-document entry.
+                        if self
+                            .fail_running_job(
+                                item.id,
                                 item.document_id,
-                                failure_reason,
                                 &error_msg,
-                                item.attempts,
-                                None,
-                                None,
-                                None,
+                                Some(failure_reason),
                             )
-                            .await;
-
-                        // Always use 'failed' status with specific failure reason
-                        sqlx::query(
-                            r#"
-                            UPDATE documents
-                            SET ocr_status = 'failed',
-                                ocr_error = $2,
-                                ocr_failure_reason = $3,
-                                updated_at = NOW()
-                            WHERE id = $1
-                            "#,
-                        )
-                        .bind(item.document_id)
-                        .bind(crate::db::sanitize::DbText(&error_msg))
-                        .bind(failure_reason)
-                        .execute(&self.pool)
-                        .await?;
-
-                        self.mark_failed(item.id, &error_msg).await?;
+                            .await?
+                        {
+                            let _ = self
+                                .create_failed_document_from_ocr_error(
+                                    item.document_id,
+                                    failure_reason,
+                                    &error_msg,
+                                    item.attempts,
+                                    None,
+                                    None,
+                                    None,
+                                )
+                                .await;
+                        }
                     }
                 }
             }
             None => {
                 let error_msg = "Document not found";
-                self.mark_failed(item.id, error_msg).await?;
+                let _ = self
+                    .fail_running_job(item.id, item.document_id, error_msg, None)
+                    .await?;
             }
         }
 
@@ -763,7 +746,12 @@ impl OcrQueueService {
                                 );
                                 // Mark the item as failed due to throttling
                                 if let Err(mark_err) = self_clone
-                                    .mark_failed(item.id, &format!("Throttling error: {}", e))
+                                    .fail_running_job(
+                                        item.id,
+                                        item.document_id,
+                                        &format!("Throttling error: {}", e),
+                                        None,
+                                    )
                                     .await
                                 {
                                     error!(

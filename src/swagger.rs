@@ -54,6 +54,7 @@ use crate::{
         crate::routes::documents::ocr::get_document_ocr,
         crate::routes::documents::debug::get_processed_image,
         crate::routes::documents::ocr::retry_ocr,
+        crate::routes::documents::ocr::cancel_ocr,
         crate::routes::documents::debug::get_document_debug_info,
         crate::routes::documents::failed::get_failed_ocr_documents,
         crate::routes::documents::failed::view_failed_document,
@@ -189,6 +190,7 @@ use crate::{
             BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             crate::routes::documents::RetryOcrResponse,
+            crate::routes::documents::CancelOcrResponse,
             // OCR schemas
             crate::models::AvailableLanguagesResponse, crate::models::LanguageInfo,
             crate::ocr::api::OcrHealthResponse, crate::errors::ApiErrorBody,

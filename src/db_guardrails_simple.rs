@@ -1,16 +1,39 @@
 /*!
  * Critical Database Guardrails for OCR Corruption Prevention
- * 
+ *
  * Simplified transaction-safe operations to prevent the FileA/FileB
  * OCR corruption issue during concurrent processing.
  */
 
-use sqlx::{PgPool, Row};
-use uuid::Uuid;
 use anyhow::Result;
-use tracing::{warn, error, info};
+use sqlx::{PgPool, Row};
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::db::sanitize::ToDb;
+
+/// An OCR result to write onto a document.
+#[derive(Debug, Clone, Copy)]
+pub struct OcrWrite<'a> {
+    pub document_id: Uuid,
+    /// The filename the worker read; a mismatch rejects the write.
+    pub expected_filename: &'a str,
+    pub ocr_text: &'a str,
+    pub confidence: f64,
+    pub word_count: i32,
+    pub processing_time_ms: i64,
+}
+
+/// What an OCR write did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OcrWriteOutcome {
+    /// The result was stored and the document marked completed.
+    Written,
+    /// Validation refused it (document missing, renamed, or already done).
+    Rejected,
+    /// The queue job was cancelled; nothing was written.
+    JobCancelled,
+}
 
 /// Simplified transaction manager focused on preventing OCR corruption
 #[derive(Clone)]
@@ -34,8 +57,57 @@ impl DocumentTransactionManager {
         word_count: i32,
         processing_time_ms: i64,
     ) -> Result<bool> {
+        let write = OcrWrite {
+            document_id,
+            expected_filename,
+            ocr_text,
+            confidence,
+            word_count,
+            processing_time_ms,
+        };
+        Ok(self.write_ocr(None, &write).await? == OcrWriteOutcome::Written)
+    }
+
+    /// Writes a worker's OCR result for queue job `job_id`, only while that
+    /// job is still running. The job row is locked before the document row
+    /// (the order a cancel locks them in too), so a concurrent cancel either
+    /// commits first -- and this writes nothing, returning `JobCancelled` --
+    /// or waits until this commits and then finds no job to cancel.
+    pub async fn update_ocr_for_job(
+        &self,
+        job_id: Uuid,
+        write: &OcrWrite<'_>,
+    ) -> Result<OcrWriteOutcome> {
+        self.write_ocr(Some(job_id), write).await
+    }
+
+    async fn write_ocr(
+        &self,
+        job_id: Option<Uuid>,
+        write: &OcrWrite<'_>,
+    ) -> Result<OcrWriteOutcome> {
+        let OcrWrite {
+            document_id,
+            expected_filename,
+            ocr_text,
+            confidence,
+            word_count,
+            processing_time_ms,
+        } = *write;
         let mut tx = self.pool.begin().await?;
-        
+
+        // 0. A cancelled job's result is discarded.
+        if let Some(job_id) = job_id {
+            if !crate::ocr::queue::lock_running_job(&mut tx, job_id).await? {
+                tx.rollback().await?;
+                info!(
+                    "OCR job {} for document {} was cancelled; discarding its result",
+                    job_id, document_id
+                );
+                return Ok(OcrWriteOutcome::JobCancelled);
+            }
+        }
+
         // 1. Lock the document row for update to prevent race conditions
         let document = sqlx::query(
             r#"
@@ -43,7 +115,7 @@ impl DocumentTransactionManager {
             FROM documents 
             WHERE id = $1 
             FOR UPDATE
-            "#
+            "#,
         )
         .bind(document_id)
         .fetch_optional(&mut *tx)
@@ -54,7 +126,7 @@ impl DocumentTransactionManager {
             None => {
                 tx.rollback().await?;
                 warn!("Document {} not found during OCR update", document_id);
-                return Ok(false);
+                return Ok(OcrWriteOutcome::Rejected);
             }
         };
 
@@ -63,25 +135,31 @@ impl DocumentTransactionManager {
         if filename != expected_filename {
             tx.rollback().await?;
             error!(
-                "Document {} filename mismatch: expected '{}', got '{}'", 
+                "Document {} filename mismatch: expected '{}', got '{}'",
                 document_id, expected_filename, filename
             );
-            return Ok(false);
+            return Ok(OcrWriteOutcome::Rejected);
         }
 
         // 3. Check if OCR is already completed (prevent double processing)
         let ocr_status: Option<String> = document.get("ocr_status");
         if ocr_status.as_deref() == Some("completed") {
             tx.rollback().await?;
-            warn!("Document {} OCR already completed, skipping update", document_id);
-            return Ok(false);
+            warn!(
+                "Document {} OCR already completed, skipping update",
+                document_id
+            );
+            return Ok(OcrWriteOutcome::Rejected);
         }
 
         // 4. Validate OCR data quality
         if ocr_text.is_empty() && confidence > 50.0 {
             tx.rollback().await?;
-            warn!("Document {} has high confidence ({}) but empty OCR text", document_id, confidence);
-            return Ok(false);
+            warn!(
+                "Document {} has high confidence ({}) but empty OCR text",
+                document_id, confidence
+            );
+            return Ok(OcrWriteOutcome::Rejected);
         }
 
         // 5. Perform the atomic update with additional safety checks
@@ -97,7 +175,7 @@ impl DocumentTransactionManager {
                 updated_at = NOW()
             WHERE id = $1 
               AND ocr_status != 'completed'  -- Extra safety check
-            "#
+            "#,
         )
         .bind(document_id)
         .bind(ocr_text.for_db())
@@ -109,8 +187,12 @@ impl DocumentTransactionManager {
 
         if updated_rows.rows_affected() != 1 {
             tx.rollback().await?;
-            error!("Document {} OCR update affected {} rows (expected 1)", document_id, updated_rows.rows_affected());
-            return Ok(false);
+            error!(
+                "Document {} OCR update affected {} rows (expected 1)",
+                document_id,
+                updated_rows.rows_affected()
+            );
+            return Ok(OcrWriteOutcome::Rejected);
         }
 
         // 6. Remove from OCR queue atomically
@@ -119,7 +201,7 @@ impl DocumentTransactionManager {
             DELETE FROM ocr_queue 
             WHERE document_id = $1 
               AND status = 'processing'
-            "#
+            "#,
         )
         .bind(document_id)
         .execute(&mut *tx)
@@ -129,21 +211,20 @@ impl DocumentTransactionManager {
 
         // 7. Commit transaction
         tx.commit().await?;
-        
+
         info!(
-            "✅ Document {} OCR updated successfully: {} chars, {:.1}% confidence, {} words", 
-            document_id, ocr_text.len(), confidence, word_count
+            "✅ Document {} OCR updated successfully: {} chars, {:.1}% confidence, {} words",
+            document_id,
+            ocr_text.len(),
+            confidence,
+            word_count
         );
-        
-        Ok(true)
+
+        Ok(OcrWriteOutcome::Written)
     }
 
     /// Safely handle OCR job failure with proper transaction boundaries
-    pub async fn mark_ocr_failed(
-        &self,
-        document_id: Uuid,
-        error_message: &str,
-    ) -> Result<()> {
+    pub async fn mark_ocr_failed(&self, document_id: Uuid, error_message: &str) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // Update document status
@@ -154,7 +235,7 @@ impl DocumentTransactionManager {
                 ocr_error = $2,
                 updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(document_id)
         .bind(error_message.for_db())
@@ -166,15 +247,18 @@ impl DocumentTransactionManager {
             r#"
             DELETE FROM ocr_queue 
             WHERE document_id = $1
-            "#
+            "#,
         )
         .bind(document_id)
         .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;
-        
-        error!("Document {} OCR marked as failed: {}", document_id, error_message);
+
+        error!(
+            "Document {} OCR marked as failed: {}",
+            document_id, error_message
+        );
         Ok(())
     }
 
@@ -224,7 +308,7 @@ impl DocumentTransactionManager {
             SET ocr_status = 'pending'
             WHERE ocr_status = 'processing'
               AND updated_at < NOW() - INTERVAL '30 minutes'
-            "#
+            "#,
         )
         .execute(&mut *tx)
         .await?;
@@ -234,7 +318,7 @@ impl DocumentTransactionManager {
             r#"
             DELETE FROM ocr_queue
             WHERE document_id NOT IN (SELECT id FROM documents)
-            "#
+            "#,
         )
         .execute(&mut *tx)
         .await?;
@@ -247,7 +331,7 @@ impl DocumentTransactionManager {
                 SELECT d.id FROM documents d 
                 WHERE d.ocr_status = 'completed'
             )
-            "#
+            "#,
         )
         .execute(&mut *tx)
         .await?;
@@ -275,8 +359,8 @@ pub struct ConsistencyReport {
 
 impl ConsistencyReport {
     pub fn is_consistent(&self) -> bool {
-        self.orphaned_queue_items == 0 
-            && self.stuck_processing_docs == 0 
+        self.orphaned_queue_items == 0
+            && self.stuck_processing_docs == 0
             && self.inconsistent_ocr_states == 0
     }
 }
