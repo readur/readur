@@ -6,20 +6,70 @@ import { IconButton, Popover, PopoverTrigger } from '../../ui';
 import { Help } from '../../ui/icons';
 import styles from './Library.module.css';
 
-const MODES: { mode: SearchMode; key: string; fallback: string; hintKey: string; hint: string }[] = [
-  { mode: 'simple', key: 'library.help.simple', fallback: 'All words', hintKey: 'library.help.simpleHint', hint: 'Every word appears somewhere' },
-  { mode: 'phrase', key: 'library.help.phrase', fallback: 'Exact phrase', hintKey: 'library.help.phraseHint', hint: 'The words appear together, in order' },
-  { mode: 'boolean', key: 'library.help.boolean', fallback: 'Operators', hintKey: 'library.help.booleanHint', hint: 'Use & (and), | (or), ! (not)' },
-  { mode: 'fuzzy', key: 'library.help.fuzzy', fallback: 'Similar spelling', hintKey: 'library.help.fuzzyHint', hint: 'Also finds near misses and typos' },
-];
+const MODES: { mode: SearchMode; key: string; fallback: string; hintKey: string; hint: string }[] =
+  [
+    {
+      mode: 'simple',
+      key: 'library.help.simple',
+      fallback: 'All words',
+      hintKey: 'library.help.simpleHint',
+      hint: 'Every word appears somewhere',
+    },
+    {
+      mode: 'phrase',
+      key: 'library.help.phrase',
+      fallback: 'Exact phrase',
+      hintKey: 'library.help.phraseHint',
+      hint: 'The words appear together, in order',
+    },
+    {
+      mode: 'boolean',
+      key: 'library.help.boolean',
+      fallback: 'Operators',
+      hintKey: 'library.help.booleanHint',
+      hint: 'Use & (and), | (or), ! (not)',
+    },
+    {
+      mode: 'fuzzy',
+      key: 'library.help.fuzzy',
+      fallback: 'Similar spelling',
+      hintKey: 'library.help.fuzzyHint',
+      hint: 'Finds words spelled close to yours; Settings decides how close',
+    },
+  ];
 
 const EXAMPLES: { q: string; mode: SearchMode; key: string; fallback: string }[] = [
-  { q: 'invoice', mode: 'simple', key: 'library.help.exampleWord', fallback: 'Documents that mention a word' },
-  { q: 'project proposal', mode: 'phrase', key: 'library.help.examplePhrase', fallback: 'An exact phrase' },
+  {
+    q: 'invoice',
+    mode: 'simple',
+    key: 'library.help.exampleWord',
+    fallback: 'Documents that mention a word',
+  },
+  {
+    q: 'project proposal',
+    mode: 'phrase',
+    key: 'library.help.examplePhrase',
+    fallback: 'An exact phrase',
+  },
   { q: 'invoice & paid', mode: 'boolean', key: 'library.help.exampleAnd', fallback: 'Both words' },
-  { q: 'budget | forecast', mode: 'boolean', key: 'library.help.exampleOr', fallback: 'Either word' },
-  { q: 'contract & !draft', mode: 'boolean', key: 'library.help.exampleNot', fallback: 'Leave a word out' },
-  { q: 'reciept', mode: 'fuzzy', key: 'library.help.exampleFuzzy', fallback: 'Tolerates typos' },
+  {
+    q: 'budget | forecast',
+    mode: 'boolean',
+    key: 'library.help.exampleOr',
+    fallback: 'Either word',
+  },
+  {
+    q: 'contract & !draft',
+    mode: 'boolean',
+    key: 'library.help.exampleNot',
+    fallback: 'Leave a word out',
+  },
+  {
+    q: 'invoce',
+    mode: 'fuzzy',
+    key: 'library.help.exampleFuzzy',
+    fallback: 'Finds “invoice” despite the typo',
+  },
 ];
 
 interface SearchHelpProps {
@@ -36,14 +86,21 @@ export function SearchHelp({ mode, onModeChange, onExample }: SearchHelpProps) {
   const examplesId = useId();
   return (
     <PopoverTrigger isOpen={open} onOpenChange={setOpen}>
-      <IconButton variant="ghost" label={t('library.help.open', 'Search help')} icon={<Help fontSize="small" />} />
+      <IconButton
+        variant="ghost"
+        label={t('library.help.open', 'Search help')}
+        icon={<Help fontSize="small" />}
+      />
       <Popover placement="bottom end">
         <RACDialog className={styles.help} aria-label={t('library.help.title', 'Search help')}>
           <Heading slot="title" className={styles.helpHeading}>
             {t('library.help.title', 'Search help')}
           </Heading>
           <p className={styles.helpText}>
-            {t('library.help.intro', 'Search looks through file names and the text read from each document.')}
+            {t(
+              'library.help.intro',
+              'Search looks through the text read from each document, not file names or labels.',
+            )}
           </p>
           <RadioGroup
             className={styles.helpModes}

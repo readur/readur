@@ -51,7 +51,9 @@ pub enum McpSearchMode {
     Simple,
     /// Exact phrase matching.
     Phrase,
-    /// Similarity matching, tolerant of typos and partial words.
+    /// Finds words spelled close to the query (typos, OCR slips) in documents
+    /// of any length, ranked by closeness; the cutoff is the user's fuzzy
+    /// search threshold setting.
     Fuzzy,
     /// Operators (keywords in any case): `AND`/`&` or adjacency, `OR`/`|`,
     /// `NOT`/`!`/leading `-`, `( )` grouping, "quoted phrases", `word:*` or
@@ -236,7 +238,8 @@ ranking, match snippets and phrase/fuzzy/boolean matching.",
     #[tool(
         description = "Search documents ranked by relevance, with text snippets showing where the query \
 matched and suggestions for refining the query. search_mode selects simple word matching (default), \
-exact phrase, fuzzy (typo-tolerant) or boolean matching. Boolean syntax: AND/& or adjacency, OR/|, \
+exact phrase, fuzzy (words spelled close to the query, within the user's fuzzy search threshold setting) \
+or boolean matching. Boolean syntax: AND/& or adjacency, OR/|, \
 NOT/!/leading -, parentheses for grouping, \"quoted phrases\", inv:* or inv* for prefixes, <-> or <N> for \
 followed-by; AND binds tighter than OR (e.g. `(invoice OR receipt) 2024 -\"draft copy\"`). Supports the same \
 filters as search_documents.",

@@ -127,7 +127,7 @@ Readur's search system gives you multiple ways to find documents, from simple ke
 
 ### Different Ways to Search
 
-Simple search (**All words**) works for most situations: type what you're looking for and Readur finds documents containing every word, handling word variations such as plurals. To find an exact phrase, switch the search to **Exact phrase** mode (or use quotes in **Operators** mode, like `"quarterly report"`). **Similar spelling** (fuzzy) mode tolerates typos, but compares the query with a document's whole text, so it only helps for short documents. When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT. Search looks at a document's extracted and OCR text, not its file name or labels; use filters for those.
+Simple search (**All words**) works for most situations: type what you're looking for and Readur finds documents containing every word, handling word variations such as plurals. To find an exact phrase, switch the search to **Exact phrase** mode (or use quotes in **Operators** mode, like `"quarterly report"`). **Similar spelling** (fuzzy) mode tolerates typos and OCR slips: it finds documents of any length containing a word spelled close to the query (`invoce` finds "invoice"), ranked by how close the spelling is. How close is close enough is your fuzzy search threshold in Settings. When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT. Search looks at a document's extracted and OCR text, not its file name or labels; use filters for those.
 
 ### Boolean (Operators) Search
 
@@ -293,7 +293,7 @@ Image preprocessing options help with documents that aren't perfectly scanned. E
 
 Search settings affect how results appear and behave. Adjust the number of results per page based on your screen size and browsing preferences. The default sort order determines how search results are organized - by relevance, date, or other criteria that match how you typically look for documents.
 
-Snippet length controls how much text appears in search previews. The fuzzy search threshold setting is stored but not yet applied: Similar spelling mode always uses a fixed similarity threshold of 0.3 (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
+Snippet length controls how much text appears in search previews. The fuzzy search threshold (0.0 to 1.0, default 0.5) is how closely a word must be spelled like the query for Similar spelling mode to match it: higher accepts fewer spelling mistakes, 1.0 only the exact spelling, and lower values tolerate more but below about 0.3 start matching unrelated long documents (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
 
 ## API Keys
 

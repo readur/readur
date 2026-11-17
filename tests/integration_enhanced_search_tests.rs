@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use readur::db::Database;
     use readur::models::{
-        CreateUser, Document, SearchRequest, SearchMode, 
+        Document, SearchRequest, SearchMode, 
         EnhancedDocumentResponse, SearchSnippet, HighlightRange
     };
     use chrono::Utc;
@@ -34,11 +33,7 @@ mod tests {
 
             // Find matches
             for (i, _) in text_lower.match_indices(&query_lower) {
-                let snippet_start = if i >= snippet_length as usize / 2 {
-                    i - snippet_length as usize / 2
-                } else {
-                    0
-                };
+                let snippet_start = i.saturating_sub(snippet_length as usize / 2);
                 
                 let snippet_end = std::cmp::min(
                     snippet_start + snippet_length as usize,
@@ -395,12 +390,10 @@ mod tests {
         
         let snippets = mock_db.generate_snippets("тест", Some(unicode_content), None, 60);
         
-        // Unicode handling might be tricky, so let's make this test more robust
+        // Unicode handling might be tricky, so let's make this test more robust:
+        // empty snippets mean the function handled unicode gracefully.
         if !snippets.is_empty() {
             assert!(snippets[0].text.contains("тест"));
-        } else {
-            // If snippets are empty, it means the function handled unicode gracefully
-            assert!(true);
         }
     }
 
@@ -807,7 +800,7 @@ mod tests {
         
         // Snippet should not cut words in the middle
         let words: Vec<&str> = snippet.text.split_whitespace().collect();
-        assert!(words.len() > 0);
+        assert!(!words.is_empty());
         // First and last words should be complete (not cut off)
         if snippet.start_offset > 0 {
             assert!(!snippet.text.starts_with(" "));
@@ -909,8 +902,8 @@ mod tests {
         assert!(!substring_snippets.is_empty());
         
         // Both should find matches
-        assert!(exact_snippets[0].highlight_ranges.len() >= 1);
-        assert!(substring_snippets[0].highlight_ranges.len() >= 1);
+        assert!(!exact_snippets[0].highlight_ranges.is_empty());
+        assert!(!substring_snippets[0].highlight_ranges.is_empty());
     }
 
     // Integration tests that would work with actual database
@@ -972,7 +965,7 @@ mod tests {
             ..Default::default()
         };
         
-        let result = ctx.state.db.enhanced_search_documents(user.user_response.id, &search_request).await;
+        let result = ctx.state.db.enhanced_search_documents(user.user_response.id, &search_request, readur::models::FuzzyThreshold::default()).await;
         assert!(result.is_ok());
         
         let documents = result.unwrap();

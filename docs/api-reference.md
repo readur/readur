@@ -464,7 +464,8 @@ GET /api/search
 - `per_page`: Items per page
 - `filters`: JSON-encoded filters
 - `highlight`: Enable highlighting (default: true)
-- `fuzzy`: Enable fuzzy search (default: false)
+
+`GET /api/search` always matches all words (simple mode). Fuzzy (similar spelling) matching is `GET /api/search/enhanced?search_mode=fuzzy`, which uses the caller's fuzzy search threshold setting; see the [Advanced Search Guide](advanced-search.md#search-api) for the exact parameters.
 
 **Response:** `200 OK`
 ```json

@@ -370,7 +370,7 @@ impl Default for Settings {
             enable_image_preprocessing: false,
             search_results_per_page: 25,
             search_snippet_length: 200,
-            fuzzy_search_threshold: 0.8,
+            fuzzy_search_threshold: crate::models::FuzzyThreshold::DEFAULT,
             retention_days: None,
             enable_auto_cleanup: false,
             enable_compression: false,

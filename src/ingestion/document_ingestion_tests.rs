@@ -346,3 +346,70 @@ fn auto_rotate_all_orientations_produce_valid_images() {
         }
     }
 }
+
+fn ingestion_request(source_type: Option<&str>) -> super::DocumentIngestionRequest {
+    super::DocumentIngestionRequest {
+        filename: "stored.pdf".to_string(),
+        original_filename: "Original Name.pdf".to_string(),
+        file_data: b"%PDF".to_vec(),
+        mime_type: "application/pdf".to_string(),
+        user_id: uuid::Uuid::new_v4(),
+        deduplication_policy: super::DeduplicationPolicy::Skip,
+        source_type: source_type.map(str::to_string),
+        source_id: None,
+        original_created_at: None,
+        original_modified_at: None,
+        source_path: None,
+        file_permissions: None,
+        file_owner: None,
+        file_group: None,
+        source_metadata: None,
+    }
+}
+
+#[test]
+fn storage_failure_record_has_no_path_and_describes_the_request() {
+    let request = ingestion_request(Some("webdav"));
+    let hash = "ab".repeat(32);
+    let context = super::IngestionFailureContext::new(&request, &hash, 4);
+    let failed = context.failed_document("storage", None, &"disk full");
+    assert_eq!(failed.user_id, request.user_id);
+    assert_eq!(failed.filename, "stored.pdf");
+    assert_eq!(
+        failed.original_filename.as_deref(),
+        Some("Original Name.pdf")
+    );
+    assert_eq!(failed.file_path, None);
+    assert_eq!(failed.file_size, Some(4));
+    assert_eq!(failed.file_hash.as_deref(), Some(hash.as_str()));
+    assert_eq!(failed.mime_type.as_deref(), Some("application/pdf"));
+    assert_eq!(failed.failure_stage, "storage");
+    assert_eq!(
+        failed.failure_reason,
+        crate::models::FailureReason::Other.to_string()
+    );
+    assert_eq!(failed.ingestion_source, "webdav");
+    assert_eq!(failed.error_message.as_deref(), Some("disk full"));
+    assert_eq!(failed.retry_count, Some(0));
+    assert_eq!(failed.existing_document_id, None);
+}
+
+#[test]
+fn insert_failure_record_keeps_the_stored_path_and_defaults_to_upload() {
+    let request = ingestion_request(None);
+    let context = super::IngestionFailureContext::new(&request, &"cd".repeat(32), 4);
+    let failed = context.failed_document(
+        "ingestion",
+        Some("/uploads/stored.pdf".to_string()),
+        &"connection reset",
+    );
+    assert_eq!(failed.file_path.as_deref(), Some("/uploads/stored.pdf"));
+    assert_eq!(failed.failure_stage, "ingestion");
+    assert_eq!(failed.ingestion_source, "upload");
+    assert_eq!(failed.error_message.as_deref(), Some("connection reset"));
+    // Each record is its own row.
+    assert_ne!(
+        failed.id,
+        context.failed_document("ingestion", None, &"x").id
+    );
+}

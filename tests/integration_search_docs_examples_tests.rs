@@ -16,6 +16,7 @@ use tower::util::ServiceExt;
 use uuid::Uuid;
 
 use readur::db::documents::boolean_to_tsquery;
+use readur::models::FuzzyThreshold;
 use readur::test_utils::{document_helpers::create_test_document, TestContext};
 
 /// Which documents of `CORPUS` a query finds.
@@ -279,15 +280,24 @@ const MODE_EXAMPLES: &[ModeSection] = &[
         ],
     ),
     (
-        "### Fuzzy Search (Similar Spelling)",
+        FUZZY_HEADING,
         "fuzzy",
+        // At the default fuzzy threshold (the test user has no settings).
         &[
+            ("invoce", INVOICES),
             ("waranty card", Only(&["warranty"])),
-            ("warranty", Only(&["warranty"])),
-            ("invoce", Only(&[])),
+            ("purchse order", Only(&["po_approved", "po_cancelled"])),
+            ("reciept", Only(&[])),
         ],
     ),
 ];
+
+const FUZZY_HEADING: &str = "### Fuzzy Search (Similar Spelling)";
+
+/// Fuzzy examples whose note also says what they find at a lowered threshold: the query, the
+/// threshold as the note writes it, and the documents of `CORPUS` found at that threshold.
+const FUZZY_AT_THRESHOLD: &[(&str, &str, Hits)] =
+    &[("reciept", "0.35", Only(&["receipt", "receipt_paid"]))];
 
 fn example(query: &str) -> Option<&'static Example> {
     EXAMPLES.iter().find(|e| e.query == query)
@@ -492,6 +502,71 @@ fn every_documented_mode_example_is_covered() {
     }
 }
 
+/// The fuzzy section states the default threshold the search applies, and every lowered
+/// threshold `FUZZY_AT_THRESHOLD` checks is the one its note mentions.
+#[test]
+fn fuzzy_section_states_the_thresholds_checked() {
+    let doc = advanced_search_doc();
+    let text = section(&doc, FUZZY_HEADING);
+    let default = format!("{} unless you change it", FuzzyThreshold::DEFAULT);
+    assert!(
+        text.contains(&default),
+        "{FUZZY_HEADING} should say {default:?}"
+    );
+    let documented = documented_queries(FUZZY_HEADING, text);
+    for (query, threshold, _) in FUZZY_AT_THRESHOLD {
+        let note = documented
+            .iter()
+            .find(|d| d.query == *query)
+            .and_then(|d| d.note.clone())
+            .unwrap_or_else(|| panic!("no documented note for fuzzy {query:?}"));
+        assert!(
+            note.contains(&format!("threshold of {threshold}")),
+            "fuzzy {query:?}: note {note:?} should mention a threshold of {threshold}"
+        );
+    }
+}
+
+/// The scores the fuzzy notes quote (`scores 0.57 against "invoice"`), as pairs of the
+/// documented query, the quoted score and the word it is scored against.
+fn quoted_fuzzy_scores(doc: &str) -> Vec<(String, String, String)> {
+    let mut scores = Vec::new();
+    for d in documented_queries(FUZZY_HEADING, section(doc, FUZZY_HEADING)) {
+        let Some(note) = d.note else { continue };
+        let mut rest = note.as_str();
+        while let Some(at) = rest.find("scores ") {
+            rest = &rest[at + "scores ".len()..];
+            let (score, after) = rest
+                .split_once(" against \"")
+                .expect("scores N against \"word\"");
+            let (word, after) = after.split_once('"').expect("closing quote");
+            scores.push((d.query.clone(), score.to_string(), word.to_string()));
+            rest = after;
+        }
+    }
+    scores
+}
+
+/// Every score a fuzzy note quotes is what pg_trgm computes.
+#[tokio::test]
+async fn quoted_fuzzy_scores_are_what_postgres_computes() {
+    let ctx = TestContext::new().await;
+    let scores = quoted_fuzzy_scores(&advanced_search_doc());
+    assert!(
+        scores.len() >= 2,
+        "expected quoted scores, found {scores:?}"
+    );
+    for (query, quoted, word) in scores {
+        let score: f32 = sqlx::query_scalar("SELECT word_similarity($1, $2)")
+            .bind(&query)
+            .bind(&word)
+            .fetch_one(&ctx.state().db.pool)
+            .await
+            .unwrap();
+        assert_eq!(format!("{score:.2}"), quoted, "{query:?} against {word:?}");
+    }
+}
+
 /// Postgres accepts every rendered example.
 #[tokio::test]
 async fn every_example_is_valid_tsquery() {
@@ -568,6 +643,43 @@ async fn every_example_finds_exactly_the_recorded_documents() {
             .map(|doc: &Value| key_by_id[doc["id"].as_str().unwrap()])
             .collect();
         assert_eq!(found, expected_keys(hits), "{mode} query {query:?}");
+    }
+
+    // The fuzzy examples documented at a lowered threshold, after saving it as the user's
+    // setting the way the Settings page does.
+    for (query, threshold, hits) in FUZZY_AT_THRESHOLD {
+        let response = ctx
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/settings")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "fuzzy_search_threshold": threshold.parse::<f32>().unwrap() })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let result = ctx
+            .mcp_call_tool(
+                &token,
+                "enhanced_search",
+                json!({ "query": query, "search_mode": "fuzzy", "limit": 100 }),
+            )
+            .await;
+        let found: BTreeSet<&str> = result["structuredContent"]["documents"]
+            .as_array()
+            .unwrap_or_else(|| panic!("fuzzy {query:?} at {threshold}: {result}"))
+            .iter()
+            .map(|doc: &Value| key_by_id[doc["id"].as_str().unwrap()])
+            .collect();
+        assert_eq!(found, expected_keys(hits), "fuzzy {query:?} at {threshold}");
     }
 }
 

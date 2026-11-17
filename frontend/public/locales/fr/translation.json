@@ -851,7 +851,7 @@
         "snippetLength": "Longueur de l'extrait",
         "snippetLengthHelper": "Caractères à afficher dans les aperçus des résultats de recherche",
         "fuzzySearchThreshold": "Seuil de recherche floue",
-        "fuzzySearchThresholdHelper": "Tolérance pour les fautes d'orthographe (0.0-1.0)"
+        "fuzzySearchThresholdHelper": "Degré de ressemblance exigé entre un mot et la requête en recherche orthographe proche : 1.0 n'accepte que l'orthographe exacte, une valeur plus basse tolère plus de fautes (0.5 par défaut)"
       },
       "storageManagement": {
         "title": "Gestion du stockage",
@@ -2383,15 +2383,15 @@
       "boolean": "Opérateurs",
       "booleanHint": "Utilisez & (et), | (ou), ! (sauf)",
       "exampleAnd": "Les deux mots",
-      "exampleFuzzy": "Tolère les fautes de frappe",
+      "exampleFuzzy": "Trouve « invoice » malgré la faute",
       "exampleNot": "Exclure un mot",
       "exampleOr": "L’un ou l’autre mot",
       "examplePhrase": "Une expression exacte",
       "exampleWord": "Documents qui mentionnent un mot",
       "examples": "Essayer",
       "fuzzy": "Orthographe proche",
-      "fuzzyHint": "Trouve aussi les correspondances proches et les coquilles",
-      "intro": "La recherche porte sur les noms de fichiers et le texte lu dans chaque document.",
+      "fuzzyHint": "Mots dont l'orthographe est proche de la vôtre, selon le seuil de vos paramètres",
+      "intro": "La recherche porte sur le texte lu dans chaque document, pas sur les noms de fichiers ni les étiquettes.",
       "match": "Correspondance",
       "open": "Aide à la recherche",
       "phrase": "Expression exacte",
@@ -2428,7 +2428,7 @@
       "selectAll_one": "Sélectionner le seul résultat",
       "selectAll_other": "Sélectionner les {{formatted}} résultats",
       "selectPage": "Tout sélectionner sur cette page",
-      "startHint": "Readur cherche dans les noms de fichiers et dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
+      "startHint": "Readur cherche dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
       "startTitle": "Retrouvez tout dans vos documents",
       "title": "Recherche avancée"
     },

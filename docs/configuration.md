@@ -89,9 +89,10 @@ See the [Configuration Reference](configuration-reference.md#security-and-access
 |----------|---------|-------------|
 | `SEARCH_RESULTS_PER_PAGE` | `25` | Default number of search results per page |
 | `SEARCH_SNIPPET_LENGTH` | `200` | Length of text snippets in search results |
-| `FUZZY_SEARCH_THRESHOLD` | `0.8` | Similarity threshold for fuzzy search (0.0-1.0) |
 | `MEMORY_LIMIT_MB` | `512` | Memory limit for OCR processes |
 | `CPU_PRIORITY` | `normal` | CPU priority: `low`, `normal`, `high` |
+
+The fuzzy search threshold is not an environment variable: each user sets it under Settings (Search configuration), default 0.5. See [Fuzzy search](advanced-search.md#fuzzy-search-similar-spelling).
 
 ### Data Management
 
@@ -180,7 +181,6 @@ ENABLE_BACKGROUND_OCR=true
 # Search optimization
 SEARCH_RESULTS_PER_PAGE=50
 SEARCH_SNIPPET_LENGTH=300
-FUZZY_SEARCH_THRESHOLD=0.7
 
 # Data management
 RETENTION_DAYS=2555  # 7 years

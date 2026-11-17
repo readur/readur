@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{Postgres, QueryBuilder, Row};
+use sqlx::{Postgres, QueryBuilder, Row, Transaction};
 use uuid::Uuid;
 
 use super::helpers::{
@@ -12,8 +12,8 @@ use super::snippets::build_snippets;
 use crate::db::sanitize::strip_nul;
 use crate::db::Database;
 use crate::models::{
-    Document, EnhancedDocumentResponse, MonthCount, SearchMode, SearchRequest, SearchSnippet,
-    UserRole,
+    Document, EnhancedDocumentResponse, FuzzyThreshold, MonthCount, SearchMode, SearchRequest,
+    SearchSnippet, UserRole,
 };
 
 /// A document's searchable text (content and OCR text) as one tsvector. It
@@ -23,6 +23,11 @@ use crate::models::{
 /// document's empty content column even when its OCR text says "draft".
 const DOCUMENT_TSVECTOR: &str =
     "to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''))";
+
+/// A document's searchable text as one string, for fuzzy matching. It is
+/// exactly the expression of the `idx_documents_content_trgm` trigram index,
+/// so `<%` can be answered from that index instead of scanning every row.
+const DOCUMENT_TEXT: &str = "(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''))";
 
 /// SQL expression building the tsquery (or similarity operand) for a search mode.
 fn tsquery_function(mode: &SearchMode) -> &'static str {
@@ -63,9 +68,13 @@ pub(crate) fn highlight_terms(search_query: &str, mode: &SearchMode) -> Vec<Stri
 /// Appends the `, <rank> as search_rank` select column for a search query.
 fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode: &SearchMode) {
     match mode {
+        // How closely the best-matching stretch of the text is spelled like
+        // the query (1.0 when the query's words appear as written).
         SearchMode::Fuzzy => {
-            query.push(", similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
+            query.push(", word_similarity(");
             query.push_bind(strip_nul(search_query).into_owned());
+            query.push(", ");
+            query.push(DOCUMENT_TEXT);
             query.push(") as search_rank");
         }
         _ => {
@@ -87,10 +96,15 @@ fn push_search_condition(
     mode: &SearchMode,
 ) {
     match mode {
+        // Word-level: the query against the closest stretch of the text,
+        // not the whole text, so a long document containing a near-miss of
+        // the query matches. The cutoff is `pg_trgm.word_similarity_threshold`,
+        // set per search by `Database::begin_search`.
         SearchMode::Fuzzy => {
-            query.push(" AND similarity(COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''), ");
+            query.push(" AND ");
             query.push_bind(strip_nul(search_query).into_owned());
-            query.push(") > 0.3");
+            query.push(" <% ");
+            query.push(DOCUMENT_TEXT);
         }
         _ => {
             query.push(" AND ");
@@ -121,7 +135,36 @@ fn push_search_scope(
     apply_document_filters(query, &search_request.filters());
 }
 
+/// The request's search mode (simple when unset).
+fn request_mode(search_request: &SearchRequest) -> &SearchMode {
+    search_request
+        .search_mode
+        .as_ref()
+        .unwrap_or(&SearchMode::Simple)
+}
+
 impl Database {
+    /// Opens the transaction a search runs in. In fuzzy mode it first sets
+    /// `pg_trgm.word_similarity_threshold` to `fuzzy`: the `<%` operator,
+    /// which the trigram index can serve, takes its cutoff from that setting
+    /// rather than from an argument. `set_config(.., true)` scopes it to this
+    /// transaction, so it never leaks to the next user of the pooled
+    /// connection, and every query of the search sees the same cutoff.
+    async fn begin_search(
+        &self,
+        mode: &SearchMode,
+        fuzzy: FuzzyThreshold,
+    ) -> Result<Transaction<'_, Postgres>> {
+        let mut tx = self.pool.begin().await?;
+        if matches!(mode, SearchMode::Fuzzy) {
+            sqlx::query("SELECT set_config('pg_trgm.word_similarity_threshold', $1, true)")
+                .bind(fuzzy.value().to_string())
+                .execute(&mut *tx)
+                .await?;
+        }
+        Ok(tx)
+    }
+
     /// Performs basic document search with PostgreSQL full-text search.
     /// Only the user's own documents are searched; see `search_documents_with_role`.
     pub async fn search_documents(
@@ -180,26 +223,26 @@ impl Database {
         &self,
         user_id: Uuid,
         search_request: &SearchRequest,
+        fuzzy: FuzzyThreshold,
     ) -> Result<Vec<EnhancedDocumentResponse>> {
-        self.enhanced_search_documents_with_role(user_id, UserRole::User, search_request)
+        self.enhanced_search_documents_with_role(user_id, UserRole::User, search_request, fuzzy)
             .await
     }
 
     /// Enhanced search with role-based access control, filters and sorting.
-    /// Defaults to relevance order when no sort is given.
+    /// Defaults to relevance order when no sort is given. `fuzzy` is the
+    /// cutoff of fuzzy mode (ignored by the other modes).
     pub async fn enhanced_search_documents_with_role(
         &self,
         user_id: Uuid,
         user_role: UserRole,
         search_request: &SearchRequest,
+        fuzzy: FuzzyThreshold,
     ) -> Result<Vec<EnhancedDocumentResponse>> {
         let search_query = search_request.query.trim();
         let include_snippets = search_request.include_snippets.unwrap_or(true);
         let snippet_length = search_request.snippet_length.unwrap_or(200) as usize;
-        let mode = search_request
-            .search_mode
-            .as_ref()
-            .unwrap_or(&SearchMode::Simple);
+        let mode = request_mode(search_request);
 
         let mut query = QueryBuilder::<Postgres>::new("SELECT ");
         query.push(DOCUMENT_FIELDS);
@@ -234,7 +277,9 @@ impl Database {
         let offset = search_request.offset.unwrap_or(0);
         apply_pagination(&mut query, limit, offset);
 
-        let rows = query.build().fetch_all(&self.pool).await?;
+        let mut tx = self.begin_search(mode, fuzzy).await?;
+        let rows = query.build().fetch_all(&mut *tx).await?;
+        tx.commit().await?;
 
         let terms = highlight_terms(search_query, mode);
         let mut results = Vec::new();
@@ -299,34 +344,43 @@ impl Database {
         build_snippets(&texts, terms, snippet_length)
     }
 
-    /// Counts total matching documents for pagination (without applying LIMIT/OFFSET),
-    /// using the request's `search_mode` (simple when unset).
+    /// Counts total matching documents for pagination (without applying
+    /// LIMIT/OFFSET), using the request's `search_mode` (simple when unset)
+    /// and, in fuzzy mode, the cutoff `fuzzy`. Pass the same `fuzzy` as to
+    /// `enhanced_search_documents_with_role` so the count matches the list.
     pub async fn count_search_documents(
         &self,
         user_id: Uuid,
         user_role: UserRole,
         search_request: &SearchRequest,
+        fuzzy: FuzzyThreshold,
     ) -> Result<i64> {
-        let mode = search_request
-            .search_mode
-            .as_ref()
-            .unwrap_or(&SearchMode::Simple);
-        self.count_search_documents_in_mode(user_id, user_role, search_request, mode)
-            .await
+        let mode = request_mode(search_request);
+        let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
+        push_search_scope(&mut query, user_id, user_role, search_request, mode);
+
+        let mut tx = self.begin_search(mode, fuzzy).await?;
+        let row: (i64,) = query.build_query_as().fetch_one(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(row.0)
     }
 
-    /// Counts total matching documents in the given mode, ignoring the
-    /// request's `search_mode`. The basic search list always matches in simple
-    /// mode, so its count must too.
-    pub async fn count_search_documents_in_mode(
+    /// Counts the matches of basic search, which always matches in simple
+    /// mode whatever the request's `search_mode`, so its count must too.
+    pub async fn count_basic_search_documents(
         &self,
         user_id: Uuid,
         user_role: UserRole,
         search_request: &SearchRequest,
-        mode: &SearchMode,
     ) -> Result<i64> {
         let mut query = QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM documents WHERE 1=1");
-        push_search_scope(&mut query, user_id, user_role, search_request, mode);
+        push_search_scope(
+            &mut query,
+            user_id,
+            user_role,
+            search_request,
+            &SearchMode::Simple,
+        );
 
         let row: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
         Ok(row.0)
@@ -340,11 +394,9 @@ impl Database {
         user_id: Uuid,
         user_role: UserRole,
         search_request: &SearchRequest,
+        fuzzy: FuzzyThreshold,
     ) -> Result<Vec<MonthCount>> {
-        let mode = search_request
-            .search_mode
-            .as_ref()
-            .unwrap_or(&SearchMode::Simple);
+        let mode = request_mode(search_request);
         let mut query = QueryBuilder::<Postgres>::new(
             "SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS month, \
              COUNT(*) AS count FROM documents WHERE 1=1",
@@ -352,7 +404,9 @@ impl Database {
         push_search_scope(&mut query, user_id, user_role, search_request, mode);
         query.push(" GROUP BY 1 ORDER BY 1");
 
-        let rows: Vec<(String, i64)> = query.build_query_as().fetch_all(&self.pool).await?;
+        let mut tx = self.begin_search(mode, fuzzy).await?;
+        let rows: Vec<(String, i64)> = query.build_query_as().fetch_all(&mut *tx).await?;
+        tx.commit().await?;
         Ok(rows
             .into_iter()
             .map(|(month, count)| MonthCount { month, count })

@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   enable_image_preprocessing: false,
   search_results_per_page: 25,
   search_snippet_length: 200,
-  fuzzy_search_threshold: 0.8,
+  fuzzy_search_threshold: 0.5,
   retention_days: null,
   enable_auto_cleanup: false,
   enable_compression: false,
@@ -84,7 +84,9 @@ export const DEFAULT_SETTINGS: SettingsValues = {
  * Merge a server response over the defaults. Missing or null values fall back to the default,
  * except `retention_days`, where null means "keep forever".
  */
-export function normalizeSettings(data: Partial<Record<string, unknown>> | null | undefined): SettingsValues {
+export function normalizeSettings(
+  data: Partial<Record<string, unknown>> | null | undefined,
+): SettingsValues {
   const out = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
   if (!data || typeof data !== 'object') return out as SettingsValues;
   for (const key of Object.keys(DEFAULT_SETTINGS) as SettingKey[]) {

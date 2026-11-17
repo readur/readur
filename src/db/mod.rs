@@ -373,7 +373,7 @@ impl Database {
                 enable_image_preprocessing BOOLEAN DEFAULT TRUE,
                 search_results_per_page INT DEFAULT 25,
                 search_snippet_length INT DEFAULT 200,
-                fuzzy_search_threshold REAL DEFAULT 0.8,
+                fuzzy_search_threshold REAL DEFAULT 0.5,
                 retention_days INT,
                 enable_auto_cleanup BOOLEAN DEFAULT FALSE,
                 enable_compression BOOLEAN DEFAULT FALSE,

@@ -107,7 +107,7 @@ Every tool acts as the user who owns the key and sees exactly what that user see
 | Tool | What it does |
 |------|--------------|
 | `search_documents` | Full-text search over document names and OCR text |
-| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match. See [Boolean search syntax](#boolean-search-syntax) |
+| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match. Fuzzy finds words spelled close to the query in documents of any length, using the calling user's fuzzy search threshold setting ([details](advanced-search.md#fuzzy-search-similar-spelling)). See [Boolean search syntax](#boolean-search-syntax) |
 | `get_search_facets` | Document counts per MIME type and tag, for narrowing a search |
 
 #### Boolean search syntax
