@@ -118,19 +118,19 @@ Extra Playwright arguments go after `--`, for example `npm run test:e2e -- --pro
 - Test directory `./e2e`, 60 s timeout per test, 10 s for `expect`.
 - Projects: `chromium` (all specs except `websocket-*.spec.ts`), `chromium-websocket` (only `websocket-*.spec.ts`, one worker), `firefox` and `webkit` (kept for local runs; CI runs only the two Chromium projects).
 - Not fully parallel; 2 workers locally, 1 in CI. One retry locally, two in CI. `test.only` fails the run in CI.
-- Reports: HTML in `test-results/e2e-report`, JSON in `test-results/e2e-results.json`, and the list reporter. Traces on the first retry, screenshots on failure, videos kept on failure, all under `test-results/e2e-artifacts`.
+- Reports: HTML in `test-results/e2e-report`, JSON in `test-results/e2e-results.json`, and the list reporter (with `PLAYWRIGHT_BLOB_REPORT` set, as in CI: a blob report in `blob-report/` and the list reporter). Traces on the first retry, screenshots on failure, videos kept on failure, all under `test-results/e2e-artifacts`.
 - `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` points the Chromium projects at a system browser, for hosts where the downloaded one cannot run (NixOS, for example).
 - `CI` set: no dev server is started, retries and workers change as above.
 
 ## CI
 
-`.github/workflows/test-e2e.yml` runs on pushes and pull requests to `main` and `master`. It starts PostgreSQL 18 as a service, installs Tesseract and the other OCR tools, builds the backend (`cargo build --release`) and the frontend (`npm run build`), and starts `./target/release/readur` on port 8000 with a generated `JWT_SECRET` and a fixed admin password; the backend serves the built frontend itself. It then waits up to a minute for `GET /api/health`, failing the job with the tail of the server log if the backend exits or never answers, installs Chromium, and runs:
+`.github/workflows/test-e2e.yml` runs on pushes and pull requests to `main` and `master`. A build job compiles the backend (`cargo build --release`) and the frontend (`npm run build`) once and hands both to four shard jobs. Each shard starts its own PostgreSQL 18 service, installs Tesseract and the other OCR tools, and starts `./target/release/readur` on port 8000 with a generated `JWT_SECRET` and a fixed admin password; the backend serves the built frontend itself. It then waits up to a minute for `GET /api/health`, failing the job with the tail of the server log if the backend exits or never answers, installs Chromium, and runs:
 
 ```bash
 npm run test:e2e -- --project=chromium --project=chromium-websocket
 ```
 
-with `PLAYWRIGHT_BASE_URL` set to `http://localhost:8000`. Test results are uploaded as artifacts.
+with `PLAYWRIGHT_BASE_URL` set to `http://localhost:8000`, `PLAYWRIGHT_SHARD` set to its shard (`1/4` to `4/4`; `playwright.config.ts` turns it into the `shard` option, like `--shard=1/4`) and `PLAYWRIGHT_BLOB_REPORT` set, which swaps the reporters for a blob report in `frontend/blob-report/` plus the list reporter. Playwright shards both projects together, so the shards' union is the whole suite. Each shard uploads its `test-results/` as `playwright-results-N`; a merge job combines the blob reports into one HTML report (`npx playwright merge-reports --reporter html`), uploaded as `playwright-report`. The `E2E Tests` check passes only when the build and every shard succeed.
 
 ## Test layout
 

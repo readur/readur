@@ -12,7 +12,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # CI_JWT_SECRET is generated per run (see "Generate throwaway JWT secret").
+  # CI_JWT_SECRET is generated per shard (see "Generate throwaway JWT secret").
   # Seeded admin account; the E2E suite logs in with it to provision test users.
   E2E_ADMIN_USERNAME: admin
   E2E_ADMIN_PASSWORD: e2e-ci-admin-password
@@ -25,10 +25,73 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Job graph:
+#   build ─> e2e (matrix: Playwright --shard=i/n over both Chromium projects) ─> merge-reports
+#                                                                           └─> E2E Tests
+# `build` compiles the backend and the frontend once; every shard starts its own backend and
+# database from them. "E2E Tests" is the single required check: it fails unless the build and
+# every shard succeeded.
+
 jobs:
-  e2e-tests:
-    name: E2E Tests
+  build:
+    name: Build backend and frontend
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libtesseract-dev \
+            libleptonica-dev \
+            pkg-config \
+            libclang-dev \
+            clang
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      - name: Build backend
+        run: cargo build --release
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-build
+          # Kept relative to the repository root: the server serves ./frontend/dist.
+          path: |
+            target/release/readur
+            frontend/dist/
+          retention-days: 1
+          if-no-files-found: error
+
+  e2e:
+    name: E2E shard ${{ matrix.shard }}/${{ strategy.job-total }}
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     services:
       postgres:
@@ -64,6 +127,7 @@ jobs:
           echo "::add-mask::$secret"
           echo "CI_JWT_SECRET=$secret" >> "$GITHUB_ENV"
 
+      # The OCR tools and the libraries the backend links against.
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -77,38 +141,30 @@ jobs:
             tesseract-ocr-por \
             libtesseract-dev \
             libleptonica-dev \
-            pkg-config \
-            libclang-dev \
             ocrmypdf \
-            poppler-utils \
-            clang
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+            poppler-utils
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
 
-      - name: Build backend
-        run: cargo build --release
-        env:
-          DATABASE_URL: postgres://readur:readur@localhost:5432/readur
-          RUST_BACKTRACE: 1
+      - name: Download build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-build
 
-      - name: Build frontend
+      - name: Install frontend dependencies
         working-directory: ./frontend
-        run: |
-          npm install
-          npm run build
+        run: npm install
 
       - name: Start backend server
         run: |
+          # Artifacts do not keep the executable bit.
+          chmod +x ./target/release/readur
           echo "Starting server with DATABASE_URL: $DATABASE_URL"
           ./target/release/readur > server.log 2>&1 &
           echo $! > backend.pid
-          sleep 2
           echo "Server started with PID: $(cat backend.pid)"
         env:
           DATABASE_URL: postgres://readur:readur@localhost:5432/readur
@@ -152,21 +208,33 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps chromium
 
+      # Playwright shards the tests of both projects together, so every shard can run some of
+      # each and their union is the whole suite.
       - name: Run frontend E2E tests
         working-directory: ./frontend
         run: npm run test:e2e -- --project=chromium --project=chromium-websocket
         env:
+          # This job's shard, i/n (read by playwright.config.ts, like --shard=i/n).
+          PLAYWRIGHT_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
           # The backend serves the built frontend and the API on one origin.
           PLAYWRIGHT_BASE_URL: http://localhost:8000
+          # A blob report per shard, merged by the merge-reports job.
+          PLAYWRIGHT_BLOB_REPORT: 1
 
-      - name: Upload Playwright Test Results
+      - name: Upload blob report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: frontend/blob-report/
+          retention-days: 1
+
+      - name: Upload Playwright test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: playwright-results
-          path: |
-            frontend/test-results/
-            frontend/playwright-report/
+          name: playwright-results-${{ matrix.shard }}
+          path: frontend/test-results/
           retention-days: 30
 
       - name: Print server logs on failure
@@ -183,3 +251,62 @@ jobs:
             kill "$(cat backend.pid)" || true
             rm backend.pid
           fi
+
+  merge-reports:
+    name: Merge E2E reports
+    needs: e2e
+    # Merge whatever the shards produced, failures included.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Download blob reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: blob-report-*
+          path: frontend/all-blob-reports
+          merge-multiple: true
+
+      - name: Merge into one HTML report
+        working-directory: ./frontend
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+  # The required check. Keeps the name the single E2E job had, so branch protection needs no
+  # change; it fails if the build or any shard failed, was cancelled or was skipped.
+  e2e-tests:
+    name: E2E Tests
+    if: always()
+    needs: [build, e2e]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require the build and every shard to succeed
+        # needs.*.result is success, failure, cancelled or skipped (a job whose own needs
+        # failed is skipped).
+        if: >-
+          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
+          contains(needs.*.result, 'skipped')
+        run: |
+          echo "::error::A required job did not succeed; see the jobs above."
+          exit 1

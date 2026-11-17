@@ -9,6 +9,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+/** PLAYWRIGHT_SHARD=i/n runs only shard i of n, as `--shard=i/n` does (CI's E2E matrix). */
+const shardMatch = /^(\d+)\/(\d+)$/.exec(process.env.PLAYWRIGHT_SHARD ?? '');
+const shard = shardMatch ? { current: Number(shardMatch[1]), total: Number(shardMatch[2]) } : null;
 const chromium = {
   ...devices['Desktop Chrome'],
   ...(chromiumExecutable ? { launchOptions: { executablePath: chromiumExecutable } } : {}),
@@ -22,13 +25,19 @@ export default defineConfig({
   },
   fullyParallel: false, // Disable full parallelism for WebSocket tests stability
   forbidOnly: !!process.env.CI,
+  shard,
   retries: process.env.CI ? 2 : 1, // Allow one retry for flaky WebSocket tests
   workers: process.env.CI ? 1 : 2, // Limit concurrency to reduce WebSocket conflicts
-  reporter: [
-    ['html', { outputFolder: 'test-results/e2e-report', open: 'never' }],
-    ['json', { outputFile: 'test-results/e2e-results.json' }],
-    ['list']
-  ],
+  // CI runs the suite in shards (PLAYWRIGHT_SHARD, .github/workflows/test-e2e.yml) with
+  // PLAYWRIGHT_BLOB_REPORT set; each shard writes a blob report to blob-report/ and a
+  // later job merges them into one HTML report (npx playwright merge-reports).
+  reporter: process.env.PLAYWRIGHT_BLOB_REPORT
+    ? [['blob'], ['list']]
+    : [
+        ['html', { outputFolder: 'test-results/e2e-report', open: 'never' }],
+        ['json', { outputFile: 'test-results/e2e-results.json' }],
+        ['list'],
+      ],
   outputDir: 'test-results/e2e-artifacts',
   use: {
     baseURL,
@@ -63,10 +72,13 @@ export default defineConfig({
       testMatch: '**/!(websocket-*)*.spec.ts',
     },
   ],
-  webServer: process.env.CI || process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  webServer:
+    process.env.CI || process.env.PLAYWRIGHT_BASE_URL
+      ? undefined
+      : {
+          command: 'npm run dev',
+          url: 'http://localhost:5173',
+          reuseExistingServer: !process.env.CI,
+          timeout: 120 * 1000,
+        },
 });

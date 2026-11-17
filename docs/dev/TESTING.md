@@ -77,7 +77,9 @@ The container, or on an existing server the per-test databases, are removed when
 ### What CI runs
 
 - `.github/workflows/test-unit.yml`: `cargo test --lib --no-fail-fast`, then `cargo test --tests unit_tests --no-fail-fast` (every test whose name contains `unit_tests`), a check that the generated TypeScript bindings are current (`scripts/check-ts-bindings.sh`), and the frontend type checks and unit tests with coverage.
-- `.github/workflows/test-integration.yml`: starts PostgreSQL and a Readur server, plus a WebDAV server for the WebDAV tests, then runs `cargo test --test '*' --features "test-utils stress-testing" --no-fail-fast -- --test-threads=1`. A separate job runs `npm run test:integration`.
+- `.github/workflows/test-integration.yml`: one job builds every integration test binary once, with the `stress-testing` feature, into a cargo-nextest archive (`cargo nextest archive --test '*'`), and another builds the release server. Four jobs then run the in-process suites from the archive, one hash partition each (`--partition hash:N/4`), with PostgreSQL as a service (`READUR_TEST_POSTGRES_URL`); a fifth starts the Readur server and the Dufs WebDAV server and runs the suites that need them. Those suites are listed in `.config/live-server-suites`, which `scripts/ci/live-server-filterset.sh` turns into the nextest filterset both sides use (`-E "$filterset"` and `-E "not ($filterset)"`), so every suite runs exactly once; `tests/integration_tooling_env_tests.rs` fails when a suite that talks to a live server is missing from the list. Each job runs one test at a time (`--profile ci`, `.config/nextest.toml`), and nextest runs every test in its own process. The `Integration Tests` check passes only when all of these jobs succeed. A separate job runs `npm run test:integration`.
+
+  To run the CI split locally: `cargo nextest run --features "test-utils stress-testing" -E "not ($(scripts/ci/live-server-filterset.sh))"` for the in-process suites, and with `-E "$(scripts/ci/live-server-filterset.sh)"` against a running server for the rest.
 
 ## Frontend tests
 
