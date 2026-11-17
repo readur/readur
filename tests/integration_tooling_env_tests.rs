@@ -703,3 +703,100 @@ fn workflows_leave_the_dotenv_tooling_in_place() {
         }
     }
 }
+
+/// The integration suites listed in .config/live-server-suites.
+fn listed_live_server_suites() -> BTreeSet<String> {
+    read(".config/live-server-suites")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(String::from)
+        .collect()
+}
+
+/// CI runs the suites in .config/live-server-suites in the job that starts a readur server and
+/// the WebDAV server, and every other suite in shards without them. Many live-server suites
+/// skip instead of failing when the server is down, so one missing from the list would pass in
+/// a shard without testing anything; one listed by mistake would only lose the shards' speed.
+#[test]
+fn every_suite_that_needs_a_live_server_is_listed_for_the_live_server_job() {
+    let live = Regex::new(
+        r#"env::var\("(?:API_URL|TEST_BASE_URL|WEBDAV_SERVER_URL)"\)|live_server_database_url|create_live_server_user|\.get\("http://localhost:8000"#,
+    )
+    .unwrap();
+    let tests_dir = repo_path("tests");
+    let mut suites = BTreeSet::new();
+    let mut need_server = BTreeSet::new();
+    for path in markdown::tracked_files(&tests_dir, "rs") {
+        // Only tests/*.rs are test targets; subdirectories hold shared modules.
+        if path.parent() != Some(tests_dir.as_path()) {
+            continue;
+        }
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        // This file names the patterns without using them.
+        if name != "integration_tooling_env_tests"
+            && live.is_match(&std::fs::read_to_string(&path).unwrap())
+        {
+            need_server.insert(name.clone());
+        }
+        suites.insert(name);
+    }
+    assert!(
+        need_server.len() >= 15 && need_server.contains("integration_mcp_live_server_tests"),
+        "{need_server:?}: is the detection broken?"
+    );
+
+    let listed = listed_live_server_suites();
+    let unlisted: Vec<_> = need_server.difference(&listed).collect();
+    assert!(
+        unlisted.is_empty(),
+        "these suites talk to a live readur or WebDAV server but are missing from \
+         .config/live-server-suites, so CI runs them without one: {unlisted:?}"
+    );
+    let unknown: Vec<_> = listed.difference(&suites).collect();
+    assert!(
+        unknown.is_empty(),
+        ".config/live-server-suites lists suites that are not tests/*.rs: {unknown:?}"
+    );
+    let not_live: Vec<_> = listed.difference(&need_server).collect();
+    assert!(
+        not_live.is_empty(),
+        ".config/live-server-suites lists suites that do not use a live server (or the \
+         detection above misses how they do): {not_live:?}"
+    );
+}
+
+/// The integration workflow splits the suites with the one filterset the list produces: the
+/// in-process shards take its complement, the live-server job the filterset itself, so no
+/// suite runs twice or not at all.
+#[test]
+fn the_integration_workflow_splits_suites_by_the_live_server_list() {
+    let script = read("scripts/ci/live-server-filterset.sh");
+    assert!(script.contains("/.config/live-server-suites\""), "{script}");
+    let workflow = read(".github/workflows/test-integration.yml");
+    assert_eq!(
+        workflow
+            .matches("filterset=\"$(scripts/ci/live-server-filterset.sh)\"")
+            .count(),
+        2,
+        "both test jobs must derive the filterset from the script"
+    );
+    assert!(workflow.contains("-E \"not ($filterset)\""));
+    assert!(workflow.contains("-E \"$filterset\""));
+    // Every in-process partition runs: the matrix lists 1..=N for the N partitions.
+    let partitions: usize = Regex::new(r"(?m)^  NEXTEST_PARTITIONS: (\d+)$")
+        .unwrap()
+        .captures(&workflow)
+        .expect("the workflow sets NEXTEST_PARTITIONS")[1]
+        .parse()
+        .unwrap();
+    let matrix = (1..=partitions)
+        .map(|p| p.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    assert!(
+        workflow.contains(&format!("partition: [{matrix}]")),
+        "the in-process matrix must list partitions 1..={partitions}"
+    );
+    assert!(workflow.contains("--partition \"hash:${PARTITION}/${NEXTEST_PARTITIONS}\""));
+}

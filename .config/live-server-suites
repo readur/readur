@@ -1,0 +1,35 @@
+# Integration test suites (tests/<name>.rs) that need services the in-process
+# suites do not: a readur server on API_URL (default http://localhost:8000) with
+# its database, or the Dufs WebDAV server on WEBDAV_SERVER_URL.
+#
+# CI runs these in the "Live-server suites" job, which starts those services, and
+# every other suite in the sharded in-process jobs
+# (.github/workflows/test-integration.yml). scripts/ci/live-server-filterset.sh
+# turns this list into the nextest filterset both use, so a suite is in exactly
+# one of them. Many of these skip, rather than fail, when the server is down, so
+# a missing entry would let them pass without testing anything;
+# tests/integration_tooling_env_tests.rs checks this list against the suites
+# that talk to a live server.
+#
+# One test binary name per line; blank lines and # comments are ignored.
+integration_comprehensive_source_management_tests
+integration_debug_ocr_test
+integration_document_deletion_integration_tests
+integration_error_handling_edge_cases_tests
+integration_failed_ocr_endpoints_tests
+integration_file_processing_pipeline_tests
+integration_health_check_tests
+integration_integration_tests
+integration_investigate_empty_content
+integration_labels_integration_tests
+integration_mcp_live_server_tests
+integration_ocr_corruption_tests
+integration_ocr_failure_counting_tests
+integration_ocr_language_endpoints
+integration_ocr_queue_management_tests
+integration_ocr_retry_bug_regression_tests
+integration_ocr_retry_tests
+integration_performance_load_tests
+integration_prometheus_metrics_tests
+integration_role_based_access_control_tests
+webdav_stress_tests

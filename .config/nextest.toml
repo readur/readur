@@ -1,0 +1,16 @@
+# cargo-nextest configuration (https://nexte.st). CI's integration jobs
+# (.github/workflows/test-integration.yml) run with `--profile ci`; a local
+# `cargo nextest run` keeps nextest's defaults.
+
+[profile.ci]
+# One test at a time per job, like the `cargo test -- --test-threads=1` these
+# jobs replace: several suites share fixed paths (/tmp/test_uploads, ./uploads)
+# and the live-server suites share one server. The speed-up comes from running
+# the shards as separate jobs instead.
+test-threads = 1
+# Report every failure, like `cargo test --no-fail-fast`.
+fail-fast = false
+failure-output = "immediate-final"
+success-output = "never"
+# Flag slow tests in the log; nothing is killed.
+slow-timeout = { period = "120s" }
