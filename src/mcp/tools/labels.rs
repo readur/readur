@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    db::labels::{is_duplicate_key, LabelAssignOutcome, LabelRemoveOutcome},
+    db::labels::{is_label_name_taken, LabelAssignOutcome, LabelRemoveOutcome},
     errors::{label::LabelError, AppError},
     mcp::{format, ReadurMcp},
     routes::labels::{CreateLabel, Label, UpdateLabel},
@@ -92,7 +92,7 @@ fn write_error(
     name: Option<&str>,
     error: sqlx::Error,
 ) -> Result<CallToolResult, McpError> {
-    if is_duplicate_key(&error) {
+    if is_label_name_taken(&error) {
         let name = name.unwrap_or_default().to_string();
         return Ok(format::tool_error(
             LabelError::duplicate_name(name).user_message(),

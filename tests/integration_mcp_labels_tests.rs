@@ -389,3 +389,170 @@ async fn non_uuid_ids_are_rejected() {
     assert_tool_error(&result);
     assert!(text(&result).contains("UUID"), "{result}");
 }
+
+#[tokio::test]
+async fn renaming_to_a_taken_name_is_a_tool_error() {
+    let ctx = TestContext::new().await;
+    let (_, token) = user_with_token(&ctx).await;
+    create_label(&ctx, &token, "Taken").await;
+    let label_id = create_label(&ctx, &token, "Free").await;
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "update_label",
+            json!({ "id": label_id, "name": "Taken" }),
+        )
+        .await;
+    assert_tool_error(&result);
+    assert!(text(&result).contains("already exists"), "{result}");
+}
+
+#[tokio::test]
+async fn add_document_label_reports_every_outcome() {
+    let ctx = TestContext::new().await;
+    let (user, token) = user_with_token(&ctx).await;
+    let label_id = create_label(&ctx, &token, "Mine").await;
+    let document_id = create_document(&ctx, &user).await;
+
+    let (owner, owner_token) = user_with_token(&ctx).await;
+    let foreign_label = create_label(&ctx, &owner_token, "Theirs").await;
+    let foreign_document = create_document(&ctx, &owner).await;
+
+    let ids = json!({ "document_id": document_id, "label_id": label_id });
+    let added = ctx
+        .mcp_call_tool(&token, "add_document_label", ids.clone())
+        .await;
+    assert_ok(&added);
+    assert_eq!(added["structuredContent"]["status"], json!("added"));
+    let again = ctx.mcp_call_tool(&token, "add_document_label", ids).await;
+    assert_ok(&again);
+    assert_eq!(
+        again["structuredContent"]["status"],
+        json!("already_assigned")
+    );
+
+    // A missing or foreign document is reported as the document, even when the
+    // label is foreign too.
+    for (doc, label) in [
+        (Uuid::new_v4(), label_id),
+        (foreign_document, label_id),
+        (foreign_document, foreign_label),
+    ] {
+        let result = ctx
+            .mcp_call_tool(
+                &token,
+                "add_document_label",
+                json!({ "document_id": doc, "label_id": label }),
+            )
+            .await;
+        assert_tool_error(&result);
+        assert!(
+            text(&result).contains(&format!("Document {doc} not found")),
+            "{result}"
+        );
+    }
+
+    for label in [Uuid::new_v4(), foreign_label] {
+        let result = ctx
+            .mcp_call_tool(
+                &token,
+                "add_document_label",
+                json!({ "document_id": document_id, "label_id": label }),
+            )
+            .await;
+        assert_tool_error(&result);
+        assert!(
+            text(&result).contains(&format!("Label {label} not found")),
+            "{result}"
+        );
+    }
+
+    let labels = ctx.state.db.get_document_labels(document_id).await.unwrap();
+    assert_eq!(
+        labels.iter().map(|l| l.id).collect::<Vec<_>>(),
+        vec![label_id]
+    );
+    assert!(ctx
+        .state
+        .db
+        .get_document_labels(foreign_document)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn remove_document_label_reports_every_outcome() {
+    let ctx = TestContext::new().await;
+    let (user, token) = user_with_token(&ctx).await;
+    let label_id = create_label(&ctx, &token, "Mine").await;
+    let document_id = create_document(&ctx, &user).await;
+    let ids = json!({ "document_id": document_id, "label_id": label_id });
+    assert_ok(
+        &ctx.mcp_call_tool(&token, "add_document_label", ids.clone())
+            .await,
+    );
+
+    let missing = ctx
+        .mcp_call_tool(
+            &token,
+            "remove_document_label",
+            json!({ "document_id": Uuid::new_v4(), "label_id": label_id }),
+        )
+        .await;
+    assert_tool_error(&missing);
+    assert!(text(&missing).contains("not found"), "{missing}");
+
+    let removed = ctx
+        .mcp_call_tool(&token, "remove_document_label", ids.clone())
+        .await;
+    assert_ok(&removed);
+    assert_eq!(removed["structuredContent"]["status"], json!("removed"));
+
+    let not_assigned = ctx
+        .mcp_call_tool(&token, "remove_document_label", ids)
+        .await;
+    assert_ok(&not_assigned);
+    assert_eq!(
+        not_assigned["structuredContent"]["status"],
+        json!("not_assigned")
+    );
+}
+
+/// Simultaneous add_document_label calls for one pair: exactly one adds the
+/// label, the others report it already assigned, and none fails.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_add_document_label_adds_exactly_once() {
+    const CALLS: usize = 16;
+    let ctx = TestContext::new().await;
+    let (user, token) = user_with_token(&ctx).await;
+    let label_id = create_label(&ctx, &token, "Raced").await;
+    let document_id = create_document(&ctx, &user).await;
+    let ids = json!({ "document_id": document_id, "label_id": label_id });
+
+    let results = futures::future::join_all(
+        (0..CALLS).map(|_| ctx.mcp_call_tool(&token, "add_document_label", ids.clone())),
+    )
+    .await;
+    let statuses: Vec<String> = results
+        .iter()
+        .map(|result| {
+            assert_ok(result);
+            result["structuredContent"]["status"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        statuses.iter().filter(|s| *s == "added").count(),
+        1,
+        "{statuses:?}"
+    );
+    assert_eq!(
+        statuses.iter().filter(|s| *s == "already_assigned").count(),
+        CALLS - 1,
+        "{statuses:?}"
+    );
+}

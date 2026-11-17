@@ -867,3 +867,6 @@ mod tests {
         result.unwrap();
     }
 }
+
+#[path = "integration_labels/rest_outcomes.rs"]
+mod rest_outcomes;

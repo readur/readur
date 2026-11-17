@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
-    db::labels::{is_duplicate_key, LabelAssignOutcome, LabelRemoveOutcome},
+    db::labels::{is_label_name_taken, LabelAssignOutcome, LabelRemoveOutcome},
     errors::label::LabelError,
     AppState,
 };
@@ -162,7 +162,7 @@ pub async fn create_label(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create label: {}", e);
-            if is_duplicate_key(&e) {
+            if is_label_name_taken(&e) {
                 LabelError::duplicate_name(payload.name.clone())
             } else {
                 LabelError::invalid_name(payload.name.clone(), e.to_string())
@@ -232,7 +232,7 @@ pub async fn update_label(
         .map_err(|e| {
             tracing::error!("Failed to update label: {}", e);
             let name = payload.name.clone().unwrap_or_default();
-            if is_duplicate_key(&e) {
+            if is_label_name_taken(&e) {
                 LabelError::duplicate_name(name)
             } else {
                 LabelError::invalid_name(name, e.to_string())

@@ -86,9 +86,20 @@ impl UpdateLabel {
     }
 }
 
-/// Whether a failed insert/update hit a unique constraint (a label name the user already has).
-pub fn is_duplicate_key(error: &sqlx::Error) -> bool {
-    error.to_string().contains("duplicate key")
+/// The constraint that keeps each user's label names unique
+/// (`migrations/20250620100017_add_labels_system.sql`).
+pub const LABEL_NAME_UNIQUE_CONSTRAINT: &str = "unique_user_label_name";
+
+/// Whether a failed label insert/update collided with a name the user already has.
+///
+/// Decided from the structured error Postgres sends, never from its message text: the server
+/// translates messages per `lc_messages`, but the SQLSTATE (23505, `unique_violation`) and the
+/// constraint name are fixed. Only the label-name constraint counts; any other unique violation
+/// is a genuine failure and must not be reported to the user as a name clash.
+pub fn is_label_name_taken(error: &sqlx::Error) -> bool {
+    error.as_database_error().is_some_and(|db| {
+        db.is_unique_violation() && db.constraint() == Some(LABEL_NAME_UNIQUE_CONSTRAINT)
+    })
 }
 
 /// Outcome of assigning a label to a document.
@@ -176,7 +187,7 @@ impl Database {
     }
 
     /// Inserts a label for the user. Call [`CreateLabel::validate`] first; a name the user
-    /// already has fails with an error [`is_duplicate_key`] recognises.
+    /// already has fails with an error [`is_label_name_taken`] recognises.
     pub async fn create_label(
         &self,
         user_id: Uuid,
@@ -249,18 +260,6 @@ impl Database {
         Ok(owned)
     }
 
-    /// Whether `user_id` owns the label.
-    pub async fn user_owns_label(&self, label_id: Uuid, user_id: Uuid) -> Result<bool> {
-        let owned = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM labels WHERE id = $1 AND user_id = $2)",
-        )
-        .bind(label_id)
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(owned)
-    }
-
     /// True when every id in `label_ids` is a label owned by `user_id`.
     pub async fn user_owns_labels(&self, label_ids: &[Uuid], user_id: Uuid) -> Result<bool> {
         if label_ids.is_empty() {
@@ -317,54 +316,210 @@ impl Database {
     }
 
     /// Puts one of the user's labels on one of the user's documents.
+    ///
+    /// One statement checks both ownerships and inserts, so there is no gap between the check
+    /// and the write and only one round trip. Concurrent calls for the same pair are settled by
+    /// the `(document_id, label_id)` unique constraint: exactly one reports `Added`, the rest
+    /// `AlreadyAssigned`.
     pub async fn add_document_label_for_user(
         &self,
         document_id: Uuid,
         label_id: Uuid,
         user_id: Uuid,
     ) -> Result<LabelAssignOutcome> {
-        if !self.user_owns_document(document_id, user_id).await? {
-            return Ok(LabelAssignOutcome::DocumentNotFound);
-        }
-        if !self.user_owns_label(label_id, user_id).await? {
-            return Ok(LabelAssignOutcome::LabelNotFound);
-        }
-        let result = sqlx::query(
-            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)
-             ON CONFLICT (document_id, label_id) DO NOTHING",
+        let (owns_document, owns_label, inserted) = sqlx::query_as::<_, (bool, bool, bool)>(
+            r#"
+            WITH doc AS (
+                SELECT EXISTS(SELECT 1 FROM documents WHERE id = $1 AND user_id = $3) AS owned
+            ),
+            lbl AS (
+                SELECT EXISTS(SELECT 1 FROM labels WHERE id = $2 AND user_id = $3) AS owned
+            ),
+            ins AS (
+                INSERT INTO document_labels (document_id, label_id, assigned_by)
+                SELECT $1, $2, $3
+                WHERE (SELECT owned FROM doc) AND (SELECT owned FROM lbl)
+                ON CONFLICT (document_id, label_id) DO NOTHING
+                RETURNING 1
+            )
+            SELECT
+                (SELECT owned FROM doc),
+                (SELECT owned FROM lbl),
+                EXISTS(SELECT 1 FROM ins)
+            "#,
         )
         .bind(document_id)
         .bind(label_id)
         .bind(user_id)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(if result.rows_affected() == 0 {
-            LabelAssignOutcome::AlreadyAssigned
-        } else {
-            LabelAssignOutcome::Added
-        })
+        Ok(assign_outcome(owns_document, owns_label, inserted))
     }
 
-    /// Takes a label off one of the user's documents.
+    /// Takes a label off one of the user's documents. Like
+    /// [`Database::add_document_label_for_user`], the ownership check and the delete are one
+    /// statement.
     pub async fn remove_document_label_for_user(
         &self,
         document_id: Uuid,
         label_id: Uuid,
         user_id: Uuid,
     ) -> Result<LabelRemoveOutcome> {
-        if !self.user_owns_document(document_id, user_id).await? {
-            return Ok(LabelRemoveOutcome::DocumentNotFound);
+        let (owns_document, deleted) = sqlx::query_as::<_, (bool, bool)>(
+            r#"
+            WITH doc AS (
+                SELECT EXISTS(SELECT 1 FROM documents WHERE id = $1 AND user_id = $3) AS owned
+            ),
+            del AS (
+                DELETE FROM document_labels
+                WHERE document_id = $1 AND label_id = $2 AND (SELECT owned FROM doc)
+                RETURNING 1
+            )
+            SELECT (SELECT owned FROM doc), EXISTS(SELECT 1 FROM del)
+            "#,
+        )
+        .bind(document_id)
+        .bind(label_id)
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(remove_outcome(owns_document, deleted))
+    }
+}
+
+/// Classifies [`Database::add_document_label_for_user`]'s result. A foreign document wins over
+/// a foreign label, so a caller probing someone else's document learns nothing about labels.
+fn assign_outcome(owns_document: bool, owns_label: bool, inserted: bool) -> LabelAssignOutcome {
+    match (owns_document, owns_label, inserted) {
+        (false, _, _) => LabelAssignOutcome::DocumentNotFound,
+        (true, false, _) => LabelAssignOutcome::LabelNotFound,
+        (true, true, true) => LabelAssignOutcome::Added,
+        (true, true, false) => LabelAssignOutcome::AlreadyAssigned,
+    }
+}
+
+/// Classifies [`Database::remove_document_label_for_user`]'s result.
+fn remove_outcome(owns_document: bool, deleted: bool) -> LabelRemoveOutcome {
+    match (owns_document, deleted) {
+        (false, _) => LabelRemoveOutcome::DocumentNotFound,
+        (true, true) => LabelRemoveOutcome::Removed,
+        (true, false) => LabelRemoveOutcome::NotAssigned,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::error::{DatabaseError, ErrorKind};
+    use std::borrow::Cow;
+
+    /// A database error with a chosen message, SQLSTATE class and constraint, to show
+    /// [`is_label_name_taken`] reads the structured fields and ignores the text.
+    #[derive(Debug)]
+    struct FakeDbError {
+        message: &'static str,
+        unique_violation: bool,
+        constraint: Option<&'static str>,
+    }
+
+    impl std::fmt::Display for FakeDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.message)
         }
-        let result =
-            sqlx::query("DELETE FROM document_labels WHERE document_id = $1 AND label_id = $2")
-                .bind(document_id)
-                .bind(label_id)
-                .execute(&self.pool)
-                .await?;
-        Ok(if result.rows_affected() == 0 {
-            LabelRemoveOutcome::NotAssigned
-        } else {
-            LabelRemoveOutcome::Removed
-        })
+    }
+
+    impl std::error::Error for FakeDbError {}
+
+    impl DatabaseError for FakeDbError {
+        fn message(&self) -> &str {
+            self.message
+        }
+        fn code(&self) -> Option<Cow<'_, str>> {
+            self.unique_violation.then_some(Cow::Borrowed("23505"))
+        }
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+        fn constraint(&self) -> Option<&str> {
+            self.constraint
+        }
+        fn kind(&self) -> ErrorKind {
+            if self.unique_violation {
+                ErrorKind::UniqueViolation
+            } else {
+                ErrorKind::Other
+            }
+        }
+    }
+
+    fn db_error(
+        message: &'static str,
+        unique_violation: bool,
+        constraint: Option<&'static str>,
+    ) -> sqlx::Error {
+        sqlx::Error::Database(Box::new(FakeDbError {
+            message,
+            unique_violation,
+            constraint,
+        }))
+    }
+
+    #[test]
+    fn name_clash_is_recognised_whatever_the_server_language() {
+        // What a server with lc_messages = 'de_DE' sends: no English words at all.
+        let german = db_error(
+            "doppelter Schlüsselwert verletzt Unique-Constraint »unique_user_label_name«",
+            true,
+            Some(LABEL_NAME_UNIQUE_CONSTRAINT),
+        );
+        assert!(is_label_name_taken(&german));
+    }
+
+    #[test]
+    fn english_duplicate_key_text_alone_is_not_a_name_clash() {
+        // The old text match would have said yes to all of these.
+        let not_unique = db_error(
+            "duplicate key value violates unique constraint \"unique_user_label_name\"",
+            false,
+            Some(LABEL_NAME_UNIQUE_CONSTRAINT),
+        );
+        assert!(!is_label_name_taken(&not_unique));
+
+        let other_constraint = db_error(
+            "duplicate key value violates unique constraint \"labels_pkey\"",
+            true,
+            Some("labels_pkey"),
+        );
+        assert!(!is_label_name_taken(&other_constraint));
+
+        let no_constraint = db_error("duplicate key value violates unique constraint", true, None);
+        assert!(!is_label_name_taken(&no_constraint));
+
+        let not_a_database_error = sqlx::Error::Protocol("duplicate key".into());
+        assert!(!is_label_name_taken(&not_a_database_error));
+    }
+
+    #[test]
+    fn assign_outcome_reports_a_foreign_document_before_a_foreign_label() {
+        use LabelAssignOutcome::*;
+        assert_eq!(assign_outcome(false, false, false), DocumentNotFound);
+        assert_eq!(assign_outcome(false, true, false), DocumentNotFound);
+        assert_eq!(assign_outcome(true, false, false), LabelNotFound);
+        assert_eq!(assign_outcome(true, true, true), Added);
+        assert_eq!(assign_outcome(true, true, false), AlreadyAssigned);
+    }
+
+    #[test]
+    fn remove_outcome_reports_a_foreign_document_first() {
+        use LabelRemoveOutcome::*;
+        assert_eq!(remove_outcome(false, false), DocumentNotFound);
+        assert_eq!(remove_outcome(true, true), Removed);
+        assert_eq!(remove_outcome(true, false), NotAssigned);
     }
 }
