@@ -57,14 +57,20 @@ export class TestHelpers {
   }
 
   /** Upload in-memory content through the API under the given filename. Returns the document id. */
-  async uploadBufferViaAPI(name: string, buffer: Buffer, mimeType = this.getMimeType(name)): Promise<string> {
+  async uploadBufferViaAPI(
+    name: string,
+    buffer: Buffer,
+    mimeType = this.getMimeType(name),
+  ): Promise<string> {
     const response = await this.page.request.post('/api/documents', {
       headers: await this.authHeaders(),
       multipart: { file: { name, mimeType, buffer } },
       timeout: 60000,
     });
     if (!response.ok()) {
-      throw new Error(`Failed to upload document via API: ${response.status()} - ${await response.text()}`);
+      throw new Error(
+        `Failed to upload document via API: ${response.status()} - ${await response.text()}`,
+      );
     }
     const result = await response.json();
     return result.id || result.document_id;
@@ -94,6 +100,29 @@ export class TestHelpers {
     throw new Error(`OCR did not complete within ${timeoutMs}ms for document ${documentId}`);
   }
 
+  /**
+   * Poll until the server's own automatic OCR retries of a failed document are over, so no
+   * pending or processing queue job is left for it. A failed OCR job goes back to pending until
+   * its attempts run out; only then does `/documents/failed/ocr` count it in `retry_count`.
+   * After this a manual retry deterministically queues a new job (`queued: true`).
+   */
+  async waitForOcrRetriesExhausted(documentId: string, timeoutMs: number = 120000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const response = await this.page.request.get('/api/documents/failed/ocr?limit=100', {
+        headers: await this.authHeaders(),
+        timeout: 10000,
+      });
+      if (response.ok()) {
+        const body = await response.json();
+        const doc = (body.documents ?? []).find((d: { id: string }) => d.id === documentId);
+        if (doc && doc.ocr_status === 'failed' && Number(doc.retry_count) >= 1) return;
+      }
+      await this.page.waitForTimeout(1000);
+    }
+    throw new Error(`OCR retries of document ${documentId} did not finish within ${timeoutMs}ms`);
+  }
+
   async deleteDocumentViaAPI(documentId: string): Promise<void> {
     const response = await this.page.request.delete(`/api/documents/${documentId}`, {
       headers: await this.authHeaders(),
@@ -116,7 +145,9 @@ export class TestHelpers {
   }
 
   async getSettingsViaAPI(): Promise<Record<string, any>> {
-    const response = await this.page.request.get('/api/settings', { headers: await this.authHeaders() });
+    const response = await this.page.request.get('/api/settings', {
+      headers: await this.authHeaders(),
+    });
     if (!response.ok()) throw new Error(`Failed to read settings: ${response.status()}`);
     return response.json();
   }
@@ -160,7 +191,9 @@ export class TestHelpers {
   }
 
   async deleteSourceViaAPI(sourceId: string): Promise<void> {
-    await this.page.request.delete(`/api/sources/${sourceId}`, { headers: await this.authHeaders() });
+    await this.page.request.delete(`/api/sources/${sourceId}`, {
+      headers: await this.authHeaders(),
+    });
   }
 
   /** A unique name for data created by a test. */
@@ -187,7 +220,10 @@ export class TestHelpers {
 
   async waitForApiCall(urlPattern: string | RegExp, timeout = 10000) {
     return this.page.waitForResponse(
-      (resp) => (typeof urlPattern === 'string' ? resp.url().includes(urlPattern) : urlPattern.test(resp.url())),
+      (resp) =>
+        typeof urlPattern === 'string'
+          ? resp.url().includes(urlPattern)
+          : urlPattern.test(resp.url()),
       { timeout },
     );
   }
@@ -208,7 +244,9 @@ export class TestHelpers {
   /** Wait for skeletons to go (they carry role=status with a "Loading" name). */
   async waitForLoadingToComplete() {
     await this.page.waitForLoadState('domcontentloaded');
-    await expect(this.page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 }).catch(() => undefined);
+    await expect(this.page.locator('[aria-busy="true"]'))
+      .toHaveCount(0, { timeout: 15000 })
+      .catch(() => undefined);
   }
 
   async navigateToPage(pathname: string) {
@@ -220,7 +258,9 @@ export class TestHelpers {
   async openIntake(section: IntakeSection) {
     const onSources = section === 'connections' || section === 'watch';
     await this.page.goto(`${onSources ? '/sources' : '/intake'}?section=${section}`);
-    await expect(this.page.getByRole('heading', { level: 1, name: onSources ? 'Sources' : 'Intake' })).toBeVisible({
+    await expect(
+      this.page.getByRole('heading', { level: 1, name: onSources ? 'Sources' : 'Intake' }),
+    ).toBeVisible({
       timeout: 15000,
     });
   }
@@ -232,7 +272,9 @@ export class TestHelpers {
    */
   async useLibraryView(view: 'table' | 'grid') {
     await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
-    const toggle = this.page.getByRole('radiogroup', { name: 'Layout' }).getByRole('radio', { name: view === 'table' ? 'Table' : 'Grid' });
+    const toggle = this.page
+      .getByRole('radiogroup', { name: 'Layout' })
+      .getByRole('radio', { name: view === 'table' ? 'Table' : 'Grid' });
     if (!(await toggle.isChecked())) await toggle.click();
     await expect(toggle).toBeChecked();
   }
@@ -257,12 +299,16 @@ export class TestHelpers {
 
   /** The Library card for one document, by file name. */
   documentCard(name: string): Locator {
-    return this.documentCards().filter({ has: this.page.getByRole('checkbox', { name: `Select ${name}`, exact: true }) });
+    return this.documentCards().filter({
+      has: this.page.getByRole('checkbox', { name: `Select ${name}`, exact: true }),
+    });
   }
 
   /** Open a document's slideout from its Library card and return the panel. */
   async openDocumentCard(name: string): Promise<Locator> {
-    await this.documentCard(name).getByRole('button', { name: new RegExp(escapeRegExp(name)) }).click();
+    await this.documentCard(name)
+      .getByRole('button', { name: new RegExp(escapeRegExp(name)) })
+      .click();
     const panel = this.page.getByRole('dialog', { name: new RegExp(escapeRegExp(name)) });
     await expect(panel).toBeVisible();
     return panel;
@@ -271,7 +317,9 @@ export class TestHelpers {
   /** The OCR text in the open document drawer (its Text tab, the one it opens on). */
   async extractedText(): Promise<Locator> {
     const drawer = this.page.getByRole('dialog');
-    await expect(drawer.getByRole('group', { name: 'Document summary' })).toBeVisible({ timeout: 15000 });
+    await expect(drawer.getByRole('group', { name: 'Document summary' })).toBeVisible({
+      timeout: 15000,
+    });
     const tab = drawer.getByRole('tab', { name: 'Text' });
     if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
     const region = this.page.getByRole('region', { name: 'Extracted text' });
@@ -280,13 +328,17 @@ export class TestHelpers {
   }
 
   async takeScreenshotOnFailure(testName: string) {
-    await this.page.screenshot({ path: `test-results/screenshots/${testName}-${Date.now()}.png`, fullPage: true });
+    await this.page.screenshot({
+      path: `test-results/screenshots/${testName}-${Date.now()}.png`,
+      fullPage: true,
+    });
   }
 
   /** Upload one file through Intake → Add documents and wait for it to finish uploading. */
   async uploadTestDocument(fileName: string = 'test1.png') {
     await this.openIntake('upload');
-    const filePath = fileName === 'test1.png' ? TEST_FILES.test1 : `../tests/test_images/${fileName}`;
+    const filePath =
+      fileName === 'test1.png' ? TEST_FILES.test1 : `../tests/test_images/${fileName}`;
     await this.page.locator('input[type="file"]').first().setInputFiles(filePath);
     const queue = this.page.getByRole('grid', { name: 'Files to upload' });
     await expect(queue.getByRole('row', { name: new RegExp(fileName) })).toBeVisible();
@@ -297,7 +349,9 @@ export class TestHelpers {
 
   /** Make sure the signed-in user has at least one document (uploads test1.png through the API). */
   async ensureTestDocumentsExist() {
-    const response = await this.page.request.get('/api/documents?limit=1', { headers: await this.authHeaders() });
+    const response = await this.page.request.get('/api/documents?limit=1', {
+      headers: await this.authHeaders(),
+    });
     const body = response.ok() ? await response.json() : null;
     const count = Array.isArray(body) ? body.length : (body?.documents?.length ?? 0);
     if (count === 0) {
@@ -325,7 +379,9 @@ export class TestHelpers {
 
     if (type === 'webdav') {
       await dialog.getByRole('radio', { name: /^WebDAV/ }).check({ force: true });
-      await dialog.getByRole('textbox', { name: 'Server URL' }).fill(options?.serverUrl ?? 'http://127.0.0.1:9/dav/');
+      await dialog
+        .getByRole('textbox', { name: 'Server URL' })
+        .fill(options?.serverUrl ?? 'http://127.0.0.1:9/dav/');
       await dialog.getByRole('textbox', { name: 'Username' }).fill('testuser');
       await dialog.getByRole('textbox', { name: 'Password' }).fill('testpass');
     } else if (type === 's3') {
@@ -340,7 +396,9 @@ export class TestHelpers {
         const folders = dialog.getByRole('list', { name: 'Directories to monitor' });
         const remove = folders.getByRole('button', { name: /^Remove / });
         while ((await remove.count()) > 0) await remove.first().click();
-        await dialog.getByRole('textbox', { name: 'Directories to monitor' }).fill(options.watchFolder);
+        await dialog
+          .getByRole('textbox', { name: 'Directories to monitor' })
+          .fill(options.watchFolder);
         await dialog.getByRole('button', { name: 'Add to Directories to monitor' }).click();
         await expect(folders.getByText(options.watchFolder, { exact: true })).toBeVisible();
       }
@@ -360,7 +418,9 @@ export class TestHelpers {
 
   /** A row of the Intake → Connections board. */
   connectionRow(name: string): Locator {
-    return this.page.getByRole('grid', { name: 'Connections' }).getByRole('row', { name: new RegExp(escapeRegExp(name)) });
+    return this.page
+      .getByRole('grid', { name: 'Connections' })
+      .getByRole('row', { name: new RegExp(escapeRegExp(name)) });
   }
 
   /** Open a connection's detail panel from its row. Returns the panel. */

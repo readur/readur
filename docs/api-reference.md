@@ -591,6 +591,56 @@ Authorization: Bearer <token>
 }
 ```
 
+#### Retry OCR
+
+```http
+POST /api/documents/{id}/ocr/retry
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request body:** an empty object runs OCR with the user's default languages; `language` or `languages` picks others and saves them as the user's preference.
+```json
+{
+  "languages": ["eng"]
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "queued": true,
+  "message": "Document queued for OCR processing"
+}
+```
+
+`success` says the request was handled; `queued` says whether it added a new OCR job. `404 Not Found` when the document does not exist or belongs to another user, `400 Bad Request` for a language that is not installed.
+
+#### Retry OCR While Already Queued
+
+When the document already has a pending or running OCR job (for example the server's own automatic retry), the request still succeeds but queues nothing, and the existing job carries on:
+
+```http
+POST /api/documents/{id}/ocr/retry
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request body:**
+```json
+{}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "queued": false,
+  "message": "The document is already queued for OCR"
+}
+```
+
 #### Delete a Document
 
 ```http

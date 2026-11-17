@@ -2059,6 +2059,7 @@
     "toast": {
       "downloadFailed": "Datei konnte nicht heruntergeladen werden",
       "retryQueued": "OCR erneut eingereiht",
+      "retryAlreadyQueued": "Bereits für OCR eingereiht",
       "retryFailed": "OCR konnte nicht erneut eingereiht werden",
       "deleted": "Dokument gelöscht",
       "deleteFailed": "Dokument konnte nicht gelöscht werden",
@@ -2545,6 +2546,7 @@
       "retryPartial": "Einige Dokumente wurden nicht eingereiht. Prüfen Sie sie und versuchen Sie es erneut.",
       "retryQueued": "{{queued}} von {{matched}} Dokumenten eingereiht",
       "retryStarted": "OCR-Wiederholung eingereiht",
+      "retryAlreadyQueued": "Bereits für OCR eingereiht",
       "retryWait": "{{name}} · etwa {{minutes}} Min.",
       "size": "Größe",
       "source": "Quelle",

@@ -68,14 +68,7 @@ READUR_INSECURE_DEV_MODE=true
 
 `JWT_SECRET` must be at least 32 bytes and must not be a published example value, or the server refuses to start. The example secret above is published, so it is only accepted together with `READUR_INSECURE_DEV_MODE=true`, which is meant for throwaway local setups; never use it in production.
 
-**Run database migrations:** Apply database schema changes to your development database.
-```bash
-# Install sqlx-cli if needed
-cargo install sqlx-cli
-
-# Run migrations
-sqlx migrate run
-```
+**Database migrations** run automatically when the server starts (`sqlx::migrate!` in `src/main.rs`); there is no separate step.
 
 **Start the backend:** Launch the Rust backend server in development mode.
 ```bash
@@ -204,16 +197,16 @@ test('renders document list', () => {
 ### Integration Tests
 
 ```bash
-# Run integration tests
-docker compose -f docker-compose.test.yml up --abort-on-container-exit
+# Run the integration tests against the containers of docker-compose.test.yml
+./run-tests.sh integration
 
-# Or manually
+# Or directly, against a test database of your own (see the Testing Guide)
 cargo test --test '*' -- --test-threads=1
 ```
 
 ### E2E Tests
 
-Using Playwright for end-to-end testing:
+Using Playwright for end-to-end testing. `scripts/run-e2e-local.sh` starts a scratch database, the backend and the dev server and runs the suite; see the [E2E Testing Guide](README-E2E.md) for that and for running against a server of your own:
 
 ```bash
 cd frontend

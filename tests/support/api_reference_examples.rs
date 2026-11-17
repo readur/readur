@@ -20,6 +20,7 @@ use readur::models::{
     ChangePasswordRequest, CreateNotification, CreateSource, CreateUser, LoginRequest,
     RegisterRequest, UpdateUser, UserRole, WebDAVSourceConfig,
 };
+use readur::routes::documents::RetryOcrRequest;
 use readur::test_utils::{document_helpers::create_test_document, TestConfigBuilder, TestContext};
 
 /// Every example heading, with the test that checks it when that is not this registry.
@@ -37,6 +38,8 @@ pub const EXAMPLES: &[(&str, Option<&str>)] = &[
     ("List Documents", None),
     ("Upload a Document", None),
     ("Get OCR Text", None),
+    ("Retry OCR", None),
+    ("Retry OCR While Already Queued", None),
     ("Delete a Document", None),
     ("Search Documents", Some(SEARCH_TEST)),
     ("Enhanced Search", Some(SEARCH_TEST)),
@@ -250,6 +253,17 @@ pub async fn setup(heading: &str, fx: &Fixture) -> Setup {
         }
         "Get OCR Text" | "Delete a Document" => {
             Setup::new(Alice).subst("{id}", fx.document().await)
+        }
+        "Retry OCR" => Setup::new(Alice)
+            .subst("{id}", fx.document().await)
+            .schema::<RetryOcrRequest>(""),
+        "Retry OCR While Already Queued" => {
+            let id = fx.document().await;
+            let uri = format!("/api/documents/{id}/ocr/retry");
+            fx.call(Alice, "POST", &uri, json!({})).await;
+            Setup::new(Alice)
+                .subst("{id}", id)
+                .schema::<RetryOcrRequest>("")
         }
         "Create a Label" => Setup::new(Alice).schema::<CreateLabel>(""),
         "Set a Document's Labels" => Setup::new(Alice)

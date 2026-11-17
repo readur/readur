@@ -82,6 +82,7 @@ export type { ProcessedImage } from './ProcessedImage';
 export type { RegisterRequest } from './RegisterRequest';
 export type { RetryFailureRequest } from './RetryFailureRequest';
 export type { RetryOcrRequest } from './RetryOcrRequest';
+export type { RetryOcrResponse } from './RetryOcrResponse';
 export type { S3SourceConfig } from './S3SourceConfig';
 export type { ScanFailureStatsResponse } from './ScanFailureStatsResponse';
 export type { ScanFailuresListResponse } from './ScanFailuresListResponse';

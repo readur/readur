@@ -7,7 +7,7 @@ import type {
 } from '../../types/generated';
 import { serializeFilterParams, type DocumentListParams } from './filterParams';
 import type { BulkOcrRetryRequest, BulkOcrRetryResponse } from './ocr';
-import type { RetryOcrRequest } from '../../types/generated';
+import type { RetryOcrRequest, RetryOcrResponse } from '../../types/generated';
 import type { SearchFacetsResponse, SearchRequest, SearchResponse } from './search';
 import type {
   DocumentRetryHistoryResponse,
@@ -183,7 +183,7 @@ export const documentService = {
    */
   retryOcr: (id: string) => {
     const body: RetryOcrRequest = {};
-    return api.post(`/documents/${id}/ocr/retry`, body);
+    return api.post<RetryOcrResponse>(`/documents/${id}/ocr/retry`, body);
   },
 
   // Advanced OCR retry functionality

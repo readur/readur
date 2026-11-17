@@ -2059,6 +2059,7 @@
     "toast": {
       "downloadFailed": "No se pudo descargar el archivo",
       "retryQueued": "OCR en cola de nuevo",
+      "retryAlreadyQueued": "Ya está en la cola de OCR",
       "retryFailed": "No se pudo volver a poner el OCR en cola",
       "deleted": "Documento eliminado",
       "deleteFailed": "No se pudo eliminar el documento",
@@ -2545,6 +2546,7 @@
       "retryPartial": "Algunos documentos no se pusieron en cola. Revísalos e inténtalo de nuevo.",
       "retryQueued": "{{queued}} de {{matched}} documentos en cola",
       "retryStarted": "Reintento de OCR en cola",
+      "retryAlreadyQueued": "Ya está en la cola de OCR",
       "retryWait": "{{name}} · unos {{minutes}} min",
       "size": "Tamaño",
       "source": "Origen",
