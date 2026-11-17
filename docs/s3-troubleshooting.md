@@ -1,510 +1,105 @@
 # S3 Storage Troubleshooting Guide
 
-## Overview
+This page covers problems with the S3 storage backend. Configuration is described in the [S3 Storage Guide](s3-storage-guide.md). Readur logs to stdout; use `docker compose logs readur` (or your platform's equivalent) to read the messages quoted below, and `RUST_LOG` to change the log level (see the [Configuration Reference](configuration-reference.md)).
 
-This guide addresses common issues encountered when using S3 storage with Readur and provides detailed solutions.
+## First check: is S3 actually in use?
 
-## Quick Diagnostics
+Readur does not refuse to start when S3 cannot be used. It falls back to local storage and keeps running, so a misconfiguration can go unnoticed. Look at the startup log:
 
-### S3 Health Check Script
+| Log line | Meaning |
+|----------|---------|
+| `✅ File service initialized with s3 storage backend` | S3 is in use |
+| `⚠️  S3_ENABLED: false (using default - env var not set)` | Neither `S3_ENABLED=true` nor `STORAGE_BACKEND=s3` is set |
+| `❌ S3 enabled but missing required configuration (bucket_name, access_key_id, or secret_access_key)` | One of `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` is empty; local storage is used |
+| `❌ Failed to initialize configured storage backend: ...` then `🔄 Falling back to local storage...` | The connection test failed; the text after the colon is the cause; local storage is used |
 
-```bash
-#!/bin/bash
-# s3-health-check.sh
+Documents uploaded while Readur ran on the fallback are stored locally. They remain readable after S3 starts working, and `migrate_to_s3` can move them into the bucket later.
 
-echo "Readur S3 Storage Health Check"
-echo "=============================="
+## Connection test failures
 
-# Load configuration
-source .env
+At startup Readur lists one object in the bucket and sends HeadBucket. Errors from these calls look like:
 
-# Check S3 connectivity
-echo -n "1. Checking S3 connectivity... "
-if aws s3 ls s3://$S3_BUCKET_NAME --region $S3_REGION > /dev/null 2>&1; then
-    echo "✓ Connected"
-else
-    echo "✗ Failed"
-    echo "   Error: Cannot connect to S3 bucket"
-    exit 1
-fi
-
-# Check bucket permissions
-echo -n "2. Checking bucket permissions... "
-TEST_FILE="/tmp/readur-test-$$"
-echo "test" > $TEST_FILE
-
-if aws s3 cp $TEST_FILE s3://$S3_BUCKET_NAME/test-write-$$ --region $S3_REGION > /dev/null 2>&1; then
-    echo "✓ Write permission OK"
-    aws s3 rm s3://$S3_BUCKET_NAME/test-write-$$ --region $S3_REGION > /dev/null 2>&1
-else
-    echo "✗ Write permission failed"
-fi
-rm -f $TEST_FILE
-
-# Check multipart upload
-echo -n "3. Checking multipart upload capability... "
-if aws s3api put-bucket-accelerate-configuration \
-    --bucket $S3_BUCKET_NAME \
-    --accelerate-configuration Status=Suspended \
-    --region $S3_REGION > /dev/null 2>&1; then
-    echo "✓ Multipart enabled"
-else
-    echo "⚠ May not have full permissions"
-fi
-
-echo ""
-echo "Health check complete!"
+```text
+Failed to access S3 bucket readur-documents: <SDK error with service code and message>
+Cannot access bucket readur-documents: <SDK error>
 ```
 
-## Common Issues and Solutions
+The SDK error includes the service error code. Common causes:
 
-### 1. Connection Issues
+| Error code or text | Cause |
+|--------------------|-------|
+| `InvalidAccessKeyId`, `SignatureDoesNotMatch` | Wrong `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` |
+| `AccessDenied` | The key lacks `s3:ListBucket` on the bucket (see the policy in the [S3 Storage Guide](s3-storage-guide.md#prerequisites)) |
+| `NoSuchBucket` | Wrong `S3_BUCKET_NAME`, or the bucket is in a different account/endpoint |
+| `PermanentRedirect`, `AuthorizationHeaderMalformed` | `S3_REGION` does not match the bucket's region |
+| `dispatch failure`, connection refused, DNS errors | Wrong `S3_ENDPOINT_URL`, or the endpoint is not reachable from the Readur container |
+| `The server address is not allowed` | The endpoint resolves to a refused address (link-local such as `169.254.x.x`, cloud metadata addresses, the unspecified or broadcast address). Private and LAN addresses are allowed |
+| Certificate or TLS errors | The endpoint's certificate is not trusted. Readur has no option to skip certificate verification; use a certificate the client trusts, or plain `http://` on a trusted network |
 
-#### Problem: "Failed to access S3 bucket"
+To check the same credentials outside Readur, use your provider's CLI or any S3 client with the same endpoint, region, bucket and keys.
 
-**Symptoms:**
-- Error during startup
-- Cannot upload documents
-- Migration tool fails immediately
+### S3-compatible services and addressing style
 
-**Diagnosis:**
-```bash
-# Test basic connectivity
-aws s3 ls s3://your-bucket-name
+With a custom `S3_ENDPOINT_URL` and no `S3_FORCE_PATH_STYLE`, Readur tries path-style first and then virtual-hosted, each with a 3-second test listing. When both fail it logs:
 
-# Check credentials
-aws sts get-caller-identity
-
-# Verify region
-aws s3api get-bucket-location --bucket your-bucket-name
+```text
+Could not auto-detect S3 addressing style for bucket 'readur-documents'; defaulting to path-style. Set S3_FORCE_PATH_STYLE=true|false to override.
 ```
 
-**Solutions:**
+That message means neither test succeeded; the real cause shows up in the connection test error that follows. If your service only supports one style, set `S3_FORCE_PATH_STYLE=true` (path-style, `http://<endpoint>/<bucket>/<key>`) or `false` (virtual-hosted, `http://<bucket>.<endpoint>/<key>`). With virtual-hosted addressing the host name `<bucket>.<endpoint host>` must resolve.
 
-**Incorrect credentials:** Verify that your AWS credentials are properly configured and accessible.
-   ```bash
-   # Verify environment variables
-   echo $S3_ACCESS_KEY_ID
-   echo $S3_SECRET_ACCESS_KEY
-   
-   # Test with AWS CLI
-   export AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
-   export AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
-   aws s3 ls
-   ```
+When running MinIO or similar in the same Docker Compose project, use the service name as the host (for example `http://minio:9000`), not `localhost`, which refers to the Readur container itself.
 
-**Wrong region:** Ensure the S3 region configuration matches your bucket's actual region.
-   ```bash
-   # Find correct region
-   aws s3api get-bucket-location --bucket your-bucket-name
-   
-   # Update configuration
-   export S3_REGION=correct-region
-   ```
+## Upload and download failures
 
-**Network issues:** Test network connectivity to S3 endpoints and resolve any connection problems.
-   ```bash
-   # Test network connectivity
-   curl -I https://s3.amazonaws.com
-   
-   # Check DNS resolution
-   nslookup s3.amazonaws.com
-   
-   # Test with specific endpoint
-   curl -I https://your-bucket.s3.amazonaws.com
-   ```
+Every S3 request is retried up to 3 times with exponential backoff (100 ms, 200 ms, 400 ms). Retries are logged as:
 
-### 2. Permission Errors
-
-#### Problem: "AccessDenied: Access Denied"
-
-**Symptoms:**
-- Can list bucket but cannot upload
-- Can upload but cannot delete
-- Partial operations succeed
-
-**Diagnosis:**
-```bash
-# Check IAM user permissions
-aws iam get-user-policy --user-name readur-user --policy-name ReadurPolicy
-
-# Test specific operations
-aws s3api put-object --bucket your-bucket --key test.txt --body /tmp/test.txt
-aws s3api get-object --bucket your-bucket --key test.txt /tmp/downloaded.txt
-aws s3api delete-object --bucket your-bucket --key test.txt
+```text
+S3 operation 'store_file: documents/...' failed (attempt 1/4), retrying in 100ms: ...
 ```
 
-**Solutions:**
+and a final failure as `S3 operation '...' failed after 4 attempts: ...`. Error texts by operation:
 
-**Update IAM policy:** Ensure your IAM user or role has all the necessary permissions for S3 operations.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "s3:ListBucket",
-           "s3:GetBucketLocation"
-         ],
-         "Resource": "arn:aws:s3:::your-bucket-name"
-       },
-       {
-         "Effect": "Allow",
-         "Action": [
-           "s3:PutObject",
-           "s3:GetObject",
-           "s3:DeleteObject",
-           "s3:PutObjectAcl",
-           "s3:GetObjectAcl"
-         ],
-         "Resource": "arn:aws:s3:::your-bucket-name/*"
-       }
-     ]
-   }
-   ```
+| Message | Operation |
+|---------|-----------|
+| `Failed to store file <key>: ...` | Single-request upload (files up to 100 MB) |
+| `Failed to initiate multipart upload for <key>: ...`, `Failed to complete multipart upload for <key>: ...` | Multipart upload (files over 100 MB, 16 MB parts) |
+| `Failed to download S3 object <key>: ...` | Reading a document |
+| `S3 object <key> download incomplete: expected N bytes, received M` | The connection ended before the whole object arrived |
+| `Timed out reading S3 object <key> after 600s` | Reading the object body took longer than 10 minutes |
+| `Failed to delete file <key>: ...` | Deleting an object |
 
-2. **Check bucket policy:**
-   ```bash
-   aws s3api get-bucket-policy --bucket your-bucket-name
-   ```
+Request limits are fixed in the code: 10 s to connect, 60 s read timeout, 600 s per request attempt. They are not configurable.
 
-3. **Verify CORS configuration:**
-   ```json
-   {
-     "CORSRules": [
-       {
-         "AllowedOrigins": ["*"],
-         "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-         "AllowedHeaders": ["*"],
-         "ExposeHeaders": ["ETag"],
-         "MaxAgeSeconds": 3000
-       }
-     ]
-   }
-   ```
+If a multipart upload fails to complete, Readur tries to abort it (logging `Failed to abort multipart upload: ...` if that also fails). Incomplete multipart uploads that were not aborted still occupy storage in the bucket; a lifecycle rule that aborts incomplete multipart uploads after a few days cleans them up.
 
-### 3. Upload Failures
+Uploads larger than `MAX_FILE_SIZE_MB` (default 50) are rejected before S3 is involved.
 
-#### Problem: Large files fail to upload
+## Documents that will not open after enabling S3
 
-**Symptoms:**
-- Small files upload successfully
-- Large files timeout or fail
-- "RequestTimeout" errors
-
-**Diagnosis:**
-```bash
-# Check multipart upload configuration
-aws s3api list-multipart-uploads --bucket your-bucket-name
-
-# Test large file upload
-dd if=/dev/zero of=/tmp/large-test bs=1M count=150
-aws s3 cp /tmp/large-test s3://your-bucket-name/test-large
-```
-
-**Solutions:**
-
-**Increase timeouts:** Configure longer timeout values to accommodate large file uploads.
-   ```rust
-   // In code configuration
-   const UPLOAD_TIMEOUT: Duration = Duration::from_secs(3600);
-   ```
-
-**Optimize chunk size:** Adjust multipart upload chunk sizes based on your network conditions.
-   ```bash
-   # For slow connections, use smaller chunks
-   export S3_MULTIPART_CHUNK_SIZE=8388608  # 8MB chunks
-   ```
-
-**Resume failed uploads:** Clean up incomplete multipart uploads and retry failed transfers.
-   ```bash
-   # List incomplete multipart uploads
-   aws s3api list-multipart-uploads --bucket your-bucket-name
-   
-   # Abort stuck uploads
-   aws s3api abort-multipart-upload \
-     --bucket your-bucket-name \
-     --key path/to/file \
-     --upload-id UPLOAD_ID
-   ```
-
-### 4. S3-Compatible Service Issues
-
-#### Problem: MinIO/Wasabi/Backblaze not working
-
-**Symptoms:**
-- AWS S3 works but compatible service doesn't
-- "InvalidEndpoint" errors
-- SSL certificate errors
-
-**Solutions:**
-
-1. **MinIO configuration:**
-   ```bash
-   # Correct endpoint format
-   S3_ENDPOINT_URL=http://minio.local:9000  # No https:// for local
-   S3_ENDPOINT_URL=https://minio.example.com  # With SSL
-   
-   # Path-style addressing
-   S3_FORCE_PATH_STYLE=true
-   ```
-
-**Wasabi configuration:** Configure the correct endpoint and region for Wasabi storage.
-   ```bash
-   S3_ENDPOINT_URL=https://s3.wasabisys.com
-   S3_REGION=us-east-1  # Or your Wasabi region
-   ```
-
-**SSL certificate issues:** Handle SSL certificate validation problems with self-signed or custom certificates.
-   ```bash
-   # Disable SSL verification (development only!)
-   export AWS_CA_BUNDLE=/path/to/custom-ca.crt
-   
-   # Or for self-signed certificates
-   export NODE_TLS_REJECT_UNAUTHORIZED=0  # Not recommended for production
-   ```
-
-### 5. Migration Problems
-
-#### Problem: Migration tool hangs or fails
-
-**Symptoms:**
-- Migration starts but doesn't progress
-- "File not found" errors during migration
-- Database inconsistencies after partial migration
-
-**Diagnosis:**
-```bash
-# Check migration state
-cat migration_state.json | jq '.'
-
-# Find failed migrations
-cat migration_state.json | jq '.failed_migrations'
-
-# Check for orphaned files
-find ./uploads -type f -name "*.pdf" | head -10
-```
-
-**Solutions:**
-
-**Resume from last successful point:** Continue migration from where it left off to avoid re-processing completed files.
-   ```bash
-   # Get last successful migration
-   LAST_ID=$(cat migration_state.json | jq -r '.completed_migrations[-1].document_id')
-   
-   # Resume migration
-   cargo run --bin migrate_to_s3 --features s3 -- --resume-from $LAST_ID
-   ```
-
-**Fix missing local files:** Identify and handle documents that reference missing local files.
-   ```sql
-   -- Find documents with missing files
-   SELECT id, filename, file_path 
-   FROM documents 
-   WHERE file_path NOT LIKE 's3://%'
-   AND NOT EXISTS (
-     SELECT 1 FROM pg_stat_file(file_path)
-   );
-   ```
-
-**Rollback failed migration:** Safely revert a partially completed migration to restore the previous state.
-   ```bash
-   # Automatic rollback
-   cargo run --bin migrate_to_s3 --features s3 -- --rollback
-   
-   # Manual cleanup
-   psql $DATABASE_URL -c "UPDATE documents SET file_path = original_path WHERE file_path LIKE 's3://%';"
-   ```
-
-### 6. Performance Issues
-
-#### Problem: Slow document retrieval from S3
-
-**Symptoms:**
-- Document downloads are slow
-- High latency for thumbnail loading
-- Timeouts on document preview
-
-**Diagnosis:**
-```bash
-# Measure S3 latency
-time aws s3 cp s3://your-bucket/test-file /tmp/test-download
-
-# Check S3 transfer metrics
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/S3 \
-  --metric-name AllRequests \
-  --dimensions Name=BucketName,Value=your-bucket \
-  --start-time 2024-01-01T00:00:00Z \
-  --end-time 2024-01-02T00:00:00Z \
-  --period 3600 \
-  --statistics Average
-```
-
-**Solutions:**
-
-**Enable S3 Transfer Acceleration:** Use AWS Transfer Acceleration to improve upload and download speeds globally.
-   ```bash
-   aws s3api put-bucket-accelerate-configuration \
-     --bucket your-bucket-name \
-     --accelerate-configuration Status=Enabled
-   
-   # Update endpoint
-   S3_ENDPOINT_URL=https://your-bucket.s3-accelerate.amazonaws.com
-   ```
-
-**Implement caching:** Add caching layers to reduce repeated S3 requests and improve response times.
-   ```nginx
-   # Nginx caching configuration
-   proxy_cache_path /var/cache/nginx/s3 levels=1:2 keys_zone=s3_cache:10m max_size=1g;
-   
-   location /api/documents/ {
-       proxy_cache s3_cache;
-       proxy_cache_valid 200 1h;
-       proxy_cache_key "$request_uri";
-   }
-   ```
-
-**Use CloudFront CDN:** Deploy a CDN to cache frequently accessed documents closer to users.
-   ```bash
-   # Create CloudFront distribution
-   aws cloudfront create-distribution \
-     --origin-domain-name your-bucket.s3.amazonaws.com \
-     --default-root-object index.html
-   ```
-
-## Advanced Debugging
-
-### Enable Debug Logging
-
-```bash
-# Set environment variables
-export RUST_LOG=readur=debug,aws_sdk_s3=debug,aws_config=debug
-export RUST_BACKTRACE=full
-
-# Run Readur with debug output
-./readur 2>&1 | tee readur-debug.log
-```
-
-### S3 Request Logging
-
-```bash
-# Enable S3 access logging
-aws s3api put-bucket-logging \
-  --bucket your-bucket-name \
-  --bucket-logging-status '{
-    "LoggingEnabled": {
-      "TargetBucket": "your-logs-bucket",
-      "TargetPrefix": "s3-access-logs/"
-    }
-  }'
-```
-
-### Network Troubleshooting
-
-```bash
-# Trace S3 requests
-tcpdump -i any -w s3-traffic.pcap host s3.amazonaws.com
-
-# Analyze with Wireshark
-wireshark s3-traffic.pcap
-
-# Check MTU issues
-ping -M do -s 1472 s3.amazonaws.com
-```
-
-## Monitoring and Alerts
-
-### CloudWatch Metrics
-
-```bash
-# Create alarm for high error rate
-aws cloudwatch put-metric-alarm \
-  --alarm-name s3-high-error-rate \
-  --alarm-description "Alert when S3 error rate is high" \
-  --metric-name 4xxErrors \
-  --namespace AWS/S3 \
-  --statistic Sum \
-  --period 300 \
-  --threshold 10 \
-  --comparison-operator GreaterThanThreshold \
-  --evaluation-periods 2
-```
-
-### Log Analysis
-
-```bash
-# Parse S3 access logs
-aws s3 sync s3://your-logs-bucket/s3-access-logs/ ./logs/
-
-# Find errors
-grep -E "4[0-9]{2}|5[0-9]{2}" ./logs/*.log | head -20
-
-# Analyze request patterns
-awk '{print $8}' ./logs/*.log | sort | uniq -c | sort -rn | head -20
-```
-
-## Recovery Procedures
-
-### Corrupted S3 Data
-
-```bash
-# Verify object integrity
-aws s3api head-object --bucket your-bucket --key path/to/document.pdf
-
-# Restore from versioning
-aws s3api list-object-versions --bucket your-bucket --prefix path/to/
-
-# Restore specific version
-aws s3api get-object \
-  --bucket your-bucket \
-  --key path/to/document.pdf \
-  --version-id VERSION_ID \
-  /tmp/recovered-document.pdf
-```
-
-### Database Inconsistency
+Documents stored before S3 was enabled have a local `file_path` and are read from the local filesystem. If they cannot be opened, check that the uploads directory (`UPLOAD_PATH`, `/app/uploads` in the image) is still mounted with the same contents. Documents stored in S3 have a `file_path` starting with `s3://`:
 
 ```sql
--- Find orphaned S3 references
-SELECT id, file_path 
-FROM documents 
-WHERE file_path LIKE 's3://%'
-AND file_path NOT IN (
-  SELECT 's3://' || key FROM s3_inventory_table
-);
-
--- Update paths after bucket migration
-UPDATE documents 
-SET file_path = REPLACE(file_path, 's3://old-bucket/', 's3://new-bucket/')
-WHERE file_path LIKE 's3://old-bucket/%';
+SELECT id, original_filename, file_path
+FROM documents
+WHERE id = '123e4567-e89b-12d3-a456-426614174000';
 ```
 
-## Prevention Best Practices
+The part after `s3://` is the object key in the bucket; check with your provider's tools that the object exists.
 
-1. **Regular Health Checks**: Run diagnostic scripts daily
-2. **Monitor Metrics**: Set up CloudWatch dashboards
-3. **Test Failover**: Regularly test backup procedures
-4. **Document Changes**: Keep configuration changelog
-5. **Capacity Planning**: Monitor storage growth trends
+## Objects left in the bucket after deleting documents
 
-## Getting Help
+Deleting a document deletes the object at the key recorded at upload (its `file_path`), plus its thumbnail and processed image; an object that is already missing counts as deleted. Earlier versions recomputed the document's key from the current month when deleting, so documents deleted in a later month than their upload left their object behind under `documents/{user_id}/{year}/{month}/`. Such leftovers can be found by comparing the keys in the bucket with the `file_path` values in the `documents` table.
 
-If issues persist after following this guide:
+## Migration tool problems
 
-1. **Collect Diagnostics**:
-   ```bash
-   ./collect-diagnostics.sh > diagnostics.txt
-   ```
+See [Migration Troubleshooting](administration/migration-troubleshooting.md) for `migrate_to_s3`.
 
-2. **Check Logs**:
-   - Application logs: `journalctl -u readur -n 1000`
-   - S3 access logs: Check CloudWatch or S3 access logs
-   - Database logs: `tail -f /var/log/postgresql/*.log`
+## Debug logging
 
-3. **Contact Support**:
-   - Include diagnostics output
-   - Provide configuration (sanitized)
-   - Describe symptoms and timeline
-   - Share any error messages
+```bash
+RUST_LOG=readur=debug,aws_sdk_s3=debug,aws_config=debug
+RUST_BACKTRACE=1
+```
+
+Set these in the container environment and restart Readur. `aws_sdk_s3=debug` logs every S3 request; turn it off again afterwards.

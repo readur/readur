@@ -9,6 +9,22 @@ repo_name: readur/readur
 repo_url: https://github.com/readur/readur
 edit_uri: edit/main/docs/
 
+# docs/README.md describes how to build this site; it is not a page of it (and would
+# clash with index.md).
+exclude_docs: |
+  /README.md
+
+# `mkdocs build --strict` fails on links to missing pages or headings.
+validation:
+  omitted_files: warn
+  unrecognized_links: warn
+  anchors: warn
+
+# Kept in the repository for history or as redirects, not linked from the navigation.
+not_in_nav: |
+  /quickstart/development.md
+  /redesign/BRIEF.md
+
 # Copyright
 copyright: Copyright &copy; 2025 Readur
 
@@ -192,6 +208,7 @@ nav:
   - Home: index.md
 
   - Quick Start:
+      - First Steps: getting-started/quickstart.md
       - Self-Hosting: quickstart/self-hosting.md
       - Docker Setup: quickstart/docker.md
       - Development: dev/development.md
@@ -200,22 +217,31 @@ nav:
       - Overview: self-hosting/index.md
       - Installation:
           - getting-started/installation.md
+          - installation.md
           - deployment.md
+          - synology.md
+          - dev/DEPLOYMENT_SUMMARY.md
       - Configuration:
           - getting-started/configuration.md
+          - configuration.md
           - configuration-reference.md
       - Storage Setup:
+          - self-hosting/storage.md
           - s3-storage-guide.md
           - WATCH_FOLDER.md
           - per-user-watch-directories.md
       - Authentication:
+          - self-hosting/authentication.md
           - oidc-setup.md
           - user-management-guide.md
       - Networking:
+          - self-hosting/reverse-proxy.md
           - REVERSE_PROXY.md
       - Backup & Updates:
+          - self-hosting/backup.md
           - backup-recovery.md
           - migration-guide.md
+          - postgres-upgrade.md
           - administration/storage-migration.md
       - Security:
           - security-guide.md
@@ -226,6 +252,7 @@ nav:
       - Gallery: gallery.md
       - Documents & OCR:
           - file-upload-guide.md
+          - office-document-support.md
           - multi-language-ocr-guide.md
       - Search & Organization:
           - advanced-search.md
@@ -236,7 +263,10 @@ nav:
 
   - Administration:
       - Health Monitoring: health-monitoring-guide.md
-      - Performance Tuning: performance-tuning.md
+      - Monitoring: self-hosting/monitoring.md
+      - Performance Tuning:
+          - performance-tuning.md
+          - self-hosting/performance.md
       - CLI Tools: administration/cli-tools.md
       - Troubleshooting:
           - troubleshooting.md

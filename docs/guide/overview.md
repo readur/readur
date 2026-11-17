@@ -77,14 +77,13 @@ Start here if you need to:
 #### Document Processing
 1. [Upload documents](../file-upload-guide.md)
 2. [Configure OCR](../user-guide.md#ocr-processing)
-3. [Monitor processing](../user-guide.md#ocr-status-indicators)
+3. [Monitor processing](../user-guide.md#understanding-ocr-status)
 4. [Troubleshoot OCR](../dev/OCR_OPTIMIZATION_GUIDE.md)
 
 #### Search & Organization
 1. [Basic search](../user-guide.md#search-features)
 2. [Advanced search syntax](../advanced-search.md)
 3. [Create labels](../labels-and-organization.md)
-4. [Save searches](../user-guide.md#smart-collections)
 
 #### Integration & Automation
 1. [Set up sources](../sources-guide.md)
@@ -141,13 +140,12 @@ Start here if you need to:
 ### Workflow Efficiency
 1. **Bulk Upload**: Process similar documents together
 2. **Automation**: Set up sources for automatic import
-3. **Saved Searches**: Create shortcuts for common queries
-4. **Keyboard Shortcuts**: Learn shortcuts for faster navigation
+3. **Keyboard Shortcuts**: Learn shortcuts for faster navigation
 
 ## Troubleshooting Resources
 
 ### Common Issues
-- [OCR not starting](../user-guide.md#common-issues)
+- [OCR not starting](../user-guide.md#when-ocr-isnt-working)
 - [Search not finding documents](../advanced-search.md#troubleshooting)
 - [Slow performance](../dev/OCR_OPTIMIZATION_GUIDE.md)
 - [Upload failures](../file-upload-guide.md#troubleshooting)

@@ -76,7 +76,7 @@ Including Arabic (`ara`), Hebrew (`heb`), Turkish (`tur`), and dozens of other l
 ### Get Available Languages
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     https://your-readur-instance.com/api/ocr/languages
+     https://readur.example.com/api/ocr/languages
 ```
 
 **Response:**
@@ -107,7 +107,7 @@ curl -X PUT \
        "preferred_languages": ["eng", "spa", "fra"],
        "primary_language": "eng"
      }' \
-     https://your-readur-instance.com/api/settings
+     https://readur.example.com/api/settings
 ```
 
 ### Retry OCR with Different Languages
@@ -118,7 +118,7 @@ curl -X POST \
      -d '{
        "languages": ["eng", "deu"]
      }' \
-     https://your-readur-instance.com/api/documents/DOCUMENT_ID/ocr/retry
+     https://readur.example.com/api/documents/DOCUMENT_ID/ocr/retry
 ```
 
 ## 🎯 Best Practices

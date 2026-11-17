@@ -84,7 +84,7 @@ Users can choose their own OCR language in Settings; `OCR_LANGUAGE` is the defau
 | `OCR_TIMEOUT_SECONDS` | `300` | OCR processing timeout per file |
 | `MAX_PDF_SIZE_MB` | `100` | Maximum PDF file size for OCR processing |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | `100` | Maximum Office document size for text extraction |
-| `OCR_LOW_MEMORY_MODE` | `false` | `true` uses lighter Tesseract settings on low-memory hardware |
+| `OCR_LOW_MEMORY_MODE` | `false` | Read only by the image OCR service behind `GET /api/ocr/health`; document processing does not use it |
 
 The fuzzy search threshold is not an environment variable: each user sets it under Settings (Search configuration), default 0.5. See [Fuzzy search](advanced-search.md#fuzzy-search-similar-spelling).
 

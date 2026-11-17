@@ -7,7 +7,7 @@ This guide walks you through everything you need to know to effectively use Read
 - [Getting Started](#getting-started)
 - [Supported File Types](#supported-file-types)
 - [Using the Interface](#using-the-interface)
-  - [Dashboard](#dashboard)
+  - [Dashboard](#dashboard-overview)
   - [Document Management](#document-management)
   - [Advanced Search](#advanced-search)
   - [Sources and Synchronization](#sources-and-synchronization)
@@ -182,12 +182,6 @@ Managing labels is straightforward - you can rename labels and all associated do
 Most successful Readur users develop a consistent labeling strategy that reflects how they actually think about and use their documents. Category-based organization works well for many use cases - you might create labels for different projects, departments, document types, or processing status. For example, a document could have labels like "Project Alpha," "Finance," "Contract," and "Final" all at once.
 
 Time-based organization adds another valuable dimension. Consider creating labels for fiscal periods, project phases, or significant events. This approach makes it easy to find all documents related to a specific time frame, like "Q1 2024" or "Pre-Launch." You can combine time-based labels with category labels for powerful organization schemes.
-
-### Using Smart Collections
-
-Smart Collections are saved searches that automatically update as you add new documents. Instead of manually maintaining lists of documents, you create search criteria and Readur continuously finds documents that match. For instance, you could create a "Current Projects" collection that automatically includes any document labeled with active project names, or a "Pending Review" collection that shows all documents with review-related labels.
-
-These collections become particularly powerful when combined with boolean search logic. A "High Priority Items" collection might search for documents with labels like "urgent" OR "critical" OR "immediate," automatically gathering important documents regardless of which specific urgency label was used.
 
 > 🏷️ **For comprehensive labeling strategies**, see the [Labels and Organization Guide](labels-and-organization.md)
 

@@ -1,515 +1,242 @@
 # Installation Guide
 
-Deploy Readur document management system with OCR capabilities using Docker.
+Readur runs as a single server process next to a PostgreSQL database. The usual way to run it is the Docker image `ghcr.io/readur/readur`, with Docker Compose or the Helm chart. To build and run it without Docker, see [Manual Installation](../installation.md#manual-installation).
 
 ## Prerequisites
 
-### System Requirements
+- Docker with the Compose plugin (`docker compose version` should work), or a Kubernetes cluster with Helm for the Helm chart.
+- Enough CPU and memory for OCR. OCR is the heaviest work Readur does; each of the `CONCURRENT_OCR_JOBS` parallel jobs (default `4`) runs Tesseract on one document.
+- Disk space for your documents. Documents are stored under `UPLOAD_PATH` (`/app/uploads` in the container), or in S3 when the S3 backend is enabled.
 
-#### Minimum Requirements
-- **CPU**: 2 cores (x86_64 or ARM64)
-- **RAM**: 4GB (system) + 1GB per concurrent OCR job
-- **Storage**: 10GB for application + space for documents
-- **OS**: Linux, macOS, or Windows with Docker support
+The Docker image contains the `readur` binary at `/app/readur`, the web interface, Tesseract with all language packs, `ocrmypdf`, `poppler-utils` and `antiword`/`catdoc` for legacy Word files. Published tags are `latest` (the most recent release), release versions such as `2.6.0`, and `main` (built from the main branch).
 
-#### Recommended for Production
-- **CPU**: 4+ cores for parallel OCR processing
-- **RAM**: 8GB minimum, 16GB for heavy workloads
-- **Storage**: SSD for database, adequate space for document growth
-- **Network**: Stable connection for source synchronization
+## Docker Compose
 
-### Software Requirements
+### 1. Get the Compose File
+
+The repository's `docker-compose.yml` builds the image from source (`build: .`):
 
 ```bash
-# Check Docker version (20.10+ required)
-docker --version
-
-# Check Docker Compose version (2.0+ required)
-docker-compose --version
-
-# Verify Docker is running
-docker ps
-```
-
-## Installation Methods
-
-### Quick Start with Docker Compose (Recommended)
-
-#### 1. Clone the Repository
-
-```bash
-# Clone the repository
 git clone https://github.com/readur/readur.git
 cd readur
-
-# Review the configuration
-cat docker-compose.yml
 ```
 
-#### 2. Configure Environment
+To use the published image instead of building it, replace `build: .` in the `readur` service with `image: ghcr.io/readur/readur:latest`, or use the standalone compose file in the [Docker Quick Start](../quickstart/docker.md).
 
-Create a `.env` file with your settings:
+### 2. Configure
+
+The compose file reads `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` and `ADMIN_EMAIL` from your shell or from a `.env` file next to it. All four are optional:
 
 ```bash
-# Security - CHANGE THESE!
-JWT_SECRET=$(openssl rand -base64 32)
-DB_PASSWORD=$(openssl rand -base64 32)
-ADMIN_PASSWORD=your_secure_password_here
-
-# OCR Configuration
-OCR_LANGUAGE=eng  # or: deu, fra, spa, etc.
-CONCURRENT_OCR_JOBS=2
-
-# Storage Paths (create these directories)
-UPLOAD_PATH=./data/uploads
-WATCH_FOLDER=./data/watch
-
-# Optional: S3 Storage (instead of local)
-# STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
-# S3_BUCKET_NAME=readur-documents
-# S3_REGION=us-east-1
-# S3_ACCESS_KEY_ID=your_key
-# S3_SECRET_ACCESS_KEY=your_secret
+# .env
+ADMIN_PASSWORD=choose-a-long-password
+# Optional; without it a signing key is generated and stored in the database.
+# JWT_SECRET=<output of: openssl rand -hex 32>
 ```
 
-#### 3. Create Required Directories
+Other settings, such as `OCR_LANGUAGE` and `CONCURRENT_OCR_JOBS`, are set directly under `environment:` in `docker-compose.yml`. Change the PostgreSQL password there too (`POSTGRES_PASSWORD` of the `postgres` service and the password in `DATABASE_URL`) before the database is first created. See the [Configuration Guide](configuration.md).
+
+The compose file stores documents in `./readur_uploads`, the watch folder in `./readur_watch`, and the database in the `postgres_data` volume.
+
+### 3. Start
 
 ```bash
-# Create data directories
-mkdir -p data/{uploads,watch,postgres}
-
-# Set appropriate permissions
-chmod 755 data/uploads data/watch
+docker compose up -d --build
+docker compose logs -f readur
 ```
 
-#### 4. Start the Application
+Startup is complete when the log shows `✅ HTTP server bound to: 0.0.0.0:8000`. Database migrations run automatically before that.
+
+### 4. Verify
 
 ```bash
-# Start all services
-docker-compose up -d
-
-# Monitor startup logs
-docker-compose logs -f
-
-# Wait for "Server started on 0.0.0.0:8000"
+docker compose ps
+curl http://localhost:8000/api/health
 ```
 
-#### 5. Verify Installation
+The health endpoint answers:
 
-```bash
-# Check service health
-docker-compose ps
-
-# Test the API endpoint
-curl http://localhost:8000/health
-
-# Expected response:
-# {"status":"healthy","database":"connected","ocr":"ready"}
+```json
+{
+  "status": "ok"
+}
 ```
 
-### Production Deployment with Custom Configuration
+## Kubernetes with Helm
 
-#### 1. Create Production Compose File
+The chart in `charts/readur` deploys Readur only; it does not deploy PostgreSQL. Provide a database and pass its connection string in `DATABASE_URL`.
 
-Create `docker-compose.prod.yml`:
+The chart mounts an existing PersistentVolumeClaim for documents, named by `existingClaim` under `persistence.uploads` (installation fails without it), and creates a claim for the watch folder. Create the uploads claim first:
 
 ```yaml
-services:
-  readur:
-    image: ghcr.io/readur/readur:main
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://readur:${DB_PASSWORD}@postgres:5432/readur
-      - JWT_SECRET=${JWT_SECRET}
-      - SERVER_ADDRESS=0.0.0.0:8000
-      - UPLOAD_PATH=/app/uploads
-      - CONCURRENT_OCR_JOBS=4
-      - MAX_FILE_SIZE_MB=100
-    volumes:
-      - ./data/uploads:/app/uploads
-      - /mnt/shared/documents:/app/watch:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=readur
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=readur
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U readur"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: readur-uploads
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
 ```
 
-#### 2. Deploy with Production Settings
+Then write a values file, `my-values.yaml`:
+
+```yaml
+controllers:
+  main:
+    containers:
+      readur:
+        image:
+          repository: ghcr.io/readur/readur
+          tag: latest
+        env:
+          DATABASE_URL: postgresql://readur:your_password@postgres.example.com:5432/readur
+          PUBLIC_URL: https://readur.example.com
+persistence:
+  uploads:
+    existingClaim: readur-uploads
+ingress:
+  main:
+    enabled: true
+    hosts:
+      - host: readur.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            service:
+              identifier: main
+              port: http
+```
+
+The chart is built on the [bjw-s common library](https://github.com/bjw-s/helm-charts), so other values of that library work too. Install from a clone of the repository:
 
 ```bash
-# Use production configuration
-docker-compose -f docker-compose.prod.yml up -d
-
-# Enable automatic startup
-sudo systemctl enable docker
+kubectl apply -f readur-uploads-pvc.yaml
+helm dependency build charts/readur
+helm install readur charts/readur -f my-values.yaml
 ```
 
-### Kubernetes Deployment
+The chart creates a Secret named `<release>-auth` with a random initial `ADMIN_PASSWORD`, kept across upgrades. `JWT_SECRET` is optional: without it Readur generates a signing key and stores it in its database. To supply your own values, set `auth.jwtSecret` / `auth.adminPassword`, or point `auth.existingSecret` at a Secret that may contain `JWT_SECRET` (at least 32 bytes) and `ADMIN_PASSWORD`.
 
-#### Using Helm Chart
+**GitOps / `helm template`:** keeping the generated admin password across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and generate a new value on every render. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set `auth.adminPassword` explicitly.
 
-```bash
-# Add Readur Helm repository
-helm repo add readur https://charts.readur.app
-helm repo update
-
-# Install with custom values
-helm install readur readur/readur \
-  --set image.tag=latest \
-  --set postgresql.auth.password=$DB_PASSWORD \
-  --set persistence.size=50Gi \
-  --set ingress.enabled=true \
-  --set ingress.hostname=readur.example.com
-```
-
-The chart creates a Secret named `<release>-auth` containing a random `JWT_SECRET` and a random initial `ADMIN_PASSWORD`. Both are kept across upgrades. To supply your own values, set `auth.jwtSecret` / `auth.adminPassword`, or point `auth.existingSecret` at a Secret that contains `JWT_SECRET` (at least 32 bytes) and optionally `ADMIN_PASSWORD`.
-
-**GitOps / `helm template`:** keeping generated values across upgrades relies on Helm's `lookup` function, which only works when Helm talks to the cluster (`helm install` / `helm upgrade`). Renderers that do not, such as `helm template` and Argo CD, cannot see the existing Secret and would generate new random values on every render, signing out all users and changing the admin password. With these tools, set `auth.existingSecret` to a Secret you manage (for example with Sealed Secrets or External Secrets), or set both `auth.jwtSecret` and `auth.adminPassword` explicitly.
-
-Read the initial admin password:
+Read the initial admin password (for a release named `readur`):
 
 ```bash
 kubectl get secret readur-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ```
 
-#### Using Raw Manifests
-
-```bash
-# Apply Kubernetes manifests
-kubectl create namespace readur
-kubectl apply -f https://raw.githubusercontent.com/readur/readur/main/k8s/
-
-# Check deployment status
-kubectl -n readur get pods
-kubectl -n readur get svc
-```
-
-### Docker Run (Development Only)
-
-For quick testing without persistence:
-
-```bash
-# Run with in-memory database (data lost on restart)
-docker run -d \
-  --name readur \
-  -p 8000:8000 \
-  -e DATABASE_URL=sqlite:///tmp/readur.db \
-  -e JWT_SECRET="$(openssl rand -hex 32)" \
-  readur:latest
-
-# Access logs
-docker logs -f readur
-```
+Run only one Readur replica.
 
 ## Post-Installation Setup
 
-### Initial Login
+### Sign In
 
-1. **Access the Web Interface**
-   ```
-   http://localhost:8000
-   ```
+Open `http://localhost:8000` (or your public URL) and sign in as `admin` (or your `ADMIN_USERNAME`).
 
-2. **Login with Admin Credentials**
-   - Username: `admin`
-   - Password: the value of `ADMIN_PASSWORD`, or the generated password file
-
-   If `ADMIN_PASSWORD` is not set, Readur generates a random password on first startup and writes it to `initial-admin-password` in the `.readur` directory inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the container, mode `0600`). It is not written to the logs; the log shows the file path. Read it with:
-
-   ```bash
-   docker compose exec readur cat /app/uploads/.readur/initial-admin-password
-   ```
-
-   After signing in and changing the password, delete the file.
-
-3. **Resetting Admin Password**
-   If you lose your password, reset it with:
-   ```bash
-   docker exec readur readur reset-admin-password
-   ```
-
-### Essential Configuration
-
-#### 1. Configure OCR Languages
+The password is `ADMIN_PASSWORD` if you set it. Otherwise Readur generated a random password on first startup and wrote it to `.readur/initial-admin-password` inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the container, mode `0600`). It is not written to the logs; the log shows the file path. Read it with:
 
 ```bash
-# Check available languages
-docker exec readur tesseract --list-langs
-
-# Add additional language packs if needed
-docker exec readur apt-get update
-docker exec readur apt-get install -y tesseract-ocr-deu  # German
-docker exec readur apt-get install -y tesseract-ocr-fra  # French
-docker exec readur apt-get install -y tesseract-ocr-spa  # Spanish
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
-#### 2. Set Up Document Sources
+After signing in and changing the password, delete the file.
 
-1. Navigate to Settings → Sources
-2. Add your document sources:
-   - **Local Folders**: Mount volumes in docker-compose.yml
-   - **WebDAV**: Configure Nextcloud/ownCloud connections
-   - **S3 Buckets**: Add AWS S3 or compatible storage
+### Reset the Admin Password
 
-#### 3. Configure User Authentication
-
-**For Local Users:**
-- Settings → User Management → Create User
-- Assign appropriate roles (User or Admin)
-
-**For SSO/OIDC:**
 ```bash
-# Add to your .env file
-OIDC_ENABLED=true
-OIDC_ISSUER=https://auth.example.com
-OIDC_CLIENT_ID=readur-client
-OIDC_CLIENT_SECRET=your-secret
+docker compose exec readur /app/readur reset-admin-password
 ```
 
-#### 4. Adjust Performance Settings
+This sets the password of the `ADMIN_USERNAME` account to `ADMIN_PASSWORD`, or, when that is empty, to a new random password printed to the terminal. With Kubernetes:
 
 ```bash
-# Edit .env for your workload
-CONCURRENT_OCR_JOBS=4        # Increase for faster processing
-OCR_TIMEOUT_SECONDS=300      # Increase for large documents
-MAX_FILE_SIZE_MB=100         # Adjust based on your documents
-MEMORY_LIMIT_MB=2048         # Increase for better performance
+kubectl exec deployment/readur -- /app/readur reset-admin-password
 ```
 
-## Verification & Health Checks
+### OCR Languages
 
-### Service Health
+The Docker image includes every Tesseract language pack, so no extra installation is needed. Set the default with `OCR_LANGUAGE` (for example `eng+deu`); each user can choose their own languages under **Settings** → **OCR**.
 
-```bash
-# Check all services are running
-docker-compose ps
+### Document Sources
 
-# Expected output:
-NAME                STATUS              PORTS
-readur              running (healthy)   0.0.0.0:8000->8000/tcp
-postgres            running (healthy)   5432/tcp
-```
+Under **Sources** in the web interface, add WebDAV servers (such as Nextcloud or ownCloud), S3 buckets, or folders on the server. Folders must be mounted into the container, and unless `LOCAL_SOURCE_ALLOWED_PATHS` is set only administrators can add them. See the [Sources Guide](../sources-guide.md).
 
-### API Health Check
+### Users
+
+Administrators create users and set their role (user or admin) under **Settings** → **Users**. See the [User Management Guide](../user-management-guide.md). For single sign-on, see the [OIDC Setup Guide](../oidc-setup.md).
+
+## Test Upload via the API
 
 ```bash
-# Test the health endpoint
-curl -s http://localhost:8000/health | jq
+# Log in and keep the session token
+token=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your-admin-password"}' | jq -r .token)
 
-# Expected response:
-{
-  "status": "healthy",
-  "version": "2.5.4",
-  "database": "connected",
-  "ocr_service": "ready",
-  "storage": "available",
-  "queue_size": 0
-}
-```
-
-### Database Connectivity
-
-```bash
-# Test database connection
-docker exec readur-postgres psql -U readur -c "SELECT version();"
-
-# Check tables were created
-docker exec readur-postgres psql -U readur -d readur -c "\dt"
-```
-
-### OCR Functionality
-
-```bash
-# Test OCR engine
-docker exec readur tesseract --version
-
-# Upload a test document
+# Upload a PDF; it is queued for OCR
 curl -X POST http://localhost:8000/api/documents \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "file=@test.pdf"
+  -H "Authorization: Bearer $token" \
+  -F "file=@sample.pdf"
+
+# List your documents with their OCR status
+curl -H "Authorization: Bearer $token" http://localhost:8000/api/documents
 ```
 
-## Troubleshooting Installation
+See the [API Reference](../api-reference.md) for the response formats.
 
-### Common Issues and Solutions
+## Troubleshooting
 
-#### Port Already in Use
+### Port Already in Use
 
-```bash
-# Check what's using port 8000
-sudo lsof -i :8000
+Map a different host port in `docker-compose.yml`, keeping the container port `8000`:
 
-# Solution 1: Stop the conflicting service
-sudo systemctl stop conflicting-service
-
-# Solution 2: Use a different port
-# Edit docker-compose.yml:
-ports:
-  - "8080:8000"  # Change 8080 to your preferred port
+```yaml
+services:
+  readur:
+    ports:
+      - "8080:8000"
 ```
 
-#### Database Connection Failed
+### Database Connection Failed
 
 ```bash
-# Check PostgreSQL logs
-docker-compose logs postgres
-
-# Common fixes:
-# 1. Ensure PostgreSQL is fully started
-docker-compose restart postgres
-sleep 10
-docker-compose restart readur
-
-# 2. Reset database (WARNING: Deletes all data)
-docker-compose down -v
-docker-compose up -d
+docker compose logs postgres
+docker compose logs readur
 ```
 
-#### OCR Processing Stuck
+The compose file waits for PostgreSQL's health check before starting Readur. If the database credentials were changed after the `postgres_data` volume was first created, the old credentials still apply; either use them or recreate the volume with `docker compose down -v` (this deletes all data).
+
+### OCR Is Not Progressing
+
+An administrator can check the queue:
 
 ```bash
-# Check OCR queue status (administrator token)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/queue/stats
-
-# Restart OCR workers
-docker-compose restart readur
-
-# Increase timeout for large files
-# Add to .env:
-OCR_TIMEOUT_SECONDS=600
+curl -H "Authorization: Bearer $token" http://localhost:8000/api/queue/stats
 ```
 
-#### Docker Permission Denied
+Large documents may need a higher `OCR_TIMEOUT_SECONDS`. The **Intake** page lists documents that need attention.
+
+### More Detailed Logs
+
+Set `RUST_LOG=debug` in the `environment:` section and restart:
 
 ```bash
-# Linux: Add user to docker group
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Verify docker access
-docker ps
-```
-
-#### Insufficient Memory
-
-```bash
-# Check container memory usage
-docker stats readur
-
-# Increase memory limits in docker-compose.yml:
-deploy:
-  resources:
-    limits:
-      memory: 4G  # Increase as needed
+docker compose up -d
+docker compose logs -f readur
 ```
 
 ### Getting Help
 
-1. **Check Logs**
-   ```bash
-   # Application logs
-   docker-compose logs -f readur
-   
-   # Database logs
-   docker-compose logs -f postgres
-   ```
-
-2. **Enable Debug Mode**
-   ```bash
-   # Add to .env
-   LOG_LEVEL=DEBUG
-   
-   # Restart services
-   docker-compose restart
-   ```
-
-3. **Community Support**
-   - [GitHub Issues](https://github.com/readur/readur/issues)
-   - [Documentation](https://docs.readur.app)
-   - [Discord Community](https://discord.gg/readur)
+- [Troubleshooting Guide](../troubleshooting.md)
+- [GitHub Issues](https://github.com/readur/readur/issues)
 
 ## Next Steps
 
-### Essential Reading
-
-1. **[User Guide](../user-guide.md)**
-   - Upload and manage documents
-   - Configure OCR processing
-   - Master search features
-   - Organize with labels
-
-2. **[Configuration Reference](../configuration-reference.md)**
-   - Complete environment variable list
-   - Performance tuning
-   - Storage configuration
-   - Security settings
-
-3. **[Deployment Guide](../deployment.md)**
-   - SSL/TLS setup with reverse proxy
-   - Backup and restore procedures
-   - Monitoring and alerts
-   - Scaling strategies
-
-### Advanced Setup
-
-4. **[Sources Guide](../sources-guide.md)**
-   - WebDAV integration
-   - S3 bucket synchronization
-   - Watch folder configuration
-   - Automated imports
-
-5. **[OIDC Setup](../oidc-setup.md)**
-   - Enterprise SSO integration
-   - Azure AD configuration
-   - Google Workspace setup
-   - Keycloak integration
-
-6. **[API Reference](../api-reference.md)**
-   - REST API endpoints
-   - Authentication
-   - Automation examples
-   - Webhook integration
-
-### Quick Test
-
-Upload your first document:
-
-```bash
-# 1. Login to get token (use ADMIN_PASSWORD or the generated password file)
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
-
-# 2. Upload a PDF
-curl -X POST http://localhost:8000/api/documents \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@sample.pdf"
-
-# 3. Check OCR status
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8000/api/documents
-```
+- [Configuration Guide](configuration.md) and [Configuration Reference](../configuration-reference.md)
+- [User Guide](../user-guide.md)
+- [Deployment Guide](../deployment.md): reverse proxy, TLS and backups
+- [Sources Guide](../sources-guide.md)
+- [API Reference](../api-reference.md)

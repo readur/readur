@@ -2,122 +2,120 @@
 
 ## Overview
 
-Readur supports multiple storage backends for document management. Choose the backend that best fits your infrastructure and scaling needs.
+Readur stores document files in one of two places:
 
-## Storage Backends
+- **Local storage** (the default): a directory on the server, set with `UPLOAD_PATH`.
+- **S3 storage**: a bucket on Amazon S3 or an S3-compatible service (MinIO, RustFS and others).
 
-### Local Storage
+Document metadata, OCR text, labels, users and settings are always in PostgreSQL, whichever backend holds the files. Both need backing up; see [Backup Strategies](./backup.md).
 
-Best for single-server deployments and small installations.
+WebDAV servers, local folders and S3 buckets can also be *sources* that Readur imports documents from. Sources are not storage backends: they are added per user in the web interface (**Sources**), and imported files are copied into the storage backend configured here. See the [Sources Guide](../sources-guide.md) and [Watch Folder](../WATCH_FOLDER.md).
 
-#### Configuration
+## Local Storage
+
+Local storage is used unless S3 is enabled. Documents go under `UPLOAD_PATH` (default `./uploads`; `/app/uploads` in the Docker image).
 
 ```bash
-# In .env file
-STORAGE_BACKEND=local
-LOCAL_STORAGE_PATH=/data/readur/documents
-LOCAL_STORAGE_MAX_SIZE_GB=500  # Optional: limit storage usage
+UPLOAD_PATH=/data/readur/uploads
 ```
 
-#### Directory Structure
+At startup Readur creates these subdirectories:
 
-```
-/data/readur/documents/
-├── users/
-│   ├── user1/
-│   │   ├── uploads/
-│   │   └── processed/
-│   └── user2/
+```text
+<UPLOAD_PATH>/
+├── documents/          # uploaded and imported documents, named <document_id>.<extension>
+├── thumbnails/         # <document_id>_thumb.jpg
+├── processed_images/   # <document_id>_processed.png, the preprocessed image OCR ran on
 ├── temp/
-└── cache/
+└── backups/
 ```
 
-#### Permissions
+When `ADMIN_PASSWORD` is not set, the generated initial admin password is also written to `<UPLOAD_PATH>/.readur/initial-admin-password` (see [Authentication](./authentication.md#the-initial-administrator)).
 
-Set proper ownership and permissions:
+The Readur process must be able to create and write these directories. The Docker image runs as root, so a bind mount works without changes; when running the binary directly, give its user ownership of `UPLOAD_PATH`:
 
 ```bash
-# Create directory structure
-sudo mkdir -p /data/readur/documents
-sudo chown -R readur:readur /data/readur/documents
-sudo chmod 750 /data/readur/documents
+sudo mkdir -p /data/readur/uploads
+sudo chown -R readur:readur /data/readur/uploads
 ```
 
-#### Backup Considerations
+In Docker Compose, keep `/app/uploads` on a volume, or documents are lost when the container is recreated:
 
-- Use filesystem snapshots (LVM, ZFS, Btrfs)
-- Rsync to backup location
-- Exclude temp/ and cache/ directories
+```yaml
+services:
+  readur:
+    image: ghcr.io/readur/readur:latest
+    environment:
+      UPLOAD_PATH: /app/uploads
+    volumes:
+      - ./readur_uploads:/app/uploads
+```
 
-### S3-Compatible Storage
+Temporary files written during OCR go to `/tmp` (inside the container when you run the Docker image), not to `UPLOAD_PATH`.
 
-Recommended for production deployments requiring scalability.
+## S3 Storage
 
-#### AWS S3 Configuration
+S3 storage is enabled with `S3_ENABLED=true` (or the equivalent `STORAGE_BACKEND=s3`) together with a bucket name and both keys:
 
 ```bash
-# In .env file
-STORAGE_BACKEND=s3  # equivalent to S3_ENABLED=true
+S3_ENABLED=true
 S3_BUCKET_NAME=readur-documents
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-
-# Optional settings
-S3_ENDPOINT_URL=  # Leave empty for AWS
-S3_USE_SSL=true
-S3_VERIFY_SSL=true
-S3_SIGNATURE_VERSION=s3v4
 ```
 
-#### MinIO Configuration
-
-For self-hosted S3-compatible storage:
+For an S3-compatible service, add its endpoint. Path-style addressing is used automatically when an endpoint is set; `S3_FORCE_PATH_STYLE` overrides that:
 
 ```bash
-STORAGE_BACKEND=s3
+S3_ENABLED=true
 S3_BUCKET_NAME=readur
-S3_ENDPOINT_URL=https://minio.company.com:9000
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin123
-S3_USE_SSL=true
-S3_VERIFY_SSL=false  # For self-signed certificates
-S3_REGION=us-east-1  # MinIO default
+S3_ENDPOINT_URL=http://minio:9000
+S3_ACCESS_KEY_ID=minio-access-key
+S3_SECRET_ACCESS_KEY=minio-secret-key
 ```
 
-#### Bucket Setup
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `S3_ENABLED` | `false` | `true` enables the S3 backend |
+| `STORAGE_BACKEND` | `local` | `s3` enables the S3 backend (same as `S3_ENABLED=true`) |
+| `S3_BUCKET_NAME` | - | Bucket name (required) |
+| `S3_ACCESS_KEY_ID` | - | Access key ID (required) |
+| `S3_SECRET_ACCESS_KEY` | - | Secret access key (required) |
+| `S3_REGION` | `us-east-1` | Region |
+| `S3_ENDPOINT_URL` | - | Endpoint of an S3-compatible service (alias `S3_ENDPOINT`) |
+| `S3_FORCE_PATH_STYLE` | auto | `true` forces path-style addressing (alias `S3_PATH_STYLE`) |
 
-Create and configure your S3 bucket:
+Readur does not create or configure the bucket; create it first. Encryption, versioning and lifecycle rules are set on the bucket with your provider's tools.
+
+### Startup Checks
+
+At startup Readur tests the bucket by listing one object and sending HeadBucket. **If S3 is enabled but misconfigured, the server still starts, using local storage:**
+
+- A missing bucket name or key logs `❌ S3 enabled but missing required configuration (bucket_name, access_key_id, or secret_access_key)`.
+- A failed connection test logs `❌ Failed to initialize configured storage backend: ...` followed by `🔄 Falling back to local storage...`.
+
+Check the log after enabling S3; on success it contains `✅ File service initialized with s3 storage backend`:
 
 ```bash
-# AWS CLI
-aws s3api create-bucket --bucket readur-documents --region us-east-1
-
-# Set lifecycle policy for temp files
-aws s3api put-bucket-lifecycle-configuration \
-  --bucket readur-documents \
-  --lifecycle-configuration file://lifecycle.json
+docker compose logs readur | grep "storage backend"
 ```
 
-Lifecycle policy (lifecycle.json):
-```json
-{
-  "Rules": [
-    {
-      "Id": "DeleteTempFiles",
-      "Status": "Enabled",
-      "Prefix": "temp/",
-      "Expiration": {
-        "Days": 7
-      }
-    }
-  ]
-}
+### Object Layout
+
+Each key is below `S3_PREFIX` when it is set:
+
+```text
+documents/<user_id>/<year>/<month>/<document_id>.<extension>
+thumbnails/<user_id>/<document_id>_thumb.jpg
+processed_images/<user_id>/<document_id>_processed.png
 ```
 
-#### IAM Permissions
+Keep the `UPLOAD_PATH` volume even with S3: documents stored before S3 was enabled stay there and keep working, and the generated admin password file is written there.
 
-Minimum required S3 permissions:
+### Permissions
+
+The credentials need to list the bucket and read, write and delete objects in it. On AWS, a minimal policy:
 
 ```json
 {
@@ -125,300 +123,53 @@ Minimum required S3 permissions:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
-      "Resource": [
-        "arn:aws:s3:::readur-documents",
-        "arn:aws:s3:::readur-documents/*"
-      ]
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::readur-documents"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+      "Resource": ["arn:aws:s3:::readur-documents/*"]
     }
   ]
 }
 ```
 
-### WebDAV Storage
+Files larger than 100 MB are uploaded with multipart uploads.
 
-For integration with existing WebDAV servers.
+See the [S3 Storage Guide](../s3-storage-guide.md) for more detail and the [S3 Troubleshooting Guide](../s3-troubleshooting.md) for connection problems.
 
-#### Configuration
+## Moving Existing Documents to S3
 
-```bash
-STORAGE_BACKEND=webdav
-WEBDAV_URL=https://webdav.company.com/readur
-WEBDAV_USERNAME=readur_user
-WEBDAV_PASSWORD=secure_password
-WEBDAV_VERIFY_SSL=true
-```
-
-#### Nextcloud Integration
+Enabling S3 does not move documents that are already stored locally. The `migrate_to_s3` tool uploads them and updates their paths in the database. It is built from source and not included in the Docker image:
 
 ```bash
-STORAGE_BACKEND=webdav
-WEBDAV_URL=https://nextcloud.company.com/remote.php/dav/files/readur/
-WEBDAV_USERNAME=readur
-WEBDAV_PASSWORD=app-password-here
+# Preview what would be migrated
+cargo run --release --bin migrate_to_s3 -- --dry-run
+
+# Migrate
+cargo run --release --bin migrate_to_s3
 ```
 
-## Storage Migration
+Its flags are `--dry-run`, `--delete-local`, `--limit <N>`, `--user-id <UUID>`, `--enable-rollback` and `--resume-from <UUID>`. Back up the database first and read [Storage Migration](../administration/storage-migration.md) and the [S3 Storage Guide](../s3-storage-guide.md#migrating-local-files-to-s3) before running it. There is no tool for moving documents from S3 back to local storage.
 
-### Migrating Between Backends
+## Monitoring Disk Usage
 
-Use the built-in Rust migration tool:
+Readur does not limit storage use. The admin metrics (`GET /api/metrics`, `documents.total_storage_bytes`) report the total size of all documents as recorded in the database; for free space, watch the filesystem or bucket with your usual tools:
 
 ```bash
-# Migrate from local to S3
-docker-compose exec readur cargo run --bin migrate_to_s3 -- \
-  --batch-size 100 \
-  --enable-rollback \
-  --verbose
+# Local storage
+df -h /data/readur/uploads
+du -sh /data/readur/uploads/*
 
-# Or using the compiled binary in production
-docker-compose exec readur /app/migrate_to_s3 \
-  --batch-size 100 \
-  --enable-rollback
+# Inside the container
+docker compose exec readur du -sh /app/uploads
 ```
-
-### Progressive Migration
-
-Migrate in stages to minimize downtime:
-
-```bash
-# Stage 1: Test migration with dry run
-docker-compose exec readur cargo run --bin migrate_to_s3 -- --dry-run
-
-# Stage 2: Migrate specific user's documents
-docker-compose exec readur cargo run --bin migrate_to_s3 -- \
-  --user-id "user-uuid" \
-  --enable-rollback
-
-# Stage 3: Full migration with rollback capability
-docker-compose exec readur cargo run --bin migrate_to_s3 -- \
-  --enable-rollback \
-  --batch-size 500 \
-  --parallel-uploads 5
-
-# Stage 4: Update configuration
-# Update .env: STORAGE_BACKEND=s3
-docker-compose restart readur
-```
-
-## Performance Optimization
-
-### Local Storage
-
-#### Filesystem Choice
-
-- **ext4**: Good general performance
-- **XFS**: Better for large files
-- **ZFS**: Advanced features, snapshots, compression
-- **Btrfs**: Copy-on-write, snapshots
-
-#### Mount Options
-
-```bash
-# /etc/fstab optimization
-/dev/sdb1 /data/readur ext4 defaults,noatime,nodiratime 0 2
-```
-
-#### RAID Configuration
-
-For better performance and redundancy:
-
-```bash
-# RAID 10 for balanced performance/redundancy
-mdadm --create /dev/md0 --level=10 --raid-devices=4 \
-  /dev/sdb /dev/sdc /dev/sdd /dev/sde
-```
-
-### S3 Storage
-
-#### Connection Pooling
-
-```bash
-# Optimize S3 connections
-S3_MAX_CONNECTIONS=100
-S3_CONNECTION_TIMEOUT=30
-S3_READ_TIMEOUT=300
-```
-
-#### Transfer Acceleration
-
-```bash
-# Enable for AWS S3
-S3_USE_ACCELERATE_ENDPOINT=true
-S3_MULTIPART_THRESHOLD=64MB
-S3_MULTIPART_CHUNKSIZE=16MB
-```
-
-#### CDN Integration
-
-Use CloudFront for read-heavy workloads:
-
-```bash
-# Serve documents through CDN
-CDN_ENABLED=true
-CDN_URL=https://d1234567890.cloudfront.net
-CDN_PRIVATE_KEY=/etc/readur/cloudfront-key.pem
-```
-
-## Storage Monitoring
-
-### Disk Usage Monitoring
-
-```bash
-# Check local storage usage
-df -h /data/readur/documents
-
-# Monitor growth rate
-du -sh /data/readur/documents/* | sort -rh
-
-# Set up alerts
-cat > /etc/cron.d/storage-alert << EOF
-0 * * * * root df /data/readur | awk '\$5+0 > 80' && mail -s "Storage Alert" admin@company.com
-EOF
-```
-
-### S3 Metrics
-
-Monitor S3 usage and costs:
-
-```bash
-# Get bucket size
-aws s3 ls s3://readur-documents --recursive --summarize | grep "Total Size"
-
-# CloudWatch metrics
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/S3 \
-  --metric-name BucketSizeBytes \
-  --dimensions Name=BucketName,Value=readur-documents \
-  --start-time 2024-01-01T00:00:00Z \
-  --end-time 2024-01-31T23:59:59Z \
-  --period 86400 \
-  --statistics Average
-```
-
-## Troubleshooting
-
-### Local Storage Issues
-
-#### Disk Full
-
-```bash
-# Find large files
-find /data/readur -type f -size +100M -exec ls -lh {} \;
-
-# Clean temporary files
-find /data/readur/documents/temp -mtime +7 -delete
-
-# Check for orphaned files
-# This is typically done via database queries or custom scripts
-docker-compose exec readur psql -U readur -d readur -c \
-  "SELECT * FROM documents WHERE file_path NOT IN (SELECT path FROM files)"
-```
-
-#### Permission Errors
-
-```bash
-# Fix ownership
-sudo chown -R readur:readur /data/readur/documents
-
-# Fix permissions
-find /data/readur/documents -type d -exec chmod 755 {} \;
-find /data/readur/documents -type f -exec chmod 644 {} \;
-```
-
-### S3 Issues
-
-#### Connection Errors
-
-```bash
-# Test S3 connectivity
-aws s3 ls s3://readur-documents --debug
-
-# Check credentials
-aws sts get-caller-identity
-
-# Verify S3 environment variables are set correctly
-# Should use S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY
-docker-compose exec readur env | grep -E '^S3_' | sed 's/=.*/=***/'
-
-# Verify bucket policy
-aws s3api get-bucket-policy --bucket readur-documents
-```
-
-#### Slow Uploads
-
-```bash
-# Increase multipart settings
-S3_MULTIPART_THRESHOLD=32MB
-S3_MULTIPART_CHUNKSIZE=8MB
-S3_MAX_CONCURRENCY=10
-
-# Enable transfer acceleration (AWS only)
-aws s3api put-bucket-accelerate-configuration \
-  --bucket readur-documents \
-  --accelerate-configuration Status=Enabled
-```
-
-## Best Practices
-
-### Security
-
-1. **Encryption at rest**:
-   - Local: Use encrypted filesystems (LUKS)
-   - S3: Enable SSE-S3 or SSE-KMS
-
-2. **Encryption in transit**:
-   - Always use HTTPS/TLS
-   - Verify SSL certificates
-
-3. **Access control**:
-   - Principle of least privilege
-   - Regular credential rotation
-   - IP whitelisting where possible
-
-### Backup Strategy
-
-1. **3-2-1 Rule**:
-   - 3 copies of data
-   - 2 different storage types
-   - 1 offsite backup
-
-2. **Testing**:
-   - Regular restore tests
-   - Document recovery procedures
-   - Monitor backup completion
-
-3. **Retention**:
-   - Define retention policies
-   - Automate old backup cleanup
-   - Comply with regulations
-
-### Capacity Planning
-
-1. **Growth estimation**:
-   ```
-   Daily documents × Average size × Retention days = Required storage
-   ```
-
-2. **Buffer space**:
-   - Keep 20% free space minimum
-   - Monitor growth trends
-   - Plan upgrades proactively
-
-3. **Cost optimization**:
-   - Use lifecycle policies
-   - Archive old documents
-   - Compress where appropriate
 
 ## Related Documentation
 
 - [S3 Storage Guide](../s3-storage-guide.md)
 - [Storage Migration](../administration/storage-migration.md)
+- [Sources Guide](../sources-guide.md)
 - [Backup Strategies](./backup.md)
 - [Performance Tuning](./performance.md)

@@ -1,322 +1,271 @@
 # Docker Quick Start
 
-Get Readur running on your machine in just 5 minutes using Docker. If you're familiar with Docker and want to test Readur quickly, this is your fastest path to a working installation.
+Run Readur from the published Docker image, `ghcr.io/readur/readur`, without building anything. A Readur installation is two containers: the Readur server (web interface, API, OCR and background processing in one process) and PostgreSQL.
 
 ## What You Need
 
-Before starting, make sure you have Docker Engine 20.10 or newer and Docker Compose 2.0 or newer installed on your machine. You'll also need at least 2GB of RAM available for the containers and about 10GB of free disk space for the application and initial document storage.
+Docker with the Compose plugin (`docker compose version` should work), and enough CPU and memory for OCR, which is the heaviest work Readur does.
 
-## Step 1: Download Configuration Files
+## Step 1: Create the Compose File
 
-First, create a directory for Readur and download the configuration files you'll need:
+Create a directory for Readur and a `docker-compose.yml` in it:
 
 ```bash
-# Create a directory for your Readur installation
 mkdir readur && cd readur
-
-# Download the Docker Compose configuration
-curl -O https://raw.githubusercontent.com/readur/readur/main/docker-compose.yml
-
-# Download the environment variables template
-curl -O https://raw.githubusercontent.com/readur/readur/main/.env.example
-mv .env.example .env
 ```
 
-These commands download the Docker Compose file that defines all the services Readur needs, plus an environment template that you'll customize with your settings.
+```yaml
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: readur
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-readur}
+      POSTGRES_DB: readur
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readur"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
-## Step 2: Configure Essential Settings
+  readur:
+    image: ghcr.io/readur/readur:latest
+    environment:
+      DATABASE_URL: postgresql://readur:${POSTGRES_PASSWORD:-readur}@postgres/readur
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      UPLOAD_PATH: /app/uploads
+      WATCH_FOLDER: /app/watch
+      OCR_LANGUAGE: eng
+      CONCURRENT_OCR_JOBS: 2
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./readur_uploads:/app/uploads
+      - ./readur_watch:/app/watch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
-Open the `.env` file in your text editor and set up the minimal configuration needed to get started:
+volumes:
+  postgres_data:
+```
+
+`latest` is the most recent release. You can pin a release version such as `2.6.0`, or use `main` for builds of the main branch.
+
+## Step 2: Set the Passwords
+
+Create a `.env` file next to `docker-compose.yml`; Docker Compose substitutes its values into the file above:
 
 ```bash
-# Optional: JWT signing secret, at least 32 bytes. Leave it out to have a key
-# generated on first start and stored in the database.
-JWT_SECRET=<output of: openssl rand -hex 32>
-
-# Set a secure database password
+cat > .env << EOF
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
-
-# Set your admin password (change this from the default!)
-ADMIN_PASSWORD=changeme123
+ADMIN_PASSWORD=choose-a-long-password
+EOF
 ```
 
-These are the only settings you need to change for a basic installation. `JWT_SECRET` signs login tokens and is optional (when it is unset, a key is generated on first start and stored in the database; when set, it must be at least 32 bytes and not an example value), the database password protects your PostgreSQL instance, and the admin password is what you'll use to log in. Everything else uses sensible defaults that work for testing and development.
+`POSTGRES_PASSWORD` is used when the database is first created. `ADMIN_PASSWORD` (at least 8 characters) becomes the password of the `admin` account created on first startup. Leave it out and Readur generates a random password instead (see Step 4).
+
+`JWT_SECRET` is not needed: without it Readur generates a signing key on first start and stores it in the database. See the [Configuration Guide](../getting-started/configuration.md) for all other settings.
 
 ## Step 3: Start Readur
 
-Now launch all the services that make up Readur:
+```bash
+docker compose up -d
+docker compose logs -f readur
+```
+
+Readur runs its database migrations and then logs `✅ HTTP server bound to: 0.0.0.0:8000`. Press `Ctrl+C` to stop following the logs.
+
+## Step 4: Sign In
+
+Open `http://localhost:8000` and sign in as `admin` with your `ADMIN_PASSWORD`.
+
+If you did not set `ADMIN_PASSWORD`, read the generated password (it is not written to the logs):
 
 ```bash
-# Start all containers in the background
-docker-compose up -d
+docker compose exec readur cat /app/uploads/.readur/initial-admin-password
 ```
 
-This command starts PostgreSQL (database), Redis (task queue), the main Readur application, and the OCR worker in the background. To watch the startup process and see what's happening:
-
-```bash
-# Follow the logs to see startup progress
-docker-compose logs -f
-```
-
-The logs will show you when each service is ready. You'll see database initialization, the web server starting up, and the OCR worker connecting to the queue.
-
-## Step 4: Access Readur
-
-The startup process typically takes 30-60 seconds. Once the logs show that all services are ready, open your web browser and go to:
-
-```
-http://localhost:8000
-```
-
-Log in using the admin account:
-- **Username:** `admin`
-- **Password:** `changeme123` (or whatever you set in the .env file)
-
-You'll be taken to the Readur dashboard where you can start uploading and managing documents immediately.
+After signing in and changing the password, delete the file.
 
 ## Step 5: Test Document Processing
 
-Now let's verify that everything is working by uploading a test document. The easiest way is through the web interface:
+Open **Intake** → **Upload** and drop a PDF, image or text file onto the upload area. The document appears in the **Library** and is queued for OCR; when OCR has finished, search for a word you know is in it.
 
-1. Click the **Upload** button in the Readur interface
-2. Select a PDF, image, or text file from your computer
-3. Make sure **OCR Processing** is enabled (it should be by default)
-4. Click **Upload**
-
-You'll see the document appear in your document list, and you can watch the OCR status change from "Pending" to "Processing" to "Completed." Once processing finishes, try searching for text you know is in the document to verify that text extraction worked correctly.
-
-If you prefer to test via the API, you can also upload documents programmatically:
+To test the API instead, log in for a session token and upload a file:
 
 ```bash
-# Upload a document via the REST API
+token=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your-admin-password"}' | jq -r .token)
+
 curl -X POST http://localhost:8000/api/documents \
-  -H "Authorization: Bearer your-token" \
+  -H "Authorization: Bearer $token" \
   -F "file=@test.pdf"
 ```
 
-You'll need to get an API token first through the web interface if you want to use the API approach.
+## Managing Your Installation
 
-## Understanding the Docker Setup
-
-Your Readur deployment consists of several containers working together:
-
-- **readur** - The main application that handles the web interface, API, and document management
-- **postgres** - The database that stores document metadata and search indexes
-- **redis** - Manages the task queue for OCR processing and caches frequently accessed data
-- **ocr-worker** - Dedicated service that processes documents and extracts text
-- **nginx** - Optional web server for production deployments (not included in basic setup)
-
-These services communicate with each other automatically through Docker's networking, so you don't need to configure connections between them.
-
-## Managing Your Readur Installation
-
-### Checking Service Status
-
-To see which containers are running and their current status:
+### Status
 
 ```bash
-# View the status of all Readur services
-docker-compose ps
+docker compose ps
+curl http://localhost:8000/api/health
 ```
 
-This shows you which services are up, which ports they're using, and if any have stopped unexpectedly.
+The health endpoint answers `{"status":"ok"}`.
 
 ### Stopping and Starting
 
-When you need to stop Readur temporarily (like for system maintenance):
-
 ```bash
-# Stop all services but keep data
-docker-compose stop
+docker compose stop
+docker compose start
 ```
 
-To start everything back up:
+### Updating
 
 ```bash
-# Start all services again
-docker-compose start
+docker compose pull
+docker compose up -d
 ```
 
-### Updating to Newer Versions
-
-When a new version of Readur is released, update your installation:
-
-```bash
-# Download the latest container images
-docker-compose pull
-
-# Restart with the new versions
-docker-compose up -d
-```
+Migrations for the new version run automatically at startup. Read the [release notes](https://github.com/readur/readur/releases) before updating.
 
 ### Complete Removal
 
-If you want to completely remove Readur and all its data:
-
 ```bash
-# CAUTION: This deletes all your documents and database!
-docker-compose down -v
+docker compose down -v
+rm -rf ./readur_uploads ./readur_watch
 ```
 
-The `-v` flag removes the data volumes, which means you'll lose all uploaded documents and the database. Only use this if you're sure you want to start fresh.
+`down -v` deletes the database volume, and removing the directories deletes your documents. Only do this if you want to start fresh.
 
 ## Backing Up Your Data
 
-Your documents and database are stored in Docker volumes, which persist even when you stop or update containers. Here's how to back them up:
-
-### List Your Data Volumes
+Documents are in `./readur_uploads` and everything else is in the PostgreSQL database. Back up both:
 
 ```bash
-# See all Docker volumes (look for ones starting with "readur_")
-docker volume ls
+# Database
+docker compose exec -T postgres pg_dump -U readur readur > readur-db.sql
+
+# Documents
+tar czf readur-uploads.tar.gz ./readur_uploads
 ```
 
-### Backup the Database
+See the [Backup Guide](../self-hosting/backup.md).
 
-```bash
-# Create a backup of your PostgreSQL database
-docker-compose exec postgres pg_dump -U readur > backup.sql
-```
+## Tuning
 
-This creates a complete backup of your document metadata, search indexes, and user settings in a SQL file.
+### Resource Limits
 
-### Backup Document Files
-
-```bash
-# Create a backup of all uploaded documents
-docker run --rm -v readur_documents:/data -v $(pwd):/backup \
-  alpine tar czf /backup/documents.tar.gz /data
-```
-
-This command creates a compressed archive of all your uploaded documents. The backup file will appear in your current directory.
-
-## Tuning Performance
-
-If you want to optimize Readur for your specific hardware or usage patterns, you can adjust resource limits and storage locations.
-
-### Setting Memory Limits
-
-To prevent containers from using too much RAM, add resource limits to your `docker-compose.yml`:
+Readur does all its work, OCR included, in the `readur` container. To cap its resources, use Compose limits:
 
 ```yaml
 services:
   readur:
-    mem_limit: 2g        # Limit main app to 2GB RAM
-    memswap_limit: 2g    # Prevent swap usage
-    
-  ocr-worker:
-    mem_limit: 1g        # OCR worker gets 1GB RAM
-    cpus: '2.0'          # Use up to 2 CPU cores
+    mem_limit: 2g
+    cpus: 2.0
 ```
 
-These limits help prevent Readur from overwhelming your system, especially on shared servers.
+Keep `CONCURRENT_OCR_JOBS` in line with the CPUs and memory you give the container. `MEMORY_LIMIT_MB` does not limit anything.
 
-### Custom Storage Locations
+### Storage Location
 
-By default, Docker stores volumes in its own directories. To use a specific location for documents:
+Change the host side of the volume mounts to store documents elsewhere, for example on a dedicated disk:
 
 ```yaml
-volumes:
-  documents:
-    driver: local
-    driver_opts:
-      type: none
-      device: /mnt/storage/readur  # Your custom path
-      o: bind
+services:
+  readur:
+    volumes:
+      - /mnt/storage/readur/uploads:/app/uploads
+      - /mnt/storage/readur/watch:/app/watch
 ```
 
-This is useful when you have a dedicated disk or mounted network storage for documents.
+To store documents in S3 instead, see the [S3 Storage Guide](../s3-storage-guide.md).
+
+### Watch Folder
+
+Files copied to `./readur_watch` are imported automatically once they have stopped changing. Only extensions in `ALLOWED_FILE_TYPES` (default `pdf,txt,doc,docx,png,jpg,jpeg`) are imported. See [Watch Folder](../WATCH_FOLDER.md).
 
 ## Network Configuration
 
 ### Custom Port
 
-Change the exposed port in `docker-compose.yml`:
+Change the host side of the port mapping; Readur keeps listening on `8000` inside the container:
 
 ```yaml
 services:
   readur:
     ports:
-      - "9000:8000"  # Access on port 9000
+      - "9000:8000"
 ```
 
-### Internal Network Only
+### Behind a Reverse Proxy
 
-Remove port exposure for internal use:
+Bind the port to the loopback interface only, so that Readur is reachable only through the proxy, and set `PUBLIC_URL` to the address users open:
 
 ```yaml
 services:
   readur:
-    # ports:    # Commented out
-    #   - "8000:8000"
-    networks:
-      - internal
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      PUBLIC_URL: https://readur.example.com
 ```
+
+See the [Reverse Proxy Guide](../REVERSE_PROXY.md).
 
 ## Troubleshooting
 
 ### Containers Keep Restarting
 
-Check logs for each service:
-
 ```bash
-docker-compose logs readur
-docker-compose logs postgres
-docker-compose logs ocr-worker
+docker compose logs readur
+docker compose logs postgres
 ```
 
-### Permission Errors
+Readur prints the configuration it loaded at startup, followed by any error that stopped it.
 
-Fix volume permissions:
+### Database Authentication Fails
 
-```bash
-docker-compose exec readur chown -R readur:readur /data
-```
+PostgreSQL applies `POSTGRES_PASSWORD` only when it first creates the database. If you changed the password afterwards, either change it back or delete the `postgres_data` volume (this deletes the database).
 
 ### Port Already in Use
 
-Change the port binding:
+Map another host port, as in [Custom Port](#custom-port).
 
-```bash
-# In docker-compose.yml
-ports:
-  - "8080:8000"  # Use port 8080 instead
-```
+### OCR Is Slow or Runs Out of Memory
 
-### Low Memory
-
-Reduce OCR workers:
-
-```bash
-# In .env
-OCR_WORKERS=1
-OCR_MAX_PARALLEL=1
-```
+Lower `CONCURRENT_OCR_JOBS` and restart with `docker compose up -d`.
 
 ## Docker Commands Reference
 
 ```bash
-# View logs
-docker-compose logs -f [service]
+# Follow the logs
+docker compose logs -f readur
 
-# Execute commands in container
-docker-compose exec readur bash
+# Open a shell in the Readur container
+docker compose exec readur bash
 
-# Restart single service
-docker-compose restart ocr-worker
+# Reset the admin password
+docker compose exec readur /app/readur reset-admin-password
 
-# Check resource usage
+# Restart Readur
+docker compose restart readur
+
+# Resource usage
 docker stats
-
-# Clean up unused resources
-docker system prune -a
 ```
 
 ## Next Steps
 
 ### Production Deployment
 
-For production use:
 1. [Configure HTTPS](../self-hosting/reverse-proxy.md)
 2. [Set up backups](../self-hosting/backup.md)
 3. [Enable monitoring](../health-monitoring-guide.md)
@@ -324,14 +273,12 @@ For production use:
 
 ### Scaling
 
-Handle more documents:
 1. [Optimize OCR processing](../self-hosting/performance.md)
 2. [Use S3 storage](../self-hosting/storage.md)
-3. [Increase server resources](../self-hosting/performance.md)
 
 ## Related Documentation
 
 - [Self-Hosting Guide](../self-hosting/index.md) - Complete deployment guide
 - [Configuration Reference](../configuration-reference.md) - All configuration options
-- [Container Architecture](../architecture.md) - How services interact
+- [Architecture](../architecture.md) - How Readur is built
 - [Troubleshooting Guide](../troubleshooting.md) - Common issues and solutions

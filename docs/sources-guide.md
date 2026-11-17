@@ -63,7 +63,7 @@ To create a WebDAV source, start by navigating to Settings → Sources in the Re
 
 ```
 Name: My Nextcloud Documents
-Server URL: https://cloud.mycompany.com/remote.php/dav/files/john/
+Server URL: https://cloud.example.com/remote.php/dav/files/john/
 Username: john
 Password: app-password-here
 ```
@@ -285,7 +285,7 @@ Configure which folders or areas to monitor and set an appropriate sync schedule
 #### Nextcloud WebDAV
 ```
 Name: Nextcloud Documents
-Server URL: https://cloud.company.com/remote.php/dav/files/username/
+Server URL: https://cloud.example.com/remote.php/dav/files/username/
 Username: username
 Password: app-password
 Watch Folders: Documents/, Shared/
@@ -452,9 +452,9 @@ Sources are continuously monitored and assigned health scores (0-100):
 **Symptom**: "Connection failed" or authentication errors
 **Solutions**:
 1. Verify server URL format:
-   - Nextcloud: `https://server.com/remote.php/dav/files/username/`
-   - ownCloud: `https://server.com/remote.php/dav/files/username/`
-   - Generic: `https://server.com/webdav/`
+   - Nextcloud: `https://cloud.example.com/remote.php/dav/files/username/`
+   - ownCloud: `https://cloud.example.com/remote.php/dav/files/username/`
+   - Generic: `https://cloud.example.com/webdav/`
 
 2. Check credentials:
    - Use app passwords instead of main passwords
@@ -464,7 +464,7 @@ Sources are continuously monitored and assigned health scores (0-100):
 3. Network issues:
    - Verify server is accessible from Readur
    - Check firewall and SSL certificate issues
-   - Test with curl: `curl -u username:password https://server.com/webdav/`
+   - Test with curl: `curl -u username:password https://cloud.example.com/webdav/`
 
 #### Local Folder Issues
 

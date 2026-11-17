@@ -30,8 +30,8 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set, it takes precedence, must be at least 32 bytes and must not be a published example value (such as `your-secret-key`, `change-me` or `secret`). Generate with `openssl rand -hex 32` | No |
-| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Allows the server to start with a short or example `JWT_SECRET`. For throwaway local development and CI only; never set in production | No |
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set to a value of at least 32 bytes that is not a published example (such as `your-secret-key`, `change-me` or `secret`), it takes precedence; a shorter or example value is ignored with a startup warning and the stored key is used instead. Generate with `openssl rand -hex 32` | No |
+| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Uses a short or example `JWT_SECRET` instead of ignoring it. For throwaway local development and CI only; never set in production | No |
 | `JWT_TTL_HOURS` | Integer | `12` | Lifetime of issued login tokens, in hours (1-720) | No |
 | `ADMIN_USERNAME` | String | `admin` | Username of the initial admin account created on first startup | No |
 | `ADMIN_EMAIL` | String | `<username>@localhost` | Email of the initial admin account | No |
@@ -86,7 +86,7 @@ See the [S3 Storage Guide](s3-storage-guide.md). The S3 backend is used only whe
 | `S3_ENDPOINT` | String | - | Alias of `S3_ENDPOINT_URL` | No |
 | `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, any other value virtual-hosted style. Unset: path-style when a custom endpoint is set, otherwise virtual-hosted. Alias: `S3_PATH_STYLE` | No |
 | `S3_PATH_STYLE` | Boolean | auto | Alias of `S3_FORCE_PATH_STYLE`, used when that is not set | No |
-| `S3_PREFIX` | String | - | Prefix for every object key | No |
+| `S3_PREFIX` | String | - | Prefix for every object key the storage backend writes (documents, thumbnails, processed images). Surrounding slashes and spaces are trimmed (`/tenant/a/` is `tenant/a`); empty or `/` means no prefix. Changing it does not move existing objects, which stay readable and deletable under the keys recorded at upload. S3 sources have their own prefix, set per source | No |
 
 ### Watch Folders
 
@@ -112,8 +112,8 @@ See [Watch Folder](WATCH_FOLDER.md) and [Per-User Watch Directories](per-user-wa
 | `MAX_FILE_SIZE_MB` | Integer | `50` | Largest accepted request body, and so the largest upload | No |
 | `MAX_PDF_SIZE_MB` | Integer | `100` | Largest PDF that is processed for text | No |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Largest Office document that is processed for text | No |
-| `OCR_LOW_MEMORY_MODE` | Boolean | `false` | `true` uses lighter Tesseract settings for low-memory hardware, at some cost in accuracy | No |
-| `TEMP_DIR` | String | `/tmp` | Directory for temporary files written during OCR | No |
+| `OCR_LOW_MEMORY_MODE` | Boolean | `false` | Read only by the image OCR service behind `GET /api/ocr/health`; document processing does not use it | No |
+| `TEMP_DIR` | String | `/tmp` | Has no effect on document processing, which writes its temporary files to `/tmp` | No |
 | `MEMORY_LIMIT_MB` | Integer | `512` | Reported in the startup log only; it does not limit anything | No |
 | `CPU_PRIORITY` | String | `normal` | Reported in the startup log only; it does not change process priority | No |
 
