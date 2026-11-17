@@ -263,7 +263,7 @@ impl EnhancedOcrService {
         }
         
         // Save processed image to temporary file
-        let temp_path = TempPath::new(format!("{}/processed_{}.png", self.temp_dir, uuid::Uuid::new_v4()));
+        let temp_path = TempPath::unique(&self.temp_dir, "processed", "png");
         let dynamic_processed = DynamicImage::ImageLuma8(processed_gray);
         dynamic_processed.save(temp_path.as_str())?;
         let temp_path = temp_path.keep();
@@ -954,7 +954,7 @@ impl EnhancedOcrService {
         }
         
         // Temporary output PDF and sidecar text for this run
-        let temp_ocr = TempPath::new(format!("{}/ocr_{}.pdf", self.temp_dir, uuid::Uuid::new_v4()));
+        let temp_ocr = TempPath::unique(&self.temp_dir, "ocr", "pdf");
         let temp_text = TempPath::new(format!("{}.txt", temp_ocr.as_str()));
         let (temp_ocr_path, temp_text_path) = (temp_ocr.as_str(), temp_text.as_str());
 
@@ -1406,13 +1406,7 @@ impl EnhancedOcrService {
                 .and_then(|e| e.to_str())
                 .unwrap_or("bin");
             tokio::fs::create_dir_all(&self.temp_dir).await?;
-            let temp_path = format!(
-                "{}/ocr_download_{}.{}",
-                self.temp_dir,
-                uuid::Uuid::new_v4(),
-                extension
-            );
-            let temp_path = TempPath::new(temp_path);
+            let temp_path = TempPath::unique(&self.temp_dir, "ocr_download", extension);
             tokio::fs::write(temp_path.as_str(), &data).await?;
             return self
                 .extract_text_from_local_path(temp_path.as_str(), mime_type, settings, progress_callback)
