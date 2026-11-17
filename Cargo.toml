@@ -139,6 +139,8 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
+# Parses the YAML examples in the documentation (tests/integration_docs_claims_tests.rs)
+serde_yaml_ng = "0.10"
 
 # Enable test-utils feature for all tests
 readur = { path = ".", features = ["test-utils"] }

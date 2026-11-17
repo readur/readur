@@ -1,498 +1,213 @@
-# S3 Storage Backend Guide for Readur
+# S3 Storage Backend Guide
 
 ## Overview
 
-Starting with version 2.5.4, Readur supports Amazon S3 and S3-compatible storage services as an alternative to local filesystem storage. This implementation provides full support for AWS S3, MinIO, Wasabi, Backblaze B2, and other S3-compatible services with automatic multipart upload for files larger than 100MB, structured storage paths with year/month organization, and automatic retry mechanisms with exponential backoff.
+Readur can store uploaded documents in Amazon S3 or an S3-compatible service (MinIO, RustFS, Wasabi, Backblaze B2 and similar) instead of the local filesystem. The S3 backend is part of the default build (the `s3` Cargo feature is on by default), so the published image `ghcr.io/readur/readur` includes it.
 
-This guide provides comprehensive instructions for configuring, deploying, and managing Readur with S3 storage.
+This page covers S3 as the storage backend for Readur's own files. Importing documents *from* an S3 bucket is a separate feature, configured per source in the UI; see the [Sources Guide](sources-guide.md).
 
-### Key Benefits
+What the backend does (`src/services/s3_service.rs`):
 
-- **Scalability**: Unlimited storage capacity without local disk constraints
-- **Durability**: 99.999999999% (11 9's) durability with AWS S3
-- **Cost-Effective**: Pay only for what you use with various storage tiers
-- **Global Access**: Access documents from anywhere with proper credentials
-- **Backup**: Built-in versioning and cross-region replication capabilities
-
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Configuration](#configuration)
-3. [Migration from Local Storage](#migration-from-local-storage)
-4. [Storage Structure](#storage-structure)
-5. [Performance Optimization](#performance-optimization)
-6. [Troubleshooting](#troubleshooting)
-7. [Best Practices](#best-practices)
+- Stores each document, its thumbnail and its processed OCR image as S3 objects (see [Storage Structure](#storage-structure)).
+- Uses a multipart upload for files larger than 100 MB, in 16 MB parts.
+- Retries failed requests up to 3 times (4 attempts in total) with exponential backoff starting at 100 ms.
+- Applies per-attempt timeouts: 10 s to connect, 60 s read timeout, 600 s per request attempt.
 
 ## Prerequisites
 
-Before configuring S3 storage, ensure you have:
+1. A bucket, and an access key ID and secret access key for it.
+2. Permissions for that key. Readur lists the bucket, checks it with HeadBucket, and reads, writes and deletes objects. A minimal IAM policy:
 
-1. **S3 Bucket Access**
-   - An AWS S3 bucket or S3-compatible service (MinIO, Wasabi, Backblaze B2, etc.)
-   - Access Key ID and Secret Access Key with appropriate permissions
-   - Bucket name and region information
-
-2. **Required S3 Permissions**
    ```json
    {
      "Version": "2012-10-17",
      "Statement": [
        {
          "Effect": "Allow",
+         "Action": ["s3:ListBucket"],
+         "Resource": "arn:aws:s3:::readur-documents"
+       },
+       {
+         "Effect": "Allow",
          "Action": [
-           "s3:PutObject",
            "s3:GetObject",
+           "s3:PutObject",
            "s3:DeleteObject",
-           "s3:ListBucket",
-           "s3:HeadObject",
-           "s3:HeadBucket",
-           "s3:AbortMultipartUpload",
-           "s3:CreateMultipartUpload",
-           "s3:UploadPart",
-           "s3:CompleteMultipartUpload"
+           "s3:AbortMultipartUpload"
          ],
-         "Resource": [
-           "arn:aws:s3:::your-bucket-name/*",
-           "arn:aws:s3:::your-bucket-name"
-         ]
+         "Resource": "arn:aws:s3:::readur-documents/*"
        }
      ]
    }
    ```
 
-3. **Readur Build Requirements**
-   - Readur must be compiled with the `s3` feature flag enabled
-   - Build command: `cargo build --release --features s3`
+   Replace `readur-documents` with your bucket name. In IAM, `s3:PutObject` also covers the multipart upload calls and `s3:GetObject` covers HeadObject.
 
 ## Configuration
 
-### Environment Variables
+S3 storage is configured with environment variables only. The full list with defaults is in the [Configuration Reference](configuration-reference.md#s3-storage).
 
-Configure S3 storage by setting the following environment variables:
+| Variable | Required | Meaning |
+|----------|----------|---------|
+| `S3_ENABLED` | Yes (or `STORAGE_BACKEND`) | `true` enables the S3 backend |
+| `STORAGE_BACKEND` | No | `s3` is equivalent to `S3_ENABLED=true` |
+| `S3_BUCKET_NAME` | Yes | Bucket name |
+| `S3_ACCESS_KEY_ID` | Yes | Access key ID |
+| `S3_SECRET_ACCESS_KEY` | Yes | Secret access key |
+| `S3_REGION` | No | Region, default `us-east-1` |
+| `S3_ENDPOINT_URL` | For S3-compatible services | Custom endpoint URL. `S3_ENDPOINT` is accepted as an alias when `S3_ENDPOINT_URL` is not set |
+| `S3_FORCE_PATH_STYLE` | No | `true` forces path-style addressing, any other value virtual-hosted. `S3_PATH_STYLE` is an alias |
+
+Credentials are only taken from these variables. Readur does not read the AWS shared credentials file, AWS profiles or instance roles.
+
+When `S3_FORCE_PATH_STYLE` is unset:
+
+- without a custom endpoint, virtual-hosted addressing is used (the AWS default);
+- with a custom endpoint, Readur tries path-style first and falls back to virtual-hosted if a test listing of the bucket fails. If neither works it keeps path-style and logs `Could not auto-detect S3 addressing style ...`.
+
+`S3_PREFIX` puts every object the storage backend writes below a prefix, so several installations can share a bucket. Surrounding slashes and spaces are trimmed (`/tenant/a/` and `tenant/a` are the same); an empty value or `/` means no prefix. S3 sources keep their own prefix, set per source in the web interface; `S3_PREFIX` only applies to where Readur stores documents.
+
+### Example: AWS S3
 
 ```bash
-# Enable S3 storage backend
 S3_ENABLED=true
-
-# Required S3 credentials
 S3_BUCKET_NAME=readur-documents
-S3_ACCESS_KEY_ID=your-access-key-id
-S3_SECRET_ACCESS_KEY=your-secret-access-key
-S3_REGION=us-east-1
-
-# Optional: For S3-compatible services (MinIO, Wasabi, etc.)
-S3_ENDPOINT_URL=https://s3-compatible-endpoint.com
-```
-
-### Configuration File Example (.env)
-
-```bash
-# Database Configuration
-DATABASE_URL=postgresql://readur:password@localhost/readur
-
-# Server Configuration
-SERVER_ADDRESS=0.0.0.0:8000
-JWT_SECRET=<output of: openssl rand -hex 32>   # optional, min 32 bytes when set
-
-# S3 Storage Configuration
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-production
 S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 S3_REGION=us-west-2
-
-# Optional S3 endpoint for compatible services
-# S3_ENDPOINT_URL=https://minio.example.com
-
-# Upload Configuration
-UPLOAD_PATH=./temp_uploads
-MAX_FILE_SIZE_MB=500
 ```
 
-### S3-Compatible Services Configuration
+### Example: MinIO or another S3-compatible service
 
-#### MinIO
 ```bash
 S3_ENABLED=true
-S3_BUCKET_NAME=readur-bucket
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
+S3_BUCKET_NAME=readur-documents
+S3_ACCESS_KEY_ID=minio-access-key
+S3_SECRET_ACCESS_KEY=minio-secret-key
 S3_REGION=us-east-1
-S3_ENDPOINT_URL=http://localhost:9000
+S3_ENDPOINT_URL=http://minio.example.com:9000
 ```
 
-Path-style addressing is used by default when a custom endpoint is set; set `S3_FORCE_PATH_STYLE=false` only if your service requires virtual-hosted addressing.
+Other services work the same way: set `S3_ENDPOINT_URL` to the service's S3 endpoint and `S3_REGION` to the region it expects. Hosts on private and LAN addresses are allowed; link-local addresses (which include cloud metadata services) are refused.
 
-#### Wasabi
+### Docker Compose
+
+Add the variables to the `readur` service's `environment` in `docker-compose.yml`:
+
+```yaml
+services:
+  readur:
+    image: ghcr.io/readur/readur:latest
+    environment:
+      DATABASE_URL: postgresql://readur:readur@postgres/readur
+      S3_ENABLED: "true"
+      S3_BUCKET_NAME: readur-documents
+      S3_ACCESS_KEY_ID: minio-access-key
+      S3_SECRET_ACCESS_KEY: minio-secret-key
+      S3_ENDPOINT_URL: http://minio:9000
+    volumes:
+      - ./data/uploads:/app/uploads
+```
+
+Keep the uploads volume (`UPLOAD_PATH`, `/app/uploads` in the image) even with S3: Readur still keeps generated thumbnails there, and it is where documents stored before S3 was enabled live. Readur also loads a `.env` file from its working directory if one exists.
+
+### What happens at startup
+
+On startup Readur prints which S3 variables it loaded (secrets are shown as `configured`), then connects to the bucket by listing one object and sending HeadBucket.
+
+- If S3 is enabled but the bucket name or either key is missing, it prints `❌ S3 enabled but missing required configuration (bucket_name, access_key_id, or secret_access_key)` and uses local storage.
+- If the connection test fails, it logs `❌ Failed to initialize configured storage backend: ...` followed by `🔄 Falling back to local storage...` and runs with local storage.
+
+In both cases the server still starts, so check the log after enabling S3. On success the log contains `✅ File service initialized with s3 storage backend`.
+
+## Storage Structure
+
+Object keys (`src/services/s3_service.rs`), each below `S3_PREFIX` when it is set:
+
+```text
+documents/{user_id}/{year}/{month}/{document_id}.{extension}
+thumbnails/{user_id}/{document_id}_thumb.jpg
+processed_images/{user_id}/{document_id}_processed.png
+```
+
+The year and month are the UTC date at the time of upload. A document without an extension is stored as `documents/{user_id}/{year}/{month}/{document_id}`. In the database, the document's `file_path` becomes `s3://` followed by the key, for example `s3://documents/550e8400-e29b-41d4-a716-446655440000/2026/03/123e4567-e89b-12d3-a456-426614174000.pdf`.
+
+Existing documents are always read and deleted by the key recorded at upload (`file_path`), not by recomputing it. Deleting a document deletes that object and its thumbnail and processed-image objects; an object that is already missing counts as deleted. Turning `S3_PREFIX` on or changing it does not move existing objects: they stay where they are and keep working (thumbnails and processed images stored without a prefix are still cleaned up), and only new uploads use the new prefix.
+
+## Documents stored before S3 was enabled
+
+Switching to S3 does not move existing files. Documents whose `file_path` is a local path keep working: Readur reads them from the local filesystem when the S3 lookup fails. To move them into the bucket, use the `migrate_to_s3` tool below.
+
+## Migrating Local Files to S3
+
+`migrate_to_s3` is a separate binary built from source (`src/bin/migrate_to_s3.rs`). It is not in the Docker image. Run it from a checkout of the repository, on a machine that can reach the database, the bucket and the local document files, with the same environment as the server (`DATABASE_URL` or the `POSTGRES_*` variables, `UPLOAD_PATH`, and the S3 variables). It reads each document's `file_path` as stored in the database, so relative paths are resolved from the directory you run it in.
+
 ```bash
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-bucket
-S3_ACCESS_KEY_ID=your-wasabi-key
-S3_SECRET_ACCESS_KEY=your-wasabi-secret
-S3_REGION=us-east-1
-S3_ENDPOINT_URL=https://s3.wasabisys.com
+# Back up the database first
+pg_dump -U readur readur > readur_backup.sql
+
+# Preview: lists the documents that would be migrated, changes nothing
+cargo run --release --bin migrate_to_s3 -- --dry-run
+
+# Migrate
+cargo run --release --bin migrate_to_s3
 ```
 
-#### Backblaze B2
-```bash
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-bucket
-S3_ACCESS_KEY_ID=your-b2-key-id
-S3_SECRET_ACCESS_KEY=your-b2-application-key
-S3_REGION=us-west-002
-S3_ENDPOINT_URL=https://s3.us-west-002.backblazeb2.com
-```
+Flags:
 
-## Migration from Local Storage
+| Flag | Meaning |
+|------|---------|
+| `-d`, `--dry-run` | Only list what would be migrated |
+| `--delete-local` | Delete each local file (and its local thumbnail and processed image) after it has been uploaded |
+| `-l`, `--limit <N>` | Migrate at most N documents |
+| `-u`, `--user-id <UUID>` | Only migrate this user's documents |
+| `--enable-rollback` | On the first failed document, undo all migrations done in this run and exit with an error |
+| `--resume-from <UUID>` | Start at this document in the list. An ID that is not in the list is ignored and the run starts at the beginning |
 
-### Using the Migration Tool
+For each document with a local `file_path` (paths starting with `s3://` are skipped) the tool:
 
-Readur includes a migration utility to transfer existing local files to S3:
+1. reads the local file and uploads it under the key shown in [Storage Structure](#storage-structure);
+2. sets the document's `file_path` to `s3://<key>`;
+3. uploads `{UPLOAD_PATH}/thumbnails/{document_id}_thumb.jpg` and `{UPLOAD_PATH}/processed_images/{document_id}_processed.png` if they exist (a failure here is logged as a warning and does not fail the document);
+4. with `--delete-local`, deletes the local files.
 
-1. **Prepare for Migration**
-   ```bash
-   # Backup your database first
-   pg_dump readur > readur_backup.sql
-   
-   # Set S3 configuration
-   export S3_ENABLED=true
-   export S3_BUCKET_NAME=readur-production
-   export S3_ACCESS_KEY_ID=your-key
-   export S3_SECRET_ACCESS_KEY=your-secret
-   export S3_REGION=us-east-1
-   ```
+Which documents are picked up:
 
-2. **Run Dry Run First**
-   ```bash
-   # Preview what will be migrated
-   cargo run --bin migrate_to_s3 --features s3 -- --dry-run
-   ```
+- Without `--user-id`, the tool takes the 500 most recent documents of each user, and `--limit` caps the total.
+- With `--user-id`, it takes that user's most recent documents, up to `--limit` (1000 when `--limit` is not given).
 
-3. **Execute Migration**
-   ```bash
-   # Migrate all files
-   cargo run --bin migrate_to_s3 --features s3
-   
-   # Migrate with options
-   cargo run --bin migrate_to_s3 --features s3 -- \
-     --delete-local \           # Delete local files after successful upload
-     --limit 100 \              # Limit to 100 files (for testing)
-     --enable-rollback          # Enable automatic rollback on failure
-   ```
+Documents already in S3 are counted in these limits before they are skipped. For a user with more documents than that, run the tool per user with `--user-id` and a `--limit` larger than the user's document count.
 
-4. **Migrate Specific User's Files**
-   ```bash
-   cargo run --bin migrate_to_s3 --features s3 -- \
-     --user-id 550e8400-e29b-41d4-a716-446655440000
-   ```
+The tool writes its progress to `migration_state.json` in the current directory (every 10 migrated documents and at the end), including `completed_migrations` and `failed_migrations` with the error for each failed document. If a rollback itself fails, the errors are written to `rollback_errors.json`.
 
-5. **Resume Failed Migration**
-   ```bash
-   # Resume from specific document ID
-   cargo run --bin migrate_to_s3 --features s3 -- \
-     --resume-from 550e8400-e29b-41d4-a716-446655440001
-   ```
+Rollback restores the database paths and deletes the uploaded objects. It does not restore local files, so do not combine `--enable-rollback` with `--delete-local`.
 
-### Migration Process Details
+Logging for this tool is fixed at `info`; `RUST_LOG` does not change it.
 
-The migration tool performs the following steps:
-
-1. Connects to database and S3
-2. Identifies all documents with local file paths
-3. For each document:
-   - Reads the local file
-   - Uploads to S3 with structured path
-   - Updates database with S3 path
-   - Migrates associated thumbnails and processed images
-   - Optionally deletes local files
-4. Tracks migration state for recovery
-5. Supports rollback on failure
-
-### Post-Migration Verification
+### Verifying the migration
 
 ```sql
--- Check migrated documents
-SELECT 
-    COUNT(*) FILTER (WHERE file_path LIKE 's3://%') as s3_documents,
-    COUNT(*) FILTER (WHERE file_path NOT LIKE 's3://%') as local_documents
+SELECT
+    COUNT(*) FILTER (WHERE file_path LIKE 's3://%')     AS s3_documents,
+    COUNT(*) FILTER (WHERE file_path NOT LIKE 's3://%') AS local_documents
 FROM documents;
 
--- Find any remaining local files
-SELECT id, filename, file_path 
-FROM documents 
+SELECT id, original_filename, file_path
+FROM documents
 WHERE file_path NOT LIKE 's3://%'
 LIMIT 10;
 ```
 
-## Storage Structure
+## Bucket settings
 
-### S3 Path Organization
-
-Readur uses a structured path format in S3:
-
-```
-bucket-name/
-├── documents/
-│   └── {user_id}/
-│       └── {year}/
-│           └── {month}/
-│               └── {document_id}.{extension}
-├── thumbnails/
-│   └── {user_id}/
-│       └── {document_id}_thumb.jpg
-└── processed_images/
-    └── {user_id}/
-        └── {document_id}_processed.png
-```
-
-### Example Paths
-
-```
-readur-production/
-├── documents/
-│   └── 550e8400-e29b-41d4-a716-446655440000/
-│       └── 2024/
-│           └── 03/
-│               ├── 123e4567-e89b-12d3-a456-426614174000.pdf
-│               └── 987fcdeb-51a2-43f1-b321-123456789abc.docx
-├── thumbnails/
-│   └── 550e8400-e29b-41d4-a716-446655440000/
-│       ├── 123e4567-e89b-12d3-a456-426614174000_thumb.jpg
-│       └── 987fcdeb-51a2-43f1-b321-123456789abc_thumb.jpg
-└── processed_images/
-    └── 550e8400-e29b-41d4-a716-446655440000/
-        ├── 123e4567-e89b-12d3-a456-426614174000_processed.png
-        └── 987fcdeb-51a2-43f1-b321-123456789abc_processed.png
-```
-
-## Performance Optimization
-
-### Multipart Upload
-
-Readur automatically uses multipart upload for files larger than 100MB:
-
-- **Chunk Size**: 16MB per part
-- **Automatic Retry**: Exponential backoff with up to 3 retries
-- **Progress Tracking**: Real-time upload progress via WebSocket
-
-### Network Optimization
-
-1. **Region Selection**: Choose S3 region closest to your Readur server
-2. **Transfer Acceleration**: Enable S3 Transfer Acceleration for global users
-3. **CloudFront CDN**: Use CloudFront for serving frequently accessed documents
-
-### Caching Strategy
-
-```nginx
-# Nginx caching configuration for S3-backed documents
-location /api/documents/ {
-    proxy_cache_valid 200 1h;
-    proxy_cache_valid 404 1m;
-    proxy_cache_bypass $http_authorization;
-    add_header X-Cache-Status $upstream_cache_status;
-}
-```
+Readur does not configure the bucket. Server-side encryption, versioning, lifecycle rules and replication are set on the bucket with your provider's tools and are transparent to Readur, with one caveat: do not use lifecycle rules that move objects to archive storage classes that need a restore before reading (such as S3 Glacier Flexible Retrieval or Deep Archive), because Readur reads objects directly with GetObject.
 
 ## Troubleshooting
 
-### Common Issues and Solutions
-
-#### 1. S3 Connection Errors
-
-**Error**: "Failed to access S3 bucket"
-
-**Solution**:
-```bash
-# Verify credentials
-aws s3 ls s3://your-bucket-name --profile readur
-
-# Check IAM permissions
-aws iam get-user-policy --user-name readur-user --policy-name ReadurS3Policy
-
-# Test connectivity
-curl -I https://s3.amazonaws.com/your-bucket-name
-```
-
-#### 2. Upload Failures
-
-**Error**: "Failed to store file: RequestTimeout"
-
-**Solution**:
-- Check network connectivity
-- Verify S3 endpoint configuration
-- Increase timeout values if using S3-compatible service
-- Monitor S3 request metrics in AWS CloudWatch
-
-#### 3. Permission Denied
-
-**Error**: "AccessDenied: Access Denied"
-
-**Solution**:
-```bash
-# Verify bucket policy
-aws s3api get-bucket-policy --bucket your-bucket-name
-
-# Check object ACLs
-aws s3api get-object-acl --bucket your-bucket-name --key test-object
-
-# Ensure CORS configuration for web access
-aws s3api put-bucket-cors --bucket your-bucket-name --cors-configuration file://cors.json
-```
-
-#### 4. Migration Stuck
-
-**Problem**: Migration process hangs or fails repeatedly
-
-**Solution**:
-```bash
-# Check migration state
-cat migration_state.json | jq '.failed_migrations'
-
-# Resume from last successful migration
-LAST_SUCCESS=$(cat migration_state.json | jq -r '.completed_migrations[-1].document_id')
-cargo run --bin migrate_to_s3 --features s3 -- --resume-from $LAST_SUCCESS
-
-# Force rollback if needed
-cargo run --bin migrate_to_s3 --features s3 -- --rollback
-```
-
-### Debugging S3 Operations
-
-Enable detailed S3 logging:
-
-```bash
-# Set environment variables for debugging
-export RUST_LOG=readur=debug,aws_sdk_s3=debug
-export AWS_SDK_LOAD_CONFIG=true
-
-# Run Readur with debug logging
-cargo run --features s3
-```
-
-### Performance Monitoring
-
-Monitor S3 performance metrics:
-
-```sql
--- Query document upload times
-SELECT 
-    DATE(created_at) as upload_date,
-    AVG(file_size / 1024.0 / 1024.0) as avg_size_mb,
-    COUNT(*) as documents_uploaded,
-    AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_processing_time_seconds
-FROM documents
-WHERE file_path LIKE 's3://%'
-GROUP BY DATE(created_at)
-ORDER BY upload_date DESC;
-```
-
-## Best Practices
-
-### 1. Security
-
-- **Encryption**: Enable S3 server-side encryption (SSE-S3 or SSE-KMS)
-- **Access Control**: Use IAM roles instead of access keys when possible
-- **Bucket Policies**: Implement least-privilege bucket policies
-- **VPC Endpoints**: Use VPC endpoints for private S3 access
-
-```bash
-# Enable default encryption on bucket
-aws s3api put-bucket-encryption \
-    --bucket readur-production \
-    --server-side-encryption-configuration '{
-        "Rules": [{
-            "ApplyServerSideEncryptionByDefault": {
-                "SSEAlgorithm": "AES256"
-            }
-        }]
-    }'
-```
-
-### 2. Cost Optimization
-
-- **Lifecycle Policies**: Archive old documents to Glacier
-- **Intelligent-Tiering**: Enable for automatic cost optimization
-- **Request Metrics**: Monitor and optimize S3 request patterns
-
-```json
-{
-  "Rules": [{
-    "Id": "ArchiveOldDocuments",
-    "Status": "Enabled",
-    "Transitions": [{
-      "Days": 90,
-      "StorageClass": "GLACIER"
-    }],
-    "NoncurrentVersionTransitions": [{
-      "NoncurrentDays": 30,
-      "StorageClass": "GLACIER"
-    }]
-  }]
-}
-```
-
-### 3. Reliability
-
-- **Versioning**: Enable S3 versioning for document recovery
-- **Cross-Region Replication**: Set up for disaster recovery
-- **Backup Strategy**: Regular backups to separate bucket or region
-
-```bash
-# Enable versioning
-aws s3api put-bucket-versioning \
-    --bucket readur-production \
-    --versioning-configuration Status=Enabled
-
-# Set up replication
-aws s3api put-bucket-replication \
-    --bucket readur-production \
-    --replication-configuration file://replication.json
-```
-
-### 4. Monitoring
-
-Set up CloudWatch alarms for:
-- High error rates
-- Unusual request patterns
-- Storage quota approaching
-- Failed multipart uploads
-
-```bash
-# Create CloudWatch alarm for S3 errors
-aws cloudwatch put-metric-alarm \
-    --alarm-name readur-s3-errors \
-    --alarm-description "Alert on S3 4xx errors" \
-    --metric-name 4xxErrors \
-    --namespace AWS/S3 \
-    --statistic Sum \
-    --period 300 \
-    --threshold 10 \
-    --comparison-operator GreaterThanThreshold
-```
-
-### 5. Compliance
-
-- **Data Residency**: Ensure S3 region meets data residency requirements
-- **Audit Logging**: Enable S3 access logging and AWS CloudTrail
-- **Retention Policies**: Implement compliant data retention policies
-- **GDPR Compliance**: Implement proper data deletion procedures
-
-```bash
-# Enable access logging
-aws s3api put-bucket-logging \
-    --bucket readur-production \
-    --bucket-logging-status '{
-        "LoggingEnabled": {
-            "TargetBucket": "readur-logs",
-            "TargetPrefix": "s3-access/"
-        }
-    }'
-```
+See the [S3 Troubleshooting Guide](s3-troubleshooting.md).
 
 ## Next Steps
 
-- Review the [Configuration Reference](./configuration-reference.md) for all S3 options
-- Explore [S3 Troubleshooting Guide](./s3-troubleshooting.md) for common issues and solutions
-- Check [Migration Guide](./migration-guide.md) for moving from local to S3 storage
-- Read [Deployment Guide](./deployment.md) for production deployment best practices
+- [Configuration Reference](configuration-reference.md#s3-storage) for every S3 variable
+- [S3 Troubleshooting Guide](s3-troubleshooting.md)
+- [Migration Troubleshooting](administration/migration-troubleshooting.md)

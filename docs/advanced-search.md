@@ -13,7 +13,7 @@ This guide describes exactly what Readur's search does: which text it looks at, 
 
 ## What Search Looks At
 
-A search query is matched against a document's **text**: the text extracted from the file (`content`) together with its OCR text, as one piece of text. Matching uses PostgreSQL full-text search with the English configuration, so words are stemmed (`invoices` finds `invoice`, `approved` finds `approve`) and common English stop words (`the`, `for`, `and`, ...) are ignored.
+A search query is matched against a document's **text**: the text extracted from the file (`content`) and its OCR text. Words and boolean operators are matched at document level, across both texts together, so one word may be found in the content and another in the OCR text. Phrases must lie within one text, the content alone or the OCR text alone: this covers phrase mode, quoted `"phrases"` and `<->` / `<N>` chains in boolean mode, and words PostgreSQL splits into parts (such as `e-mail`). Matching uses PostgreSQL full-text search with the English configuration, so words are stemmed (`invoices` finds `invoice`, `approved` finds `approve`) and common English stop words (`the`, `for`, `and`, ...) are ignored; a query made only of stop words matches nothing.
 
 The query does **not** search file names, labels, file types, sources, sizes or dates, and there is no field syntax for them: `filename:invoice`, `label:urgent`, `type:pdf`, `source:webdav`, `size:>10MB` or `date:2024` are searched as ordinary words and will not do what they look like. To narrow a search by file type, label, OCR status, source or date, use the [filters](#filters); to find a file by name, sort the library by file name.
 
@@ -44,7 +44,7 @@ contract -draft                      # Operators are ignored: finds the document
 
 ### Phrase Search (Exact Phrase)
 
-The query's words must appear next to each other and in the given order (stop words in the query are dropped, and words are stemmed as in simple mode). Double quotes are not needed and are ignored.
+The query's words must appear next to each other and in the given order (stop words in the query are dropped, and words are stemmed as in simple mode). Double quotes are not needed and are ignored. Snippets highlight the whole phrase as one range; when stemming means the phrase does not appear in the text as typed, its words are highlighted individually.
 
 ```
 total due                            # Finds "... 17 total due 300", but not "due total in reverse"
@@ -57,7 +57,7 @@ annual budget                        # Finds both annual budget documents
 
 Fuzzy mode looks for the stretch of a document's text that is spelled most like the query, word by word, using PostgreSQL trigram word similarity (`pg_trgm` `word_similarity`: the share of the query's three-letter groups found in that stretch, from 0 to 1). A document matches when that score reaches your **fuzzy search threshold** (Settings, Search configuration; 0.5 unless you change it). Only the closest stretch counts, so document length does not matter: a misspelled word finds a 5000-word document containing the right word just as it finds a one-line one. Results are ranked by the score, so the query's own spelling (1.0) ranks above near misses.
 
-Fuzzy mode compares letters, not words: there is no stemming or stop-word removal, and quotes and operators are ordinary characters. A slip changes a larger share of a short word than of a long one, and swapped letters (`reciept`) change more three-letter groups than a wrong or missing letter, so they need a lower threshold. Raising the threshold towards 1.0 accepts only spellings closer to the query (1.0: the exact spelling); lowering it lets more through, and below about 0.3 unrelated long documents start to match on chance letter overlap. Settings below 0.1 are treated as 0.1. Snippets highlight the query's words as typed, so a result found through a near miss may come without a snippet.
+Fuzzy mode compares letters, not words: there is no stemming or stop-word removal, and quotes and operators are ordinary characters. A slip changes a larger share of a short word than of a long one, and swapped letters (`reciept`) change more three-letter groups than a wrong or missing letter, so they need a lower threshold. Raising the threshold towards 1.0 accepts only spellings closer to the query (1.0: the exact spelling); lowering it lets more through, and below about 0.3 unrelated long documents start to match on chance letter overlap. Settings below 0.1 are treated as 0.1. Snippets highlight the words of the document that matched within your threshold, so a near miss is highlighted where it occurs; only the first 512 KiB of each text (content and OCR text) is scanned for them.
 
 ```
 invoce                               # Finds every document containing "invoice" (it scores 0.57 against "invoice")

@@ -1,524 +1,220 @@
 # Configuration Guide
 
-Configure Readur for your specific needs and optimize for your workload.
+Readur is configured with environment variables. This page explains how configuration works and walks through the settings most installations need. The [Configuration Reference](../configuration-reference.md) is the complete list of every variable Readur reads, with types and defaults; anything not listed there is ignored.
 
-## Configuration Overview
+## How Configuration Works
 
-Readur uses environment variables for configuration, making it easy to deploy in containerized environments. Configuration can be set through:
+- Readur reads its environment once at startup. After changing a variable, restart the server.
+- A `.env` file in the working directory is loaded first. A variable that is already set in the environment (for example by Docker Compose or Kubernetes) takes precedence over the `.env` file.
+- There is no configuration file and there are no command-line options for settings. The `readur` binary has only the subcommands `serve` (the default), `reset-admin-password` and `rotate-jwt-secret`.
+- Per-user preferences, such as OCR languages and search options, are not environment variables. Each user sets them on the **Settings** page of the web interface, and they are stored in the database.
 
-1. **Environment variables** - Direct system environment
-2. **`.env` file** - Docker Compose automatically loads this
-3. **`docker-compose.yml`** - Directly in the compose file
-4. **Kubernetes ConfigMaps** - For K8s deployments
+### Where to Set Variables
 
-## Essential Configuration
+**Docker Compose:** under `environment:` of the `readur` service, or in a `.env` file next to `docker-compose.yml` that the compose file references with `${VARIABLE}`. The `docker-compose.yml` in the repository passes `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` and `ADMIN_EMAIL` through from the shell or `.env` file and sets the rest directly:
 
-### Security Settings
-
-These MUST be changed from defaults in production:
-
-```bash
-# Generate secure secrets
-JWT_SECRET=$(openssl rand -base64 32)
-DB_PASSWORD=$(openssl rand -base64 32)
-
-# JWT_SECRET is optional (when unset, a key is generated and stored in the
-# database). When set, the server refuses to start if it is
-# shorter than 32 bytes, or a published example value
-
-# Set admin password
-ADMIN_PASSWORD=your_secure_password_here
-
-# Enable HTTPS (reverse proxy recommended)
-FORCE_HTTPS=true
-SECURE_COOKIES=true
-
-# WARNING: Only disable SSL verification for development/testing
-# S3_VERIFY_SSL=false  # NEVER use in production
+```yaml
+services:
+  readur:
+    environment:
+      DATABASE_URL: postgresql://readur:readur@postgres/readur
+      UPLOAD_PATH: /app/uploads
+      WATCH_FOLDER: /app/watch
+      OCR_LANGUAGE: eng
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
 ```
 
-### Database Configuration
+**Helm:** under `controllers.main.containers.readur.env` in your values file. The chart manages `JWT_SECRET` and `ADMIN_PASSWORD` itself through a Secret; see [Helm Chart Values](../configuration-reference.md#helm-chart-values).
+
+**Running the binary directly:** export the variables in the shell, or put them in a `.env` file in the directory you start `readur` from.
+
+## Essential Settings
+
+### Database
+
+Readur needs a PostgreSQL database. Set either a connection string:
 
 ```bash
-# PostgreSQL connection
-DATABASE_URL=postgresql://readur:${DB_PASSWORD}@postgres:5432/readur
-# WARNING: Never include passwords directly in DATABASE_URL in config files
-
-# Connection pool settings
-DB_POOL_SIZE=20
-DB_MAX_OVERFLOW=40
-DB_POOL_TIMEOUT=30
-
-# PostgreSQL specific optimizations
-POSTGRES_SHARED_BUFFERS=256MB
-POSTGRES_EFFECTIVE_CACHE_SIZE=1GB
+DATABASE_URL=postgresql://readur:your_password@db.example.com:5432/readur
 ```
 
-### Storage Configuration
-
-#### Local Storage (Default)
+or the individual parts, which are used only when `DATABASE_URL` is not set:
 
 ```bash
-# File storage paths
-UPLOAD_PATH=/app/uploads
-TEMP_PATH=/app/temp
+POSTGRES_HOST=db.example.com
+POSTGRES_PORT=5432
+POSTGRES_DB=readur
+POSTGRES_USER=readur
+POSTGRES_PASSWORD=your_password
+```
 
-# Size limits
+Database migrations run automatically at startup.
+
+### Initial Admin Account
+
+On first startup Readur creates an administrator account. `ADMIN_USERNAME` (default `admin`), `ADMIN_EMAIL` and `ADMIN_PASSWORD` are used only at that moment; changing them later does not change the existing account.
+
+If `ADMIN_PASSWORD` is not set, Readur generates a random 24-character password and writes it to `.readur/initial-admin-password` inside `UPLOAD_PATH` (`/app/uploads/.readur/initial-admin-password` in the Docker image), with mode `0600`. The password is not written to the logs; the startup log shows the file path. Sign in, change the password, then delete the file. `ADMIN_PASSWORD_FILE` chooses a different location.
+
+To set a new admin password later, run `readur reset-admin-password` (see [CLI Tools](../administration/cli-tools.md)).
+
+### Session Signing Key
+
+`JWT_SECRET` is optional. When it is unset, Readur generates a signing key on first start and stores it in the database; `readur rotate-jwt-secret` replaces it. To manage the key yourself, set `JWT_SECRET` to at least 32 bytes of random data:
+
+```bash
+openssl rand -hex 32
+```
+
+A value that is shorter than 32 bytes or a published example (such as `your-secret-key` or `change-me`) is ignored with a warning in the startup log, and the stored key is used instead. `JWT_TTL_HOURS` (default `12`, range 1-720) sets how long a login lasts.
+
+### Storage Paths
+
+| Variable | Default | Docker image |
+|----------|---------|--------------|
+| `UPLOAD_PATH` | `./uploads` | `/app/uploads` |
+| `WATCH_FOLDER` | `./watch` | `/app/watch` |
+
+Mount persistent volumes at these paths in containers. `UPLOAD_PATH` holds every stored document when the local storage backend is used.
+
+### Listening Address
+
+Readur listens on `0.0.0.0:8000` by default. Change it with `SERVER_ADDRESS` (for example `0.0.0.0:9000`), or with `SERVER_HOST` and `SERVER_PORT`.
+
+## Common Tasks
+
+### Running Behind a Reverse Proxy
+
+```bash
+PUBLIC_URL=https://readur.example.com
+TRUSTED_PROXIES=10.0.0.0/8
+```
+
+`PUBLIC_URL` is used to build OIDC redirects and shared-link URLs. `TRUSTED_PROXIES` lists the proxies whose `X-Forwarded-For` header is trusted when determining the client IP; by default loopback and private networks are trusted. See the [Reverse Proxy Guide](../REVERSE_PROXY.md).
+
+### OCR and File Limits
+
+```bash
+OCR_LANGUAGE=eng+deu
+CONCURRENT_OCR_JOBS=4
+OCR_TIMEOUT_SECONDS=300
 MAX_FILE_SIZE_MB=50
-TOTAL_STORAGE_LIMIT_GB=100
-
-# File types
-ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,tiff,bmp,gif,txt,rtf,doc,docx
 ```
 
-#### S3 Storage (Scalable)
+- `OCR_LANGUAGE` is the default Tesseract language code, or several joined with `+`. Users can choose their own languages in **Settings**. The Docker image includes all Tesseract language packs.
+- `CONCURRENT_OCR_JOBS` is the number of documents processed in parallel (clamped to 1-15).
+- `OCR_TIMEOUT_SECONDS` is the time limit for processing one document.
+- `MAX_FILE_SIZE_MB` is the largest accepted upload. `MAX_PDF_SIZE_MB` and `MAX_OFFICE_DOCUMENT_SIZE_MB` (both default `100`) limit which PDFs and Office documents are processed for text.
+
+`MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only reported in the startup log; they do not limit anything. To cap memory or CPU, use container limits.
+
+### Watch Folder
 
 ```bash
-# Enable S3 backend
-# STORAGE_BACKEND=s3 is equivalent to S3_ENABLED=true; you only need one
-STORAGE_BACKEND=s3
-S3_ENABLED=true
+WATCH_FOLDER=/app/watch
+WATCH_INTERVAL_SECONDS=30
+FILE_STABILITY_CHECK_MS=1000
+ALLOWED_FILE_TYPES=pdf,txt,doc,docx,png,jpg,jpeg
+```
 
-# AWS S3
+New files in `WATCH_FOLDER` are imported once their size has stopped changing for `FILE_STABILITY_CHECK_MS`. Only extensions in `ALLOWED_FILE_TYPES` are imported. `MAX_FILE_AGE_HOURS` skips files last modified longer ago than that (the repository's `docker-compose.yml` sets it to `24`). Network filesystems are polled; `FORCE_POLLING_WATCH` forces polling everywhere. For a watch directory per user, set `ENABLE_PER_USER_WATCH=true` and `USER_WATCH_BASE_DIR`. See [Watch Folder](../WATCH_FOLDER.md) and [Per-User Watch Directories](../per-user-watch-directories.md).
+
+Folders on the server can also be added as local folder sources in the web interface. Unless `LOCAL_SOURCE_ALLOWED_PATHS` is set, only administrators can create them.
+
+### S3 Storage
+
+To store documents in S3 or an S3-compatible service instead of `UPLOAD_PATH`:
+
+```bash
+S3_ENABLED=true
 S3_BUCKET_NAME=readur-documents
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your_access_key
 S3_SECRET_ACCESS_KEY=your_secret_key
-
-# Or S3-compatible (MinIO, Wasabi, etc.)
-# S3_ENDPOINT_URL alias: S3_ENDPOINT
+# Only for S3-compatible services such as MinIO:
 S3_ENDPOINT_URL=https://s3.example.com
-# S3_FORCE_PATH_STYLE alias: S3_PATH_STYLE. true=path-style, false=virtual-hosted,
-# unset=path-style when a custom endpoint is set, otherwise the AWS default
-# of virtual-hosted style
-S3_FORCE_PATH_STYLE=true  # For MinIO
 ```
 
-## OCR Configuration
+With a custom endpoint, path-style addressing is used unless `S3_FORCE_PATH_STYLE` says otherwise. See [S3 Storage](../configuration-reference.md#s3-storage) and the [S3 Storage Guide](../s3-storage-guide.md).
 
-### Language Settings
-
-```bash
-# Single language (fastest)
-OCR_LANGUAGE=eng
-
-# Multiple languages
-OCR_LANGUAGE=eng+deu+fra+spa
-
-# Available languages (partial list):
-# eng - English
-# deu - German (Deutsch)
-# fra - French (Français)
-# spa - Spanish (Español)
-# ita - Italian (Italiano)
-# por - Portuguese
-# rus - Russian
-# chi_sim - Chinese Simplified
-# jpn - Japanese
-# ara - Arabic
-```
-
-### Performance Tuning
+### Single Sign-On (OIDC)
 
 ```bash
-# Concurrent processing
-CONCURRENT_OCR_JOBS=3  # OCR runtime uses 3 threads
-OCR_WORKER_THREADS=2   # Background runtime uses 2 threads
-# Note: Database runtime also uses 2 threads
-
-# Timeouts and limits
-OCR_TIMEOUT_SECONDS=300
-OCR_MAX_PAGES=500
-MAX_FILE_SIZE_MB=100
-
-# Memory management
-OCR_MEMORY_LIMIT_MB=512  # Per job
-ENABLE_MEMORY_PROFILING=false
-
-# Processing options
-OCR_DPI=300  # Higher = better quality, slower
-ENABLE_PREPROCESSING=true
-ENABLE_AUTO_ROTATION=true
-ENABLE_DESKEW=true
-```
-
-### Quality vs Speed
-
-#### High Quality (Slow)
-```bash
-OCR_QUALITY_PRESET=high
-OCR_DPI=300
-ENABLE_PREPROCESSING=true
-ENABLE_DESKEW=true
-ENABLE_AUTO_ROTATION=true
-OCR_ENGINE_MODE=3  # LSTM only
-```
-
-#### Balanced (Default)
-```bash
-OCR_QUALITY_PRESET=balanced
-OCR_DPI=200
-ENABLE_PREPROCESSING=true
-ENABLE_DESKEW=false
-ENABLE_AUTO_ROTATION=true
-OCR_ENGINE_MODE=2  # LSTM + Legacy
-```
-
-#### Fast (Lower Quality)
-```bash
-OCR_QUALITY_PRESET=fast
-OCR_DPI=150
-ENABLE_PREPROCESSING=false
-ENABLE_DESKEW=false
-ENABLE_AUTO_ROTATION=false
-OCR_ENGINE_MODE=0  # Legacy only
-```
-
-## Source Synchronization
-
-### Watch Folders
-
-```bash
-# Global watch folder
-WATCH_FOLDER=/app/watch
-WATCH_INTERVAL_SECONDS=60
-FILE_STABILITY_CHECK_MS=2000
-
-# Per-user watch folders
-ENABLE_PER_USER_WATCH=true
-USER_WATCH_BASE_DIR=/app/user_watch
-
-# Processing rules
-WATCH_PROCESS_HIDDEN_FILES=false
-WATCH_RECURSIVE=true
-WATCH_MAX_DEPTH=5
-DELETE_AFTER_IMPORT=false
-```
-
-### WebDAV Sources
-
-```bash
-# Default WebDAV settings
-WEBDAV_TIMEOUT_SECONDS=30
-WEBDAV_MAX_RETRIES=3
-WEBDAV_CHUNK_SIZE_MB=10
-WEBDAV_VERIFY_SSL=true
-```
-
-### S3 Sources
-
-```bash
-# S3 sync settings
-S3_SYNC_INTERVAL_MINUTES=30
-S3_BATCH_SIZE=100
-S3_MULTIPART_THRESHOLD_MB=100
-S3_CONCURRENT_DOWNLOADS=4
-```
-
-## Authentication & Security
-
-### Local Authentication
-
-```bash
-# Password policy
-PASSWORD_MIN_LENGTH=12
-PASSWORD_REQUIRE_UPPERCASE=true
-PASSWORD_REQUIRE_NUMBERS=true
-PASSWORD_REQUIRE_SPECIAL=true
-
-# Session management
-SESSION_TIMEOUT_MINUTES=60
-REMEMBER_ME_DURATION_DAYS=30
-MAX_LOGIN_ATTEMPTS=5
-LOCKOUT_DURATION_MINUTES=15
-```
-
-### OIDC/SSO Configuration
-
-```bash
-# Enable OIDC
 OIDC_ENABLED=true
-
-# Provider configuration
-OIDC_ISSUER=https://login.microsoftonline.com/tenant-id/v2.0
-OIDC_CLIENT_ID=your-client-id
+OIDC_ISSUER_URL=https://auth.example.com/realms/main
+OIDC_CLIENT_ID=readur
 OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://readur.example.com/auth/callback
-
-# Optional settings
-OIDC_SCOPE=openid profile email
-OIDC_USER_CLAIM=email
-OIDC_GROUPS_CLAIM=groups
-OIDC_ADMIN_GROUP=readur-admins
-
-# Auto-provisioning
-OIDC_AUTO_CREATE_USERS=true
-OIDC_DEFAULT_ROLE=user
+OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
+OIDC_AUTO_REGISTER=true
 ```
 
-## Search Configuration
+`ALLOW_LOCAL_AUTH=false` turns off username/password login, and `OIDC_LINK_EXISTING_BY_EMAIL=true` links an OIDC login to an existing account with the same verified email. See the [OIDC Setup Guide](../oidc-setup.md).
 
-### Search Engine
+### User Registration
+
+Self-registration is off by default. With `ALLOW_REGISTRATION=true`, people can create accounts from the login page, but each new account stays disabled until an administrator enables it in user management.
+
+### Monitoring
+
+`GET /api/health` answers `{"status":"ok"}` without authentication. Prometheus metrics at `/metrics` require an admin session or admin API key; for a scraper, set a bearer token of at least 16 characters:
 
 ```bash
-# PostgreSQL Full-Text Search settings
-SEARCH_LANGUAGE=english
-SEARCH_RANKING_NORMALIZATION=32
-ENABLE_PHRASE_SEARCH=true
-ENABLE_FUZZY_SEARCH=true
-FUZZY_SEARCH_DISTANCE=2
-
-# Search results
-SEARCH_RESULTS_PER_PAGE=20
-SEARCH_SNIPPET_LENGTH=200
-SEARCH_HIGHLIGHT_TAG=mark
+METRICS_TOKEN=<output of: openssl rand -hex 24>
 ```
 
-### Search Performance
+See the [Health Monitoring Guide](../health-monitoring-guide.md).
+
+### AI Assistants (MCP)
+
+The Model Context Protocol endpoint at `/api/mcp` is on by default (`MCP_ENABLED`) and needs an API key or session token. The `delete_document` tool is offered only with `MCP_ALLOW_DELETE=true`. See [AI Assistants (MCP)](../mcp-guide.md).
+
+### Logging
+
+Logs go to standard output. `RUST_LOG` filters them, using [tracing `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) syntax:
 
 ```bash
-# Index management
-AUTO_REINDEX=true
-REINDEX_SCHEDULE=0 3 * * *  # 3 AM daily
-SEARCH_CACHE_TTL_SECONDS=300
-SEARCH_CACHE_SIZE_MB=100
-
-# Query optimization
-MAX_SEARCH_TERMS=10
-ENABLE_SEARCH_SUGGESTIONS=true
-SUGGESTION_MIN_LENGTH=3
+RUST_LOG=info
+RUST_LOG=readur=debug,sqlx=warn
 ```
 
-## Monitoring & Logging
+`DEBUG=true` adds extra diagnostic log lines.
 
-### Logging Configuration
+## Example: Small Docker Compose Installation
 
 ```bash
-# Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
-LOG_LEVEL=INFO
-LOG_FORMAT=json  # or text
-
-# Log outputs
-LOG_TO_FILE=true
-LOG_FILE_PATH=/app/logs/readur.log
-LOG_FILE_MAX_SIZE_MB=100
-LOG_FILE_BACKUP_COUNT=10
-
-# Detailed logging
-LOG_SQL_QUERIES=false
-LOG_HTTP_REQUESTS=true
-LOG_OCR_DETAILS=false
+# .env next to docker-compose.yml
+ADMIN_PASSWORD=choose-a-long-password
 ```
 
-### Health Monitoring
+```yaml
+services:
+  readur:
+    image: ghcr.io/readur/readur:latest
+    environment:
+      DATABASE_URL: postgresql://readur:readur@postgres/readur
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      UPLOAD_PATH: /app/uploads
+      WATCH_FOLDER: /app/watch
+      OCR_LANGUAGE: eng
+      CONCURRENT_OCR_JOBS: 2
+      PUBLIC_URL: https://readur.example.com
+```
+
+## Checking the Configuration
+
+At startup Readur prints the settings it loaded, marking which came from the environment and which are defaults:
 
 ```bash
-# Health check endpoints
-HEALTH_CHECK_ENABLED=true
-HEALTH_CHECK_PATH=/health
-METRICS_ENABLED=true
-METRICS_PATH=/metrics
-METRICS_TOKEN=<output of: openssl rand -hex 24>  # bearer token for Prometheus; /metrics requires auth
-
-# Alerting thresholds
-ALERT_QUEUE_SIZE=100
-ALERT_OCR_FAILURE_RATE=0.1
-ALERT_DISK_USAGE_PERCENT=80
-ALERT_MEMORY_USAGE_PERCENT=90
+docker compose logs readur
 ```
 
-## Performance Optimization
+Invalid security settings (for example a malformed `TRUSTED_PROXIES` entry or an invalid `CORS_ALLOWED_ORIGINS` origin) stop the server with an error; an invalid number falls back to its default with a warning. Administrators can read the effective server configuration, without secrets, from `GET /api/settings/config` or the **Settings** page.
 
-### System Resources
-
-```bash
-# Memory limits
-MEMORY_LIMIT_MB=2048
-MEMORY_SOFT_LIMIT_MB=1536
-
-# CPU settings
-CPU_CORES=4
-WORKER_PROCESSES=auto  # or specific number
-WORKER_THREADS=2
-
-# Connection limits
-MAX_CONNECTIONS=100
-CONNECTION_TIMEOUT=30
-```
-
-### Caching
-
-```bash
-# Enable caching layers
-ENABLE_CACHE=true
-CACHE_TYPE=redis  # or memory
-
-# Redis cache (if used)
-REDIS_URL=redis://redis:6379/0
-REDIS_MAX_CONNECTIONS=50
-
-# Cache TTLs
-DOCUMENT_CACHE_TTL=3600
-SEARCH_CACHE_TTL=300
-USER_CACHE_TTL=1800
-```
-
-### Queue Management
-
-```bash
-# Background job processing
-QUEUE_TYPE=database  # or redis
-MAX_QUEUE_SIZE=1000
-QUEUE_POLL_INTERVAL=5
-
-# Job priorities
-OCR_JOB_PRIORITY=5
-SYNC_JOB_PRIORITY=3
-CLEANUP_JOB_PRIORITY=1
-
-# Retry configuration
-MAX_JOB_RETRIES=3
-RETRY_DELAY_SECONDS=60
-EXPONENTIAL_BACKOFF=true
-```
-
-## Environment-Specific Configurations
-
-### Development
-
-```bash
-# .env.development
-DEBUG=true
-LOG_LEVEL=DEBUG
-RELOAD_ON_CHANGE=true
-CONCURRENT_OCR_JOBS=1
-DISABLE_RATE_LIMITING=true
-```
-
-### Staging
-
-```bash
-# .env.staging
-DEBUG=false
-LOG_LEVEL=INFO
-CONCURRENT_OCR_JOBS=2
-ENABLE_PROFILING=true
-MOCK_EXTERNAL_SERVICES=true
-```
-
-### Production
-
-```bash
-# .env.production
-DEBUG=false
-LOG_LEVEL=WARNING
-CONCURRENT_OCR_JOBS=8
-ENABLE_RATE_LIMITING=true
-SECURE_COOKIES=true
-FORCE_HTTPS=true
-```
-
-## Configuration Validation
-
-### Check Configuration
-
-```bash
-# Validate current configuration
-docker exec readur python validate_config.py
-
-# Test specific settings
-docker exec readur python -c "
-from config import settings
-print(f'OCR Languages: {settings.OCR_LANGUAGE}')
-print(f'Storage Backend: {settings.STORAGE_BACKEND}')
-print(f'Max File Size: {settings.MAX_FILE_SIZE_MB}MB')
-"
-```
-
-### Common Validation Errors
-
-```bash
-# Missing required S3 credentials
-ERROR: S3_ENABLED=true but S3_BUCKET_NAME not set
-
-# Invalid language code
-ERROR: OCR_LANGUAGE 'xyz' not supported
-
-# Insufficient resources
-WARNING: CONCURRENT_OCR_JOBS=8 but only 2 CPU cores available
-```
-
-## Configuration Best Practices
-
-### Security
-
-1. **Never commit secrets** - Use `.env` files and add to `.gitignore`
-2. **Generate JWT_SECRET randomly** - e.g. `openssl rand -hex 32`; there is no default
-3. **Rotate secrets regularly** - Especially JWT_SECRET and API keys
-4. **Use strong passwords** - Minimum 16 characters for admin
-5. **Enable HTTPS** - Always in production
-6. **Restrict file types** - Only allow necessary formats
-7. **Never expose secrets in command lines** - They appear in process lists
-8. **Always verify SSL certificates** - Only disable for local development
-
-### Performance
-
-1. **Match workers to cores** - CONCURRENT_OCR_JOBS ≤ CPU cores
-2. **Monitor memory usage** - Adjust limits based on usage
-3. **Use S3 for scale** - Local storage limited by disk
-4. **Enable caching** - Reduces database load
-5. **Tune PostgreSQL** - Adjust shared_buffers and work_mem
-
-### Reliability
-
-1. **Set reasonable timeouts** - Prevent hanging jobs
-2. **Configure retries** - Handle transient failures
-3. **Enable health checks** - For load balancer integration
-4. **Set up logging** - Essential for troubleshooting
-5. **Regular backups** - Automate database backups
-
-## Configuration Examples
-
-### Small Office (5-10 users)
-
-```bash
-# Minimal resources, local storage
-CONCURRENT_OCR_JOBS=2
-MEMORY_LIMIT_MB=1024
-STORAGE_BACKEND=local
-MAX_FILE_SIZE_MB=20
-SEARCH_CACHE_TTL=600
-```
-
-### Medium Business (50-100 users)
-
-```bash
-# Balanced performance, S3 storage
-CONCURRENT_OCR_JOBS=4
-MEMORY_LIMIT_MB=4096
-STORAGE_BACKEND=s3
-MAX_FILE_SIZE_MB=50
-ENABLE_CACHE=true
-CACHE_TYPE=redis
-```
-
-### Enterprise (500+ users)
-
-```bash
-# High performance, full features
-CONCURRENT_OCR_JOBS=16
-MEMORY_LIMIT_MB=16384
-STORAGE_BACKEND=s3
-MAX_FILE_SIZE_MB=100
-ENABLE_CACHE=true
-CACHE_TYPE=redis
-QUEUE_TYPE=redis
-OIDC_ENABLED=true
-```
+If a variable seems to have no effect, check its name against the [Configuration Reference](../configuration-reference.md), make sure there are no spaces around `=`, and restart the server.
 
 ## Next Steps
 
-- [Installation Guide](installation.md) - Deploy Readur
-- [User Guide](../user-guide.md) - Learn the interface
-- [API Reference](../api-reference.md) - Integrate with Readur
-- [Deployment Guide](../deployment.md) - Production setup
+- [Configuration Reference](../configuration-reference.md) - every variable, with defaults
+- [Installation Guide](installation.md) - deploy Readur
+- [User Guide](../user-guide.md) - learn the interface
+- [Deployment Guide](../deployment.md) - production setup

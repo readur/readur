@@ -1,10 +1,9 @@
 //! Keeps the environment variables the documentation names in step with the code: every
-//! variable named in a checked file ([`DOCUMENTED_IN`]: the configuration docs, the OIDC guide,
-//! charts/readur/values.yaml and every other page whose variables are all real) must be read
-//! somewhere, and every user-facing variable the server reads must be in the configuration
-//! reference. README.md and every other page under docs/ that names a variable must be either
-//! checked or listed in [`UNAUDITED`], whose entries must still name a variable the code does
-//! not read, so the list only shrinks.
+//! variable named in a checked file ([`checked_files`]: README.md, every tracked page under
+//! docs/ and charts/readur/values.yaml) must be read somewhere, and every user-facing variable
+//! the server reads must be in the configuration reference. The pages still listed in
+//! [`UNAUDITED`] are not checked; each must still name a variable the code does not read, so
+//! the list only shrinks.
 //!
 //! A variable is "named" by a doc when it appears as
 //! - the first cell of a Markdown table row, as `` `NAME` ``;
@@ -13,10 +12,17 @@
 //! - in a fenced code block (or anywhere in the YAML file), at the start of a line, possibly
 //!   after `export `, `- ` or a `# ` comment marker: `NAME=...`, `NAME: ...` or `- name: NAME`.
 //!
-//! NAME is `[A-Z][A-Z0-9_]*`. A variable is "read" when a `.rs` file under src/ passes it as a
-//! string literal to `env::var`, `env::var_os`, `env_flag` or `env_list`, when the frontend
-//! development config reads it as `process.env.NAME`, or (for `RUST_LOG` only) when the server
-//! builds its log filter with `EnvFilter::try_from_default_env`.
+//! NAME is `[A-Z][A-Z0-9_]*`. A variable is "read" when a `.rs` file under src/ passes it to
+//! `env::var`, `env::var_os`, `env_flag` or `env_list`, as a string literal or through a
+//! `const NAME_ENV: &str = "NAME";` in the same tree, when a frontend config (vite, Playwright)
+//! reads it as `process.env.NAME`, or (for `RUST_LOG` only) when the server builds its log
+//! filter with `EnvFilter::try_from_default_env`.
+//!
+//! Two kinds of name are allowed without being read by Readur's code: the API error codes the
+//! server returns (each `=> "CODE"` in src/errors/), which the error documentation lists in
+//! tables, and the few variables in [`READ_BY_OTHER_SOFTWARE`] that programs Readur runs or is
+//! run with read (each with the program that reads it). Shell scripts in the docs name their own
+//! variables in lowercase, so they are not taken for settings.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -26,66 +32,29 @@ use regex::Regex;
 #[path = "support/markdown.rs"]
 mod markdown;
 
-const DOCUMENTED_IN: &[&str] = &[
+/// Files that name many variables, so finding few there means the extraction broke.
+const NAMING_MANY: [&str; 3] = [
     "docs/configuration.md",
     "docs/configuration-reference.md",
     "charts/readur/values.yaml",
-    "docs/oidc-setup.md",
-    "README.md",
-    "docs/REVERSE_PROXY.md",
-    "docs/WATCH_FOLDER.md",
-    "docs/administration/cli-tools.md",
-    "docs/administration/storage-migration.md",
-    "docs/architecture.md",
-    "docs/dev/LABEL_TESTING.md",
-    "docs/dev/development.md",
-    "docs/index.md",
-    "docs/installation.md",
-    "docs/mcp-guide.md",
-    "docs/per-user-watch-directories.md",
-    "docs/sources-guide.md",
-    "docs/user-guide.md",
-    "docs/user-management-guide.md",
 ];
 
-/// Pages that still name variables Readur does not read: settings of other software in
-/// examples, shell variables of scripts, and settings that do not exist. Audit a page (make
-/// every variable it names real, or reword it) and move it to [`DOCUMENTED_IN`].
-const UNAUDITED: &[&str] = &[
-    "docs/administration/migration-troubleshooting.md",
-    "docs/api-reference.md",
-    "docs/backup-recovery.md",
-    "docs/deployment.md",
-    "docs/dev/DEPLOYMENT_SUMMARY.md",
-    "docs/dev/ERROR_SYSTEM.md",
-    "docs/dev/QUEUE_IMPROVEMENTS.md",
-    "docs/dev/README-E2E.md",
-    "docs/dev/TESTING.md",
-    "docs/dev/architecture.md",
-    "docs/dev/test-infrastructure.md",
-    "docs/getting-started/configuration.md",
-    "docs/getting-started/installation.md",
-    "docs/getting-started/quickstart.md",
-    "docs/health-monitoring-guide.md",
-    "docs/integrations.md",
-    "docs/migration-guide.md",
-    "docs/notifications-guide.md",
-    "docs/performance-tuning.md",
-    "docs/quickstart/docker.md",
-    "docs/quickstart/self-hosting.md",
-    "docs/redesign/BRIEF.md",
-    "docs/s3-storage-guide.md",
-    "docs/s3-troubleshooting.md",
-    "docs/security-guide.md",
-    "docs/self-hosting/authentication.md",
-    "docs/self-hosting/backup.md",
-    "docs/self-hosting/index.md",
-    "docs/self-hosting/monitoring.md",
-    "docs/self-hosting/performance.md",
-    "docs/self-hosting/storage.md",
-    "docs/swagger-ui-guide.md",
-    "docs/synology.md",
-    "docs/troubleshooting.md",
+/// Pages that still name variables Readur does not read. Audit a page (make every variable it
+/// names real, or reword it) and remove it from this list. docs/api-reference.md is waiting
+/// only for its example script's `TOKEN` variable to be renamed to lowercase.
+const UNAUDITED: &[&str] = &["docs/api-reference.md"];
+
+/// Variables named in the docs that Readur's code does not read but software it runs, or is run
+/// with, does: name -> who reads it.
+const READ_BY_OTHER_SOFTWARE: &[(&str, &str)] = &[
+    (
+        "RUST_BACKTRACE",
+        "the Rust runtime of every Readur binary, to print panic backtraces",
+    ),
+    (
+        "PGDATA",
+        "the postgres container image, for its data directory",
+    ),
 ];
 
 /// Variables the server reads that are not settings for users: test harness switches and
@@ -110,22 +79,38 @@ fn is_test_support(path: &Path) -> bool {
 fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
     let call =
         Regex::new(r#"(?:env::var(?:_os)?|env_flag|env_list)\(\s*"([A-Z][A-Z0-9_]*)""#).unwrap();
+    let call_const =
+        Regex::new(r"(?:env::var(?:_os)?|env_flag|env_list)\(\s*([A-Z][A-Z0-9_]*)\s*\)").unwrap();
+    let const_def = Regex::new(r#"const ([A-Z][A-Z0-9_]*): &str = "([A-Z][A-Z0-9_]*)";"#).unwrap();
     let mut read: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let sources = markdown::tracked_files(&repo().join("src"), "rs");
-    for path in &sources {
-        let text = std::fs::read_to_string(path).unwrap();
-        let file = path.strip_prefix(repo()).unwrap().display().to_string();
-        for caps in call.captures_iter(&text) {
-            read.entry(caps[1].to_string())
+    let sources: Vec<(String, String)> = markdown::tracked_files(&repo().join("src"), "rs")
+        .iter()
+        .map(|path| {
+            let file = path.strip_prefix(repo()).unwrap().display().to_string();
+            (file, std::fs::read_to_string(path).unwrap())
+        })
+        .collect();
+    let constants: BTreeMap<String, String> = sources
+        .iter()
+        .flat_map(|(_, text)| const_def.captures_iter(text))
+        .map(|caps| (caps[1].to_string(), caps[2].to_string()))
+        .collect();
+    for (file, text) in &sources {
+        let literal = call.captures_iter(text).map(|caps| caps[1].to_string());
+        let through_const = call_const
+            .captures_iter(text)
+            .filter_map(|caps| constants.get(&caps[1]).cloned());
+        for name in literal.chain(through_const) {
+            read.entry(name).or_default().insert(file.clone());
+        }
+        if text.contains("EnvFilter::try_from_default_env") {
+            read.entry("RUST_LOG".into())
                 .or_default()
                 .insert(file.clone());
         }
-        if text.contains("EnvFilter::try_from_default_env") {
-            read.entry("RUST_LOG".into()).or_default().insert(file);
-        }
     }
     let process_env = Regex::new(r"process\.env\.([A-Z][A-Z0-9_]*)").unwrap();
-    for config in ["frontend/vite.config.ts"] {
+    for config in ["frontend/vite.config.ts", "frontend/playwright.config.ts"] {
         let text = std::fs::read_to_string(repo().join(config)).unwrap();
         for caps in process_env.captures_iter(&text) {
             read.entry(caps[1].to_string())
@@ -134,6 +119,32 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
         }
     }
     read
+}
+
+/// The error codes the API returns: every `=> "CODE"` in src/errors/.
+fn error_codes() -> BTreeSet<String> {
+    let code = Regex::new(r#"=>\s*"([A-Z][A-Z0-9_]*)""#).unwrap();
+    markdown::tracked_files(&repo().join("src/errors"), "rs")
+        .iter()
+        .flat_map(|path| {
+            let text = std::fs::read_to_string(path).unwrap();
+            code.captures_iter(&text)
+                .map(|caps| caps[1].to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Whether a name a doc uses is accounted for: read by Readur, an error code, or read by other
+/// software.
+fn accounted_for(
+    name: &str,
+    read: &BTreeMap<String, BTreeSet<String>>,
+    codes: &BTreeSet<String>,
+) -> bool {
+    read.contains_key(name)
+        || codes.contains(name)
+        || READ_BY_OTHER_SOFTWARE.iter().any(|(n, _)| *n == name)
 }
 
 /// The variables `text` names (see the module docs). `yaml` treats every line as code.
@@ -172,77 +183,92 @@ fn documented(file: &str) -> BTreeSet<String> {
     named_variables(&text, file.ends_with(".yaml"))
 }
 
+/// The checked files: README.md, every tracked page under docs/ except the
+/// [`UNAUDITED`] ones, and the Helm chart's values.yaml.
+fn checked_files() -> Vec<String> {
+    markdown::all_doc_files()
+        .into_iter()
+        .map(|path| path.strip_prefix(repo()).unwrap().display().to_string())
+        .chain(["charts/readur/values.yaml".to_string()])
+        .filter(|file| !UNAUDITED.contains(&file.as_str()))
+        .collect()
+}
+
 #[test]
 fn every_documented_variable_is_read_by_the_code() {
     let read = variables_read();
-    let mut missing = Vec::new();
-    for file in DOCUMENTED_IN {
+    let codes = error_codes();
+    let checked = checked_files();
+    for file in NAMING_MANY {
+        assert!(checked.iter().any(|f| f == file), "{file} is not checked");
         let names = documented(file);
         assert!(
-            !names.is_empty(),
-            "{file}: no variables found; is the extraction broken?"
+            names.len() > 10,
+            "{file}: only {names:?} found; is the extraction broken?"
         );
-        if file.starts_with("docs/configuration") || file.ends_with(".yaml") {
-            assert!(
-                names.len() > 10,
-                "{file}: only {names:?} found; is the extraction broken?"
-            );
-        }
+    }
+    let mut missing = Vec::new();
+    for file in &checked {
         missing.extend(
-            names
+            documented(file)
                 .into_iter()
-                .filter(|name| !read.contains_key(name))
+                .filter(|name| !accounted_for(name, &read, &codes))
                 .map(|name| format!("{file}: {name}")),
         );
     }
     assert!(
         missing.is_empty(),
-        "documented but never read (remove them from the docs, or read them):\n{}",
+        "documented but never read (remove them from the docs, or read them; name shell script \
+         variables in lowercase):\n{}",
         missing.join("\n")
     );
 }
 
-/// Every Markdown page outside [`DOCUMENTED_IN`] that names a variable.
-fn unchecked_pages_naming_variables() -> BTreeMap<String, BTreeSet<String>> {
-    let pages = markdown::all_doc_files();
-    pages
-        .into_iter()
-        .map(|path| path.strip_prefix(repo()).unwrap().display().to_string())
-        .filter(|file| !DOCUMENTED_IN.contains(&file.as_str()))
-        .map(|file| {
-            let names = documented(&file);
-            (file, names)
-        })
-        .filter(|(_, names)| !names.is_empty())
-        .collect()
+#[test]
+fn every_unaudited_page_still_names_a_variable_nobody_reads() {
+    let read = variables_read();
+    let codes = error_codes();
+    for file in UNAUDITED {
+        assert!(repo().join(file).is_file(), "{file} does not exist");
+        let fake: Vec<String> = documented(file)
+            .into_iter()
+            .filter(|n| !accounted_for(n, &read, &codes))
+            .collect();
+        assert!(
+            !fake.is_empty(),
+            "{file} now names only real variables: remove it from UNAUDITED"
+        );
+    }
 }
 
 #[test]
-fn every_page_naming_variables_is_checked_or_listed_as_unaudited() {
+fn the_exceptions_are_needed_and_not_readur_settings() {
     let read = variables_read();
-    let pages = unchecked_pages_naming_variables();
-    let unlisted: Vec<&String> = pages
-        .keys()
-        .filter(|file| !UNAUDITED.contains(&file.as_str()))
+    let named: BTreeSet<String> = checked_files()
+        .iter()
+        .flat_map(|file| documented(file))
         .collect();
-    assert!(
-        unlisted.is_empty(),
-        "pages naming variables that are neither checked nor listed as unaudited (add them to \
-         DOCUMENTED_IN once every variable they name is read by the code): {unlisted:?}"
-    );
-    for file in UNAUDITED {
+    for (name, reader) in READ_BY_OTHER_SOFTWARE {
         assert!(
-            !DOCUMENTED_IN.contains(file),
-            "{file} is both checked and unaudited"
+            !read.contains_key(*name),
+            "{name} is read by Readur itself; drop it from READ_BY_OTHER_SOFTWARE"
         );
-        let fake = pages.get(*file).map_or(0, |names| {
-            names.iter().filter(|n| !read.contains_key(*n)).count()
-        });
         assert!(
-            fake > 0,
-            "{file} now names only real variables: move it from UNAUDITED to DOCUMENTED_IN"
+            named.contains(*name),
+            "no checked page names {name} (read by {reader}); drop it from READ_BY_OTHER_SOFTWARE"
         );
     }
+    let codes = error_codes();
+    for code in [
+        "SHARED_LINK_NOT_FOUND",
+        "USER_NOT_FOUND",
+        "SEARCH_QUERY_TOO_SHORT",
+    ] {
+        assert!(codes.contains(code), "error code {code} not detected");
+    }
+    // Error codes are detected from the code, not by their shape.
+    assert!(!codes.contains("DOCUMENT_NOT_FOUND"));
+    assert!(!codes.contains("JWT_SECRET"));
 }
 
 #[test]
@@ -270,12 +296,15 @@ fn every_variable_the_server_reads_is_in_the_reference() {
 fn reading_detection_sees_every_reader_form() {
     let read = variables_read();
     // env::var, a multi-line env_flag call, env_list, the implicit RUST_LOG and the frontend.
+    // A const holding the name, and the Playwright config.
     for name in [
         "DATABASE_URL",
         "OIDC_LINK_EXISTING_BY_EMAIL",
         "CORS_ALLOWED_ORIGINS",
         "RUST_LOG",
         "CLIENT_PORT",
+        "READUR_TEST_POSTGRES_URL",
+        "PLAYWRIGHT_BASE_URL",
     ] {
         assert!(read.contains_key(name), "{name} not detected");
     }

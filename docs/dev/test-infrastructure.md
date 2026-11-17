@@ -1,8 +1,8 @@
 # Test Infrastructure Documentation
 
-This document provides a comprehensive guide to the test infrastructure in Readur, including test patterns, utilities, common issues, and best practices.
+The shared helpers Rust tests use: per-test databases, `TestContext`, `TestAuthHelper` and the document builders. How to run the suites is in the [Testing Guide](TESTING.md).
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Test Architecture Overview](#test-architecture-overview)
 - [TestContext Pattern](#testcontext-pattern)
@@ -14,531 +14,203 @@ This document provides a comprehensive guide to the test infrastructure in Readu
 
 ## Test Architecture Overview
 
-Readur uses a three-tier testing approach:
+| Module | Contents |
+|--------|----------|
+| `src/test_db.rs` | `TestDatabase`: a fresh PostgreSQL database per test, cloned from a migrated template |
+| `src/test_utils.rs` | `TestContext`, `TestAuthHelper`, `TestUser`, `document_helpers`, test image helpers, live-server helpers |
+| `src/test_utils_config.rs` | `TestConfigBuilder`, the configuration a `TestContext` runs with |
+| `src/test_utils_mcp.rs` | MCP helpers: JSON-RPC requests to `/api/mcp`, MCP config switches |
+| `src/test_helpers.rs` | Lower-level builders: `create_test_config`, `create_test_app_state`, `create_test_queue_service`, `TestAppStateOptions` |
 
-1. **Unit Tests** (`src/tests/`) - Fast, isolated component tests
-2. **Integration Tests** (`tests/`) - Full system tests with database
-3. **Frontend Tests** (`frontend/src/__tests__/`) - React component and API tests
-
-### Test Execution Flow
-
-```
-┌─────────────────┐
-│   Unit Tests    │ ← No external dependencies
-│  (cargo test)   │ ← Milliseconds execution
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│Integration Tests│ ← Real database (PostgreSQL)
-│ (TestContext)   │ ← In-memory app instance
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│ Frontend Tests  │ ← Mocked API responses
-│   (Vitest)      │ ← Component isolation
-└─────────────────┘
-```
+These modules are compiled under `#[cfg(any(test, feature = "test-utils"))]`. The `readur` dev-dependency in `Cargo.toml` enables `test-utils`, so integration tests in `tests/` can use them without extra flags.
 
 ## TestContext Pattern
 
-The `TestContext` is the cornerstone of integration testing in Readur. It provides an isolated test environment with a real database.
-
-### Basic Usage
+`TestContext` builds the full application in process: a new database, an `AppState`, and the Axum router with every API route. Requests go straight to the router, with no network and no separate server.
 
 ```rust
-use readur::test_utils::{TestContext, TestAuthHelper};
+use readur::test_utils::TestContext;
 
 #[tokio::test]
-async fn test_document_workflow() {
-    // Create a new test context with default configuration
+async fn health_is_ok() {
     let ctx = TestContext::new().await;
-    
-    // Access the app router for making requests
-    let app = ctx.app();
-    
-    // Access the application state
-    let state = ctx.state();
-    
-    // Test runs with isolated database
+
+    let request = axum::http::Request::builder()
+        .uri("/api/health")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(ctx.app().clone(), request).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
 }
 ```
 
 ### How TestContext Works
 
-1. **Database Setup**: Spins up a PostgreSQL container using testcontainers
-2. **Migrations**: Runs all SQLx migrations automatically
-3. **App Instance**: Creates an in-memory Axum router with full API routes
-4. **Isolation**: Each test gets its own database container
+1. **Database**: `TestDatabase::from_template()` creates a database with all migrations applied (see [Per-test databases](#per-test-databases)).
+2. **Pool**: a connection pool of 5 connections (15 with `TEST_REQUIRES_LARGER_POOL` set).
+3. **Upload directory**: unless `with_upload_path` is given, a fresh directory outside the repository, removed when the context is dropped.
+4. **App**: an `AppState` and the router, available as `ctx.app()` (also the public field `ctx.app`) and `ctx.state()`.
+
+Databases are dropped when the test process exits. `ctx.cleanup_and_close().await` closes the pool earlier, which helps tests that open many contexts.
 
 ### Custom Configuration
 
 ```rust
-use readur::test_utils::{TestContext, TestConfigBuilder};
+use readur::test_utils::{TestConfigBuilder, TestContext};
 
 #[tokio::test]
-async fn test_with_custom_config() {
+async fn small_upload_limit() {
     let config = TestConfigBuilder::default()
-        .with_concurrent_ocr_jobs(4)
-        .with_upload_path("./test-uploads")
-        .with_oidc_enabled(false);
-    
+        .with_max_file_size_mb(1)
+        .with_concurrent_ocr_jobs(1);
     let ctx = TestContext::with_config(config).await;
+    // ...
 }
 ```
 
-### Making Requests
-
-```rust
-use axum::http::{Request, StatusCode};
-use axum::body::Body;
-use tower::ServiceExt;
-
-// Direct request to the test app
-let request = Request::builder()
-    .method("GET")
-    .uri("/api/health")
-    .body(Body::empty())
-    .unwrap();
-
-let response = ctx.app().clone().oneshot(request).await.unwrap();
-assert_eq!(response.status(), StatusCode::OK);
-```
+`TestConfigBuilder` methods: `with_upload_path`, `with_watch_folder`, `with_concurrent_ocr_jobs`, `with_oidc_enabled`, `with_max_file_size_mb`, `with_registration_requires_approval`, `with_mcp_enabled`, `with_mcp_allow_delete`.
 
 ## Test Utilities
 
 ### TestAuthHelper
 
-Handles user creation and authentication in tests:
+Creates users and sends authenticated requests to the in-process app. Get one bound to the context's app and database with `ctx.auth_helper()` (`TestAuthHelper::new(app)` works too, but cannot create admins).
 
 ```rust
-let auth_helper = TestAuthHelper::new(ctx.app().clone());
+let auth_helper = ctx.auth_helper();
 
-// Create a regular user
-let mut test_user = auth_helper.create_test_user().await;
-// Generates unique username: testuser_<pid>_<thread>_<nanos>
+// Regular user, registered through POST /api/auth/register.
+// Username: testuser_<pid>_<thread>_<nanos>, password: password123
+let mut user = auth_helper.create_test_user().await;
 
-// Create an admin user
-let admin_user = auth_helper.create_admin_user().await;
+// Admin user, created directly in the database (needs ctx.auth_helper()).
+// Username: adminuser_<pid>_<uuid>, password: adminpass123
+let admin = auth_helper.create_admin_user().await;
 
-// Login and get token
-let token = test_user.login(&auth_helper).await.unwrap();
+// Log in: either through the user, which caches the token...
+let token = user.login(&auth_helper).await.unwrap().to_string();
+// ...or directly
+let admin_token = auth_helper.login_user(&admin.username, &admin.password).await;
 
-// Make authenticated request
-let response = auth_helper.make_authenticated_request(
-    "GET",
-    "/api/documents",
-    None,
-    &token
-).await;
+// Request with a bearer token; returns the response body as bytes
+let body = auth_helper
+    .make_authenticated_request("GET", "/api/documents", None, &token)
+    .await;
 ```
+
+`TestUser` has the fields `user_response`, `username`, `password` and `token`, and the methods `id()` and `is_admin()`.
 
 ### Document Helpers
 
-Test data builders for consistent document creation:
+`readur::test_utils::document_helpers` builds `Document` values for database-level tests:
 
 ```rust
 use readur::test_utils::document_helpers::*;
 
-// Basic test document
 let doc = create_test_document(user_id);
-
-// Document with specific hash
-let doc = create_test_document_with_hash(
-    user_id,
-    "test.pdf",
-    "abc123".to_string()
-);
-
-// Low confidence OCR document
+let doc = create_test_document_with_hash(user_id, "test.pdf", "abc123".to_string());
 let doc = create_low_confidence_document(user_id, 45.0);
-
-// Document with OCR error
+let doc = create_document_without_ocr(user_id);
 let doc = create_document_with_ocr_error(user_id);
 ```
 
-### Test User Pattern
+### Test images
 
-Each test creates unique users to avoid conflicts:
+`get_test_images()`, `get_test_image(n)`, `load_test_image(filename)` and `test_images_available()` give access to the images in `tests/test_images/` together with the text OCR should find in them.
 
-```rust
-// Unique username pattern: testuser_<process_id>_<thread_id>_<timestamp_nanos>
-// Example: testuser_12345_2_1752870966778668050
+### Live-server helpers
 
-// This prevents "Username already exists" errors in parallel tests
-```
+For the tests that talk to a separately running server over HTTP: `live_server_database_url()` (the `TEST_DATABASE_URL` or `DATABASE_URL` value, default `postgresql://readur:readur@localhost:5432/readur`), `create_live_server_user(...)` to create an active account directly in that database, and `test_password()` for a random password. Public registration cannot be used for this because self-registered accounts start inactive.
 
 ## Test Isolation and Environment Variables
 
-### The TESSDATA_PREFIX Problem
+### Per-test databases
 
-One of the most challenging issues in the test suite was related to OCR language validation and environment variables.
+Each test process uses one PostgreSQL server: a `postgres:18` testcontainer started on first use, or the server `READUR_TEST_POSTGRES_URL` points to (any database there whose role may `CREATEDB`). The migrations run once into a template database named after a hash of the migrations; each test then gets `readur_test_<pid>_<n>`, created with `CREATE DATABASE … TEMPLATE …`. `TestDatabase::empty()` gives a database without migrations, for migration tests.
 
-#### The Issue
+At process exit the container is removed or, on an external server, the per-test databases are dropped. The template stays on an external server and is reused while the migrations are unchanged.
 
-1. Tests set `TESSDATA_PREFIX` environment variable to point to temporary directories
-2. Environment variables are **global** and shared across all threads
-3. When tests run in parallel, they overwrite each other's `TESSDATA_PREFIX`
-4. This caused 400 errors when validating OCR languages
+### Environment variables
 
-#### The Solution
-
-Modified the OCR retry endpoint to use custom tessdata paths:
-
-```rust
-// In src/routes/documents/ocr.rs
-let health_checker = if let Ok(tessdata_path) = std::env::var("TESSDATA_PREFIX") {
-    crate::ocr::health::OcrHealthChecker::new_with_path(tessdata_path)
-} else {
-    crate::ocr::health::OcrHealthChecker::new()
-};
-```
-
-#### Test Setup Example
-
-```rust
-#[tokio::test]
-async fn test_retry_ocr_with_language() {
-    // Create temporary directory for tessdata
-    let temp_dir = TempDir::new().unwrap();
-    let tessdata_path = temp_dir.path();
-    
-    // Create mock language files
-    fs::write(tessdata_path.join("eng.traineddata"), "mock").unwrap();
-    fs::write(tessdata_path.join("spa.traineddata"), "mock").unwrap();
-    
-    // Set environment variable (careful with parallel tests!)
-    let tessdata_str = tessdata_path.to_string_lossy().to_string();
-    std::env::set_var("TESSDATA_PREFIX", &tessdata_str);
-    
-    let ctx = TestContext::new().await;
-    // ... rest of test
-}
-```
-
-### Best Practices for Environment Variables
-
-1. **Avoid Global State**: Prefer passing configuration through constructors
-2. **Use TestContext**: It provides isolation for most test scenarios
-3. **Serial Execution**: For tests that must modify environment variables:
-   ```rust
-   #[tokio::test]
-   #[serial]  // Using serial_test crate
-   async fn test_that_modifies_env() {
-       // This test runs in isolation
-   }
-   ```
+Environment variables are shared by every test thread in a process, so a test that sets one can affect tests running in parallel. Prefer passing settings through `TestConfigBuilder` or `TestAppStateOptions` (in `src/test_helpers.rs`). If a test must change the process environment, run that test binary with `-- --test-threads=1`.
 
 ## Common Patterns
 
-### Authentication Test Pattern
+### Authenticated request
 
 ```rust
 #[tokio::test]
-async fn test_authenticated_endpoint() {
+async fn me_returns_the_user() {
     let ctx = TestContext::new().await;
-    let auth_helper = TestAuthHelper::new(ctx.app().clone());
-    
-    // Create and login user
-    let mut user = auth_helper.create_test_user().await;
-    let token = user.login(&auth_helper).await.unwrap();
-    
-    // Make authenticated request
-    let request = Request::builder()
-        .method("GET")
-        .uri("/api/auth/me")
-        .header("Authorization", format!("Bearer {}", token))
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = ctx.app().clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    let auth_helper = ctx.auth_helper();
+    let user = auth_helper.create_test_user().await;
+    let token = auth_helper.login_user(&user.username, &user.password).await;
+
+    let body = auth_helper
+        .make_authenticated_request("GET", "/api/auth/me", None, &token)
+        .await;
+    let me: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(me["username"], user.username);
 }
 ```
 
-### Document Upload Pattern
+### Direct database access
 
 ```rust
-#[tokio::test]
-async fn test_document_upload() {
-    let ctx = TestContext::new().await;
-    let auth_helper = TestAuthHelper::new(ctx.app().clone());
-    let mut user = auth_helper.create_test_user().await;
-    let token = user.login(&auth_helper).await.unwrap();
-    
-    // Create multipart form
-    let form = multipart::Form::new()
-        .text("tags", "test,document")
-        .part("file", multipart::Part::bytes(b"test content")
-            .file_name("test.txt")
-            .mime_str("text/plain").unwrap());
-    
-    // Upload document
-    let response = reqwest::Client::new()
-        .post("http://localhost:8000/api/documents")
-        .header("Authorization", format!("Bearer {}", token))
-        .multipart(form)
-        .send()
-        .await
-        .unwrap();
-    
-    assert_eq!(response.status(), 201);
-}
-```
-
-### Database Direct Access Pattern
-
-```rust
-#[tokio::test]
-async fn test_database_operations() {
-    let ctx = TestContext::new().await;
-    let user_id = Uuid::new_v4();
-    
-    // Direct database access
-    sqlx::query!(
-        "INSERT INTO users (id, username, email, password_hash, role) 
-         VALUES ($1, $2, $3, $4, $5)",
-        user_id,
-        "testuser",
-        "test@example.com",
-        "hash",
-        "user"
-    )
-    .execute(&ctx.state().db.pool)
+let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+    .fetch_one(ctx.state().db.get_pool())
     .await
     .unwrap();
-    
-    // Verify through API
-    // ...
-}
 ```
+
+### Checking the status code
+
+`make_authenticated_request` returns only the body. To check the status, build the request yourself and send it with `oneshot` as in the [TestContext example](#testcontext-pattern), adding an `Authorization: Bearer <token>` header.
 
 ## Troubleshooting
 
-### Common Test Failures
+| Symptom | Cause and fix |
+|---------|---------------|
+| Testcontainer or `Failed to connect to test database` errors | Docker is not running or not reachable. Start it, or set `READUR_TEST_POSTGRES_URL` to an existing server |
+| `permission denied to create database` | The role in `READUR_TEST_POSTGRES_URL` lacks `CREATEDB` |
+| `TestAuthHelper::create_admin_user needs database access` | The helper was built with `TestAuthHelper::new`; use `ctx.auth_helper()` |
+| Connection refused to `localhost:8000` | A live-server test without a running server; see the [Testing Guide](TESTING.md#integration-tests) |
+| Pool timeouts in tests that open many connections | Set `TEST_REQUIRES_LARGER_POOL`, or call `ctx.cleanup_and_close()` when done |
 
-#### 1. "Username already exists" Error
-
-**Cause**: Parallel tests creating users with same username
-
-**Solution**: TestAuthHelper now generates unique usernames with timestamps
-
-```rust
-// Automatic unique username generation
-let username = format!("testuser_{}_{}_{}",
-    std::process::id(),
-    thread_id,
-    timestamp_nanos
-);
-```
-
-#### 2. "Server is not running" (Integration Tests)
-
-**Cause**: Tests expecting external server on localhost:8000
-
-**Solution**: Use TestContext instead of external HTTP requests
-
-```rust
-// ❌ Wrong - expects external server
-let response = reqwest::get("http://localhost:8000/api/health").await;
-
-// ✅ Correct - uses TestContext
-let response = ctx.app().clone()
-    .oneshot(Request::builder()
-        .uri("/api/health")
-        .body(Body::empty())
-        .unwrap())
-    .await
-    .unwrap();
-```
-
-#### 3. OCR Language Validation Failures (400 errors)
-
-**Cause**: TESSDATA_PREFIX environment variable conflicts
-
-**Solution**: Use new_with_path() for custom tessdata directories
-
-#### 4. Database Connection Errors
-
-**Cause**: PostgreSQL container not ready or migrations failed
-
-**Debug Steps**:
-```bash
-# Check if tests can connect to database
-RUST_LOG=debug cargo test
-
-# Run single test with output
-cargo test test_name -- --nocapture
-
-# Check Docker containers
-docker ps
-```
-
-### Debugging Techniques
-
-#### Enable Detailed Logging
+Useful commands:
 
 ```bash
-# Full debug output
-RUST_LOG=debug cargo test -- --nocapture
-
-# Specific module logging
-RUST_LOG=readur::routes=debug cargo test
-
-# With backtrace
-RUST_BACKTRACE=1 cargo test
-```
-
-#### Run Tests Serially
-
-```bash
-# Avoid parallel execution issues
-cargo test -- --test-threads=1
-```
-
-#### Inspect Test Database
-
-```rust
-// Add debug queries in test
-let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-    .fetch_one(&ctx.state().db.pool)
-    .await
-    .unwrap();
-println!("User count: {}", count);
+RUST_LOG=readur=debug cargo test --test integration_labels_tests -- --nocapture
+cargo test --test integration_labels_tests -- --test-threads=1
+RUST_BACKTRACE=1 cargo test --lib
 ```
 
 ## Best Practices
 
-### 1. Use Unique Identifiers
-
-Always use timestamps or UUIDs for test data:
-
-```rust
-let unique_id = Uuid::new_v4();
-let unique_email = format!("test_{}@example.com", unique_id);
-```
-
-### 2. Clean Test State
-
-TestContext automatically provides isolated databases, but clean up external resources:
-
-```rust
-// TempDir automatically cleans up
-let temp_dir = TempDir::new().unwrap();
-// Directory deleted when temp_dir drops
-```
-
-### 3. Test Both Success and Failure Cases
-
-```rust
-#[tokio::test]
-async fn test_endpoint_success() {
-    // Happy path test
-}
-
-#[tokio::test]
-async fn test_endpoint_unauthorized() {
-    // No auth token - expect 401
-}
-
-#[tokio::test]
-async fn test_endpoint_not_found() {
-    // Invalid ID - expect 404
-}
-```
-
-### 4. Use Type-Safe Assertions
-
-```rust
-// Parse response to proper types
-let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-    .await
-    .unwrap();
-let document: DocumentResponse = serde_json::from_slice(&body_bytes).unwrap();
-
-// Now assertions are type-safe
-assert_eq!(document.filename, "test.pdf");
-```
-
-### 5. Document Test Purpose
-
-```rust
-#[tokio::test]
-async fn test_ocr_retry_with_multiple_languages() {
-    // Tests that OCR retry endpoint accepts multiple language codes
-    // and validates them against available tessdata files.
-    // This ensures multi-language OCR support works correctly.
-}
-```
-
-### 6. Avoid External Dependencies
-
-- Use TestContext instead of external servers
-- Mock external services when possible
-- Use in-memory databases for unit tests
-- Create test fixtures instead of relying on external files
-
-### 7. Handle Async Properly
-
-```rust
-// Use tokio::test for async tests
-#[tokio::test]
-async fn test_async_operation() {
-    // Can use .await here
-}
-
-// For timeout handling
-use tokio::time::{timeout, Duration};
-
-let result = timeout(
-    Duration::from_secs(30),
-    long_running_operation()
-).await;
-```
+- Use `TestContext` for API behaviour; it needs only a database and no running server.
+- Create the users and documents a test needs inside the test. Each `TestContext` has its own database, so tests do not see each other's data.
+- Test the failure paths too: no token (401), another user's resource (404 or 403), invalid input (400).
+- Parse response bodies into the real model types (`serde_json::from_slice::<DocumentResponse>(&body)`) so assertions break when the API changes.
+- Keep temporary files in `tempfile::TempDir`, which deletes them on drop.
 
 ## Test Organization
 
-### Directory Structure
-
-```
+```text
 readur/
 ├── src/
-│   └── tests/          # Unit tests
-│       ├── mod.rs
-│       ├── auth_tests.rs
-│       ├── db_tests.rs
-│       └── ...
-├── tests/              # Integration tests
-│   ├── integration_ocr_language_endpoints.rs
-│   ├── integration_settings_tests.rs
-│   └── ...
+│   ├── tests/            # cross-cutting unit tests
+│   ├── test_db.rs        # per-test databases
+│   ├── test_utils*.rs    # TestContext, TestAuthHelper, builders
+│   └── test_helpers.rs   # config and AppState builders
+├── tests/                # integration tests, one binary per file
+│   ├── integration_*.rs
+│   ├── unit_*.rs
+│   ├── support/          # helpers for the documentation tests
+│   ├── test_images/      # OCR test images
+│   └── test_pdfs/
 └── frontend/
-    └── src/
-        └── __tests__/  # Frontend tests
-            ├── components/
-            └── pages/
+    ├── src/**/__tests__/ # Vitest tests
+    └── e2e/              # Playwright tests
 ```
 
-### Naming Conventions
-
-- Unit tests: `test_<component>_<behavior>`
-- Integration tests: `test_<workflow>_<scenario>`
-- Test files: `integration_<feature>_tests.rs`
-
-## Summary
-
-The test infrastructure in Readur provides:
-
-1. **Isolation**: Each test runs in its own environment
-2. **Realism**: Integration tests use real databases and full app instances
-3. **Speed**: Parallel execution with proper isolation
-4. **Reliability**: Unique identifiers prevent conflicts
-5. **Maintainability**: Clear patterns and utilities
-
-Key takeaways:
-- Always use TestContext for integration tests
-- Generate unique test data to avoid conflicts
-- Be careful with environment variables in parallel tests
-- Use the provided test utilities for common operations
-- Test both success and failure scenarios
-
-For more examples, see the existing test files in `tests/` directory.
+File naming: `integration_<area>_tests.rs` for integration tests, `unit_<area>_tests.rs` for isolated tests in `tests/`.

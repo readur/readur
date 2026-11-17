@@ -5,7 +5,7 @@ Readur's labeling system provides powerful document organization and categorizat
 ## Table of Contents
 
 - [Overview](#overview)
-- [Label Types](#label-types)
+- [Your Labels](#your-labels)
 - [Creating and Managing Labels](#creating-and-managing-labels)
 - [Assigning Labels to Documents](#assigning-labels-to-documents)
 - [Label-Based Search and Filtering](#label-based-search-and-filtering)

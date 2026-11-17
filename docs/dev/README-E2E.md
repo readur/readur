@@ -1,279 +1,123 @@
 # Readur E2E Testing Guide
 
-This guide covers the end-to-end (E2E) testing setup for Readur using Playwright.
+End-to-end tests drive the real UI in a browser with Playwright. They live in `frontend/e2e/` and are configured in `frontend/playwright.config.ts`.
 
-## Overview
+## Prerequisites
 
-The E2E test suite covers:
-- User authentication flows
-- Document upload and processing
-- Search functionality
-- Document management
-- Complete user workflows
-
-## Setup
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- Rust and Cargo
+- Node.js and npm (CI uses Node 26)
+- Rust and Cargo, to build the backend
 - PostgreSQL
-- Git
+- Tesseract with the languages the OCR tests use (CI installs eng, spa, fra, deu, ita and por), plus ocrmypdf and poppler-utils
 
-### Installation
-
-1. **Install Playwright dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   npx playwright install
-   ```
-
-**Set up test database:** Create a dedicated database for E2E testing to avoid conflicts with development data.
-   ```bash
-   # Create test database
-   createdb readur_e2e_test
-   
-   # Add vector extension (if available)
-   psql -d readur_e2e_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
-   ```
-
-## Running Tests
-
-### Local Development
-
-#### Quick Start
-Use the provided script for automated setup:
-```bash
-./scripts/run-e2e-local.sh
-```
-
-#### Manual Setup
-If you prefer manual control:
-
-**Start backend server:** Launch the backend configured for E2E testing on a different port.
-   ```bash
-   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/readur_e2e_test" \
-   TEST_MODE=true \
-   ROCKET_PORT=8001 \
-   cargo run --release
-   ```
-
-**Start frontend dev server:** Launch the frontend development server configured to connect to the test backend.
-   ```bash
-   cd frontend
-   VITE_API_BASE_URL="http://localhost:8001" \
-   npm run dev -- --port 5174
-   ```
-
-**Run tests:** Execute the end-to-end test suite against the running application.
-   ```bash
-   cd frontend
-   npm run test:e2e
-   ```
-
-### Test Options
-
-- **Headless mode** (default): `npm run test:e2e`
-- **Headed mode** (show browser): `npm run test:e2e:headed`
-- **Debug mode**: `npm run test:e2e:debug`
-- **UI mode**: `npm run test:e2e:ui`
-
-### Using the Local Script
-
-The `run-e2e-local.sh` script provides additional options:
+Install the frontend dependencies and the browsers:
 
 ```bash
-# Run tests normally
-./scripts/run-e2e-local.sh
-
-# Run in headed mode
-./scripts/run-e2e-local.sh --headed
-
-# Run in debug mode
-./scripts/run-e2e-local.sh --debug
-
-# Run with Playwright UI
-./scripts/run-e2e-local.sh --ui
-
-# Show help
-./scripts/run-e2e-local.sh --help
+cd frontend
+npm install
+npx playwright install
 ```
 
-## GitHub Actions
+## How the tests reach the server
 
-The E2E tests automatically run in GitHub Actions on:
-- Push to `master`/`main` branch
-- Pull requests to `master`/`main` branch
+- With `PLAYWRIGHT_BASE_URL` set, the tests run against that URL and Playwright starts nothing.
+- Without it (and outside CI), Playwright starts the Vite dev server (`npm run dev`) on `http://localhost:5173`, or reuses one that is already running. The dev server proxies `/api` to `http://localhost:8000`, so a backend must be running there. (The proxy target can be changed with the `BACKEND_PORT` or `VITE_API_PROXY_TARGET` variables of `frontend/vite.config.ts`.)
 
-The workflow:
-1. Sets up PostgreSQL database
-2. Builds and starts the backend server
-3. Starts the frontend dev server
-4. Runs all E2E tests
-5. Uploads test reports and artifacts
+The suite provisions its own test users through the API, logged in as the admin account the server creates at startup. It needs that admin's password: set E2E_ADMIN_PASSWORD (or `ADMIN_PASSWORD`) in the test environment to the `ADMIN_PASSWORD` the server was started with. The username defaults to `admin` (override with E2E_ADMIN_USERNAME). See `frontend/e2e/utils/test-auth-helper.ts`.
 
-## Test Structure
+## Running locally
 
-### Test Files
+1. Start PostgreSQL and the backend with a known admin password. Migrations run automatically at startup.
 
-- `e2e/auth.spec.ts` - Authentication flows
-- `e2e/upload.spec.ts` - Document upload functionality
-- `e2e/search.spec.ts` - Search workflows
-- `e2e/document-management.spec.ts` - Document management
+   ```bash
+   createdb readur_e2e
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/readur_e2e \
+   ADMIN_PASSWORD=e2e-admin-password \
+   cargo run --release --bin readur
+   ```
 
-### Utilities
+2. In another terminal, run the tests (Playwright starts the dev server on port 5173):
 
-- `e2e/fixtures/auth.ts` - Authentication fixture for logged-in tests
-- `e2e/utils/test-helpers.ts` - Common helper functions
-- `e2e/utils/test-data.ts` - Test data and configuration
+   ```bash
+   cd frontend
+   env E2E_ADMIN_PASSWORD=e2e-admin-password npm run test:e2e
+   ```
 
-### Configuration
+Alternatively, build the frontend (`npm run build` in `frontend/`): the backend serves `frontend/dist` itself, and the tests can run straight against it with `PLAYWRIGHT_BASE_URL` set to `http://localhost:8000`. This is what CI does.
 
-- `playwright.config.ts` - Playwright configuration
-- `.github/workflows/test-e2e.yml` - GitHub Actions workflow
+### Scripts
 
-## Test Data
+| Command | What it does |
+|---------|--------------|
+| `npm run test:e2e` | Run all projects headless |
+| `npm run test:e2e:headed` | Show the browser |
+| `npm run test:e2e:debug` | Playwright inspector, step through tests |
+| `npm run test:e2e:ui` | Playwright UI mode |
 
-Tests use sample files from:
-- `frontend/test_data/hello_ocr.png` - Sample image for OCR
-- `frontend/test_data/multiline.png` - Multi-line text image
-- `frontend/test_data/numbers.png` - Numbers image
+Extra Playwright arguments go after `--`, for example `npm run test:e2e -- --project=chromium e2e/search.spec.ts`.
 
-Add additional test files to `frontend/test_data/` as needed.
+`scripts/run-e2e-local.sh` and `./run-tests.sh e2e` are older wrappers. They do not currently work as written: `run-e2e-local.sh` calls a `migrate` binary that does not exist and polls `/health` instead of `/api/health`, and both start a dev server that relies on VITE_API_BASE_URL, which `vite.config.ts` does not read. Use the steps above.
 
-## Writing Tests
+## Configuration (`frontend/playwright.config.ts`)
 
-### Basic Test Structure
+- Test directory `./e2e`, 60 s timeout per test, 10 s for `expect`.
+- Projects: `chromium` (all specs except `websocket-*.spec.ts`), `chromium-websocket` (only `websocket-*.spec.ts`, one worker), `firefox` and `webkit` (kept for local runs; CI runs only the two Chromium projects).
+- Not fully parallel; 2 workers locally, 1 in CI. One retry locally, two in CI. `test.only` fails the run in CI.
+- Reports: HTML in `test-results/e2e-report`, JSON in `test-results/e2e-results.json`, and the list reporter. Traces on the first retry, screenshots on failure, videos kept on failure, all under `test-results/e2e-artifacts`.
+- `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` points the Chromium projects at a system browser, for hosts where the downloaded one cannot run (NixOS, for example).
+- `CI` set: no dev server is started, retries and workers change as above.
 
-```typescript
-import { test, expect } from '@playwright/test';
-import { TestHelpers } from './utils/test-helpers';
+## CI
 
-test.describe('Feature Name', () => {
-  let helpers: TestHelpers;
+`.github/workflows/test-e2e.yml` runs on pushes and pull requests to `main` and `master`. It starts PostgreSQL 18 as a service, installs Tesseract and the other OCR tools, builds the backend (`cargo build --release`) and the frontend (`npm run build`), starts `./target/release/readur` with a generated `JWT_SECRET` and a fixed admin password, waits for `GET /api/health`, installs Chromium, and runs:
 
-  test.beforeEach(async ({ page }) => {
-    helpers = new TestHelpers(page);
-    await helpers.navigateToPage('/your-page');
-  });
-
-  test('should do something', async ({ page }) => {
-    // Your test logic here
-    await expect(page.locator('[data-testid="element"]')).toBeVisible();
-  });
-});
+```bash
+npm run test:e2e -- --project=chromium --project=chromium-websocket
 ```
 
-### Using Authentication Fixture
+with `PLAYWRIGHT_BASE_URL` set to `http://localhost:8000`. Test results are uploaded as artifacts.
 
-For tests requiring authentication:
+## Test layout
+
+Specs in `frontend/e2e/`:
+
+`auth.spec.ts`, `auth-system.spec.ts`, `command-palette.spec.ts`, `document-management.spec.ts`, `home.spec.ts`, `library.spec.ts`, `mobile-nav.spec.ts`, `navigation.spec.ts`, `no-horizontal-overflow.spec.ts`, `ocr-multiple-languages.spec.ts`, `ocr-retry-workflow.spec.ts`, `per-user-watch-feature-flag.spec.ts`, `redirects.spec.ts`, `search.spec.ts`, `settings.spec.ts`, `slideover-layering.spec.ts`, `sources.spec.ts`, `theme.spec.ts`, `toast-placement.spec.ts`, `upload.spec.ts`, `webdav-workflow.spec.ts`, `websocket-sync-progress.spec.ts`.
+
+Helpers:
+
+- `e2e/fixtures/auth.ts`: a Playwright `test` extended with `testUser` and `testAdmin` (users created through the API) and `dynamicUserPage` / `dynamicAdminPage` (a page already logged in as that user).
+- `e2e/utils/test-auth-helper.ts`: `E2ETestAuthHelper`, which creates and logs in test users through the seeded admin. Test user passwords default to `testpass123` / `adminpass123` (override with E2E_USER_PASSWORD / E2E_ADMIN_TEST_PASSWORD).
+- `e2e/utils/test-helpers.ts`: `TestHelpers`, with API helpers (`uploadDocumentViaAPI`, `waitForOCRComplete`, `deleteDocumentViaAPI`, `createWebdavSourceViaAPI`, ...) and UI helpers (`navigateToPage`, `waitForApiCall`, `waitForToast`, `waitForLoadingToComplete`, ...).
+- `e2e/utils/test-data.ts`: test file paths, API paths and `TIMEOUTS` (`short` 5 s, `medium` 10 s, `long` 30 s, `upload` 60 s, `ocr` 120 s).
+
+Sample files are in `frontend/test_data/` (for example `hello_ocr.png`, `multiline.png`, `numbers.png`, `sample.txt`, `test_file.docx`, and `multilingual/`).
+
+## Writing a test
 
 ```typescript
 import { test, expect } from './fixtures/auth';
+import { TestHelpers } from './utils/test-helpers';
 
-test.describe('Authenticated Feature', () => {
-  test('should work when logged in', async ({ authenticatedPage }) => {
-    // Page is already authenticated
-    await authenticatedPage.goto('/protected-page');
+test.describe('Sources', () => {
+  test('opens the Sources page', async ({ dynamicUserPage: page }) => {
+    const helpers = new TestHelpers(page);
+    await helpers.openIntake('connections');
+    await helpers.waitForLoadingToComplete();
+    await expect(page.getByRole('heading', { level: 1, name: 'Sources' })).toBeVisible();
   });
 });
 ```
 
-### Best Practices
+Guidelines:
 
-1. **Use data-testid attributes** for reliable element selection
-2. **Wait for API calls** using `helpers.waitForApiCall()`
-3. **Handle loading states** with `helpers.waitForLoadingToComplete()`
-4. **Use meaningful test descriptions** that describe user actions
-5. **Clean up test data** when necessary
-6. **Use timeouts appropriately** from `TIMEOUTS` constants
+- Prefer role- and label-based locators; add `data-testid` only where there is no accessible name.
+- Create the data a test needs through the API helpers and delete it afterwards, so tests do not depend on each other.
+- Wait for the API call or UI state you need (`waitForApiCall`, `waitForOCRComplete`) instead of fixed sleeps.
+- Name WebSocket tests `websocket-*.spec.ts` so they run in the serial project.
 
 ## Debugging
 
-### Local Debugging
-
-1. **Run with --debug flag**:
-   ```bash
-   npm run test:e2e:debug
-   ```
-
-2. **Use Playwright UI**:
-   ```bash
-   npm run test:e2e:ui
-   ```
-
-3. **Add debugging code**:
-   ```typescript
-   await page.pause(); // Pauses execution
-   await page.screenshot({ path: 'debug.png' }); // Take screenshot
-   ```
-
-### CI Debugging
-
-- Check uploaded test artifacts in GitHub Actions
-- Review test reports in the workflow summary
-- Examine screenshots and videos from failed tests
-
-## Configuration
-
-### Environment Variables
-
-- `PLAYWRIGHT_BASE_URL` - Base URL for tests (default: http://localhost:5173)
-- `CI` - Set to true in CI environment
-- `TEST_MODE` - Set to true for backend test mode
-
-### Timeouts
-
-Configure timeouts in `utils/test-data.ts`:
-- `TIMEOUTS.short` (5s) - Quick operations
-- `TIMEOUTS.medium` (10s) - Normal operations  
-- `TIMEOUTS.long` (30s) - Slow operations
-- `TIMEOUTS.upload` (60s) - File uploads
-- `TIMEOUTS.ocr` (120s) - OCR processing
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Tests timing out**:
-   - Increase timeouts in configuration
-   - Check if services are running properly
-   - Verify database connectivity
-
-2. **Authentication failures**:
-   - Ensure test user exists in database
-   - Check authentication fixture implementation
-   - Verify API endpoints are correct
-
-3. **File upload failures**:
-   - Ensure test files exist in `test_data/`
-   - Check file permissions
-   - Verify upload API is working
-
-4. **Database issues**:
-   - Ensure PostgreSQL is running
-   - Check database migrations
-   - Verify test database exists
-
-### Getting Help
-
-1. Check logs in `backend.log` and `frontend.log`
-2. Review Playwright documentation
-3. Examine existing test implementations
-4. Use browser dev tools in headed mode
-
-## Contributing
-
-When adding new features:
-
-1. **Add E2E tests** for new user workflows
-2. **Update test data** if needed
-3. **Add data-testid attributes** to new UI elements
-4. **Update this documentation** if test setup changes
-
-Ensure tests:
-- Are reliable and not flaky
-- Test realistic user scenarios
-- Have good error messages
-- Clean up after themselves
+- `npm run test:e2e:debug` or `npm run test:e2e:ui`, or add `await page.pause()` to a test and run headed.
+- After a failure, open the HTML report: `npx playwright show-report test-results/e2e-report`.
+- Traces of retried tests open with `npx playwright show-trace <path to trace.zip>`.
+- In CI, download the uploaded artifacts from the workflow run.
+- If test users cannot be created, check that the admin password given to the tests matches the server's `ADMIN_PASSWORD`; if the server was started without one, it generated a random password (written to `<UPLOAD_PATH>/.readur/initial-admin-password`).

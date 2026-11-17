@@ -1,532 +1,168 @@
-# Backup and Recovery Guide
+# Backup Strategies
 
-## Overview
+Readur has no backup command or backup API. Its state lives in a few places, and you back them up with the usual tools: `pg_dump` for PostgreSQL and a file copy (or bucket copy) for the documents. This page shows how to do that for a Docker Compose installation; [Backup and Recovery](../backup-recovery.md) covers the same steps without Docker, plus restore details.
 
-This guide covers comprehensive backup strategies for Readur, including database backups, document storage, configuration files, and disaster recovery procedures.
+## What to Back Up
 
-## What to Backup
+| What | Where | Why |
+|------|-------|-----|
+| PostgreSQL database | the `postgres_data` volume in the bundled `docker-compose.yml`, or your external database | Users, document records, extracted text, labels, sources and their credentials, settings, API keys, the OCR queue, and the generated JWT signing key (when `JWT_SECRET` is not set) |
+| Document files (local storage) | `UPLOAD_PATH`: `/app/uploads` in the container, `./readur_uploads` on the host with the bundled compose file | The original files (`documents/`), thumbnails (`thumbnails/`) and processed OCR images (`processed_images/`). Also holds `.readur/initial-admin-password` when the initial admin password was generated |
+| Document files (S3 storage) | the bucket named by `S3_BUCKET_NAME`, below `S3_PREFIX` if set | The same files, when the S3 backend is enabled |
+| Your configuration | `docker-compose.yml`, `.env`, Helm values, reverse proxy config | The environment variables Readur runs with, including `JWT_SECRET`, OIDC client secrets and S3 credentials |
+| Watch folder (optional) | `WATCH_FOLDER`: `/app/watch` in the container | Readur copies files out of the watch folder and never changes or deletes them there, so these are your originals. Back them up if Readur's copy is not enough for you |
 
-### Critical Components
+The database and the document files belong together: the database records where every file is stored, so restore them as a pair taken at (nearly) the same time.
 
-1. **PostgreSQL Database** - Contains all metadata, user data, and system configuration
-2. **Document Storage** - Original documents and processed files
-3. **Configuration Files** - Environment variables and settings
-4. **SSL Certificates** - If using custom certificates
-5. **Custom Code** - Any modifications or plugins
+Treat the backups as sensitive. The database contains password hashes, API key hashes, source credentials (WebDAV, S3) and possibly the JWT signing key; the files are your documents.
 
-### Backup Priority Matrix
+## Database
 
-| Component | Priority | RPO | RTO | Backup Frequency |
-|-----------|----------|-----|-----|------------------|
-| Database | Critical | 1 hour | 30 min | Hourly |
-| Documents | Critical | 24 hours | 2 hours | Daily |
-| Config | High | 24 hours | 1 hour | On change |
-| Logs | Medium | 7 days | N/A | Weekly |
-| Cache | Low | N/A | N/A | Not required |
-
-## Database Backup
-
-### PostgreSQL Backup Methods
-
-#### Method 1: pg_dump (Logical Backup)
+With the bundled compose file, run `pg_dump` inside the `postgres` service and write the dump to the host:
 
 ```bash
-#!/bin/bash
-# backup-database.sh
-
-# Configuration
-DB_NAME="readur"
-DB_USER="readur"
-BACKUP_DIR="/backup/postgres"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-# Create backup
-pg_dump -U $DB_USER -d $DB_NAME -F custom -f "$BACKUP_DIR/readur_$DATE.dump"
-
-# Compress backup
-gzip "$BACKUP_DIR/readur_$DATE.dump"
-
-# Keep only last 30 days
-find $BACKUP_DIR -name "*.dump.gz" -mtime +30 -delete
-
-# Upload to S3 (optional)
-aws s3 cp "$BACKUP_DIR/readur_$DATE.dump.gz" s3://backup-bucket/postgres/
+docker compose exec -T postgres pg_dump -U readur -d readur -Fc > readur-db-$(date +%Y%m%d-%H%M%S).dump
 ```
 
-#### Method 2: Physical Backup with pg_basebackup
+`-Fc` produces PostgreSQL's compressed custom format, which `pg_restore` reads. `pg_dump` takes a consistent snapshot while Readur keeps running, so there is no need to stop anything for the database alone.
+
+If your database runs elsewhere, run `pg_dump` against it with the same connection details as `DATABASE_URL`:
 
 ```bash
-#!/bin/bash
-# physical-backup.sh
-
-# Stop application (optional for consistency)
-docker-compose stop readur
-
-# Perform base backup
-pg_basebackup -U replicator -D /backup/pgdata_$(date +%Y%m%d) \
-  -Fp -Xs -P -R
-
-# Start application
-docker-compose start readur
+pg_dump "postgresql://readur:password@db.example.com:5432/readur" -Fc -f readur-db.dump
 ```
 
-#### Method 3: Continuous Archiving (WAL)
+For continuous archiving and point-in-time recovery, use PostgreSQL's own WAL archiving or a tool built on it (pgBackRest, Barman, WAL-G). Readur needs nothing special from them.
+
+## Document Files
+
+### Local storage
+
+Copy the upload directory. With the bundled compose file it is the `./readur_uploads` bind mount next to `docker-compose.yml`:
 
 ```bash
-# postgresql.conf
-wal_level = replica
-archive_mode = on
-archive_command = 'test ! -f /archive/%f && cp %p /archive/%f'
-max_wal_senders = 3
-wal_keep_segments = 64
+tar -czf readur-uploads-$(date +%Y%m%d-%H%M%S).tar.gz -C ./readur_uploads .
 ```
 
-### Docker Database Backup
+or incrementally:
 
 ```bash
-#!/bin/bash
-# docker-db-backup.sh
-
-# Backup database from Docker container
-docker-compose exec -T postgres pg_dump -U readur readur | \
-  gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
-
-# Alternative: Using docker run
-docker run --rm \
-  --network readur_default \
-  postgres:14 \
-  pg_dump -h postgres -U readur readur | \
-  gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+rsync -a --delete ./readur_uploads/ /backup/readur/uploads/
 ```
 
-## Document Storage Backup
+The `temp/` subdirectory only holds files in transit and can be excluded (`--exclude temp/`).
 
-### Local Storage Backup
+If you mounted a named volume instead of a host directory, archive it through a throwaway container:
 
 ```bash
-#!/bin/bash
-# backup-documents.sh
-
-SOURCE="/data/readur/documents"
-BACKUP_DIR="/backup/documents"
-DATE=$(date +%Y%m%d)
-
-# Incremental backup with rsync
-rsync -avz --delete \
-  --backup --backup-dir="$BACKUP_DIR/incremental_$DATE" \
-  "$SOURCE/" "$BACKUP_DIR/current/"
-
-# Create tar archive
-tar -czf "$BACKUP_DIR/documents_$DATE.tar.gz" \
-  -C "$BACKUP_DIR" current/
-
-# Keep only last 7 daily backups
-find $BACKUP_DIR -name "documents_*.tar.gz" -mtime +7 -delete
+docker run --rm -v readur_uploads:/data:ro -v "$PWD":/backup alpine \
+  tar -czf /backup/readur-uploads.tar.gz -C /data .
 ```
 
-### S3 Storage Backup
+(The volume name is prefixed with the compose project name; `docker volume ls` shows it.)
+
+### S3 storage
+
+Readur does not copy the bucket anywhere. Protect it with the features of your storage provider, for example bucket versioning or replication, or copy it with a generic tool:
 
 ```bash
-#!/bin/bash
-# backup-s3.sh
-
-# Sync S3 bucket to another bucket
-aws s3 sync s3://readur-documents s3://readur-backup \
-  --delete \
-  --storage-class GLACIER_IR
-
-# Or to local storage
-aws s3 sync s3://readur-documents /backup/s3-documents \
-  --delete
+rclone sync s3remote:readur-documents /backup/readur/s3
 ```
 
-### Deduplication Strategy
+## Consistency
+
+Readur keeps writing files and database rows while it runs (uploads, watch folder imports, source syncs, OCR). For a backup you can restore without surprises:
+
+1. Dump the database first, then copy the files. Files that appear after the dump are harmless extras; a database row whose file is missing is not.
+2. For a fully consistent backup, stop Readur (not PostgreSQL) for the duration: `docker compose stop readur`, back up, `docker compose start readur`.
+
+## Example Script
+
+A complete nightly backup for the bundled compose setup. Run it from the directory that contains `docker-compose.yml`.
 
 ```bash
-#!/bin/bash
-# dedup-backup.sh
+#!/usr/bin/env bash
+# readur-backup.sh: back up the Readur database and uploads
+set -euo pipefail
 
-# Use restic for deduplication
-restic -r /backup/restic init
+backup_root=/backup/readur
+keep_days=14
+stamp=$(date +%Y%m%d-%H%M%S)
+target="$backup_root/$stamp"
 
-# Backup with deduplication
-restic -r /backup/restic backup \
-  /data/readur/documents \
-  --tag documents \
-  --host readur-server
+mkdir -p "$target"
 
-# Prune old snapshots
-restic -r /backup/restic forget \
-  --keep-daily 7 \
-  --keep-weekly 4 \
-  --keep-monthly 12 \
-  --prune
+# 1. Database first
+docker compose exec -T postgres pg_dump -U readur -d readur -Fc > "$target/readur-db.dump"
+
+# 2. Then the uploaded documents (local storage)
+tar -czf "$target/readur-uploads.tar.gz" --exclude ./temp -C ./readur_uploads .
+
+# 3. The configuration
+cp docker-compose.yml "$target/"
+if [ -f .env ]; then cp .env "$target/"; fi
+
+# Quick sanity check: the dump must be readable by pg_restore
+docker compose exec -T postgres pg_restore --list < "$target/readur-db.dump" > /dev/null
+
+# Remove backups older than keep_days
+find "$backup_root" -mindepth 1 -maxdepth 1 -type d -mtime +"$keep_days" -exec rm -rf {} +
+
+echo "Backup written to $target"
 ```
 
-## Configuration Backup
-
-### Environment and Settings
+Schedule it with cron:
 
 ```bash
-#!/bin/bash
-# backup-config.sh
-
-CONFIG_DIR="/etc/readur"
-BACKUP_DIR="/backup/config"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-# Create config archive
-tar -czf "$BACKUP_DIR/config_$DATE.tar.gz" \
-  $CONFIG_DIR/.env \
-  $CONFIG_DIR/docker-compose.yml \
-  $CONFIG_DIR/nginx.conf \
-  /etc/ssl/certs/readur* \
-  /etc/systemd/system/readur*
-
-# Encrypt sensitive configuration
-gpg --encrypt --recipient backup@company.com \
-  "$BACKUP_DIR/config_$DATE.tar.gz"
-
-# Remove unencrypted file
-rm "$BACKUP_DIR/config_$DATE.tar.gz"
+# crontab -e
+30 2 * * * cd /opt/readur && ./readur-backup.sh >> /var/log/readur-backup.log 2>&1
 ```
 
-## Automated Backup Solution
+Copy the backup directory off the machine (another host, a NAS, object storage); a backup on the same disk does not survive a disk failure.
 
-### Complete Backup Script
+## Restoring with Docker Compose
 
-```bash
-#!/bin/bash
-# readur-backup.sh
+1. Stop Readur, keep PostgreSQL running:
 
-set -e
+   ```bash
+   docker compose stop readur
+   ```
 
-# Configuration
-BACKUP_ROOT="/backup"
-S3_BUCKET="s3://company-backups/readur"
-SLACK_WEBHOOK="https://hooks.slack.com/services/XXX"
-DATE=$(date +%Y%m%d_%H%M%S)
+2. Recreate the database and load the dump:
 
-# Functions
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-}
+   ```bash
+   docker compose exec -T postgres dropdb -U readur --if-exists readur
+   docker compose exec -T postgres createdb -U readur -O readur readur
+   docker compose exec -T postgres pg_restore -U readur -d readur --no-owner < readur-db.dump
+   ```
 
-notify() {
-    curl -X POST -H 'Content-type: application/json' \
-      --data "{\"text\":\"$1\"}" $SLACK_WEBHOOK
-}
+3. Put the files back:
 
-# Create backup directories
-mkdir -p "$BACKUP_ROOT"/{database,documents,config,logs}
+   ```bash
+   find ./readur_uploads -mindepth 1 -delete
+   tar -xzf readur-uploads.tar.gz -C ./readur_uploads
+   ```
 
-# 1. Database backup
-log "Starting database backup..."
-docker-compose exec -T postgres pg_dump -U readur readur | \
-  gzip > "$BACKUP_ROOT/database/readur_$DATE.sql.gz"
+4. Start Readur and check that it comes up:
 
-# 2. Documents backup (if local storage)
-if [ "$STORAGE_BACKEND" = "local" ]; then
-    log "Starting documents backup..."
-    rsync -avz --delete \
-      /data/readur/documents/ \
-      "$BACKUP_ROOT/documents/current/"
-    
-    tar -czf "$BACKUP_ROOT/documents/documents_$DATE.tar.gz" \
-      -C "$BACKUP_ROOT/documents" current/
-fi
+   ```bash
+   docker compose start readur
+   docker compose logs -f readur
+   curl -f http://localhost:8000/api/health
+   ```
 
-# 3. Configuration backup
-log "Starting configuration backup..."
-tar -czf "$BACKUP_ROOT/config/config_$DATE.tar.gz" \
-  .env docker-compose.yml
+On startup Readur applies any database migrations the dump does not have yet, so a dump from an older Readur version can be restored under a newer one. The reverse does not work: an older Readur refuses to start on a database that a newer version has already migrated.
 
-# 4. Upload to S3
-log "Uploading to S3..."
-aws s3 sync "$BACKUP_ROOT" "$S3_BUCKET" \
-  --exclude "*/current/*" \
-  --storage-class STANDARD_IA
+If `JWT_SECRET` is set, restore it with the same value; otherwise the signing key comes back with the database. Either way, users who were logged in may need to log in again if the key changed.
 
-# 5. Cleanup old backups
-log "Cleaning up old backups..."
-find "$BACKUP_ROOT/database" -name "*.sql.gz" -mtime +7 -delete
-find "$BACKUP_ROOT/documents" -name "*.tar.gz" -mtime +7 -delete
-find "$BACKUP_ROOT/config" -name "*.tar.gz" -mtime +30 -delete
+## Kubernetes (Helm Chart)
 
-# 6. Verify backup
-BACKUP_SIZE=$(du -sh "$BACKUP_ROOT" | cut -f1)
-log "Backup completed. Total size: $BACKUP_SIZE"
-
-# 7. Send notification
-notify "Readur backup completed successfully. Size: $BACKUP_SIZE"
-```
-
-### Cron Schedule
-
-```bash
-# /etc/crontab
-# Hourly database backup
-0 * * * * root /opt/readur/scripts/backup-database.sh
-
-# Daily full backup at 2 AM
-0 2 * * * root /opt/readur/scripts/readur-backup.sh
-
-# Weekly configuration backup
-0 3 * * 0 root /opt/readur/scripts/backup-config.sh
-```
-
-## Recovery Procedures
-
-### Database Recovery
-
-#### From pg_dump Backup
-
-```bash
-#!/bin/bash
-# restore-database.sh
-
-BACKUP_FILE="$1"
-
-# Stop application
-docker-compose stop readur
-
-# Drop existing database
-docker-compose exec postgres psql -U postgres -c "DROP DATABASE IF EXISTS readur;"
-docker-compose exec postgres psql -U postgres -c "CREATE DATABASE readur OWNER readur;"
-
-# Restore backup
-gunzip -c "$BACKUP_FILE" | docker-compose exec -T postgres psql -U readur readur
-
-# Run migrations
-docker-compose exec readur alembic upgrade head
-
-# Start application
-docker-compose start readur
-```
-
-#### Point-in-Time Recovery
-
-```bash
-# Restore to specific time
-recovery_target_time = '2024-01-15 14:30:00'
-
-# Restore base backup
-pg_basebackup -R -D /var/lib/postgresql/data
-
-# Apply WAL logs
-restore_command = 'cp /archive/%f %p'
-recovery_target_time = '2024-01-15 14:30:00'
-```
-
-### Document Recovery
-
-```bash
-#!/bin/bash
-# restore-documents.sh
-
-BACKUP_FILE="$1"
-TARGET_DIR="/data/readur/documents"
-
-# Extract backup
-tar -xzf "$BACKUP_FILE" -C /tmp/
-
-# Restore with verification
-rsync -avz --checksum \
-  /tmp/current/ \
-  "$TARGET_DIR/"
-
-# Fix permissions
-chown -R readur:readur "$TARGET_DIR"
-chmod -R 755 "$TARGET_DIR"
-```
-
-### Full System Recovery
-
-```bash
-#!/bin/bash
-# disaster-recovery.sh
-
-set -e
-
-# 1. Install Docker and dependencies
-apt-get update
-apt-get install -y docker.io docker-compose
-
-# 2. Restore configuration
-gpg --decrypt config_backup.tar.gz.gpg | tar -xzf - -C /etc/readur/
-
-# 3. Pull Docker images
-docker-compose pull
-
-# 4. Restore database
-gunzip -c database_backup.sql.gz | \
-  docker-compose exec -T postgres psql -U readur
-
-# 5. Restore documents
-tar -xzf documents_backup.tar.gz -C /data/readur/
-
-# 6. Start services
-docker-compose up -d
-
-# 7. Verify
-curl -f http://localhost:8000/health || exit 1
-
-echo "Recovery completed successfully"
-```
-
-## Backup Verification
-
-### Automated Testing
-
-```bash
-#!/bin/bash
-# verify-backup.sh
-
-# Test database backup
-TEST_DB="readur_test"
-
-# Create test database
-createdb $TEST_DB
-
-# Restore backup to test database
-gunzip -c "$1" | psql $TEST_DB
-
-# Verify data integrity
-RECORD_COUNT=$(psql -t -c "SELECT COUNT(*) FROM documents" $TEST_DB)
-echo "Restored $RECORD_COUNT documents"
-
-# Cleanup
-dropdb $TEST_DB
-```
-
-### Backup Monitoring
-
-```python
-#!/usr/bin/env python3
-# monitor-backups.py
-
-import os
-import time
-from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-
-BACKUP_DIR = "/backup"
-MAX_AGE_HOURS = 25  # Alert if backup older than 25 hours
-
-def check_backup_age(directory):
-    latest_backup = None
-    latest_time = 0
-    
-    for file in os.listdir(directory):
-        if file.endswith('.gz'):
-            file_time = os.path.getmtime(os.path.join(directory, file))
-            if file_time > latest_time:
-                latest_time = file_time
-                latest_backup = file
-    
-    if latest_backup:
-        age = time.time() - latest_time
-        return latest_backup, age / 3600  # Age in hours
-    return None, float('inf')
-
-def send_alert(message):
-    msg = MIMEText(message)
-    msg['Subject'] = 'Readur Backup Alert'
-    msg['From'] = 'monitor@company.com'
-    msg['To'] = 'admin@company.com'
-    
-    s = smtplib.SMTP('localhost')
-    s.send_message(msg)
-    s.quit()
-
-# Check each backup type
-for backup_type in ['database', 'documents', 'config']:
-    dir_path = os.path.join(BACKUP_DIR, backup_type)
-    filename, age_hours = check_backup_age(dir_path)
-    
-    if age_hours > MAX_AGE_HOURS:
-        send_alert(f"WARNING: {backup_type} backup is {age_hours:.1f} hours old")
-    else:
-        print(f"OK: {backup_type} backup is {age_hours:.1f} hours old")
-```
-
-## Cloud Backup Solutions
-
-### AWS Backup Integration
-
-```yaml
-# CloudFormation template
-Resources:
-  BackupPlan:
-    Type: AWS::Backup::BackupPlan
-    Properties:
-      BackupPlan:
-        BackupPlanName: ReadurBackupPlan
-        BackupPlanRule:
-          - RuleName: DailyBackups
-            TargetBackupVault: Default
-            ScheduleExpression: "cron(0 5 ? * * *)"
-            StartWindowMinutes: 60
-            CompletionWindowMinutes: 120
-            Lifecycle:
-              DeleteAfterDays: 30
-              MoveToColdStorageAfterDays: 7
-```
-
-### Backup to Multiple Destinations
-
-```bash
-#!/bin/bash
-# multi-destination-backup.sh
-
-BACKUP_FILE="readur_$(date +%Y%m%d).tar.gz"
-
-# Local backup
-cp "$BACKUP_FILE" /mnt/nas/backups/
-
-# AWS S3
-aws s3 cp "$BACKUP_FILE" s3://backup-bucket/
-
-# Google Cloud Storage
-gsutil cp "$BACKUP_FILE" gs://backup-bucket/
-
-# Azure Blob Storage
-az storage blob upload \
-  --container-name backups \
-  --name "$BACKUP_FILE" \
-  --file "$BACKUP_FILE"
-```
-
-## Best Practices
-
-### Security
-
-1. **Encrypt backups** at rest and in transit
-2. **Test recovery** procedures regularly
-3. **Store backups** in multiple locations
-4. **Rotate credentials** used for backup access
-5. **Monitor backup** success and failures
-
-### Testing
-
-1. **Monthly recovery drills** to test procedures
-2. **Quarterly full recovery** to separate environment
-3. **Annual disaster recovery** exercise
-4. **Document lessons learned** and update procedures
-
-### Documentation
-
-Maintain documentation for:
-- Backup schedules and retention policies
-- Recovery procedures and contact information
-- RTO/RPO requirements
-- Backup verification procedures
-- Encryption keys and access credentials
+The Helm chart does not include a database; back up the PostgreSQL server you point it at with `pg_dump` or your operator's backup feature. Documents live on the `uploads` PersistentVolumeClaim (mounted at `/app/uploads`) unless S3 is enabled; back it up with volume snapshots or a tool such as Velero.
 
 ## Related Documentation
 
+- [Backup and Recovery](../backup-recovery.md)
 - [Storage Configuration](./storage.md)
 - [Migration Guide](../migration-guide.md)
+- [Upgrading PostgreSQL](../postgres-upgrade.md)
 - [Security Best Practices](../security-guide.md)
-- [Monitoring Setup](./monitoring.md)

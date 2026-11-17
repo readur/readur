@@ -80,10 +80,10 @@ sqlx migrate run
 **Start the backend:** Launch the Rust backend server in development mode.
 ```bash
 # Development mode with auto-reload
-cargo watch -x run
+cargo watch -x 'run --bin readur'
 
 # Or without auto-reload
-cargo run
+cargo run --bin readur
 ```
 
 **Start the frontend:** Launch the React frontend development server.
@@ -181,13 +181,13 @@ mod tests {
 cd frontend
 
 # Run unit tests
-npm test
+npm run test:unit
 
 # Run with coverage
-npm run test:coverage
+npm run test:unit:coverage
 
 # Run in watch mode
-npm run test:watch
+npm run test:unit:watch
 ```
 
 Example test:
@@ -218,14 +218,14 @@ Using Playwright for end-to-end testing:
 ```bash
 cd frontend
 
-# Install Playwright
-npm run e2e:install
+# Install the Playwright browsers
+npx playwright install
 
 # Run E2E tests
-npm run e2e
+npm run test:e2e
 
 # Run in UI mode
-npm run e2e:ui
+npm run test:e2e:ui
 ```
 
 ## Code Style
@@ -255,15 +255,14 @@ Style preferences:
 ### Frontend Guidelines
 
 ```bash
-# Format code
-npm run format
-
-# Lint check
-npm run lint
+# Format code (oxfmt, installed by mise; the pre-commit hook formats staged files)
+oxfmt src
 
 # Type check
 npm run type-check
 ```
+
+There is no lint script; the TypeScript compiler is the check.
 
 Style preferences:
 - Use functional components with hooks
@@ -348,12 +347,13 @@ Types:
 
 1. **Enable debug logging**:
 ```bash
-RUST_LOG=debug cargo run
+RUST_LOG=debug cargo run --bin readur
 ```
 
 2. **Use VS Code debugger**:
+`.vscode/launch.json`:
+
 ```json
-// .vscode/launch.json
 {
   "version": "0.2.0",
   "configurations": [
@@ -377,7 +377,7 @@ RUST_LOG=debug cargo run
 
 **Database query logging:** Enable detailed SQL query logging for debugging database interactions.
 ```bash
-RUST_LOG=sqlx=debug cargo run
+RUST_LOG=sqlx=debug cargo run --bin readur
 ```
 
 ### Frontend Debugging

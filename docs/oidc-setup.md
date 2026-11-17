@@ -55,11 +55,11 @@ Configure OIDC by setting these environment variables:
 | `OIDC_CLIENT_ID` | Yes | OAuth2 client ID from your provider | `readur-app-client-id` |
 | `OIDC_CLIENT_SECRET` | No | OAuth2 client secret from your provider. Leave it unset (or empty) for a public client; see [Public and Confidential Clients](#public-and-confidential-clients) | `very-secret-key` |
 | `OIDC_ISSUER_URL` | Yes | The provider's issuer URL, exactly as its discovery document publishes it (a trailing `/` is ignored) | `https://accounts.google.com` |
-| `OIDC_REDIRECT_URI` | Yes | Absolute callback URL of your Readur instance, ending in `/api/auth/oidc/callback`; register exactly this URL with the provider | `https://readur.company.com/api/auth/oidc/callback` |
+| `OIDC_REDIRECT_URI` | Yes | Absolute callback URL of your Readur instance, ending in `/api/auth/oidc/callback`; register exactly this URL with the provider | `https://readur.example.com/api/auth/oidc/callback` |
 | `OIDC_AUTO_REGISTER` | No | Create an account for an identity Readur does not know yet (default: `false`) | `true` or `false` |
 | `OIDC_LINK_EXISTING_BY_EMAIL` | No | Link an OIDC login to an existing account with the same email (default: `false`). Only applies when the provider reports `email_verified: true` and the account is not linked to another identity | `true` or `false` |
 | `ALLOW_LOCAL_AUTH` | No | Allow username/password authentication (default: `true`) | `true` or `false` |
-| `PUBLIC_URL` | No | Public base URL of Readur, used for the post-login redirect back to the web UI. Defaults to the origin of `OIDC_REDIRECT_URI`. Request headers are not used to derive it | `https://readur.company.com` |
+| `PUBLIC_URL` | No | Public base URL of Readur, used for the post-login redirect back to the web UI. Defaults to the origin of `OIDC_REDIRECT_URI`. Request headers are not used to derive it | `https://readur.example.com` |
 
 OIDC sign-in is available only when every required variable is set and Readur can fetch the provider's discovery document (`<OIDC_ISSUER_URL>/.well-known/openid-configuration`) at startup, and the issuer it publishes matches `OIDC_ISSUER_URL`. Otherwise the server still starts, logs `❌ Failed to initialize OIDC client: <reason>` followed by `❌ OIDC authentication will be disabled`, and offers local login only. The one combination that stops the server is OIDC disabled together with `ALLOW_LOCAL_AUTH=false`, since nobody could sign in.
 
@@ -90,7 +90,7 @@ OIDC_ENABLED=true
 OIDC_CLIENT_ID=123456789-abcdefgh.apps.googleusercontent.com
 OIDC_CLIENT_SECRET=GOCSPX-your-secret-key
 OIDC_ISSUER_URL=https://accounts.google.com
-OIDC_REDIRECT_URI=https://readur.company.com/api/auth/oidc/callback
+OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
 OIDC_AUTO_REGISTER=true  # Allow new users to register via OIDC
 ALLOW_LOCAL_AUTH=true  # Set to false to disable username/password login
 ```
@@ -104,7 +104,7 @@ OIDC_ENABLED=true
 # Local development settings
 OIDC_CLIENT_ID=dev-client-id
 OIDC_CLIENT_SECRET=dev-client-secret
-OIDC_ISSUER_URL=https://your-keycloak.company.com/auth/realms/readur
+OIDC_ISSUER_URL=https://keycloak.example.com/auth/realms/readur
 OIDC_REDIRECT_URI=http://localhost:8000/api/auth/oidc/callback
 OIDC_AUTO_REGISTER=false  # Only allow existing users to login
 ALLOW_LOCAL_AUTH=true  # Keep local auth for development
@@ -127,9 +127,9 @@ services:
       OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
       OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
       OIDC_ISSUER_URL: "${OIDC_ISSUER_URL}"
-      OIDC_REDIRECT_URI: "https://readur.company.com/api/auth/oidc/callback"
+      OIDC_REDIRECT_URI: "https://readur.example.com/api/auth/oidc/callback"
       OIDC_AUTO_REGISTER: "true"
-      PUBLIC_URL: "https://readur.company.com"
+      PUBLIC_URL: "https://readur.example.com"
     ports:
       - "8000:8000"
 ```
@@ -151,7 +151,7 @@ services:
 4. **Configure Redirect URIs**:
    ```
    Authorized redirect URIs:
-   https://your-readur-domain.com/api/auth/oidc/callback
+   https://readur.example.com/api/auth/oidc/callback
    http://localhost:8000/api/auth/oidc/callback  (for development)
    ```
 
@@ -161,7 +161,7 @@ services:
    OIDC_CLIENT_ID=123456789-abcdefgh.apps.googleusercontent.com
    OIDC_CLIENT_SECRET=GOCSPX-your-secret-key
    OIDC_ISSUER_URL=https://accounts.google.com
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -172,7 +172,7 @@ services:
    - Click "New registration"
    - Name: "Readur Document Management"
    - Supported account types: Choose based on your needs
-   - Redirect URI: `https://your-readur-domain.com/api/auth/oidc/callback`
+   - Redirect URI: `https://readur.example.com/api/auth/oidc/callback`
 
 2. **Configure Authentication**:
    - In your app registration, go to "Authentication"
@@ -196,7 +196,7 @@ services:
    OIDC_CLIENT_ID=12345678-1234-1234-1234-123456789012
    OIDC_CLIENT_SECRET=your-client-secret
    OIDC_ISSUER_URL=https://login.microsoftonline.com/your-tenant-id/v2.0
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -210,13 +210,13 @@ services:
    - Go to "Clients" → "Create"
    - Client ID: `readur`
    - Client Protocol: `openid-connect`
-   - Root URL: `https://your-readur-domain.com`
+   - Root URL: `https://readur.example.com`
 
 3. **Configure Client Settings**:
    - Access Type (Client authentication): `confidential` (on) to use a client secret, or `public` (off) for a public client without `OIDC_CLIENT_SECRET`
    - Standard Flow Enabled: `ON`
-   - Valid Redirect URIs: `https://your-readur-domain.com/api/auth/oidc/callback*`
-   - Web Origins: `https://your-readur-domain.com`
+   - Valid Redirect URIs: `https://readur.example.com/api/auth/oidc/callback*`
+   - Web Origins: `https://readur.example.com`
 
 4. **Get Client Secret**:
    - Go to "Credentials" tab
@@ -227,8 +227,8 @@ services:
    OIDC_ENABLED=true
    OIDC_CLIENT_ID=readur
    OIDC_CLIENT_SECRET=your-keycloak-client-secret
-   OIDC_ISSUER_URL=https://keycloak.company.com/auth/realms/your-realm
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_ISSUER_URL=https://keycloak.example.com/auth/realms/your-realm
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -240,9 +240,9 @@ services:
    - Application Type: "Regular Web Applications"
 
 2. **Configure Settings**:
-   - Allowed Callback URLs: `https://your-readur-domain.com/api/auth/oidc/callback`
-   - Allowed Web Origins: `https://your-readur-domain.com`
-   - Allowed Logout URLs: `https://your-readur-domain.com/login`
+   - Allowed Callback URLs: `https://readur.example.com/api/auth/oidc/callback`
+   - Allowed Web Origins: `https://readur.example.com`
+   - Allowed Logout URLs: `https://readur.example.com/login`
 
 3. **Get Credentials**:
    - Note the Client ID and Client Secret from the "Settings" tab
@@ -254,7 +254,7 @@ services:
    OIDC_CLIENT_ID=your-auth0-client-id
    OIDC_CLIENT_SECRET=your-auth0-client-secret
    OIDC_ISSUER_URL=https://your-app.auth0.com
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -272,7 +272,7 @@ services:
    - Provider type: Choose "OAuth2/OpenID Provider"
    - Authorization flow: "default-provider-authorization-implicit-consent"
    - Client type: "Confidential" (with `OIDC_CLIENT_SECRET`) or "Public" (without)
-   - Redirect URIs: Add `https://your-readur-domain.com/api/auth/oidc/callback`
+   - Redirect URIs: Add `https://readur.example.com/api/auth/oidc/callback`
    - Scopes: Ensure `openid`, `email`, and `profile` are included
 
 3. **Get Application Credentials**:
@@ -288,17 +288,17 @@ services:
      - `profile` → `preferred_username` and `name` claims
 
 5. **Get Issuer URL**:
-   - The issuer URL format is: `https://your-authentik-domain.com/application/o/readur/`
+   - The issuer URL format is: `https://authentik.example.com/application/o/readur/`
    - Replace `readur` with your application's slug
-   - Alternatively, use: `https://your-authentik-domain.com/application/o/<application-slug>/`
+   - Alternatively, use: `https://authentik.example.com/application/o/<application-slug>/`
 
 6. **Environment Variables**:
    ```env
    OIDC_ENABLED=true
    OIDC_CLIENT_ID=<your-authentik-client-id>
    OIDC_CLIENT_SECRET=<your-authentik-client-secret>
-   OIDC_ISSUER_URL=https://your-authentik-domain.com/application/o/readur/
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_ISSUER_URL=https://authentik.example.com/application/o/readur/
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -312,7 +312,7 @@ services:
 
 - **User Attributes**: Authentik automatically provides `email`, `preferred_username`, and `name` in the OIDC claims
 - **Roles**: Readur does not read group or role claims; every OIDC-created account gets the `user` role, and an administrator promotes accounts in Readur
-- **Self-Service Portal**: Users can manage their Authentik profile at `https://your-authentik-domain.com/if/user/`
+- **Self-Service Portal**: Users can manage their Authentik profile at `https://authentik.example.com/if/user/`
 - **Email Verification**: If email verification is required in Authentik, ensure users verify their email before using Readur
 - **Custom Branding**: Authentik allows you to customize the login page to match your organization's branding
 
@@ -332,10 +332,10 @@ services:
       OIDC_ENABLED: "true"
       OIDC_CLIENT_ID: "<from-authentik-application>"
       OIDC_CLIENT_SECRET: "<from-authentik-application>"
-      OIDC_ISSUER_URL: "https://authentik.company.com/application/o/readur/"
-      OIDC_REDIRECT_URI: "https://readur.company.com/api/auth/oidc/callback"
+      OIDC_ISSUER_URL: "https://authentik.example.com/application/o/readur/"
+      OIDC_REDIRECT_URI: "https://readur.example.com/api/auth/oidc/callback"
       OIDC_AUTO_REGISTER: "true"
-      PUBLIC_URL: "https://readur.company.com"
+      PUBLIC_URL: "https://readur.example.com"
     ports:
       - "8000:8000"
 ```
@@ -353,15 +353,15 @@ services:
 For any OIDC-compliant provider:
 
 1. **Register Your Application** with the provider
-2. **Configure Redirect URI**: `https://your-readur-domain.com/api/auth/oidc/callback`
+2. **Configure Redirect URI**: `https://readur.example.com/api/auth/oidc/callback`
 3. **Get Credentials**: Client ID, Issuer URL and, for a confidential client, the Client Secret
 4. **Set Environment Variables**:
    ```env
    OIDC_ENABLED=true
    OIDC_CLIENT_ID=your-client-id
    OIDC_CLIENT_SECRET=your-client-secret
-   OIDC_ISSUER_URL=https://your-provider.com
-   OIDC_REDIRECT_URI=https://your-readur-domain.com/api/auth/oidc/callback
+   OIDC_ISSUER_URL=https://sso.example.com
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    OIDC_AUTO_REGISTER=true
    ```
 
@@ -376,7 +376,7 @@ When starting Readur, check the logs for OIDC configuration:
 ✅ OIDC_CLIENT_ID: your-client-id (loaded from env)
 ✅ OIDC_CLIENT_SECRET: ***hidden*** (loaded from env, 32 chars)
 ✅ OIDC_ISSUER_URL: https://accounts.google.com (loaded from env)
-✅ OIDC_REDIRECT_URI: https://your-domain.com/api/auth/oidc/callback (loaded from env)
+✅ OIDC_REDIRECT_URI: https://readur.example.com/api/auth/oidc/callback (loaded from env)
 ✅ OIDC client initialized successfully
 ```
 
@@ -449,7 +449,7 @@ Linking an OIDC identity to an existing local account by email is controlled by 
 - The `auth_provider` field is updated to `oidc`
 - Future logins can use OIDC, and the account's password keeps working for local login while `ALLOW_LOCAL_AUTH` is on
 
-**Example**: With linking enabled, if you have a local user `john.doe@company.com` and they log in via OIDC with the same, verified email, their account is upgraded to support OIDC authentication without creating a duplicate account.
+**Example**: With linking enabled, if you have a local user `john.doe@example.com` and they log in via OIDC with the same, verified email, their account is upgraded to support OIDC authentication without creating a duplicate account.
 
 ### Auto-Registration Control
 
@@ -498,8 +498,8 @@ For OIDC-only deployments, you can disable local username/password authenticatio
 OIDC_ENABLED=true
 OIDC_CLIENT_ID=your-client-id
 OIDC_CLIENT_SECRET=your-client-secret
-OIDC_ISSUER_URL=https://your-provider.com
-OIDC_REDIRECT_URI=https://readur.company.com/api/auth/oidc/callback
+OIDC_ISSUER_URL=https://sso.example.com
+OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
 OIDC_AUTO_REGISTER=true
 
 # Disable local authentication
@@ -607,10 +607,10 @@ This will show detailed information about:
 
 ```bash
 # Is OIDC active? ("oidc_enabled": true once the client initialized)
-curl https://your-readur-domain.com/api/auth/config
+curl https://readur.example.com/api/auth/config
 
 # Does the login start? Expect 302 with a Location header pointing at your provider
-curl -i https://your-readur-domain.com/api/auth/oidc/login
+curl -i https://readur.example.com/api/auth/oidc/login
 ```
 
 ## Security Considerations
@@ -619,7 +619,7 @@ curl -i https://your-readur-domain.com/api/auth/oidc/login
 
 1. **Use HTTPS**: Always use HTTPS in production
    ```env
-   OIDC_REDIRECT_URI=https://readur.company.com/api/auth/oidc/callback
+   OIDC_REDIRECT_URI=https://readur.example.com/api/auth/oidc/callback
    ```
 
 2. **Secure Client Secret**: Store client secrets securely
