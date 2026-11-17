@@ -69,9 +69,10 @@ pub async fn run_basic_search(
 
 /// Longest accepted query, in bytes.
 const MAX_QUERY_LEN: usize = 1000;
-/// Largest page and snippet window a search may ask for.
+/// Largest page a search may ask for.
 const MAX_LIMIT: i64 = 1000;
-const MAX_SNIPPET_LENGTH: i32 = 2000;
+/// Largest snippet window a search may ask for, through REST or MCP.
+pub const MAX_SNIPPET_LENGTH: i32 = 2000;
 
 /// Request checks shared by basic and enhanced search, so neither can send
 /// an unbounded query, page or snippet window to the database. An empty

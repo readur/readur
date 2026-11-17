@@ -2,7 +2,10 @@
 //! That Postgres accepts every rendering is pinned by the fuzz test in
 //! tests/integration_boolean_search_tests.rs.
 
-use super::{BooleanQuery, Node, MAX_GROUP_DEPTH};
+use super::{
+    document_match, single_field_match, BooleanQuery, Node, SqlPart, MAX_GROUP_DEPTH,
+    PHRASETO_TSQUERY, PLAINTO_TSQUERY, TO_TSQUERY,
+};
 
 fn ts(query: &str) -> String {
     BooleanQuery::parse(query).to_tsquery()
@@ -363,4 +366,200 @@ fn positive_terms_skip_negated_terms_and_operators() {
     assert!(positive("").is_empty());
     assert!(positive("NOT draft").is_empty());
     assert!(positive("& | ! ( )").is_empty());
+}
+
+// ------------------------------------------------------------------- SQL
+
+/// The SQL of `parts` with each bound value shown as `$<value>`, and the
+/// bound values in order.
+fn sql_shape(parts: &[SqlPart]) -> (String, Vec<String>) {
+    let mut sql = String::new();
+    let mut binds = Vec::new();
+    for part in parts {
+        match part {
+            SqlPart::Sql(text) => sql.push_str(text),
+            SqlPart::Bind(value) => {
+                sql.push_str("$<");
+                sql.push_str(value);
+                sql.push('>');
+                binds.push(value.clone());
+            }
+        }
+    }
+    (sql, binds)
+}
+
+/// `query` as SQL, with lexeme counts from `lexemes` (one per leaf).
+fn sql(query: &str, lexemes: &[i32]) -> Option<String> {
+    let parsed = BooleanQuery::parse(query);
+    assert_eq!(parsed.leaves().len(), lexemes.len(), "leaves of {query:?}");
+    parsed.to_sql(lexemes).map(|parts| sql_shape(&parts).0)
+}
+
+const DOC: &str = "to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''))";
+const CONTENT: &str = "to_tsvector('english', COALESCE(content, ''))";
+const OCR: &str = "to_tsvector('english', COALESCE(ocr_text, ''))";
+
+fn doc_match(tsquery: &str) -> String {
+    format!("({DOC} @@ to_tsquery('english', $<{tsquery}>))")
+}
+
+fn field_match(tsquery: &str, prefilter: Option<&str>) -> String {
+    let fields = format!(
+        "(({CONTENT} @@ to_tsquery('english', $<{tsquery}>)) OR \
+         ({OCR} @@ to_tsquery('english', $<{tsquery}>)))"
+    );
+    match prefilter {
+        Some(words) => format!("({} AND {fields})", doc_match(words)),
+        None => format!("({fields})"),
+    }
+}
+
+#[test]
+fn leaves_are_words_phrases_and_followed_by_chains() {
+    let parsed = BooleanQuery::parse("(a | \"b c\") -d e <-> f inv*");
+    assert_eq!(
+        parsed.leaves(),
+        ["'a'", "('b' <-> 'c')", "'d'", "('e' <-> 'f')", "'inv':*"]
+    );
+    assert!(BooleanQuery::parse("").leaves().is_empty());
+    assert!(BooleanQuery::parse("!! ()").leaves().is_empty());
+}
+
+#[test]
+fn words_match_the_whole_document() {
+    assert_eq!(sql("invoice", &[1]).unwrap(), doc_match("'invoice'"));
+    assert_eq!(sql("inv*", &[1]).unwrap(), doc_match("'inv':*"));
+    assert_eq!(
+        sql("invoice -draft", &[1, 1]).unwrap(),
+        format!(
+            "({} AND (NOT {}))",
+            doc_match("'invoice'"),
+            doc_match("'draft'")
+        )
+    );
+    assert_eq!(
+        sql("(a | b) c", &[1, 1, 1]).unwrap(),
+        format!(
+            "(({} OR {}) AND {})",
+            doc_match("'a'"),
+            doc_match("'b'"),
+            doc_match("'c'")
+        )
+    );
+}
+
+#[test]
+fn phrases_and_followed_by_match_within_one_field() {
+    // Prefiltered on the whole document by the same words, unordered.
+    assert_eq!(
+        sql("\"total due\"", &[3]).unwrap(),
+        field_match("('total' <-> 'due')", Some("('total' & 'due')"))
+    );
+    assert_eq!(
+        sql("total <2> due", &[3]).unwrap(),
+        field_match("('total' <2> 'due')", Some("('total' & 'due')"))
+    );
+    assert_eq!(
+        sql("(a | b) <-> c", &[5]).unwrap(),
+        field_match("(('a' | 'b') <-> 'c')", Some("(('a' | 'b') & 'c')"))
+    );
+    // A word Postgres splits into several lexemes is matched like a phrase.
+    assert_eq!(
+        sql("e-mail", &[5]).unwrap(),
+        field_match("'e-mail'", Some("'e-mail'"))
+    );
+    // A negation inside a chain implies no words, so no prefilter.
+    assert_eq!(
+        sql("!draft <-> copy", &[4]).unwrap(),
+        field_match("(!'draft' <-> 'copy')", None)
+    );
+    // Mixed: the phrase per field, the negated word document-wide.
+    assert_eq!(
+        sql("\"total due\" -draft", &[3, 1]).unwrap(),
+        format!(
+            "({} AND (NOT {}))",
+            field_match("('total' <-> 'due')", Some("('total' & 'due')")),
+            doc_match("'draft'")
+        )
+    );
+}
+
+#[test]
+fn a_phrase_reduced_to_one_lexeme_matches_the_whole_document() {
+    assert_eq!(
+        sql("\"the invoice\"", &[1]).unwrap(),
+        doc_match("('the' <-> 'invoice')")
+    );
+}
+
+#[test]
+fn stop_word_leaves_are_dropped_like_to_tsquery_drops_them() {
+    assert_eq!(
+        sql("report of sales", &[1, 0, 1]).unwrap(),
+        format!("({} AND {})", doc_match("'report'"), doc_match("'sales'"))
+    );
+    assert_eq!(
+        sql("invoice | the", &[1, 0]).unwrap(),
+        doc_match("'invoice'")
+    );
+    assert_eq!(
+        sql("invoice -the", &[1, 0]).unwrap(),
+        doc_match("'invoice'")
+    );
+    // Nothing left: the query matches nothing (not, as `NOT` of nothing
+    // might suggest, everything).
+    assert_eq!(sql("the", &[0]), None);
+    assert_eq!(sql("-the", &[0]), None);
+    assert_eq!(sql("!(the | a)", &[0, 0]), None);
+    assert_eq!(sql("", &[]), None);
+    // A missing count counts as no lexeme rather than panicking.
+    let short = BooleanQuery::parse("a b").to_sql(&[1]).unwrap();
+    assert_eq!(sql_shape(&short).0, doc_match("'a'"));
+}
+
+#[test]
+fn user_text_is_only_ever_bound() {
+    let hostile = "x'); DROP TABLE documents; -- \\ ' \" <-> $1 ?";
+    for input in [hostile.to_string(), format!("\"{hostile}\" -{hostile}")] {
+        let parsed = BooleanQuery::parse(&input);
+        let lexemes = vec![3; parsed.leaves().len()];
+        let parts = parsed.to_sql(&lexemes).unwrap();
+        let (_, binds) = sql_shape(&parts);
+        assert!(!binds.is_empty());
+        for part in &parts {
+            if let SqlPart::Sql(text) = part {
+                assert!(!text.contains("DROP"), "{text:?} in {input:?}");
+                assert!(!text.contains('$'), "{text:?} in {input:?}");
+            }
+        }
+        // The words travel as rendered tsquery text, quotes escaped.
+        assert!(binds.iter().any(|b| b.contains("x''")), "{binds:?}");
+        assert!(binds.iter().any(|b| b.contains("'DROP'")), "{binds:?}");
+    }
+}
+
+#[test]
+fn phrase_and_simple_mode_conditions() {
+    let (simple, binds) = sql_shape(&document_match(PLAINTO_TSQUERY, "total due"));
+    assert_eq!(
+        simple,
+        format!("({DOC} @@ plainto_tsquery('english', $<total due>))")
+    );
+    assert_eq!(binds, ["total due"]);
+    let (phrase, binds) = sql_shape(&single_field_match(
+        PHRASETO_TSQUERY,
+        "total due",
+        Some((PLAINTO_TSQUERY, "total due")),
+    ));
+    assert_eq!(
+        phrase,
+        format!(
+            "(({DOC} @@ plainto_tsquery('english', $<total due>)) AND \
+             (({CONTENT} @@ phraseto_tsquery('english', $<total due>)) OR \
+             ({OCR} @@ phraseto_tsquery('english', $<total due>))))"
+        )
+    );
+    assert_eq!(binds.len(), 3);
+    assert_eq!(TO_TSQUERY, "to_tsquery('english', ");
 }

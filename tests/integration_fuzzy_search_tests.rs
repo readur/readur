@@ -331,6 +331,34 @@ async fn threshold_does_not_leak_into_other_modes_or_users() {
     assert_eq!(result["structuredContent"]["total"], json!(1), "{result}");
 }
 
+#[tokio::test]
+async fn threshold_is_not_visible_on_pooled_connections_after_a_search() {
+    let lib = invoice_library().await;
+    lib.set_threshold(0.9).await;
+    for uri in [
+        "/api/search/enhanced?query=invoce&search_mode=fuzzy",
+        "/api/search/timeline?query=invoce&search_mode=fuzzy",
+    ] {
+        let (status, body) = lib.request("GET", uri, None).await;
+        assert_eq!(status, StatusCode::OK, "{uri}: {body}");
+    }
+    // Hold every open connection at once, so each is checked, not just
+    // whichever the pool hands out first.
+    let pool = &lib.ctx.state().db.pool;
+    let mut connections = Vec::new();
+    for _ in 0..pool.size().max(1) {
+        connections.push(pool.acquire().await.unwrap());
+    }
+    for conn in &mut connections {
+        let setting: Option<String> =
+            sqlx::query_scalar("SELECT current_setting('pg_trgm.word_similarity_threshold', true)")
+                .fetch_one(&mut **conn)
+                .await
+                .unwrap();
+        assert_ne!(setting.as_deref(), Some("0.9"), "the cutoff leaked");
+    }
+}
+
 /// The highlighted words of each found document, by key: every highlight range of every snippet,
 /// as text. Ranges are byte offsets into the snippet text.
 fn highlights(lib: &Library, documents: &Value) -> HashMap<&'static str, Vec<String>> {

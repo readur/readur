@@ -23,7 +23,6 @@ use crate::{
 const DEFAULT_LIMIT: u32 = 25;
 const MAX_LIMIT: u32 = 100;
 const DEFAULT_SNIPPET_LENGTH: u32 = 200;
-const MAX_SNIPPET_LENGTH: u32 = 1000;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SearchDocumentsParams {
@@ -81,7 +80,7 @@ pub struct EnhancedSearchParams {
     pub search_mode: Option<McpSearchMode>,
     /// Include text snippets around each match (default true).
     pub include_snippets: Option<bool>,
-    /// Snippet length in characters (default 200, max 1000).
+    /// Approximate snippet size in bytes (default 200, 1 to 2000).
     pub snippet_length: Option<u32>,
     /// Maximum number of results (default 25, max 100).
     pub limit: Option<u32>,
@@ -126,17 +125,16 @@ impl From<SearchDocumentsParams> for SearchRequest {
 impl From<EnhancedSearchParams> for SearchRequest {
     fn from(p: EnhancedSearchParams) -> Self {
         let (limit, offset) = page(p.limit, p.offset);
-        let snippet_length = p
-            .snippet_length
-            .unwrap_or(DEFAULT_SNIPPET_LENGTH)
-            .clamp(1, MAX_SNIPPET_LENGTH);
+        // Passed through unclamped: `validate_search_request` rejects a
+        // length outside 1..=`services::search::MAX_SNIPPET_LENGTH`, as it does for REST.
+        let snippet_length = p.snippet_length.unwrap_or(DEFAULT_SNIPPET_LENGTH);
         SearchRequest {
             query: p.query,
             limit: Some(limit),
             offset: Some(offset),
             search_mode: p.search_mode.map(Into::into),
             include_snippets: p.include_snippets,
-            snippet_length: Some(snippet_length as i32),
+            snippet_length: Some(i32::try_from(snippet_length).unwrap_or(i32::MAX)),
             mime_types: non_empty(p.mime_types),
             tags: non_empty(p.tags),
             label_ids: non_empty(p.label_ids),
@@ -329,12 +327,53 @@ fn facets_text(facets: &SearchFacetsResponse, is_admin: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::search::MAX_SNIPPET_LENGTH;
 
     fn item(value: &str, count: i64) -> FacetItem {
         FacetItem {
             value: value.to_string(),
             count,
         }
+    }
+
+    fn enhanced(snippet_length: Option<u32>) -> EnhancedSearchParams {
+        serde_json::from_value(serde_json::json!({
+            "query": "invoice",
+            "snippet_length": snippet_length,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn snippet_length_is_validated_by_the_service_not_clamped() {
+        use crate::services::search::validate_search_request;
+        let accepted = |length: Option<u32>| {
+            validate_search_request(&SearchRequest::from(enhanced(length))).is_ok()
+        };
+        let max = MAX_SNIPPET_LENGTH as u32;
+        assert_eq!(
+            SearchRequest::from(enhanced(Some(max))).snippet_length,
+            Some(MAX_SNIPPET_LENGTH)
+        );
+        assert_eq!(
+            SearchRequest::from(enhanced(None)).snippet_length,
+            Some(DEFAULT_SNIPPET_LENGTH as i32)
+        );
+        assert!(accepted(None));
+        assert!(accepted(Some(1)));
+        assert!(accepted(Some(max)));
+        assert!(!accepted(Some(0)));
+        assert!(!accepted(Some(max + 1)));
+        assert!(!accepted(Some(u32::MAX)));
+    }
+
+    #[test]
+    fn snippet_length_schema_states_the_service_limit() {
+        let schema = serde_json::to_string(&schemars::schema_for!(EnhancedSearchParams)).unwrap();
+        assert!(
+            schema.contains(&format!("1 to {MAX_SNIPPET_LENGTH}")),
+            "{schema}"
+        );
     }
 
     #[test]
