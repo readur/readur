@@ -63,10 +63,7 @@ $$ LANGUAGE plpgsql;
 
 -- Documents the 20261117120000 function stranded: their only job failed, yet
 -- they are still 'processing', with nothing left to finish them.
--- (A DO block: this repairs a handful of rows the old function left behind; it
--- is not the documents -> failed_documents backfill that
--- tests/pr_migration_validation_tests.rs checks, and is tested in
--- tests/new_migration_data_tests.rs instead.)
+-- (Tested in tests/new_migration_data_tests.rs.)
 DO $repair$
 BEGIN
     WITH stranded AS (

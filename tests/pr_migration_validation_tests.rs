@@ -40,10 +40,6 @@ mod pr_migration_validation_tests {
         verify_migrations_with_data(pool, &test_data).await;
 
         // Step 3: Test specific migration scenarios if they involve data transformation
-        if migrations_backfill_failed_documents(&new_migrations) {
-            test_data_transformation_integrity(pool, &test_data).await;
-        }
-
         // Step 4: Verify no data loss occurred
         verify_no_data_loss(pool, &test_data).await;
 
@@ -498,80 +494,6 @@ mod pr_migration_validation_tests {
         }
     }
 
-    async fn test_data_transformation_integrity(pool: &PgPool, test_data: &ComprehensiveTestData) {
-        // Test that data transformations maintain integrity
-        println!("🔄 Testing data transformation integrity...");
-
-        // Check if failed_documents table exists (indicating migration ran)
-        let failed_docs_exists = sqlx::query(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'failed_documents')"
-        )
-        .fetch_one(pool)
-        .await
-        .unwrap()
-        .get::<bool, _>(0);
-
-        if failed_docs_exists {
-            // Verify all failed documents were migrated correctly
-            let migrated_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM failed_documents WHERE failure_stage = 'ocr'",
-            )
-            .fetch_one(pool)
-            .await
-            .unwrap();
-
-            let expected_failed = test_data
-                .documents
-                .iter()
-                .filter(|d| d.ocr_status == "failed")
-                .count();
-
-            assert!(
-                migrated_count >= expected_failed as i64,
-                "Not all failed documents were migrated: expected at least {}, got {}",
-                expected_failed,
-                migrated_count
-            );
-
-            // Verify data integrity for specific test cases
-            for doc in test_data
-                .documents
-                .iter()
-                .filter(|d| d.ocr_status == "failed")
-            {
-                let migrated = sqlx::query("SELECT * FROM failed_documents WHERE filename = $1")
-                    .bind(&doc.filename)
-                    .fetch_optional(pool)
-                    .await
-                    .unwrap();
-
-                assert!(
-                    migrated.is_some(),
-                    "Failed document '{}' was not migrated",
-                    doc.filename
-                );
-
-                if let Some(row) = migrated {
-                    let failure_reason: String = row.get("failure_reason");
-
-                    // Verify reason mapping
-                    match doc.failure_reason.as_deref() {
-                        Some("timeout") => assert_eq!(failure_reason, "ocr_timeout"),
-                        Some("memory_limit") => assert_eq!(failure_reason, "ocr_memory_limit"),
-                        Some("file_corrupted") => assert_eq!(failure_reason, "file_corrupted"),
-                        Some("low_ocr_confidence") => {
-                            assert_eq!(failure_reason, "low_ocr_confidence")
-                        }
-                        Some("unknown_error") | None => assert_eq!(failure_reason, "other"),
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        println!("✅ Data transformation integrity verified");
-    }
-
     async fn verify_no_data_loss(pool: &PgPool, test_data: &ComprehensiveTestData) {
         println!("🔍 Verifying no data loss occurred...");
 
@@ -879,111 +801,6 @@ mod pr_migration_validation_tests {
                     Vec::new()
                 }
             }
-        }
-    }
-
-    /// Whether a migration copies rows into failed_documents when it runs, as the original
-    /// backfill did. Only statement-level inserts count: a function body (between dollar
-    /// quotes) that inserts later, at runtime, does not move existing documents, and its
-    /// behaviour is tested in tests/new_migration_data_tests.rs. A DO block is skipped the
-    /// same way; a migration that repairs a few rows in one is tested there too.
-    fn migrations_backfill_failed_documents(migrations: &[String]) -> bool {
-        migrations.iter().any(|migration_file| {
-            std::fs::read_to_string(migration_file)
-                .map(|content| backfills_failed_documents(&content))
-                .unwrap_or(false)
-        })
-    }
-
-    fn backfills_failed_documents(sql: &str) -> bool {
-        let insert = regex::Regex::new(
-            r#"(?i)\binsert\s+into\s+(?:"?public"?\s*\.\s*)?"?failed_documents"?(?:\W|$)"#,
-        )
-        .unwrap();
-        insert.is_match(&statement_level_sql(sql))
-    }
-
-    /// `sql` without comments, string literals and dollar-quoted bodies
-    /// (function bodies, DO blocks), each replaced by a space.
-    fn statement_level_sql(sql: &str) -> String {
-        let mut out = String::with_capacity(sql.len());
-        let mut rest = sql;
-        while let Some(c) = rest.chars().next() {
-            let skipped = if rest.starts_with("--") {
-                rest.find('\n').unwrap_or(rest.len())
-            } else if rest.starts_with("/*") {
-                rest[2..].find("*/").map_or(rest.len(), |end| end + 4)
-            } else if c == '\'' {
-                rest[1..].find('\'').map_or(rest.len(), |end| end + 2)
-            } else if let Some(tag) = dollar_quote_tag(rest) {
-                rest[tag.len()..]
-                    .find(tag)
-                    .map_or(rest.len(), |end| end + 2 * tag.len())
-            } else {
-                out.push(c);
-                rest = &rest[c.len_utf8()..];
-                continue;
-            };
-            out.push(' ');
-            rest = &rest[skipped..];
-        }
-        out
-    }
-
-    /// The opening `$tag$` (or `$$`) at the start of `sql`, if there is one.
-    fn dollar_quote_tag(sql: &str) -> Option<&str> {
-        let tag = regex::Regex::new(r"^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$").unwrap();
-        tag.find(sql).map(|m| m.as_str())
-    }
-
-    #[test]
-    fn only_statement_level_inserts_count_as_a_backfill() {
-        let backfill = std::fs::read_to_string(
-            "migrations/20250628000004_migrate_failed_ocr_to_failed_documents.sql",
-        )
-        .unwrap();
-        assert!(backfills_failed_documents(&backfill));
-        let function_only = std::fs::read_to_string(
-            "migrations/20261117130000_reset_stuck_ocr_jobs_fails_exhausted_documents.sql",
-        )
-        .unwrap();
-        assert!(!backfills_failed_documents(&function_only));
-        let repair = std::fs::read_to_string(
-            "migrations/20261117140000_reset_stuck_ocr_jobs_records_every_exhausted_job.sql",
-        )
-        .unwrap();
-        assert!(!backfills_failed_documents(&repair));
-        assert!(!backfills_failed_documents(
-            "CREATE TABLE failed_documents (id uuid);"
-        ));
-        for statement in [
-            "INSERT INTO failed_documents(user_id) SELECT user_id FROM documents;",
-            "insert into public.failed_documents (user_id) select user_id from documents;",
-            "INSERT INTO \"failed_documents\" (user_id) VALUES (NULL);",
-            "INSERT INTO \"public\".\"failed_documents\"(user_id) VALUES (NULL);",
-            "CREATE FUNCTION f() RETURNS void AS $$ SELECT 1 $$ LANGUAGE sql;\n\
-             INSERT INTO failed_documents (user_id) VALUES (NULL);",
-        ] {
-            assert!(backfills_failed_documents(statement), "{statement}");
-        }
-        for not_a_backfill in [
-            "CREATE FUNCTION f() RETURNS void AS $fn1$ \
-             BEGIN INSERT INTO failed_documents (user_id) VALUES (NULL); END \
-             $fn1$ LANGUAGE plpgsql;",
-            // A digit in the tag must not shift what counts as inside a body.
-            "CREATE FUNCTION f() RETURNS void AS $fn1$ SELECT 1 $fn1$ LANGUAGE sql;\n\
-             CREATE FUNCTION g() RETURNS void AS $$ \
-             BEGIN INSERT INTO failed_documents (user_id) VALUES (NULL); END \
-             $$ LANGUAGE plpgsql;",
-            "-- this used to INSERT INTO failed_documents directly\nSELECT 1;",
-            "/* INSERT INTO failed_documents (user_id) */ SELECT 1;",
-            "SELECT 'INSERT INTO failed_documents';",
-            "INSERT INTO failed_documents_archive (user_id) VALUES (NULL);",
-        ] {
-            assert!(
-                !backfills_failed_documents(not_a_backfill),
-                "{not_a_backfill}"
-            );
         }
     }
 }

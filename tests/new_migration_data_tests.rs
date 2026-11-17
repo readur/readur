@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use readur::test_db::TestDatabase;
 
+const FAILED_OCR_TO_FAILED_DOCUMENTS: i64 = 20250628000004;
 const OCR_QUEUE_DUPLICATES_VIA_INDEX: i64 = 20261116000001;
 const FUZZY_THRESHOLD_WORD_SIMILARITY: i64 = 20261116120000;
 const OCR_QUEUE_CLAIM_AND_HEARTBEAT: i64 = 20261117120000;
@@ -278,6 +279,7 @@ fn the_migrations_under_test_exist() {
         .map(|m| m.version)
         .collect();
     for version in [
+        FAILED_OCR_TO_FAILED_DOCUMENTS,
         OCR_QUEUE_DUPLICATES_VIA_INDEX,
         FUZZY_THRESHOLD_WORD_SIMILARITY,
         OCR_QUEUE_CLAIM_AND_HEARTBEAT,
@@ -474,4 +476,85 @@ async fn exhausted_stale_job_of(pool: &PgPool, ocr_status: &str) -> Uuid {
     set_ocr_status(pool, document, ocr_status).await;
     insert_exhausted_stale_job(pool, document).await;
     document
+}
+
+#[tokio::test]
+async fn failed_ocr_documents_move_to_failed_documents() {
+    let (_database, pool) = database_at(version_before(FAILED_OCR_TO_FAILED_DOCUMENTS)).await;
+    let user = insert_user(&pool).await;
+
+    // (stored ocr_failure_reason, expected failure_reason after the move)
+    let cases = [
+        (Some("timeout"), "ocr_timeout"),
+        (Some("memory_limit"), "ocr_memory_limit"),
+        (Some("file_corrupted"), "file_corrupted"),
+        (Some("low_ocr_confidence"), "low_ocr_confidence"),
+        (Some("something_new"), "other"),
+        (None, "other"),
+    ];
+    let mut failed = Vec::new();
+    for (index, (reason, expected)) in cases.into_iter().enumerate() {
+        let document = insert_document(&pool, user).await;
+        let filename = format!("failed_{index}.pdf");
+        sqlx::query(
+            "UPDATE documents SET filename = $2, ocr_status = 'failed', ocr_failure_reason = $3, \
+             ocr_error = 'boom' WHERE id = $1",
+        )
+        .bind(document)
+        .bind(&filename)
+        .bind(reason)
+        .execute(&pool)
+        .await
+        .unwrap();
+        failed.push((filename, expected));
+    }
+    let completed = insert_document(&pool, user).await;
+    sqlx::query("UPDATE documents SET ocr_status = 'completed' WHERE id = $1")
+        .bind(completed)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    sqlx::migrate!("./migrations")
+        .run_to(FAILED_OCR_TO_FAILED_DOCUMENTS, &pool)
+        .await
+        .expect("apply the backfill");
+
+    for (filename, expected) in failed {
+        let (reason, stage, source, error): (String, String, String, Option<String>) =
+            sqlx::query_as(
+                "SELECT failure_reason, failure_stage, ingestion_source, error_message \
+             FROM failed_documents WHERE filename = $1",
+            )
+            .bind(&filename)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("{filename} was not moved: {e}"));
+        assert_eq!(
+            (
+                reason.as_str(),
+                stage.as_str(),
+                source.as_str(),
+                error.as_deref()
+            ),
+            (expected, "ocr", "migration", Some("boom")),
+            "{filename}"
+        );
+    }
+    let left: Vec<String> =
+        sqlx::query_scalar("SELECT ocr_status FROM documents WHERE user_id = $1")
+            .bind(user)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        left,
+        ["completed"],
+        "failed documents leave documents; others stay"
+    );
+    let moved: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM failed_documents")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(moved, 6);
 }
