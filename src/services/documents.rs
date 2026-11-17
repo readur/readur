@@ -20,6 +20,7 @@ use crate::{
         DocumentFilters, DocumentOcrResponse, DocumentResponse, DocumentSortField,
         FileIngestionInfo, SortOrder, User,
     },
+    ocr::queue::EnqueueOutcome,
     routes::documents::{
         DocumentError, DocumentPaginationInfo, DocumentUploadResponse, PaginatedDocumentsResponse,
     },
@@ -215,10 +216,40 @@ pub struct UploadRequest {
 
 /// Validates, stores and ingests an upload, attaches its labels and queues
 /// it for OCR.
+///
+/// A file identical to one the caller already has is rejected with
+/// `DocumentError::Conflict` (409), with no labels applied. This is the REST
+/// contract the web UI relies on: it treats any success as a new document
+/// (marks it new on the Board) and shows the conflict message, which names
+/// the existing document, as the reason the file was not uploaded.
 pub async fn upload_document(
     state: &AppState,
     user: &User,
     request: UploadRequest,
+) -> Result<DocumentUploadResponse, DocumentError> {
+    ingest_upload(state, user, request, DeduplicationPolicy::Skip).await
+}
+
+/// Like [`upload_document`], but a file identical to one the caller already
+/// has returns that document (status `"duplicate"`) with the requested
+/// labels applied to it, instead of an error. For clients that want the
+/// upload to be idempotent, such as the MCP `upload_document` tool.
+pub async fn upload_document_or_existing(
+    state: &AppState,
+    user: &User,
+    request: UploadRequest,
+) -> Result<DocumentUploadResponse, DocumentError> {
+    ingest_upload(state, user, request, DeduplicationPolicy::ReturnExisting).await
+}
+
+/// The shared upload pipeline; `on_duplicate` decides what an upload of
+/// content the caller already has does (`Skip` rejects it, `ReturnExisting`
+/// returns the existing document).
+async fn ingest_upload(
+    state: &AppState,
+    user: &User,
+    request: UploadRequest,
+    on_duplicate: DeduplicationPolicy,
 ) -> Result<DocumentUploadResponse, DocumentError> {
     let UploadRequest {
         filename,
@@ -241,14 +272,7 @@ pub async fn upload_document(
         DocumentIngestionService::new(state.db.clone(), state.file_service.as_ref().clone());
     let ingestion_start = std::time::Instant::now();
     let result = ingestion_service
-        .ingest_from_file_info(
-            &file_info,
-            data,
-            user.id,
-            DeduplicationPolicy::Skip,
-            "web_upload",
-            None,
-        )
+        .ingest_from_file_info(&file_info, data, user.id, on_duplicate, "web_upload", None)
         .await;
 
     match result {
@@ -437,7 +461,9 @@ async fn queue_upload_for_ocr(
         .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
         .await
     {
-        Ok(_) => {
+        // A brand-new document cannot already have a job, but if it does
+        // its OCR will run all the same.
+        Ok(EnqueueOutcome::Queued(_) | EnqueueOutcome::AlreadyQueued) => {
             info!("Document {} enqueued for OCR processing", document.id);
             None
         }
@@ -546,40 +572,6 @@ fn categorize_ingestion_error(message: &str) -> DocumentError {
     }
 }
 
-/// Whether the document has a pending or processing OCR queue job.
-pub async fn has_active_ocr_job(state: &AppState, document_id: Uuid) -> Result<bool> {
-    let active = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM ocr_queue WHERE document_id = $1 AND status IN ('pending', 'processing'))",
-    )
-    .bind(document_id)
-    .fetch_one(state.db.get_pool())
-    .await?;
-    Ok(active)
-}
-
-/// Queues the document for OCR unless it already has a pending or
-/// processing job, in one statement: the queue's partial unique index
-/// (`idx_ocr_queue_unique_pending_document`) arbitrates concurrent retries,
-/// so there is no check-then-insert race. Returns whether a job was added.
-/// A retried 'failed' document keeps that status until the worker starts,
-/// so the document's own status cannot answer this.
-async fn enqueue_unless_queued(
-    state: &AppState,
-    document: &crate::models::Document,
-) -> Result<bool> {
-    let inserted = sqlx::query_scalar::<_, Uuid>(
-        "INSERT INTO ocr_queue (document_id, priority, file_size) VALUES ($1, $2, $3) \
-         ON CONFLICT (document_id) WHERE status IN ('pending', 'processing') DO NOTHING \
-         RETURNING id",
-    )
-    .bind(document.id)
-    .bind(USER_OCR_PRIORITY)
-    .bind(document.file_size)
-    .fetch_optional(state.db.get_pool())
-    .await?;
-    Ok(inserted.is_some())
-}
-
 /// Outcome of a manual OCR retry.
 #[derive(Debug, serde::Serialize)]
 pub struct OcrRetryOutcome {
@@ -608,13 +600,10 @@ pub async fn retry_document_ocr(
         })?
         .ok_or(DocumentError::NotFound)?;
 
-    if document.ocr_status.as_deref() == Some("processing") {
-        return Ok(OcrRetryOutcome {
-            queued: false,
-            message: "OCR is already in progress for this document".to_string(),
-        });
-    }
-
+    // No early return on the document's own `ocr_status`: 'processing' can
+    // be stale (a worker died mid-job), and a retried 'failed' document stays
+    // 'failed' until a worker claims it. Only the queue knows whether a job
+    // is active, and the enqueue below asks it atomically.
     let health_checker = crate::ocr::health::OcrHealthChecker::new();
     if let Some(languages) = languages {
         health_checker
@@ -640,11 +629,15 @@ pub async fn retry_document_ocr(
         store_language_preference(state, user, &[], Some(lang)).await;
     }
 
-    let queued = enqueue_unless_queued(state, &document).await.map_err(|e| {
-        error!("Failed to queue document {} for OCR: {}", document_id, e);
-        DocumentError::InternalServerError("Failed to queue document for OCR".to_string())
-    })?;
-    if !queued {
+    let outcome = state
+        .queue_service
+        .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
+        .await
+        .map_err(|e| {
+            error!("Failed to queue document {} for OCR: {}", document_id, e);
+            DocumentError::InternalServerError("Failed to queue document for OCR".to_string())
+        })?;
+    if outcome == EnqueueOutcome::AlreadyQueued {
         return Ok(OcrRetryOutcome {
             queued: false,
             message: "The document is already queued for OCR".to_string(),

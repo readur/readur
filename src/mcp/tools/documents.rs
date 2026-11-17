@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     mcp::{format, ReadurMcp},
-    models::{DocumentFilters, DocumentResponse, User},
+    models::{DocumentFilters, DocumentOcrResponse, DocumentResponse, User},
     routes::documents::DocumentError,
     services::documents::{
         self as service, UploadRequest, LABELS_NOT_APPLIED_WARNING, OCR_NOT_QUEUED_WARNING,
@@ -200,12 +200,18 @@ impl ReadurMcp {
                 return Ok(format::tool_error(message));
             }
         }
+        // The document's own status cannot say whether OCR will progress:
+        // 'processing' outlives a crashed worker and a retried 'failed'
+        // document keeps its status until a worker claims it. The queue can.
+        let active_job = self
+            .state
+            .queue_service
+            .has_active_job(ocr.id)
+            .await
+            .map_err(|e| format::internal("check the OCR queue", e))?;
         // A retry keeps the previous run's text until the new run finishes;
         // say so rather than present stale text as the result.
-        let reprocessing = ocr.has_ocr_text
-            && service::has_active_ocr_job(&self.state, ocr.id)
-                .await
-                .map_err(|e| format::internal("check the OCR queue", e))?;
+        let reprocessing = ocr.has_ocr_text && active_job;
         let max_chars = p
             .max_chars
             .unwrap_or(DEFAULT_OCR_CHARS)
@@ -215,25 +221,7 @@ impl ReadurMcp {
         let next_offset = (end < total_chars).then_some(end);
 
         let summary = if !ocr.has_ocr_text {
-            let mut msg = format!(
-                "No OCR text is available yet for \"{}\" ({}). OCR status: {}.",
-                ocr.filename, ocr.id, status
-            );
-            match status.as_str() {
-                "failed" => msg.push_str(" Use retry_document_ocr to try again."),
-                "processing" => {
-                    if let Some(pages) = ocr.pages_processed {
-                        msg.push_str(&format!(" {pages} page(s) processed so far."));
-                    }
-                    msg.push_str(" Check back shortly.");
-                }
-                "pending" => msg.push_str(" The document is waiting in the OCR queue."),
-                "completed" => msg.push_str(
-                    " OCR completed but stored no text. Use retry_document_ocr to process it again.",
-                ),
-                _ => msg.push_str(" Use retry_document_ocr if it does not start processing."),
-            }
-            msg
+            no_text_summary(&ocr, &status, active_job)
         } else if total_chars == 0 {
             format!(
                 "OCR finished for \"{}\" ({}) but no text was found.",
@@ -282,7 +270,7 @@ impl ReadurMcp {
     }
 
     #[tool(
-        description = "Upload a new document to Readur. Provide the file as a base64-encoded string; it is stored and queued for OCR automatically. Supports PDFs, images (PNG, JPEG, TIFF, ...), plain text and Office documents. Optionally attach some of your labels. If an identical file already exists, the existing document is returned.",
+        description = "Upload a new document to Readur. Provide the file as a base64-encoded string; it is stored and queued for OCR automatically. Supports PDFs, images (PNG, JPEG, TIFF, ...), plain text and Office documents. Optionally attach some of your labels. If an identical file already exists, that existing document is returned instead (no error) and the requested labels are added to it.",
         annotations(
             title = "Upload Document",
             read_only_hint = false,
@@ -342,14 +330,15 @@ impl ReadurMcp {
             label_ids: label_ids.unwrap_or_default(),
             ..Default::default()
         };
-        let uploaded = match service::upload_document(&self.state, user, request).await {
+        let uploaded = match service::upload_document_or_existing(&self.state, user, request).await
+        {
             Ok(uploaded) => uploaded,
             Err(e) => return upload_error(e),
         };
 
         let mut text = if uploaded.status == "duplicate" {
             format!(
-                "An identical file already exists: \"{}\" ({}). No new document was created.",
+                "An identical file already exists: \"{}\" ({}). No new document was created; this is the existing document.",
                 uploaded.filename, uploaded.id
             )
         } else if uploaded
@@ -416,7 +405,7 @@ impl ReadurMcp {
     }
 
     #[tool(
-        description = "Queue a document for another OCR pass, e.g. after OCR failed or produced poor text. Does nothing if OCR is already running for the document.",
+        description = "Queue a document for another OCR pass, e.g. after OCR failed or produced poor text. Does nothing if the document is already queued or being processed; a document stuck in 'processing' with no OCR job is queued again.",
         annotations(
             title = "Retry Document OCR",
             read_only_hint = false,
@@ -441,6 +430,38 @@ impl ReadurMcp {
             Err(e) => Err(format::internal("retry OCR", format!("{e:?}"))),
         }
     }
+}
+
+/// What to tell the model about a document that has no OCR text yet. Only
+/// promise progress when a queue job exists; otherwise point it at
+/// `retry_document_ocr`, or it would poll a document that never changes.
+fn no_text_summary(ocr: &DocumentOcrResponse, status: &str, active_job: bool) -> String {
+    let mut msg = format!(
+        "No OCR text is available yet for \"{}\" ({}). OCR status: {}.",
+        ocr.filename, ocr.id, status
+    );
+    if active_job {
+        if let Some(pages) = ocr.pages_processed {
+            msg.push_str(&format!(" {pages} page(s) processed so far."));
+        }
+        msg.push_str(if status == "processing" {
+            " Check back shortly."
+        } else {
+            " The document is waiting in the OCR queue; check back shortly."
+        });
+        return msg;
+    }
+    msg.push_str(match status {
+        "failed" => " Use retry_document_ocr to try again.",
+        "completed" => {
+            " OCR completed but stored no text. Use retry_document_ocr to process it again."
+        }
+        "processing" | "pending" => {
+            " No OCR job is queued or running for it, so it will not progress on its own (OCR may have been interrupted). Use retry_document_ocr to queue it."
+        }
+        _ => " Use retry_document_ocr to queue it for OCR.",
+    });
+    msg
 }
 
 fn describe_document(doc: &DocumentResponse) -> String {
