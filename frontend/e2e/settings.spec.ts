@@ -126,6 +126,8 @@ test.describe('Settings Management', () => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Edit File Processing' }).click();
     const field = page.getByRole('spinbutton', { name: 'Max File Size (MB)' });
+    // Empty for a new user: no personal limit, the server's MAX_FILE_SIZE_MB applies.
+    const savedValue = await field.inputValue();
 
     let saved = false;
     page.on('request', (r) => {
@@ -139,7 +141,7 @@ test.describe('Settings Management', () => {
 
     // Cancel restores the saved value
     await page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(field).toHaveValue('50');
+    await expect(field).toHaveValue(savedValue);
   });
 
   test('should display current system status', async ({ dynamicAdminPage: page }) => {
