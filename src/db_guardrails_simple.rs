@@ -6,7 +6,7 @@
  */
 
 use anyhow::Result;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -103,18 +103,9 @@ impl DocumentTransactionManager {
         let mut tx = self.pool.begin().await?;
 
         // 0. A job the claim no longer owns has its result discarded.
-        if let Some(claim) = claim {
-            if let Err(loss) = lock_claimed_job(&mut tx, claim).await? {
-                tx.rollback().await?;
-                info!(
-                    "OCR job {} for document {} no longer owned ({:?}); discarding its result",
-                    claim.job_id, document_id, loss
-                );
-                return Ok(match loss {
-                    ClaimLoss::Cancelled => OcrWriteOutcome::JobCancelled,
-                    ClaimLoss::Reclaimed => OcrWriteOutcome::ClaimLost,
-                });
-            }
+        if let Some(lost) = lost_claim(&mut tx, claim).await? {
+            tx.rollback().await?;
+            return Ok(lost);
         }
 
         // 1. Lock the document row for update to prevent race conditions
@@ -204,25 +195,8 @@ impl DocumentTransactionManager {
             return Ok(OcrWriteOutcome::Rejected);
         }
 
-        // 6. Remove the job from the OCR queue: the claimed job itself (its
-        //    row is locked and owned), or without a claim the document's
-        //    running job.
-        match claim {
-            Some(claim) => {
-                sqlx::query("DELETE FROM ocr_queue WHERE id = $1")
-                    .bind(claim.job_id)
-                    .execute(&mut *tx)
-                    .await?;
-            }
-            None => {
-                sqlx::query(
-                    "DELETE FROM ocr_queue WHERE document_id = $1 AND status = 'processing'",
-                )
-                .bind(document_id)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
+        // 6. Remove the job from the OCR queue.
+        remove_job(&mut tx, claim, document_id).await?;
 
         // Note: We don't fail if queue removal fails - it might have been cleaned up already
 
@@ -388,4 +362,46 @@ pub struct CleanupReport {
     pub reset_stuck_documents: usize,
     pub removed_orphaned_queue_items: usize,
     pub removed_completed_queue_items: usize,
+}
+
+/// The outcome of a claimed write whose claim no longer owns its job, or
+/// None when it does (or the write carries no claim). The job row is locked
+/// in `tx` either way.
+async fn lost_claim(
+    tx: &mut Transaction<'_, Postgres>,
+    claim: Option<&JobClaim>,
+) -> Result<Option<OcrWriteOutcome>> {
+    let Some(claim) = claim else {
+        return Ok(None);
+    };
+    let Err(loss) = lock_claimed_job(tx, claim).await? else {
+        return Ok(None);
+    };
+    info!(
+        "OCR job {} for document {} no longer owned ({:?}); discarding its result",
+        claim.job_id, claim.document_id, loss
+    );
+    Ok(Some(match loss {
+        ClaimLoss::Cancelled => OcrWriteOutcome::JobCancelled,
+        ClaimLoss::Reclaimed => OcrWriteOutcome::ClaimLost,
+    }))
+}
+
+/// Removes the written job from the queue: the claimed job itself (its row
+/// is locked and owned), or without a claim the document's running job.
+async fn remove_job(
+    tx: &mut Transaction<'_, Postgres>,
+    claim: Option<&JobClaim>,
+    document_id: Uuid,
+) -> Result<()> {
+    match claim {
+        Some(claim) => sqlx::query("DELETE FROM ocr_queue WHERE id = $1").bind(claim.job_id),
+        None => {
+            sqlx::query("DELETE FROM ocr_queue WHERE document_id = $1 AND status = 'processing'")
+                .bind(document_id)
+        }
+    }
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }

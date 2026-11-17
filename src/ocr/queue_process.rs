@@ -236,53 +236,32 @@ impl OcrQueueService {
             word_count: result.word_count as i32,
             processing_time_ms: job.started.elapsed().as_millis() as i64,
         };
-        let error_msg = match self
+        let outcome = self
             .transaction_manager
             .update_ocr_for_job(&job.claim, &write)
-            .await
-        {
-            Ok(OcrWriteOutcome::Written) => None,
-            Ok(lost @ (OcrWriteOutcome::JobCancelled | OcrWriteOutcome::ClaimLost)) => {
+            .await;
+        match write_failure(outcome) {
+            WriteFailure::None => {}
+            WriteFailure::Discarded(lost) => {
                 info!(
                     "OCR result for job {} discarded: {:?}",
                     job.claim.job_id, lost
                 );
                 return Ok(());
             }
-            Ok(OcrWriteOutcome::Rejected) => {
-                Some("OCR update failed validation (document may have been modified)".to_string())
+            WriteFailure::Failed(error_msg) => {
+                warn!("{} for document {}", error_msg, job.claim.document_id);
+                let attempt = FailedAttempt {
+                    error_message: &error_msg,
+                    document_failure_reason: None,
+                    record_reason: Some(classify_ocr_error(&error_msg).0),
+                    partial: None,
+                };
+                return self.fail(job, attempt).await;
             }
-            Err(e) => Some(format!("Transaction-safe OCR update failed: {}", e)),
-        };
-        if let Some(error_msg) = error_msg {
-            warn!("{} for document {}", error_msg, job.claim.document_id);
-            let attempt = FailedAttempt {
-                error_message: &error_msg,
-                document_failure_reason: None,
-                record_reason: Some(classify_ocr_error(&error_msg).0),
-                partial: None,
-            };
-            return self.fail(job, attempt).await;
         }
-
         if job.settings.save_processed_images {
-            if let Some(ref processed) = result.processed_image_path {
-                if let Err(e) = self
-                    .save_processed_image_for_review(
-                        job.claim.document_id,
-                        job.user_id.unwrap_or_default(),
-                        &job.file_path,
-                        processed,
-                        &result.preprocessing_applied,
-                    )
-                    .await
-                {
-                    warn!(
-                        "Failed to save processed image for document {}: {}",
-                        job.claim.document_id, e
-                    );
-                }
-            }
+            self.save_for_review(job, result).await;
         }
         info!(
             "OCR completed for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words | {}ms | Preprocessing: {:?}",
@@ -290,6 +269,28 @@ impl OcrQueueService {
             result.word_count, job.started.elapsed().as_millis(), result.preprocessing_applied
         );
         Ok(())
+    }
+
+    /// Keeps the preprocessed image for review, when there is one.
+    async fn save_for_review(&self, job: &LoadedJob, result: &OcrResult) {
+        let Some(ref processed) = result.processed_image_path else {
+            return;
+        };
+        let saved = self
+            .save_processed_image_for_review(
+                job.claim.document_id,
+                job.user_id.unwrap_or_default(),
+                &job.file_path,
+                processed,
+                &result.preprocessing_applied,
+            )
+            .await;
+        if let Err(e) = saved {
+            warn!(
+                "Failed to save processed image for document {}: {}",
+                job.claim.document_id, e
+            );
+        }
     }
 
     async fn extraction_failed(&self, job: &LoadedJob, e: &anyhow::Error) -> Result<()> {
@@ -336,5 +337,64 @@ fn log_discarded(job: &LoadedJob, loss: ClaimLoss) {
             "OCR job {} for document {} was reclaimed by another worker; its failure is discarded",
             job.claim.job_id, job.claim.document_id
         ),
+    }
+}
+
+/// What a result write that did not store the result means for the job.
+#[derive(Debug, PartialEq, Eq)]
+enum WriteFailure {
+    /// It was stored.
+    None,
+    /// The claim was lost: nothing may be written, not even a failure.
+    Discarded(OcrWriteOutcome),
+    /// The write failed; the attempt fails with this message.
+    Failed(String),
+}
+
+fn write_failure(outcome: Result<OcrWriteOutcome>) -> WriteFailure {
+    match outcome {
+        Ok(OcrWriteOutcome::Written) => WriteFailure::None,
+        Ok(lost @ (OcrWriteOutcome::JobCancelled | OcrWriteOutcome::ClaimLost)) => {
+            WriteFailure::Discarded(lost)
+        }
+        Ok(OcrWriteOutcome::Rejected) => WriteFailure::Failed(
+            "OCR update failed validation (document may have been modified)".to_string(),
+        ),
+        Err(e) => WriteFailure::Failed(format!("Transaction-safe OCR update failed: {}", e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lost_claim_discards_and_only_real_failures_fail_the_attempt() {
+        assert_eq!(
+            write_failure(Ok(OcrWriteOutcome::Written)),
+            WriteFailure::None
+        );
+        for lost in [OcrWriteOutcome::JobCancelled, OcrWriteOutcome::ClaimLost] {
+            assert_eq!(write_failure(Ok(lost)), WriteFailure::Discarded(lost));
+        }
+        assert!(matches!(
+            write_failure(Ok(OcrWriteOutcome::Rejected)),
+            WriteFailure::Failed(_)
+        ));
+        assert!(matches!(
+            write_failure(Err(anyhow::anyhow!("db down"))),
+            WriteFailure::Failed(m) if m.contains("db down")
+        ));
+    }
+
+    #[test]
+    fn a_temp_image_is_removed_when_dropped() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("processed.png");
+        std::fs::write(&path, b"x").unwrap();
+        drop(TempImage(Some(path.to_string_lossy().into_owned())));
+        assert!(!path.exists());
+        // Already gone is fine.
+        drop(TempImage(Some(path.to_string_lossy().into_owned())));
     }
 }

@@ -17,7 +17,7 @@
 //! completed (a re-OCR was cancelled) stays 'completed' with its text.
 
 use anyhow::Result;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -184,28 +184,7 @@ impl OcrQueueService {
             );
             return Ok(Err(loss));
         }
-        if let Some(reason) = attempt.document_failure_reason {
-            sqlx::query(
-                "UPDATE documents SET ocr_status = 'failed', ocr_failure_reason = $3, \
-                 ocr_error = $2, updated_at = NOW() WHERE id = $1",
-            )
-            .bind(claim.document_id)
-            .bind(crate::db::sanitize::DbText(attempt.error_message))
-            .bind(reason)
-            .execute(&mut *tx)
-            .await?;
-        }
-        let status: Option<String> = sqlx::query_scalar(
-            "UPDATE ocr_queue SET status = CASE WHEN attempts >= max_attempts \
-             THEN 'failed' ELSE 'pending' END, \
-             error_message = $2, started_at = NULL, worker_id = NULL, \
-             claim_id = NULL, heartbeat_at = NULL \
-             WHERE id = $1 RETURNING status",
-        )
-        .bind(claim.job_id)
-        .bind(crate::db::sanitize::DbText(attempt.error_message))
-        .fetch_one(&mut *tx)
-        .await?;
+        let status = write_failed_attempt(&mut tx, claim, &attempt).await?;
         tx.commit().await?;
 
         if status.as_deref() == Some("failed") {
@@ -214,21 +193,68 @@ impl OcrQueueService {
                 claim.job_id, attempt.error_message
             );
         }
-        if let Some(reason) = attempt.record_reason {
-            let partial = attempt.partial;
-            if let Err(e) = self
-                .create_failed_document_from_ocr_error(
-                    claim.document_id,
-                    reason,
-                    attempt.error_message,
-                    attempt_number,
-                    partial,
-                )
-                .await
-            {
-                error!("Failed to record failed OCR attempt: {}", e);
-            }
-        }
+        self.record_failure(claim, attempt_number, attempt).await;
         Ok(Ok(()))
     }
+}
+
+impl OcrQueueService {
+    /// Adds the attempt's `failed_documents` record, if it asks for one.
+    /// Best effort: the attempt itself is already recorded on the job.
+    async fn record_failure(
+        &self,
+        claim: &JobClaim,
+        attempt_number: i32,
+        attempt: FailedAttempt<'_>,
+    ) {
+        let Some(reason) = attempt.record_reason else {
+            return;
+        };
+        let recorded = self
+            .create_failed_document_from_ocr_error(
+                claim.document_id,
+                reason,
+                attempt.error_message,
+                attempt_number,
+                attempt.partial,
+            )
+            .await;
+        if let Err(e) = recorded {
+            error!("Failed to record failed OCR attempt: {}", e);
+        }
+    }
+}
+
+/// Inside `tx`, which holds the claimed job's lock: marks the document
+/// failed if the attempt says so, and puts the job back in the queue (or
+/// fails it when it has no attempts left). Returns the job's new status.
+async fn write_failed_attempt(
+    tx: &mut Transaction<'_, Postgres>,
+    claim: &JobClaim,
+    attempt: &FailedAttempt<'_>,
+) -> Result<Option<String>> {
+    let error_message = crate::db::sanitize::DbText(attempt.error_message);
+    if let Some(reason) = attempt.document_failure_reason {
+        sqlx::query(
+            "UPDATE documents SET ocr_status = 'failed', ocr_failure_reason = $3, \
+             ocr_error = $2, updated_at = NOW() WHERE id = $1",
+        )
+        .bind(claim.document_id)
+        .bind(error_message)
+        .bind(reason)
+        .execute(&mut **tx)
+        .await?;
+    }
+    let status = sqlx::query_scalar(
+        "UPDATE ocr_queue SET status = CASE WHEN attempts >= max_attempts \
+         THEN 'failed' ELSE 'pending' END, \
+         error_message = $2, started_at = NULL, worker_id = NULL, \
+         claim_id = NULL, heartbeat_at = NULL \
+         WHERE id = $1 RETURNING status",
+    )
+    .bind(claim.job_id)
+    .bind(error_message)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(status)
 }

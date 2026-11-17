@@ -385,37 +385,30 @@ impl OcrQueueService {
 
     /// Runs a dequeued job with the processing throttle held.
     async fn run_job(&self, item: OcrQueueItem, ocr_service: &EnhancedOcrService) {
-        match self.processing_throttler.acquire_permit().await {
-            Ok(_throttle_permit) => {
-                if let Err(e) = self.process_item(item, ocr_service).await {
-                    error!("Error processing OCR item: {}", e);
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Failed to acquire throttling permit for OCR processing: {}",
-                    e
-                );
-                let message = format!("Throttling error: {}", e);
-                let attempt = cancel::FailedAttempt {
-                    error_message: &message,
-                    ..Default::default()
-                };
-                let recorded = match item.claim() {
-                    Ok(claim) => {
-                        self.record_failed_attempt(&claim, item.attempts, attempt)
-                            .await
-                    }
-                    Err(e) => Err(e),
-                };
-                if let Err(mark_err) = recorded {
-                    error!(
-                        "Failed to mark item as failed after throttling error: {}",
-                        mark_err
-                    );
-                }
-            }
+        let result = match self.processing_throttler.acquire_permit().await {
+            Ok(_throttle_permit) => self.process_item(item, ocr_service).await,
+            Err(e) => self.fail_throttled(&item, e.to_string()).await,
+        };
+        if let Err(e) = result {
+            error!("Error processing OCR item: {}", e);
         }
+    }
+
+    /// Records a job that could not get a processing permit as a failed attempt.
+    async fn fail_throttled(&self, item: &OcrQueueItem, e: String) -> Result<()> {
+        error!(
+            "Failed to acquire throttling permit for OCR processing: {}",
+            e
+        );
+        let message = format!("Throttling error: {}", e);
+        let attempt = cancel::FailedAttempt {
+            error_message: &message,
+            ..Default::default()
+        };
+        let _ = self
+            .record_failed_attempt(&item.claim()?, item.attempts, attempt)
+            .await?;
+        Ok(())
     }
 
     /// Helper function to create failed document record from OCR failure
