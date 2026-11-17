@@ -29,7 +29,7 @@ offset?: number,
  */
 include_snippets?: boolean, 
 /**
- * Length of text snippets in characters (default: 200)
+ * Approximate length of text snippets in bytes, 1 to 2000 (default: 200)
  */
 snippet_length?: number, 
 /**
