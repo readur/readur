@@ -1,4 +1,4 @@
-//! Upload failures reach REST clients with their status and `error_code`
+//! Upload failures reach REST clients with their status and `code`
 //! but never the raw database or storage error behind them.
 
 use axum::http::StatusCode;
@@ -52,7 +52,7 @@ async fn rest_upload_storage_failure_hides_the_raw_error() {
     )
     .unwrap();
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
-    assert_eq!(body["error_code"], json!("UPLOAD_INTERNAL_ERROR"));
+    assert_eq!(body["code"], json!("UPLOAD_INTERNAL_ERROR"));
     assert_eq!(body["status"], json!(500));
     assert_eq!(body["error"], json!("Failed to ingest document"));
     let message = body["error"].as_str().unwrap();

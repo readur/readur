@@ -1,10 +1,16 @@
 import api, { documentService, searchService } from '../../services/api';
 import type { DocumentListParams, EnhancedSearchParams } from '../../services/api';
 import { labelService } from '../../services/api/labels';
-import type { DocumentResponse, EnhancedDocumentResponse, MonthCount, SearchSnippet } from '../../types/generated';
+import type {
+  DocumentResponse,
+  EnhancedDocumentResponse,
+  MonthCount,
+  SearchSnippet,
+} from '../../types/generated';
 import { toLabelData, type LabelData } from '../labels';
 import { dayBoundary } from './format';
 import { UPLOADED, WATCHED, isSearch, type LibraryQuery } from './urlState';
+import { parseApiError } from '../../services/errors';
 
 /** One board row: the fields shared by the list and search responses. */
 export interface LibraryRow {
@@ -123,7 +129,10 @@ export function timelineParams(query: LibraryQuery, mimeTypes: string[]): Enhanc
   };
 }
 
-export async function fetchTimeline(query: LibraryQuery, mimeTypes: string[]): Promise<MonthCount[]> {
+export async function fetchTimeline(
+  query: LibraryQuery,
+  mimeTypes: string[],
+): Promise<MonthCount[]> {
   const res = await searchService.getTimeline(timelineParams(query, mimeTypes));
   return Array.isArray(res.data) ? res.data : [];
 }
@@ -132,11 +141,20 @@ export async function fetchTimeline(query: LibraryQuery, mimeTypes: string[]): P
 const ID_PAGE = 1000;
 
 /** The ids of every match of the search (not just the current page), for acting on all of them. */
-export async function fetchAllMatchIds(query: LibraryQuery, mimeTypes: string[], total: number): Promise<string[]> {
+export async function fetchAllMatchIds(
+  query: LibraryQuery,
+  mimeTypes: string[],
+  total: number,
+): Promise<string[]> {
   const base = searchParams(query, mimeTypes);
   const ids: string[] = [];
   for (let offset = 0; offset < total; offset += ID_PAGE) {
-    const res = await searchService.enhancedSearch({ ...base, include_snippets: false, limit: ID_PAGE, offset });
+    const res = await searchService.enhancedSearch({
+      ...base,
+      include_snippets: false,
+      limit: ID_PAGE,
+      offset,
+    });
     const docs = res.data.documents ?? [];
     ids.push(...docs.map((d) => d.id));
     if (docs.length < ID_PAGE) break;
@@ -155,8 +173,11 @@ export async function fetchRows(query: LibraryQuery, mimeTypes: string[]): Promi
 
 /** The backend refuses searches with more than 10,000 matches. */
 export function isTooManyResults(error: unknown): boolean {
-  const e = error as { response?: { status?: number; data?: { error_code?: string } } } | null;
-  return e?.response?.status === 413 || e?.response?.data?.error_code === 'SEARCH_TOO_MANY_RESULTS';
+  const e = error as { response?: { status?: number; data?: unknown } } | null;
+  return (
+    e?.response?.status === 413 ||
+    parseApiError(e?.response?.data)?.code === 'SEARCH_TOO_MANY_RESULTS'
+  );
 }
 
 export async function fetchLabels(): Promise<LabelData[]> {
@@ -167,7 +188,9 @@ export async function fetchLabels(): Promise<LabelData[]> {
 export async function fetchSources(): Promise<LibrarySource[]> {
   const res = await api.get('/sources');
   const data = res.data as unknown;
-  const items = Array.isArray(data) ? data : ((data as { sources?: unknown[] } | null)?.sources ?? []);
+  const items = Array.isArray(data)
+    ? data
+    : ((data as { sources?: unknown[] } | null)?.sources ?? []);
   return (items as LibrarySource[]).filter((s) => s && typeof s.id === 'string');
 }
 

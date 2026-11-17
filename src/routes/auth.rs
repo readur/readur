@@ -46,8 +46,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .nest("/keys", crate::routes::api_keys::router())
 }
 
+/// An error in the API's shared shape, with the status's generic code.
 fn json_error(status: StatusCode, message: &str) -> Response {
-    (status, Json(serde_json::json!({ "error": message }))).into_response()
+    crate::errors::error_response(status, crate::errors::status_code_name(status), message)
 }
 
 fn rate_limited(retry_after: u64) -> Response {

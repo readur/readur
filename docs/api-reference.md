@@ -74,14 +74,23 @@ Keys start with `readur_pat_` so that secret scanners can recognise them. A key 
 
 ## Errors
 
-A failed request answers with a 4xx or 5xx status. The body takes one of three forms, depending on the endpoint:
+Every failed request answers with a 4xx or 5xx status and the same JSON object, whatever the endpoint:
 
-- Many endpoints answer with a JSON object holding a message for people (`error`), a stable code for programs (`code`) and the HTTP status (`status`); see [Error Response](#error-response). The per-area code tables are under [Shared Links](#shared-links-error-codes), [API Keys](#api-keys-error-codes) and [Comments](#comments-error-codes).
-- Listing and uploading documents (`GET /api/documents`, `POST /api/documents`) answer with the code under `error_code` instead, plus a `timestamp` and a `request_id`; see [Document Error Response](#document-error-response).
-- The login, registration, password and OIDC endpoints answer with only `{"error": "<message>"}`; see [Authentication Error](#authentication-error).
-- Other endpoints answer with the status code alone and an empty body, for example `404 Not Found` for a missing document or label.
+| Field | Type | Meaning |
+|-------|------|---------|
+| `error` | string | A message for people. A server error (5xx) never includes internal detail such as SQL, file paths or stack traces |
+| `code` | string | A stable code for programs, in UPPER_SNAKE_CASE |
+| `status` | integer | The HTTP status, repeated |
 
-A request body that is not valid JSON or lacks a required field gets `400 Bad Request` or `422 Unprocessable Entity` with a plain-text explanation, before the endpoint runs.
+Where an endpoint knows more than the status, `code` says so: `API_KEY_NOT_FOUND`, `USER_NOT_FOUND_BY_ID`, `LABEL_DUPLICATE_NAME`, `SOURCE_DUPLICATE_NAME`, `INVALID_QUERY`, `UPLOAD_TOO_LARGE` and so on; the per-area tables are under [Shared Links](#shared-links-error-codes), [API Keys](#api-keys-error-codes) and [Comments](#comments-error-codes). Otherwise `code` is the status's reason phrase in UPPER_SNAKE_CASE: `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `PAYLOAD_TOO_LARGE`, `UNPROCESSABLE_ENTITY`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR`, `NOT_IMPLEMENTED`, `SERVICE_UNAVAILABLE`. Branch on `status` and `code`, not on the wording of `error`. The OpenAPI document describes the object as the `ApiErrorBody` schema.
+
+A request body that is not valid JSON gets `400 Bad Request`, and one that lacks a required field or has a field of the wrong type `422 Unprocessable Entity`, before the endpoint runs; `error` then explains what is wrong with the body (see [Invalid Request Body](#invalid-request-body)).
+
+A few more conventions hold across the API:
+
+- Creating something (a label, source, user, API key, shared link or comment) answers `201 Created` with the new object. Uploading a document answers `200 OK`.
+- Deleting one object answers `204 No Content`. Deleting something that does not exist, or that the caller cannot see, answers `404 Not Found` on every endpoint; deleting it again is therefore a `404`, not a second `204`.
+- A feature the server has switched off answers `501 Not Implemented` (code `USER_WATCH_DISABLED` for the per-user watch directory endpoints while `ENABLE_PER_USER_WATCH` is off).
 
 #### Error Response
 
@@ -99,7 +108,7 @@ Authorization: Bearer <token>
 }
 ```
 
-#### Document Error Response
+#### Invalid Query Error
 
 ```http
 GET /api/documents?ocr_status=done
@@ -110,10 +119,32 @@ Authorization: Bearer <token>
 ```json
 {
   "error": "Invalid ocr_status filter; expected one of: pending, processing, completed, failed",
-  "error_code": "INVALID_QUERY",
-  "status": 400,
-  "timestamp": "2026-04-21T12:34:56.789012+00:00",
-  "request_id": "8d3f0c2a-1b4e-4f6a-9c7d-2e5b8a1f3c4d"
+  "code": "INVALID_QUERY",
+  "status": 400
+}
+```
+
+#### Invalid Request Body
+
+```http
+POST /api/labels
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request body:**
+```json
+{
+  "color": "#0969da"
+}
+```
+
+**Response:** `422 Unprocessable Entity`
+```json
+{
+  "error": "Failed to deserialize the JSON body into the target type: missing field `name` at line 3 column 1",
+  "code": "UNPROCESSABLE_ENTITY",
+  "status": 422
 }
 ```
 
@@ -135,7 +166,9 @@ Content-Type: application/json
 **Response:** `401 Unauthorized`
 ```json
 {
-  "error": "Invalid username or password"
+  "error": "Invalid username or password",
+  "code": "UNAUTHORIZED",
+  "status": 401
 }
 ```
 
@@ -339,7 +372,7 @@ Content-Type: application/json
 | `name` | string | yes | 1 to 100 characters, to recognise the key by |
 | `expires_in_days` | integer or null | no | 1 to 365. Omit it or send `null` for a key that never expires |
 
-**Response:** `200 OK`
+**Response:** `201 Created`
 ```json
 {
   "api_key": {
@@ -565,7 +598,7 @@ DELETE /api/documents/{id}
 Authorization: Bearer <token>
 ```
 
-**Response:** `204 No Content`, or `404 Not Found` with an empty body when the document does not exist or belongs to another user.
+**Response:** `204 No Content`, or `404 Not Found` when the document does not exist or belongs to another user. A document that a source sync imported is also put on its owner's [ignored list](#ignored-file-endpoints), so the next sync does not import it again.
 
 
 ### Search Endpoints
@@ -590,7 +623,7 @@ All search endpoints only see the documents the caller may see (their own; admin
 | `limit` | integer | `25` | Page size, 1 to 1000 |
 | `offset` | integer | `0` | Number of results to skip |
 | `include_snippets` | boolean | `true` | Return snippets (enhanced search only) |
-| `snippet_length` | integer | `200` | Approximate snippet size in bytes, 1 to 2000 |
+| `snippet_length` | integer | `200` | Approximate snippet size in bytes, 1 to 2000; any other value is a `400 Bad Request` (the MCP search tool answers it with a tool error) |
 | `sort_by` | string | relevance | `created_at`, `updated_at`, `filename`, `file_size`, `ocr_status`, `mime_type` or `ocr_confidence`. Without it, enhanced search orders by relevance and `GET /api/search` newest first |
 | `sort_order` | string | `desc` | `asc` or `desc` |
 | `tags` | comma-separated strings | | Documents carrying any label with one of these names |
@@ -602,7 +635,7 @@ All search endpoints only see the documents the caller may see (their own; admin
 | `created_from` | RFC 3339 timestamp | | Documents created at or after this instant |
 | `created_to` | RFC 3339 timestamp | | Documents created at or before this instant |
 
-Filters combine with AND. A query that is too short or too long, an out-of-range `limit`, `offset` or `snippet_length`, an unknown `search_mode`, `sort_by` or `ocr_status`, or `created_from` later than `created_to` is a `400 Bad Request`. `GET /api/search` answers errors with a JSON body (`{"error": "...", "code": "SEARCH_QUERY_TOO_SHORT", "status": 400}`) and refuses more than 10000 matches with `413` (`SEARCH_TOO_MANY_RESULTS`); the other endpoints answer with the status code alone.
+Filters combine with AND. A query that is too short or too long, an out-of-range `limit`, `offset` or `snippet_length`, an unknown `search_mode`, `sort_by` or `ocr_status`, or `created_from` later than `created_to` is a `400 Bad Request`. Errors have the usual [error body](#errors). `GET /api/search` gives them specific codes such as `SEARCH_QUERY_TOO_SHORT`, and refuses more than 10000 matches with `413` (`SEARCH_TOO_MANY_RESULTS`).
 
 The examples below run against a library of three documents: a PDF "invoice for march" (added 2024-03-10, labelled Finance), a PNG "scanned invoice" (2024-03-20) and a PNG "invoice copy" (2024-06-01).
 
@@ -622,7 +655,7 @@ Simple-mode search. Returns the response below with `search_rank` set to `null`,
 GET /api/search/enhanced?query=invoce&search_mode=fuzzy&mime_types=application/pdf
 ```
 
-Search in any mode, ranked by relevance (`search_rank`; in fuzzy mode the pg_trgm word similarity of the query to the closest stretch of the text), with snippets. Each snippet's `highlight_ranges` mark the matched words: the query's words as typed, or in fuzzy mode the words spelled within the threshold of a query word (so `invoce` highlights `invoice`). `start_offset` and `end_offset` locate the snippet in the document text and `highlight_ranges` locate matches in the snippet, all as UTF-8 byte offsets.
+Search in any mode, ranked by relevance (`search_rank`; in fuzzy mode the pg_trgm word similarity of the query to the closest stretch of the text), with snippets. Each snippet's `highlight_ranges` mark the matches: in simple and boolean mode the query's words as typed; in phrase mode the whole phrase as one range (or its individual words when stemming means the phrase does not appear in the text as typed); in fuzzy mode the words spelled within the caller's threshold of a query word (so `invoce` highlights `invoice`), looking only at the first 512 KiB of each text. `start_offset` and `end_offset` locate the snippet in the document text and `highlight_ranges` locate matches in the snippet, all as UTF-8 byte offsets.
 
 **Response:** `200 OK`
 ```json
@@ -756,7 +789,7 @@ Content-Type: application/json
 
 `name` and `color` (a `#rrggbb` value) are required; `description`, `background_color` and `icon` are optional.
 
-**Response:** `200 OK`
+**Response:** `201 Created`
 ```json
 {
   "id": "6f1c2a8e-3b7d-4c1e-9a2f-0d4b5e6f7a8b",
@@ -920,7 +953,7 @@ Content-Type: application/json
 
 Only `document_id` is required.
 
-**Response:** `200 OK`
+**Response:** `201 Created`
 ```json
 {
   "id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
@@ -1086,7 +1119,7 @@ Content-Type: application/json
 
 `source_type` is `webdav`, `s3` or `local_folder`, and `config` takes that type's fields (the OpenAPI schemas `WebDAVSourceConfig`, `S3SourceConfig` and `LocalFolderSourceConfig`).
 
-**Response:** `200 OK`
+**Response:** `201 Created`
 ```json
 {
   "id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
@@ -1151,7 +1184,7 @@ Folders and files a source could not read are recorded as scan failures, which b
 
 ### Ignored File Endpoints
 
-The ignored list records files, by content hash, that a user does not want imported. The current server does not add entries on its own; these endpoints read and remove the existing ones.
+The ignored list holds files a user deleted after a source sync imported them. Deleting such a document (one at a time, in bulk, or with the low-confidence and failed-OCR clean-ups) adds an entry with the file's content hash, path, source type, source id (`source_identifier`) and the reason. From then on the user's automatic ingestion (source syncs, watch folders, batch import) skips that content; uploads are never checked. Taking an entry off the list lets the next sync import the file again. Deleting an uploaded document adds nothing.
 
 | Endpoint | Access | What it does |
 |----------|--------|--------------|
@@ -1213,12 +1246,12 @@ The settings response never contains the stored WebDAV password; it reports `has
 | `POST /api/users` | admin | Create an account |
 | `GET /api/users/{id}` | admin | One account |
 | `PUT /api/users/{id}` | admin | Change an account's `username`, `email`, `password` or `is_active` |
-| `DELETE /api/users/{id}` | admin | Delete an account (not your own) |
+| `DELETE /api/users/{id}` | admin | Delete an account (not your own); `404 Not Found` when there is no such account |
 | `GET /api/users/{id}/watch/directory` | admin or self | The account's personal watch directory (see [Per-User Watch Directories](per-user-watch-directories.md)) |
 | `POST /api/users/{id}/watch/directory` | admin or self | Create the personal watch directory (`{"ensure_created": true}`) |
 | `DELETE /api/users/{id}/watch/directory` | admin | Remove an account's personal watch directory |
 
-Users change their own password with [Change Own Password](#change-own-password). The watch directory endpoints fail with `500 Internal Server Error` unless the server runs with `ENABLE_PER_USER_WATCH=true`.
+Users change their own password with [Change Own Password](#change-own-password). The watch directory endpoints answer `501 Not Implemented` (code `USER_WATCH_DISABLED`) unless the server runs with `ENABLE_PER_USER_WATCH=true`.
 
 #### Create a User
 
@@ -1240,7 +1273,7 @@ Content-Type: application/json
 
 `role` is `user` (the default) or `admin`.
 
-**Response:** `200 OK`
+**Response:** `201 Created`
 ```json
 {
   "id": "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f",
@@ -1337,24 +1370,24 @@ Every message is a JSON object with a `type` and a `data` object:
 
 ```bash
 # Log in and keep the session token
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+token=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "alice-password-1"}' | jq -r .token)
 
 # Upload a document with an OCR language and a label
 curl -X POST http://localhost:8000/api/documents \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $token" \
   -F "file=@invoice.pdf" \
   -F "ocr_language=deu" \
-  -F "label_ids=$LABEL_ID"
+  -F "label_ids=$label_id"
 
 # Search
 curl "http://localhost:8000/api/search/enhanced?query=invoice%202024" \
-  -H "Authorization: Bearer $TOKEN" | jq '.documents[].filename'
+  -H "Authorization: Bearer $token" | jq '.documents[].filename'
 
 # Read a document's text
-curl http://localhost:8000/api/documents/$DOCUMENT_ID/ocr \
-  -H "Authorization: Bearer $TOKEN" | jq -r .ocr_text
+curl http://localhost:8000/api/documents/$document_id/ocr \
+  -H "Authorization: Bearer $token" | jq -r .ocr_text
 ```
 
 ### Python

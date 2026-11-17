@@ -107,12 +107,7 @@ export function fileKind(mimeType: string | null | undefined): FileKind {
 }
 
 /** Pulls the server's `error` message out of an API failure, if there is one. */
-export function apiErrorMessage(err: unknown): string | null {
-  const data = (err as { response?: { data?: { error?: unknown; message?: unknown } } })?.response?.data;
-  if (data && typeof data.error === 'string' && data.error) return data.error;
-  if (data && typeof data.message === 'string' && data.message) return data.message;
-  return null;
-}
+export { apiErrorMessage } from '../../services/errors';
 
 export function httpStatus(err: unknown): number | undefined {
   return (err as { response?: { status?: number } })?.response?.status;

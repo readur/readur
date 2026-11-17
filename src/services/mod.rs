@@ -1,5 +1,6 @@
 pub mod documents;
 pub mod file_service;
+pub mod ingestion_error;
 pub mod local_folder_service;
 pub mod ocr_languages;
 pub mod ocr_retry_service;

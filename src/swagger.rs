@@ -190,7 +190,7 @@ use crate::{
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
             crate::models::AvailableLanguagesResponse, crate::models::LanguageInfo,
-            crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
+            crate::ocr::api::OcrHealthResponse, crate::errors::ApiErrorBody,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo
         )
@@ -221,8 +221,11 @@ use crate::{
             email = "support@readur.dev"
         )
     ),
+    // Every path already carries its full prefix ("/api/...", "/metrics"),
+    // so the server is the site root: a "/api" server made Swagger UI call
+    // "/api/api/...".
     servers(
-        (url = "/api", description = "API base path")
+        (url = "/", description = "This Readur server")
     )
 )]
 pub struct ApiDoc;

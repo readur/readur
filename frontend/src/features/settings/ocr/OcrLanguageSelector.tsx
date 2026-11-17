@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../ui';
-import { ocrService, type LanguageInfo } from '../../../services/api';
+import { apiErrorMessage, ocrService, type LanguageInfo } from '../../../services/api';
 import { cx } from '../../../ui/shared/FieldParts';
 import field from '../../../ui/shared/field.module.css';
 import styles from './OcrLanguageSelector.module.css';
@@ -54,7 +54,7 @@ export function OcrLanguageSelector({
       setCurrent(response.data.current_user_language);
       if (!latest.current.value) latest.current.onChange(response.data.current_user_language);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const message = apiErrorMessage(err);
       setError(message || t('ocr.languageSelector.error', 'Failed to load OCR languages'));
       setLanguages([{ code: 'eng', name: 'English', installed: true }]);
       if (!latest.current.value) latest.current.onChange('eng');
@@ -67,13 +67,20 @@ export function OcrLanguageSelector({
     void fetchLanguages();
   }, [fetchLanguages]);
 
-  const rootClass = cx(field.field, styles.root, fullWidth && styles.full, size === 'small' && styles.small);
+  const rootClass = cx(
+    field.field,
+    styles.root,
+    fullWidth && styles.full,
+    size === 'small' && styles.small,
+  );
   const nameOf = (code: string) => languages.find((l) => l.code === code)?.name ?? code;
 
   if (loading) {
     return (
       <div className={rootClass} role="status">
-        <span className={styles.meta}>{t('ocr.languageSelector.loading', 'Loading languages...')}</span>
+        <span className={styles.meta}>
+          {t('ocr.languageSelector.loading', 'Loading languages...')}
+        </span>
       </div>
     );
   }
@@ -110,7 +117,9 @@ export function OcrLanguageSelector({
           languages.map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.name} ({lang.code})
-              {showCurrentIndicator && lang.code === current ? ` · ${t('ocr.languageSelector.current', 'Current')}` : ''}
+              {showCurrentIndicator && lang.code === current
+                ? ` · ${t('ocr.languageSelector.current', 'Current')}`
+                : ''}
             </option>
           ))
         )}

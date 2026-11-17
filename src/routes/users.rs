@@ -78,6 +78,16 @@ fn map_user_write_error(e: anyhow::Error, username: &str, email: &str) -> UserEr
     }
 }
 
+/// The watch-directory endpoints answer 501 Not Implemented while the feature
+/// is switched off, as their OpenAPI annotations declare.
+fn ensure_per_user_watch_enabled(state: &AppState) -> Result<(), UserError> {
+    if state.config.enable_per_user_watch {
+        Ok(())
+    } else {
+        Err(UserError::PerUserWatchDisabled)
+    }
+}
+
 fn can_access_user_data(auth_user: &AuthUser, target_user_id: Uuid) -> Result<(), UserError> {
     // Admin can access any user's data, users can only access their own
     if auth_user.user.role == UserRole::Admin || auth_user.user.id == target_user_id {
@@ -170,7 +180,7 @@ async fn get_user(
     ),
     request_body = CreateUser,
     responses(
-        (status = 200, description = "User created successfully", body = UserResponse),
+        (status = 201, description = "User created successfully", body = UserResponse),
         (status = 400, description = "Bad request - invalid user data"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - Admin access required"),
@@ -181,7 +191,7 @@ async fn create_user(
     _admin: AdminUser,
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUser>,
-) -> Result<Json<UserResponse>, UserError> {
+) -> Result<(StatusCode, Json<UserResponse>), UserError> {
     validate_account_fields(
         Some(&user_data.username),
         Some(&user_data.email),
@@ -195,7 +205,7 @@ async fn create_user(
         .await
         .map_err(|e| map_user_write_error(e, &username, &email))?;
 
-    Ok(Json(user.into()))
+    Ok((StatusCode::CREATED, Json(user.into())))
 }
 
 #[utoipa::path(
@@ -308,15 +318,18 @@ async fn delete_user(
         ));
     }
 
-    // Deleting an account that does not exist is idempotent (204), as it
-    // always has been: `Database::delete_user` does not report missing rows.
-    state
-        .db
-        .delete_user(id)
-        .await
-        .map_err(|e| UserError::internal_server_error(format!("Failed to delete user: {}", e)))?;
+    // Like every other DELETE in the API, deleting something that does not
+    // exist is a 404 rather than a silent 204.
+    let deleted =
+        state.db.delete_user(id).await.map_err(|e| {
+            UserError::internal_server_error(format!("Failed to delete user: {}", e))
+        })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(UserError::not_found_by_id(id))
+    }
 }
 
 #[utoipa::path(
@@ -345,12 +358,7 @@ async fn get_user_watch_directory(
 ) -> Result<Json<UserWatchDirectoryResponse>, UserError> {
     can_access_user_data(&auth_user, id)?;
 
-    // Check if per-user watch is enabled
-    if !state.config.enable_per_user_watch {
-        return Err(UserError::internal_server_error(
-            "Per-user watch directories are not enabled".to_string(),
-        ));
-    }
+    ensure_per_user_watch_enabled(&state)?;
 
     // Get the user
     let user = state
@@ -417,12 +425,7 @@ async fn create_user_watch_directory(
 ) -> Result<Json<UserWatchDirectoryOperationResponse>, UserError> {
     can_access_user_data(&auth_user, id)?;
 
-    // Check if per-user watch is enabled
-    if !state.config.enable_per_user_watch {
-        return Err(UserError::internal_server_error(
-            "Per-user watch directories are not enabled".to_string(),
-        ));
-    }
+    ensure_per_user_watch_enabled(&state)?;
 
     // Get the user
     let user = state
@@ -496,12 +499,7 @@ async fn delete_user_watch_directory(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<UserWatchDirectoryOperationResponse>, UserError> {
-    // Check if per-user watch is enabled
-    if !state.config.enable_per_user_watch {
-        return Err(UserError::internal_server_error(
-            "Per-user watch directories are not enabled".to_string(),
-        ));
-    }
+    ensure_per_user_watch_enabled(&state)?;
 
     // Get the user
     let user = state

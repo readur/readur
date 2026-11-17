@@ -178,11 +178,11 @@ async fn estimate_webdav_crawl(
             "WebDAV crawl estimate refused for user {}: {}",
             auth_user.user.id, e
         );
-        return Ok((
+        return Ok(crate::errors::error_response(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response());
+            "WEBDAV_ESTIMATE_REFUSED",
+            e.to_string(),
+        ));
     }
 
     // Create WebDAV service and estimate crawl

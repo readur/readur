@@ -86,7 +86,7 @@ async fn a_duplicate_name_is_a_409_with_the_duplicate_name_code() {
     let bob_token = bob.login(&helper).await.unwrap().to_string();
 
     let (status, body) = create_source(&ctx, &alice_token, &webdav_source("Nextcloud")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
 
     let (status, body) = create_source(&ctx, &alice_token, &webdav_source("Nextcloud")).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
@@ -95,7 +95,7 @@ async fn a_duplicate_name_is_a_409_with_the_duplicate_name_code() {
 
     // Names are unique per user only.
     let (status, body) = create_source(&ctx, &bob_token, &webdav_source("Nextcloud")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
 }
 
 #[tokio::test]
@@ -106,9 +106,9 @@ async fn renaming_to_a_name_the_user_already_has_is_a_409_and_changes_nothing() 
     let token = alice.login(&helper).await.unwrap().to_string();
 
     let (status, body) = create_source(&ctx, &token, &webdav_source("Nextcloud")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let (status, body) = create_source(&ctx, &token, &webdav_source("Backup")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let backup = body["id"].as_str().unwrap().to_string();
 
     let rename = json!({ "name": "Nextcloud", "enabled": true });
@@ -142,10 +142,10 @@ async fn renaming_to_another_users_source_name_is_allowed() {
     let bob_token = bob.login(&helper).await.unwrap().to_string();
 
     let (status, body) = create_source(&ctx, &alice_token, &webdav_source("Shared name")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let alices = body["id"].as_str().unwrap().to_string();
     let (status, body) = create_source(&ctx, &bob_token, &webdav_source("Mine")).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     let bobs = body["id"].as_str().unwrap().to_string();
 
     let (status, body) =

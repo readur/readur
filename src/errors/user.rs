@@ -58,6 +58,9 @@ pub enum UserError {
     #[error("User session has expired, please login again")]
     SessionExpired,
 
+    #[error("Per-user watch directories are disabled (ENABLE_PER_USER_WATCH)")]
+    PerUserWatchDisabled,
+
     #[error("Internal server error: {message}")]
     InternalServerError { message: String },
 }
@@ -82,6 +85,7 @@ impl AppError for UserError {
             UserError::TokenExpired => StatusCode::UNAUTHORIZED,
             UserError::InvalidToken => StatusCode::UNAUTHORIZED,
             UserError::SessionExpired => StatusCode::UNAUTHORIZED,
+            UserError::PerUserWatchDisabled => StatusCode::NOT_IMPLEMENTED,
             UserError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -108,6 +112,9 @@ impl AppError for UserError {
             UserError::TokenExpired => "Token has expired".to_string(),
             UserError::InvalidToken => "Invalid token".to_string(),
             UserError::SessionExpired => "Session has expired, please login again".to_string(),
+            UserError::PerUserWatchDisabled => {
+                "Per-user watch directories are not enabled on this server".to_string()
+            }
             UserError::InternalServerError { .. } => "An internal error occurred".to_string(),
         }
     }
@@ -131,6 +138,7 @@ impl AppError for UserError {
             UserError::TokenExpired => "USER_TOKEN_EXPIRED",
             UserError::InvalidToken => "USER_INVALID_TOKEN",
             UserError::SessionExpired => "USER_SESSION_EXPIRED",
+            UserError::PerUserWatchDisabled => "USER_WATCH_DISABLED",
             UserError::InternalServerError { .. } => "USER_INTERNAL_SERVER_ERROR",
         }
     }
@@ -168,6 +176,9 @@ impl AppError for UserError {
             UserError::InvalidCredentials => Some("Please check your username and password".to_string()),
             UserError::SessionExpired | UserError::TokenExpired => Some("Please login again".to_string()),
             UserError::AccountDisabled => Some("Please contact an administrator".to_string()),
+            UserError::PerUserWatchDisabled => {
+                Some("Set ENABLE_PER_USER_WATCH=true to enable them".to_string())
+            }
             _ => None,
         }
     }

@@ -183,18 +183,17 @@ impl Database {
                         return Err(e);
                     }
                 }
-                Err(_) => {
+                Err(elapsed) => {
                     if attempt == MAX_RETRIES - 1 {
                         tracing::error!(
                             "Database operation '{}' timed out after {} attempts",
                             operation_name,
                             MAX_RETRIES
                         );
-                        return Err(anyhow::anyhow!(
+                        return Err(anyhow::Error::new(elapsed).context(format!(
                             "Database operation '{}' timed out after {} retries",
-                            operation_name,
-                            MAX_RETRIES
-                        ));
+                            operation_name, MAX_RETRIES
+                        )));
                     }
 
                     tracing::warn!(
@@ -231,11 +230,13 @@ impl Database {
                         e
                     );
                 }
-                Err(_) if attempt == MAX_RETRIES - 1 => {
-                    return Err(anyhow::anyhow!(
+                // Keep the `Elapsed` in the chain so callers can recognise a
+                // timeout by type rather than by this message.
+                Err(elapsed) if attempt == MAX_RETRIES - 1 => {
+                    return Err(anyhow::Error::new(elapsed).context(format!(
                         "Database operation timed out after {} retries",
                         MAX_RETRIES
-                    ));
+                    )));
                 }
                 Err(_) => {
                     tracing::warn!(

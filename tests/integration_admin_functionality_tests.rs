@@ -598,11 +598,10 @@ async fn test_admin_error_handling() {
     assert!(update_non_existent.is_err());
     println!("✅ Non-existent user update properly handled");
     
-    // Test deleting non-existent user (current implementation returns success)
+    // Deleting a user that does not exist is a 404, like every other DELETE
     let delete_non_existent = client.delete_user(&fake_user_id).await;
-    // Current implementation returns 204 No Content even for non-existent users
-    assert!(delete_non_existent.is_ok());
-    println!("✅ Non-existent user deletion returns success (current behavior)");
+    assert!(delete_non_existent.is_err());
+    println!("✅ Non-existent user deletion returns 404");
     
     // Test creating duplicate username
     let unique_id = Uuid::new_v4().to_string()[..8].to_string();

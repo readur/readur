@@ -85,7 +85,7 @@ pub async fn create_label(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(payload): Json<CreateLabel>,
-) -> Result<Json<Label>, LabelError> {
+) -> Result<(StatusCode, Json<Label>), LabelError> {
     payload.validate()?;
 
     let label = state
@@ -101,7 +101,7 @@ pub async fn create_label(
             }
         })?;
 
-    Ok(Json(label))
+    Ok((StatusCode::CREATED, Json(label)))
 }
 
 #[utoipa::path(
@@ -286,8 +286,8 @@ pub async fn update_document_labels(
     ),
     responses(
         (status = 201, description = "Label added to document"),
+        (status = 200, description = "The label was already on the document; nothing changed"),
         (status = 404, description = "Document or label not found"),
-        (status = 409, description = "Label already assigned"),
     )
 )]
 pub async fn add_document_label(

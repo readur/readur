@@ -556,7 +556,7 @@ mod document_deletion_tests {
 
             // Delete documents as owner
             let result = ctx.state.db
-                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents");
 
@@ -610,7 +610,7 @@ mod document_deletion_tests {
 
             // Delete documents as admin
             let result = ctx.state.db
-                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
+                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents as admin");
 
@@ -667,7 +667,7 @@ mod document_deletion_tests {
 
             // Try to delete all documents as user1 (should only delete their own)
             let result = ctx.state.db
-                .bulk_delete_documents(&document_ids, user1.id, user1.role)
+                .bulk_delete_documents(&document_ids, user1.id, user1.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents");
 
@@ -710,7 +710,7 @@ mod document_deletion_tests {
 
             // Delete empty list of documents
             let result = ctx.state.db
-                .bulk_delete_documents(&empty_ids, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&empty_ids, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete empty list");
 
@@ -749,7 +749,7 @@ mod document_deletion_tests {
 
             // Delete documents (should only delete the real one)
             let result = ctx.state.db
-                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&document_ids, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents");
 
@@ -792,7 +792,7 @@ mod document_deletion_tests {
 
             // Admin should be able to delete both
             let result = ctx.state.db
-                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role)
+                .bulk_delete_documents(&document_ids, admin.user_response.id, admin.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents as admin");
 
@@ -810,7 +810,7 @@ mod document_deletion_tests {
 
             // Regular user should only delete their own
             let result2 = ctx.state.db
-                .bulk_delete_documents(&document_ids2, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&document_ids2, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents as user");
 
@@ -1031,7 +1031,7 @@ mod rbac_deletion_tests {
 
             // User1 tries to delete all documents (should only delete their own)
             let result = ctx.state.db
-                .bulk_delete_documents(&all_document_ids, user1.id, user1.role)
+                .bulk_delete_documents(&all_document_ids, user1.id, user1.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents");
 
@@ -1114,7 +1114,7 @@ mod rbac_deletion_tests {
 
             // Admin should be able to delete all documents
             let result = ctx.state.db
-                .bulk_delete_documents(&all_document_ids, admin.id, admin.role)
+                .bulk_delete_documents(&all_document_ids, admin.id, admin.role, "deleted by user")
                 .await
                 .expect("Failed to bulk delete documents as admin");
 
@@ -1339,7 +1339,7 @@ mod rbac_deletion_tests {
             let user2_doc2_doc = create_test_document(user2.id);
             let user2_doc2 = ctx.state.db.create_document(user2_doc2_doc).await.expect("Failed to create document");
             let bulk_delete_result = ctx.state.db
-                .bulk_delete_documents(&vec![user2_doc2.id], user1.id, user1.role)
+                .bulk_delete_documents(&[user2_doc2.id], user1.id, user1.role, "deleted by user")
                 .await
                 .expect("Database query failed");
             let (deleted_ids, failed_ids) = bulk_delete_result;
@@ -1565,14 +1565,14 @@ mod deletion_error_handling_tests {
             let duplicate_ids = vec![document.id, document.id, document.id];
 
             let result = ctx.state.db
-                .bulk_delete_documents(&duplicate_ids, user.id, user.role)
+                .bulk_delete_documents(&duplicate_ids, user.id, user.role, "deleted by user")
                 .await
                 .expect("Bulk delete should handle duplicates");
 
-            // Should only delete the document once, but subsequent attempts fail
+            // Deleted once; the repeats are not failures, the document is gone
             let (deleted_ids, failed_ids) = result;
             assert_eq!(deleted_ids.len(), 1);
-            assert_eq!(failed_ids.len(), 2); // Two failed attempts on already-deleted document
+            assert!(failed_ids.is_empty(), "{failed_ids:?}");
             assert!(deleted_ids.contains(&document.id));
             
             Ok(())
@@ -1610,7 +1610,7 @@ mod deletion_error_handling_tests {
             }
 
             let result = ctx.state.db
-                .bulk_delete_documents(&large_id_list, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&large_id_list, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Should handle large requests");
 
@@ -1755,7 +1755,7 @@ mod deletion_error_handling_tests {
 
             // User1 attempts to delete all (should only delete their own)
             let result = ctx.state.db
-                .bulk_delete_documents(&mixed_ids, user1.id, user1.role)
+                .bulk_delete_documents(&mixed_ids, user1.id, user1.role, "deleted by user")
                 .await
                 .expect("Should handle mixed permissions gracefully");
 
@@ -1890,7 +1890,7 @@ mod deletion_error_handling_tests {
 
             // Test empty list
             let empty_result = ctx.state.db
-                .bulk_delete_documents(&vec![], user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&[], user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Empty list should be handled gracefully");
             let (deleted_ids, failed_ids) = empty_result;
@@ -1900,7 +1900,7 @@ mod deletion_error_handling_tests {
             // Test with only nil UUIDs
             let nil_uuids = vec![Uuid::nil(), Uuid::nil()];
             let nil_result = ctx.state.db
-                .bulk_delete_documents(&nil_uuids, user.user_response.id, user.user_response.role)
+                .bulk_delete_documents(&nil_uuids, user.user_response.id, user.user_response.role, "deleted by user")
                 .await
                 .expect("Nil UUIDs should be handled gracefully");
             let (deleted_ids, failed_ids) = nil_result;

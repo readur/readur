@@ -89,7 +89,12 @@ pub async fn bulk_delete_documents(
     // Perform bulk delete from database
     let (deleted_ids, failed_ids) = state
         .db
-        .bulk_delete_documents(&accessible_ids, auth_user.user.id, auth_user.user.role)
+        .bulk_delete_documents(
+            &accessible_ids,
+            auth_user.user.id,
+            auth_user.user.role,
+            crate::db::ignored_files::REASON_DELETED_BY_USER,
+        )
         .await
         .map_err(|e| {
             error!("Database error during bulk delete: {}", e);
@@ -210,7 +215,12 @@ pub async fn delete_low_confidence_documents(
 
     let (deleted_ids, failed_ids) = state
         .db
-        .bulk_delete_documents(&document_ids, auth_user.user.id, scope_role)
+        .bulk_delete_documents(
+            &document_ids,
+            auth_user.user.id,
+            scope_role,
+            crate::db::ignored_files::REASON_LOW_CONFIDENCE_CLEANUP,
+        )
         .await
         .map_err(|e| {
             error!("Database error during low confidence bulk delete: {}", e);
@@ -299,7 +309,12 @@ pub async fn delete_failed_ocr_documents(
 
     let (deleted_ids, failed_ids) = state
         .db
-        .bulk_delete_documents(&document_ids, auth_user.user.id, scope_role)
+        .bulk_delete_documents(
+            &document_ids,
+            auth_user.user.id,
+            scope_role,
+            crate::db::ignored_files::REASON_FAILED_OCR_CLEANUP,
+        )
         .await
         .map_err(|e| {
             error!("Database error during failed OCR bulk delete: {}", e);

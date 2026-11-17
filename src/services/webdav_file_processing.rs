@@ -131,8 +131,13 @@ impl FileProcessor {
             .map_err(|e| format!("Failed to download {}: {}", path, e))?;
         let size = file_data.len();
 
-        let (document, queue_ocr, sync_status) =
-            self.ingest(request_id, file_info, file_data).await?;
+        let Some((document, queue_ocr, sync_status)) =
+            self.ingest(request_id, file_info, file_data).await?
+        else {
+            // On the ignored-files list. Not tracked, so the file is looked
+            // at again once the user takes it off the list.
+            return Ok(false);
+        };
         self.record_tracking(request_id, file_info, &document, sync_status)
             .await;
         if self.enable_background_ocr && queue_ocr {
@@ -170,13 +175,14 @@ impl FileProcessor {
     }
 
     /// Ingests the downloaded bytes. Returns the document the file maps to,
-    /// whether it is new (and so needs OCR), and the tracking status to record.
+    /// whether it is new (and so needs OCR), and the tracking status to
+    /// record; `None` when the content is on the user's ignored-files list.
     async fn ingest(
         &self,
         request_id: Uuid,
         file_info: &FileIngestionInfo,
         file_data: Vec<u8>,
-    ) -> Result<(Document, bool, &'static str), String> {
+    ) -> Result<Option<(Document, bool, &'static str)>, String> {
         let ingestion = DocumentIngestionService::new(
             self.state.db.clone(),
             self.state.file_service.as_ref().clone(),
@@ -200,9 +206,16 @@ impl FileProcessor {
             .map_err(|e| format!("Document ingestion failed for {}: {}", file_info.name, e))?;
 
         match result {
-            IngestionResult::Created(document) => Ok((document, true, "synced")),
+            IngestionResult::Created(document) => Ok(Some((document, true, "synced"))),
             IngestionResult::ExistingDocument(document) => {
-                Ok((document, false, "duplicate_content"))
+                Ok(Some((document, false, "duplicate_content")))
+            }
+            IngestionResult::Ignored { ignored_file_id } => {
+                info!(
+                    "[{}] Skipped '{}': on the ignored-files list ({})",
+                    request_id, file_info.relative_path, ignored_file_id
+                );
+                Ok(None)
             }
             IngestionResult::TrackedAsDuplicate {
                 existing_document_id,
@@ -215,7 +228,7 @@ impl FileProcessor {
                 let document = self
                     .existing_document(request_id, existing_document_id)
                     .await?;
-                Ok((document, false, "duplicate_content"))
+                Ok(Some((document, false, "duplicate_content")))
             }
         }
     }

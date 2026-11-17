@@ -37,13 +37,13 @@ pub struct OcrRetryFilter {
 }
 
 /// Queue priority for a retried document: an explicit override (clamped to
-/// 1-20), else the retry priority for its size (smaller files first).
+/// 1-20), else the user-work priority for its size (smaller files first).
 pub fn retry_priority(file_size: i64, override_priority: Option<i32>) -> i32 {
     if let Some(priority) = override_priority {
         return priority.clamp(1, 20);
     }
 
-    crate::ocr::priority::retry_priority_for_file_size(file_size)
+    crate::ocr::priority::user_priority_for_file_size(file_size)
 }
 
 #[derive(Clone)]

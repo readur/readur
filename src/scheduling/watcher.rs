@@ -619,6 +619,12 @@ pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<
                 file_info.name, existing_document_id
             );
         }
+        IngestionResult::Ignored { ignored_file_id } => {
+            info!(
+                "Skipped watch folder file {}: on the ignored-files list ({})",
+                file_info.name, ignored_file_id
+            );
+        }
     }
 
     Ok(())

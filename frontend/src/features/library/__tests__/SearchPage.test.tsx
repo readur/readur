@@ -304,7 +304,10 @@ describe('Search page', () => {
 
     test('too many matches asks the user to refine', async () => {
       searchService.enhancedSearch.mockRejectedValue({
-        response: { status: 413, data: { error_code: 'SEARCH_TOO_MANY_RESULTS' } },
+        response: {
+          status: 413,
+          data: { error: 'Too many results', code: 'SEARCH_TOO_MANY_RESULTS', status: 413 },
+        },
       });
       renderSearch('/search?q=the');
       expect(

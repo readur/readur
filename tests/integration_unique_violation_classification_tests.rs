@@ -268,6 +268,7 @@ fn outcome_summary(result: &IngestionResult) -> (&'static str, Uuid, Option<Stri
         IngestionResult::TrackedAsDuplicate {
             existing_document_id,
         } => ("tracked", *existing_document_id, None),
+        IngestionResult::Ignored { ignored_file_id } => ("ignored", *ignored_file_id, None),
     }
 }
 

@@ -60,7 +60,7 @@ async fn create_label(ctx: &TestContext, token: &str, name: &str) -> Uuid {
         Some(json!({ "name": name, "color": "#0969da" })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
     body["id"].as_str().unwrap().parse().unwrap()
 }
 

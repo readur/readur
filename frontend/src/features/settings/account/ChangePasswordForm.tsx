@@ -7,16 +7,18 @@ import { MIN_PASSWORD_LENGTH, validateNewPassword } from '../../auth/passwordPol
 import { Notice } from '../shared/Notice';
 import shared from '../shared/shared.module.css';
 import formStyles from '../form/form.module.css';
+import { apiErrorMessage } from '../../../services/errors';
 
 /** Maps a failed password change to a message. */
 export function changePasswordErrorMessage(err: unknown, t: TFunction): string {
-  const response = (err as { response?: { status?: number; data?: { error?: unknown } } } | null)?.response;
-  if (response?.status === 401) return t('settings.account.wrongCurrentPassword', 'Current password is incorrect');
-  if (response?.status === 429) return t('settings.account.tooManyAttempts', 'Too many attempts. Please try again later.');
-  const serverMessage = response?.data?.error;
-  return typeof serverMessage === 'string' && serverMessage
-    ? serverMessage
-    : t('settings.account.passwordChangeFailed', 'Failed to change password');
+  const response = (err as { response?: { status?: number } } | null)?.response;
+  if (response?.status === 401)
+    return t('settings.account.wrongCurrentPassword', 'Current password is incorrect');
+  if (response?.status === 429)
+    return t('settings.account.tooManyAttempts', 'Too many attempts. Please try again later.');
+  return (
+    apiErrorMessage(err) ?? t('settings.account.passwordChangeFailed', 'Failed to change password')
+  );
 }
 
 /**
@@ -54,7 +56,10 @@ export function ChangePasswordForm() {
       setNewPassword('');
       setConfirmPassword('');
       setSuccess(
-        t('settings.account.passwordChanged', 'Password changed. Other sessions for your account have been signed out.'),
+        t(
+          'settings.account.passwordChanged',
+          'Password changed. Other sessions for your account have been signed out.',
+        ),
       );
     } catch (err) {
       setError(changePasswordErrorMessage(err, t));

@@ -409,6 +409,13 @@ impl SourceSyncService {
                 );
                 return Ok(FileOutcome::Skipped);
             }
+            IngestionResult::Ignored { ignored_file_id } => {
+                info!(
+                    "Skipped {}: on the ignored-files list ({})",
+                    file_info.name, ignored_file_id
+                );
+                return Ok(FileOutcome::Skipped);
+            }
         };
 
         // Queue for OCR if enabled and this is a new document (OCR continues even if sync is cancelled)
