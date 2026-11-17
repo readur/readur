@@ -7,6 +7,11 @@ use uuid::Uuid;
 use crate::models::search::{deserialize_comma_separated, deserialize_comma_separated_uuids};
 use crate::models::{DocumentFilters, DocumentSortField, SortOrder};
 
+// Response types the document routes share with `services::documents`; they live in `models`.
+pub use crate::models::{
+    DocumentPaginationInfo, DocumentUploadResponse, PaginatedDocumentsResponse,
+};
+
 #[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
 #[ts(export, optional_fields)]
 pub struct PaginationQuery {
@@ -91,21 +96,6 @@ pub struct RetryOcrRequest {
     pub languages: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema, TS)]
-#[ts(export)]
-pub struct DocumentUploadResponse {
-    pub id: uuid::Uuid,
-    pub filename: String,
-    pub file_size: i64,
-    pub mime_type: String,
-    pub status: String,
-    pub message: String,
-    /// Follow-up steps that failed after the document was stored (OCR
-    /// queueing, labelling). The upload itself succeeded.
-    #[serde(default)]
-    pub warnings: Vec<String>,
-}
-
 #[derive(Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct BulkDeleteResponse {
@@ -134,22 +124,6 @@ pub struct DocumentDebugInfo {
     pub readable: bool,
     pub permissions: Option<String>,
     pub user_settings: Option<crate::models::SettingsResponse>,
-}
-
-#[derive(Serialize, Deserialize, ToSchema, TS)]
-#[ts(export)]
-pub struct DocumentPaginationInfo {
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-    pub has_more: bool,
-}
-
-#[derive(Serialize, Deserialize, ToSchema, TS)]
-#[ts(export)]
-pub struct PaginatedDocumentsResponse {
-    pub documents: Vec<crate::models::DocumentResponse>,
-    pub pagination: DocumentPaginationInfo,
 }
 
 impl Default for PaginationQuery {

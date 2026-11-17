@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -6,17 +5,19 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use uuid::Uuid;
-use tracing::{info, error, warn};
-use utoipa::ToSchema;
+use std::sync::Arc;
+use tracing::{error, info, warn};
 use ts_rs::TS;
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
-    AppState,
     db::sanitize::{strip_nul, strip_nul_vec},
     models::UserRole,
     ocr::queue::EnqueueOutcome,
+    services::ocr_retry_service::{retry_priority, OcrRetryFilter},
+    AppState,
 };
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
@@ -41,29 +42,6 @@ pub enum SelectionMode {
     All,      // All failed OCR documents
     Specific, // Specific document IDs
     Filter,   // Filter by criteria
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct OcrRetryFilter {
-    /// Filter by MIME types
-    pub mime_types: Option<Vec<String>>,
-    /// Filter by file extensions
-    pub file_extensions: Option<Vec<String>>,
-    /// Filter by OCR failure reasons
-    pub failure_reasons: Option<Vec<String>>,
-    /// Filter by minimum file size (bytes)
-    pub min_file_size: Option<i64>,
-    /// Filter by maximum file size (bytes)
-    pub max_file_size: Option<i64>,
-    /// Filter by date range - documents created after this date
-    pub created_after: Option<chrono::DateTime<chrono::Utc>>,
-    /// Filter by date range - documents created before this date
-    pub created_before: Option<chrono::DateTime<chrono::Utc>>,
-    /// Filter by tags
-    pub tags: Option<Vec<String>>,
-    /// Maximum number of documents to retry
-    pub limit: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema, TS)]
@@ -116,14 +94,20 @@ pub async fn bulk_retry_ocr(
         "priority_override" => request.priority_override.unwrap_or(-1),
         "message" => "Starting bulk OCR retry request"
     );
-    
-    info!("Bulk OCR retry requested by user {} with mode: {:?}", auth_user.user.id, request.mode);
-    
+
+    info!(
+        "Bulk OCR retry requested by user {} with mode: {:?}",
+        auth_user.user.id, request.mode
+    );
+
     let preview_only = request.preview_only.unwrap_or(false);
-    
+
     // Build query based on selection mode
-    crate::debug_log!("BULK_OCR_RETRY", "Building document query based on selection mode");
-    
+    crate::debug_log!(
+        "BULK_OCR_RETRY",
+        "Building document query based on selection mode"
+    );
+
     let documents = match request.mode {
         SelectionMode::All => {
             crate::debug_log!("BULK_OCR_RETRY", "Fetching all documents for retry");
@@ -137,7 +121,10 @@ pub async fn bulk_retry_ocr(
                 );
                 get_specific_documents(&state, &auth_user, ids.clone()).await?
             } else {
-                crate::debug_error!("BULK_OCR_RETRY", "Specific mode requested but no document IDs provided");
+                crate::debug_error!(
+                    "BULK_OCR_RETRY",
+                    "Specific mode requested but no document IDs provided"
+                );
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
@@ -150,12 +137,15 @@ pub async fn bulk_retry_ocr(
                 );
                 get_filtered_documents(&state, &auth_user, filter.clone()).await?
             } else {
-                crate::debug_error!("BULK_OCR_RETRY", "Filter mode requested but no filter provided");
+                crate::debug_error!(
+                    "BULK_OCR_RETRY",
+                    "Filter mode requested but no filter provided"
+                );
                 return Err(StatusCode::BAD_REQUEST);
             }
         }
     };
-    
+
     let matched_count = documents.len();
     crate::debug_log!("BULK_OCR_RETRY",
         "matched_count" => matched_count,
@@ -164,10 +154,10 @@ pub async fn bulk_retry_ocr(
     let mut retry_documents = Vec::new();
     let mut queued_count = 0;
     let mut total_estimated_time = 0.0;
-    
+
     for (index, doc) in documents.iter().enumerate() {
-        let priority = calculate_priority(doc.file_size, request.priority_override);
-        
+        let priority = retry_priority(doc.file_size, request.priority_override);
+
         crate::debug_log!("BULK_OCR_RETRY",
             "index" => index + 1,
             "total" => matched_count,
@@ -178,7 +168,7 @@ pub async fn bulk_retry_ocr(
             "failure_reason" => doc.ocr_failure_reason.as_deref().unwrap_or("none"),
             "message" => "Processing document"
         );
-        
+
         let mut doc_info = OcrRetryDocumentInfo {
             id: doc.id,
             filename: doc.filename.clone(),
@@ -188,20 +178,23 @@ pub async fn bulk_retry_ocr(
             priority,
             queue_id: None,
         };
-        
+
         if !preview_only {
             // Reset OCR fields
             crate::debug_log!("BULK_OCR_RETRY",
                 "document_id" => doc.id,
                 "message" => "Resetting OCR status for document"
             );
-            
+
             if let Err(e) = reset_document_ocr_status(&state, doc.id).await {
-                crate::debug_error!("BULK_OCR_RETRY", format!("Failed to reset OCR status for document {}: {}", doc.id, e));
+                crate::debug_error!(
+                    "BULK_OCR_RETRY",
+                    format!("Failed to reset OCR status for document {}: {}", doc.id, e)
+                );
                 warn!("Failed to reset OCR status for document {}: {}", doc.id, e);
                 continue;
             }
-            
+
             // Queue for OCR
             crate::debug_log!("BULK_OCR_RETRY",
                 "document_id" => doc.id,
@@ -209,17 +202,24 @@ pub async fn bulk_retry_ocr(
                 "file_size" => doc.file_size,
                 "message" => "Enqueueing document for OCR"
             );
-            
-            match state.queue_service.enqueue_document(doc.id, priority, doc.file_size).await {
+
+            match state
+                .queue_service
+                .enqueue_document(doc.id, priority, doc.file_size)
+                .await
+            {
                 Ok(EnqueueOutcome::AlreadyQueued) => {
                     // A job is already pending or running for it; that job
                     // does the retry, so there is nothing to add or record.
-                    info!("Document {} is already queued for OCR; not queueing it again", doc.id);
+                    info!(
+                        "Document {} is already queued for OCR; not queueing it again",
+                        doc.id
+                    );
                 }
                 Ok(EnqueueOutcome::Queued(queue_id)) => {
                     doc_info.queue_id = Some(queue_id);
                     queued_count += 1;
-                    
+
                     crate::debug_log!("BULK_OCR_RETRY",
                         "document_id" => doc.id,
                         "queue_id" => queue_id,
@@ -227,21 +227,21 @@ pub async fn bulk_retry_ocr(
                         "queued_count" => queued_count,
                         "message" => "Successfully enqueued document"
                     );
-                    
+
                     // Record retry history
                     let retry_reason = match &request.mode {
                         SelectionMode::All => "bulk_retry_all",
                         SelectionMode::Specific => "bulk_retry_specific",
                         SelectionMode::Filter => "bulk_retry_filtered",
                     };
-                    
+
                     crate::debug_log!("BULK_OCR_RETRY",
                         "document_id" => doc.id,
                         "retry_reason" => retry_reason,
                         "queue_id" => queue_id,
                         "message" => "Recording retry history"
                     );
-                    
+
                     if let Err(e) = crate::db::ocr_retry::record_ocr_retry(
                         state.db.get_pool(),
                         doc.id,
@@ -249,32 +249,49 @@ pub async fn bulk_retry_ocr(
                         retry_reason,
                         priority,
                         Some(queue_id),
-                    ).await {
-                        crate::debug_error!("BULK_OCR_RETRY", format!("Failed to record retry history for document {}: {}", doc.id, e));
-                        warn!("Failed to record retry history for document {}: {}", doc.id, e);
+                    )
+                    .await
+                    {
+                        crate::debug_error!(
+                            "BULK_OCR_RETRY",
+                            format!(
+                                "Failed to record retry history for document {}: {}",
+                                doc.id, e
+                            )
+                        );
+                        warn!(
+                            "Failed to record retry history for document {}: {}",
+                            doc.id, e
+                        );
                     } else {
-                        crate::debug_log!("BULK_OCR_RETRY", 
+                        crate::debug_log!("BULK_OCR_RETRY",
                             "document_id" => doc.id,
                             "queue_id" => queue_id,
                             "message" => "Successfully recorded retry history"
                         );
                     }
-                    
-                    info!("Queued document {} for OCR retry with priority {}", doc.id, priority);
+
+                    info!(
+                        "Queued document {} for OCR retry with priority {}",
+                        doc.id, priority
+                    );
                 }
                 Err(e) => {
-                    crate::debug_error!("BULK_OCR_RETRY", format!("Failed to enqueue document {}: {}", doc.id, e));
+                    crate::debug_error!(
+                        "BULK_OCR_RETRY",
+                        format!("Failed to enqueue document {}: {}", doc.id, e)
+                    );
                     error!("Failed to queue document {} for OCR retry: {}", doc.id, e);
                 }
             }
         }
-        
+
         // Estimate processing time (2 seconds per MB as rough estimate)
         total_estimated_time += (doc.file_size as f64 / 1_048_576.0) * 2.0;
         retry_documents.push(doc_info);
     }
-    
-    crate::debug_log!("BULK_OCR_RETRY", 
+
+    crate::debug_log!("BULK_OCR_RETRY",
         "matched_count" => matched_count,
         "queued_count" => queued_count,
         "preview_only" => preview_only,
@@ -282,20 +299,26 @@ pub async fn bulk_retry_ocr(
         "user_id" => auth_user.user.id,
         "message" => "Bulk retry operation completed"
     );
-    
+
     let response = BulkOcrRetryResponse {
         success: true,
         message: if preview_only {
-            format!("Preview: {} documents would be queued for OCR retry", matched_count)
+            format!(
+                "Preview: {} documents would be queued for OCR retry",
+                matched_count
+            )
         } else {
-            format!("Successfully queued {} out of {} documents for OCR retry", queued_count, matched_count)
+            format!(
+                "Successfully queued {} out of {} documents for OCR retry",
+                queued_count, matched_count
+            )
         },
         queued_count,
         matched_count,
         documents: retry_documents,
         estimated_total_time_minutes: total_estimated_time / 60.0,
     };
-    
+
     Ok(Json(response))
 }
 
@@ -327,23 +350,29 @@ pub async fn get_document_retry_history(
         SELECT 1 FROM documents 
         WHERE id = $1 
           AND ($2::uuid IS NULL OR user_id = $2)
-        "#
+        "#,
     )
     .bind(document_id)
-    .bind(if auth_user.user.role == UserRole::Admin { None } else { Some(auth_user.user.id) })
+    .bind(if auth_user.user.role == UserRole::Admin {
+        None
+    } else {
+        Some(auth_user.user.id)
+    })
     .fetch_optional(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     if doc_exists.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
-    
-    let history = crate::db::ocr_retry::get_document_retry_history(state.db.get_pool(), document_id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let history_items: Vec<serde_json::Value> = history.into_iter()
+
+    let history =
+        crate::db::ocr_retry::get_document_retry_history(state.db.get_pool(), document_id)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let history_items: Vec<serde_json::Value> = history
+        .into_iter()
         .map(|h| {
             serde_json::json!({
                 "id": h.id.to_string(),
@@ -357,7 +386,7 @@ pub async fn get_document_retry_history(
             })
         })
         .collect();
-    
+
     Ok(Json(serde_json::json!({
         "document_id": document_id.to_string(),
         "retry_history": history_items,
@@ -387,7 +416,7 @@ pub async fn get_ocr_retry_stats(
     } else {
         Some(auth_user.user.id)
     };
-    
+
     // Get statistics by failure reason
     let failure_stats = sqlx::query(
         r#"
@@ -401,13 +430,13 @@ pub async fn get_ocr_retry_stats(
         WHERE ($1::uuid IS NULL OR user_id = $1)
         GROUP BY ocr_failure_reason
         ORDER BY count DESC
-        "#
+        "#,
     )
     .bind(user_filter)
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     // Get statistics by file type
     let type_stats = sqlx::query(
         r#"
@@ -419,14 +448,15 @@ pub async fn get_ocr_retry_stats(
         WHERE ($1::uuid IS NULL OR user_id = $1)
         GROUP BY mime_type
         ORDER BY count DESC
-        "#
+        "#,
     )
     .bind(user_filter)
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    let failure_reasons: Vec<serde_json::Value> = failure_stats.into_iter()
+
+    let failure_reasons: Vec<serde_json::Value> = failure_stats
+        .into_iter()
         .map(|row| {
             // Handle NUMERIC type from database by trying different types
             let avg_file_size_mb = if let Ok(val) = row.try_get::<f64, _>("avg_file_size") {
@@ -436,9 +466,12 @@ pub async fn get_ocr_retry_stats(
             } else {
                 0.0
             };
-            
+            let reason = row
+                .get::<Option<String>, _>("ocr_failure_reason")
+                .unwrap_or_else(|| "unknown".to_string());
+
             serde_json::json!({
-                "reason": row.get::<Option<String>, _>("ocr_failure_reason").unwrap_or_else(|| "unknown".to_string()),
+                "reason": reason,
                 "count": row.get::<i64, _>("count"),
                 "avg_file_size_mb": avg_file_size_mb,
                 "first_occurrence": row.get::<chrono::DateTime<chrono::Utc>, _>("first_occurrence"),
@@ -446,8 +479,9 @@ pub async fn get_ocr_retry_stats(
             })
         })
         .collect();
-    
-    let file_types: Vec<serde_json::Value> = type_stats.into_iter()
+
+    let file_types: Vec<serde_json::Value> = type_stats
+        .into_iter()
         .map(|row| {
             // Handle NUMERIC type from database by trying different types
             let avg_file_size_mb = if let Ok(val) = row.try_get::<f64, _>("avg_file_size") {
@@ -457,7 +491,7 @@ pub async fn get_ocr_retry_stats(
             } else {
                 0.0
             };
-            
+
             serde_json::json!({
                 "mime_type": row.get::<String, _>("mime_type"),
                 "count": row.get::<i64, _>("count"),
@@ -465,7 +499,7 @@ pub async fn get_ocr_retry_stats(
             })
         })
         .collect();
-    
+
     Ok(Json(serde_json::json!({
         "failure_reasons": failure_reasons,
         "file_types": file_types,
@@ -491,15 +525,17 @@ pub async fn get_retry_recommendations(
     auth_user: AuthUser,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let retry_service = crate::services::ocr_retry_service::OcrRetryService::new(state);
-    
-    let recommendations = retry_service.get_retry_recommendations(auth_user.user.id)
+
+    let recommendations = retry_service
+        .get_retry_recommendations(auth_user.user.id)
         .await
         .map_err(|e| {
             error!("Failed to get retry recommendations: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    
-    let recommendations_json: Vec<serde_json::Value> = recommendations.into_iter()
+
+    let recommendations_json: Vec<serde_json::Value> = recommendations
+        .into_iter()
         .map(|rec| {
             serde_json::json!({
                 "reason": rec.reason,
@@ -511,7 +547,7 @@ pub async fn get_retry_recommendations(
             })
         })
         .collect();
-    
+
     Ok(Json(serde_json::json!({
         "recommendations": recommendations_json,
         "total_recommendations": recommendations_json.len(),
@@ -521,15 +557,15 @@ pub async fn get_retry_recommendations(
 // Helper functions
 
 async fn get_all_failed_ocr_documents(
-    state: &Arc<AppState>, 
-    auth_user: &AuthUser
+    state: &Arc<AppState>,
+    auth_user: &AuthUser,
 ) -> Result<Vec<DocumentInfo>, StatusCode> {
     let user_filter = if auth_user.user.role == UserRole::Admin {
         None
     } else {
         Some(auth_user.user.id)
     };
-    
+
     let documents = sqlx::query_as::<_, DocumentInfo>(
         r#"
         SELECT id, filename, file_size, mime_type, ocr_failure_reason
@@ -537,33 +573,35 @@ async fn get_all_failed_ocr_documents(
         WHERE ocr_status = 'failed'
           AND ($1::uuid IS NULL OR user_id = $1)
         ORDER BY created_at DESC
-        "#
+        "#,
     )
     .bind(user_filter)
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(documents)
 }
 
 async fn get_specific_documents(
     state: &Arc<AppState>,
     auth_user: &AuthUser,
-    document_ids: Vec<Uuid>
+    document_ids: Vec<Uuid>,
 ) -> Result<Vec<DocumentInfo>, StatusCode> {
     let user_filter = if auth_user.user.role == UserRole::Admin {
         None
     } else {
         Some(auth_user.user.id)
     };
-    
+
     // First let's debug what documents we're looking for and their current status
     for doc_id in &document_ids {
-        if let Ok(Some(row)) = sqlx::query("SELECT id, filename, ocr_status FROM documents WHERE id = $1")
-            .bind(doc_id)
-            .fetch_optional(state.db.get_pool())
-            .await {
+        if let Ok(Some(row)) =
+            sqlx::query("SELECT id, filename, ocr_status FROM documents WHERE id = $1")
+                .bind(doc_id)
+                .fetch_optional(state.db.get_pool())
+                .await
+        {
             let status: Option<String> = row.get("ocr_status");
             let filename: String = row.get("filename");
             crate::debug_log!("BULK_OCR_RETRY",
@@ -586,32 +624,32 @@ async fn get_specific_documents(
         FROM documents
         WHERE id = ANY($1)
           AND ($2::uuid IS NULL OR user_id = $2)
-        "#
+        "#,
     )
     .bind(&document_ids)
     .bind(user_filter)
     .fetch_all(state.db.get_pool())
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(documents)
 }
 
 async fn get_filtered_documents(
     state: &Arc<AppState>,
     auth_user: &AuthUser,
-    filter: OcrRetryFilter
+    filter: OcrRetryFilter,
 ) -> Result<Vec<DocumentInfo>, StatusCode> {
     let mut query = sqlx::QueryBuilder::new(
-        "SELECT id, filename, file_size, mime_type, ocr_failure_reason FROM documents WHERE 1=1"
+        "SELECT id, filename, file_size, mime_type, ocr_failure_reason FROM documents WHERE 1=1",
     );
-    
+
     // User filter
     if auth_user.user.role != UserRole::Admin {
         query.push(" AND user_id = ");
         query.push_bind(auth_user.user.id);
     }
-    
+
     // MIME type filter
     if let Some(mime_types) = &filter.mime_types {
         if !mime_types.is_empty() {
@@ -620,7 +658,7 @@ async fn get_filtered_documents(
             query.push(")");
         }
     }
-    
+
     // File extension filter
     if let Some(extensions) = &filter.file_extensions {
         if !extensions.is_empty() {
@@ -635,7 +673,7 @@ async fn get_filtered_documents(
             query.push(")");
         }
     }
-    
+
     // Failure reason filter
     if let Some(reasons) = &filter.failure_reasons {
         if !reasons.is_empty() {
@@ -644,29 +682,29 @@ async fn get_filtered_documents(
             query.push(")");
         }
     }
-    
+
     // File size filters
     if let Some(min_size) = filter.min_file_size {
         query.push(" AND file_size >= ");
         query.push_bind(min_size);
     }
-    
+
     if let Some(max_size) = filter.max_file_size {
         query.push(" AND file_size <= ");
         query.push_bind(max_size);
     }
-    
+
     // Date filters
     if let Some(created_after) = filter.created_after {
         query.push(" AND created_at >= ");
         query.push_bind(created_after);
     }
-    
+
     if let Some(created_before) = filter.created_before {
         query.push(" AND created_at <= ");
         query.push_bind(created_before);
     }
-    
+
     // Tag filter
     if let Some(tags) = &filter.tags {
         if !tags.is_empty() {
@@ -674,24 +712,28 @@ async fn get_filtered_documents(
             query.push_bind(strip_nul_vec(tags));
         }
     }
-    
+
     // Order and limit
     query.push(" ORDER BY created_at DESC");
-    
+
     if let Some(limit) = filter.limit {
         query.push(" LIMIT ");
         query.push_bind(limit);
     }
-    
-    let documents = query.build_query_as::<DocumentInfo>()
+
+    let documents = query
+        .build_query_as::<DocumentInfo>()
         .fetch_all(state.db.get_pool())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
     Ok(documents)
 }
 
-async fn reset_document_ocr_status(state: &Arc<AppState>, document_id: Uuid) -> Result<(), anyhow::Error> {
+async fn reset_document_ocr_status(
+    state: &Arc<AppState>,
+    document_id: Uuid,
+) -> Result<(), anyhow::Error> {
     sqlx::query(
         r#"
         UPDATE documents
@@ -706,27 +748,13 @@ async fn reset_document_ocr_status(state: &Arc<AppState>, document_id: Uuid) -> 
             ocr_completed_at = NULL,
             updated_at = NOW()
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(document_id)
     .execute(state.db.get_pool())
     .await?;
-    
-    Ok(())
-}
 
-fn calculate_priority(file_size: i64, override_priority: Option<i32>) -> i32 {
-    if let Some(priority) = override_priority {
-        return priority.clamp(1, 20);
-    }
-    
-    match file_size {
-        0..=1048576 => 15,      // <= 1MB: highest priority
-        ..=5242880 => 12,       // 1-5MB: high priority
-        ..=10485760 => 10,      // 5-10MB: medium priority  
-        ..=52428800 => 8,       // 10-50MB: low priority
-        _ => 6,                 // > 50MB: lowest priority
-    }
+    Ok(())
 }
 
 #[derive(Debug, sqlx::FromRow)]

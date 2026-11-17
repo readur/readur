@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    errors::document::DocumentError,
     mcp::{format, ReadurMcp},
     models::{DocumentFilters, DocumentOcrResponse, DocumentResponse, User},
-    routes::documents::DocumentError,
     services::documents::{
         self as service, UploadRequest, LABELS_NOT_APPLIED_WARNING, OCR_NOT_QUEUED_WARNING,
     },

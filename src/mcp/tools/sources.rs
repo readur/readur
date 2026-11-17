@@ -11,8 +11,7 @@ use uuid::Uuid;
 use crate::{
     mcp::{format, ReadurMcp},
     models::{SourceResponse, SourceStatus, SourceType},
-    routes::sources::source_responses_for_user,
-    services::sync_progress_tracker::SyncProgressInfo,
+    services::{sources::source_responses_for_user, sync_progress_tracker::SyncProgressInfo},
 };
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]

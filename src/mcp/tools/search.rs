@@ -1,6 +1,6 @@
 //! Search tools. They build the same `SearchRequest` the REST search
 //! endpoints receive and run it through the shared functions in
-//! `routes::search`, so results and validation match the web UI.
+//! `services::search`, so results and validation match the web UI.
 
 use http::request::Parts;
 use rmcp::{
@@ -17,7 +17,7 @@ use crate::{
     models::{
         FacetItem, SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse, UserRole,
     },
-    routes::search::{load_search_facets, run_basic_search, run_enhanced_search},
+    services::search::{load_search_facets, run_basic_search, run_enhanced_search},
 };
 
 const DEFAULT_LIMIT: u32 = 25;

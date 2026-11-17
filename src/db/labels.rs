@@ -2,9 +2,8 @@ use anyhow::Result;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::db::{sanitize::ToDb, Database};
-use crate::errors::label::LabelError;
-use crate::routes::labels::{CreateLabel, Label, UpdateLabel};
+use crate::db::{sanitize::ToDb, unique_violation::violates_unique_constraint, Database};
+use crate::models::label::{CreateLabel, Label, UpdateLabel};
 
 /// The labels every new account starts with: name, description, colour. They are ordinary labels
 /// the user owns, so they can be renamed, recoloured or deleted.
@@ -33,59 +32,6 @@ pub async fn seed_default_labels(conn: &mut PgConnection, user_id: Uuid) -> Resu
     Ok(())
 }
 
-/// Rejects names that are blank or contain commas (commas break the comma-separated label
-/// filters in search).
-pub fn validate_label_name(name: &str) -> Result<(), LabelError> {
-    if name.trim().is_empty() {
-        return Err(LabelError::invalid_name(
-            name.to_string(),
-            "Name cannot be empty".to_string(),
-        ));
-    }
-    // URL-encoded values (%2c) are decoded by serde before reaching here
-    if name.contains(',') {
-        return Err(LabelError::invalid_name(
-            name.to_string(),
-            "Name cannot contain commas".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-/// Colours are `#rrggbb`.
-pub fn validate_label_color(color: &str) -> Result<(), LabelError> {
-    if !color.starts_with('#') || color.len() != 7 {
-        return Err(LabelError::invalid_color(color));
-    }
-    Ok(())
-}
-
-impl CreateLabel {
-    pub fn validate(&self) -> Result<(), LabelError> {
-        validate_label_name(&self.name)?;
-        validate_label_color(&self.color)?;
-        if let Some(bg_color) = &self.background_color {
-            validate_label_color(bg_color)?;
-        }
-        Ok(())
-    }
-}
-
-impl UpdateLabel {
-    pub fn validate(&self) -> Result<(), LabelError> {
-        if let Some(name) = &self.name {
-            validate_label_name(name)?;
-        }
-        if let Some(color) = &self.color {
-            validate_label_color(color)?;
-        }
-        if let Some(bg_color) = &self.background_color {
-            validate_label_color(bg_color)?;
-        }
-        Ok(())
-    }
-}
-
 /// The constraint that keeps each user's label names unique
 /// (`migrations/20250620100017_add_labels_system.sql`).
 pub const LABEL_NAME_UNIQUE_CONSTRAINT: &str = "unique_user_label_name";
@@ -97,9 +43,7 @@ pub const LABEL_NAME_UNIQUE_CONSTRAINT: &str = "unique_user_label_name";
 /// constraint name are fixed. Only the label-name constraint counts; any other unique violation
 /// is a genuine failure and must not be reported to the user as a name clash.
 pub fn is_label_name_taken(error: &sqlx::Error) -> bool {
-    error.as_database_error().is_some_and(|db| {
-        db.is_unique_violation() && db.constraint() == Some(LABEL_NAME_UNIQUE_CONSTRAINT)
-    })
+    violates_unique_constraint(error, LABEL_NAME_UNIQUE_CONSTRAINT)
 }
 
 /// Outcome of assigning a label to a document.
@@ -118,6 +62,28 @@ pub enum LabelRemoveOutcome {
     NotAssigned,
     DocumentNotFound,
 }
+
+/// Outcome of replacing a document's labels with a new set.
+#[derive(Debug, Clone)]
+pub enum LabelReplaceOutcome {
+    /// The document now carries exactly these labels.
+    Replaced(Vec<Label>),
+    DocumentNotFound,
+    /// Some requested label is not the user's (or is listed twice); nothing was changed.
+    LabelNotFound,
+}
+
+/// Label columns as a document's label list reports them (no usage counts).
+pub(crate) const DOCUMENT_LABELS_SQL: &str = r#"
+    SELECT
+        l.id, l.user_id, l.name, l.description, l.color,
+        l.background_color, l.icon, l.created_at, l.updated_at,
+        0::bigint as document_count, 0::bigint as source_count
+    FROM labels l
+    JOIN document_labels dl ON l.id = dl.label_id
+    WHERE dl.document_id = $1
+    ORDER BY l.name
+"#;
 
 /// Label queries for one user. Labels and label assignments belong to the user who owns them:
 /// every function here scopes by `user_id`, whatever that user's role.
@@ -385,6 +351,75 @@ impl Database {
         .await?;
         Ok(remove_outcome(owns_document, deleted))
     }
+
+    /// Replaces the labels on one of the user's documents with `label_ids`, all or nothing.
+    ///
+    /// Runs in one transaction that locks the document row (`FOR UPDATE`, so concurrent
+    /// replacements of the same document run one after the other) and the requested label rows
+    /// (`FOR SHARE`, so none can be deleted before the commit). Every write repeats the
+    /// ownership condition, so nothing outside the user's documents and labels can be touched
+    /// whatever happens between statements. The returned list is read inside the same
+    /// transaction, so it is exactly what was committed.
+    pub async fn replace_document_labels_for_user(
+        &self,
+        document_id: Uuid,
+        label_ids: &[Uuid],
+        user_id: Uuid,
+    ) -> Result<LabelReplaceOutcome> {
+        let mut tx = self.pool.begin().await?;
+
+        let owns_document = sqlx::query_scalar::<_, i32>(
+            "SELECT 1 FROM documents WHERE id = $1 AND user_id = $2 FOR UPDATE",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if !owns_document {
+            return Ok(LabelReplaceOutcome::DocumentNotFound);
+        }
+
+        let owned_labels = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM labels WHERE id = ANY($1) AND user_id = $2 FOR SHARE",
+        )
+        .bind(label_ids)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        // A repeated id also fails this check, as it always has: the set must name each label once.
+        if owned_labels.len() != label_ids.len() {
+            return Ok(LabelReplaceOutcome::LabelNotFound);
+        }
+
+        sqlx::query(
+            "DELETE FROM document_labels dl USING documents d
+             WHERE dl.document_id = $1 AND d.id = dl.document_id AND d.user_id = $2",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO document_labels (document_id, label_id, assigned_by)
+             SELECT d.id, l.id, $2
+             FROM documents d JOIN labels l ON l.user_id = d.user_id
+             WHERE d.id = $1 AND d.user_id = $2 AND l.id = ANY($3)",
+        )
+        .bind(document_id)
+        .bind(user_id)
+        .bind(label_ids)
+        .execute(&mut *tx)
+        .await?;
+
+        let labels = sqlx::query_as::<_, Label>(DOCUMENT_LABELS_SQL)
+            .bind(document_id)
+            .fetch_all(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(LabelReplaceOutcome::Replaced(labels))
+    }
 }
 
 /// Classifies [`Database::add_document_label_for_user`]'s result. A foreign document wins over
@@ -410,65 +445,7 @@ fn remove_outcome(owns_document: bool, deleted: bool) -> LabelRemoveOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::error::{DatabaseError, ErrorKind};
-    use std::borrow::Cow;
-
-    /// A database error with a chosen message, SQLSTATE class and constraint, to show
-    /// [`is_label_name_taken`] reads the structured fields and ignores the text.
-    #[derive(Debug)]
-    struct FakeDbError {
-        message: &'static str,
-        unique_violation: bool,
-        constraint: Option<&'static str>,
-    }
-
-    impl std::fmt::Display for FakeDbError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str(self.message)
-        }
-    }
-
-    impl std::error::Error for FakeDbError {}
-
-    impl DatabaseError for FakeDbError {
-        fn message(&self) -> &str {
-            self.message
-        }
-        fn code(&self) -> Option<Cow<'_, str>> {
-            self.unique_violation.then_some(Cow::Borrowed("23505"))
-        }
-        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
-            self
-        }
-        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
-            self
-        }
-        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-            self
-        }
-        fn constraint(&self) -> Option<&str> {
-            self.constraint
-        }
-        fn kind(&self) -> ErrorKind {
-            if self.unique_violation {
-                ErrorKind::UniqueViolation
-            } else {
-                ErrorKind::Other
-            }
-        }
-    }
-
-    fn db_error(
-        message: &'static str,
-        unique_violation: bool,
-        constraint: Option<&'static str>,
-    ) -> sqlx::Error {
-        sqlx::Error::Database(Box::new(FakeDbError {
-            message,
-            unique_violation,
-            constraint,
-        }))
-    }
+    use crate::db::unique_violation::fake_db_error as db_error;
 
     #[test]
     fn name_clash_is_recognised_whatever_the_server_language() {

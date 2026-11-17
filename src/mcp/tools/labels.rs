@@ -16,10 +16,8 @@ use crate::{
     db::labels::{is_label_name_taken, LabelAssignOutcome, LabelRemoveOutcome},
     errors::{label::LabelError, AppError},
     mcp::{format, ReadurMcp},
-    routes::labels::{CreateLabel, Label, UpdateLabel},
+    models::label::{CreateLabel, Label, UpdateLabel, DEFAULT_LABEL_COLOR},
 };
-
-const DEFAULT_LABEL_COLOR: &str = "#0969da";
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListLabelsParams {

@@ -5,6 +5,10 @@ use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
+    models::label::{
+        BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
+        LabelQuery, UpdateLabel,
+    },
     models::source::{
         WebDAVConnectionResult, WebDAVCrawlEstimate, WebDAVSyncStatus, WebDAVTestConnection,
     },
@@ -21,10 +25,6 @@ use crate::{
     },
     routes::{
         documents::BulkDeleteRequest,
-        labels::{
-            BulkUpdateRequest as LabelBulkUpdateRequest, CreateLabel, Label, LabelAssignment,
-            LabelQuery, UpdateLabel,
-        },
         metrics::{
             DatabaseMetrics, DocumentMetrics, GeneralSystemMetrics, OcrMetrics, SystemMetrics,
             UserMetrics,
@@ -189,7 +189,7 @@ use crate::{
             BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
             // OCR schemas
-            crate::routes::ocr::AvailableLanguagesResponse, crate::routes::ocr::LanguageInfo,
+            crate::models::AvailableLanguagesResponse, crate::models::LanguageInfo,
             crate::ocr::api::OcrHealthResponse, crate::ocr::api::OcrErrorResponse,
             // Sync progress schemas
             crate::services::sync_progress_tracker::SyncProgressInfo

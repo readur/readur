@@ -4,27 +4,16 @@ use uuid::Uuid;
 
 use super::helpers::{apply_role_based_filter, map_row_to_document};
 use crate::db::Database;
+use crate::models::label::Label;
 use crate::models::{Document, DocumentFilters, FacetItem, UserRole};
-use crate::routes::labels::Label;
 
 impl Database {
     /// Gets labels for a specific document
     pub async fn get_document_labels(&self, document_id: Uuid) -> Result<Vec<Label>> {
-        let rows = sqlx::query_as::<_, Label>(
-            r#"
-            SELECT
-                l.id, l.user_id, l.name, l.description, l.color,
-                l.background_color, l.icon, l.created_at, l.updated_at,
-                0::bigint as document_count, 0::bigint as source_count
-            FROM labels l
-            JOIN document_labels dl ON l.id = dl.label_id
-            WHERE dl.document_id = $1
-            ORDER BY l.name
-            "#,
-        )
-        .bind(document_id)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query_as::<_, Label>(crate::db::labels::DOCUMENT_LABELS_SQL)
+            .bind(document_id)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(rows)
     }
