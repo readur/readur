@@ -91,7 +91,9 @@ pub struct OcrQueueService {
     running_jobs: claim::RunningJobs,
     heartbeat_interval: Duration,
     /// Test hook: a pause right after a job's outcome commits, before the
-    /// work that follows it (the failure record, the review copy).
+    /// work that follows it (the failure record, the review copy). Absent
+    /// from production builds.
+    #[cfg(any(test, feature = "test-utils"))]
     post_commit_pause: Duration,
 }
 
@@ -136,6 +138,7 @@ impl OcrQueueService {
             ocr_timeout_seconds,
             running_jobs: claim::RunningJobs::default(),
             heartbeat_interval: claim::HEARTBEAT_INTERVAL,
+            #[cfg(any(test, feature = "test-utils"))]
             post_commit_pause: Duration::ZERO,
         }
     }

@@ -266,12 +266,14 @@ impl OcrQueueService {
     /// outcome commits, before the work that follows the commit: for
     /// exercising a heartbeat or cancel landing in that window.
     #[doc(hidden)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn with_post_commit_pause(mut self, pause: Duration) -> Self {
         self.post_commit_pause = pause;
         self
     }
 
     /// The [`Self::with_post_commit_pause`] test hook; a no-op by default.
+    #[cfg(any(test, feature = "test-utils"))]
     pub(super) async fn pause_after_commit(&self) {
         if !self.post_commit_pause.is_zero() {
             tokio::time::sleep(self.post_commit_pause).await;
