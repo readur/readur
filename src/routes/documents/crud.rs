@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use super::types::{DocumentUploadResponse, PaginatedDocumentsResponse, PaginationQuery};
 use crate::{
@@ -106,127 +106,173 @@ pub async fn upload_document(
     auth_user: AuthUser,
     mut multipart: Multipart,
 ) -> Result<Json<DocumentUploadResponse>, DocumentError> {
-    let mut uploaded_file = None;
-    let mut ocr_language: Option<String> = None;
-    let mut ocr_languages: Vec<String> = Vec::new();
-    let mut label_ids: Vec<uuid::Uuid> = Vec::new();
-
-    // First pass: collect all multipart fields
+    let mut form = UploadForm::default();
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         let error_msg = format!("Failed to get multipart field: {}", e);
         error!("{}", error_msg);
         DocumentError::BadRequest(error_msg)
     })? {
-        let name = field.name().unwrap_or("").to_string();
+        form.add_field(field).await?;
+    }
+    let response =
+        documents_service::upload_document(&state, &auth_user.user, form.into_request()?).await?;
+    Ok(Json(response))
+}
 
-        if name == "ocr_language" {
-            let language = field.text().await.map_err(|_| {
-                DocumentError::BadRequest("Failed to read language field".to_string())
-            })?;
-            if !language.trim().is_empty() {
-                // Validate that the language is available
-                let health_checker = crate::ocr::health::OcrHealthChecker::new();
-                match health_checker.validate_language(language.trim()) {
-                    Ok(_) => {
-                        ocr_language = Some(language.trim().to_string());
-                        info!("OCR language specified and validated: {}", language);
-                    }
-                    Err(e) => {
-                        let available_languages =
-                            health_checker.get_available_languages().unwrap_or_default();
-                        let error_msg = format!(
-                            "Invalid OCR language '{}': {}. Available languages: {}",
-                            language,
-                            e,
-                            available_languages.join(", ")
-                        );
-                        warn!("{}", error_msg);
-                        return Err(DocumentError::BadRequest(error_msg));
-                    }
-                }
-            }
-        } else if name == "ocr_languages" || name.starts_with("ocr_languages[") {
-            let language = field.text().await.map_err(|_| {
-                DocumentError::BadRequest("Failed to read language field".to_string())
-            })?;
-            if !language.trim().is_empty() {
-                // Validate that the language is available
-                let health_checker = crate::ocr::health::OcrHealthChecker::new();
-                debug!("Validating OCR language: '{}'", language.trim());
-                match health_checker.validate_language(language.trim()) {
-                    Ok(_) => {
-                        ocr_languages.push(language.trim().to_string());
-                        info!("OCR language added to list: {}", language);
-                    }
-                    Err(e) => {
-                        let available_languages =
-                            health_checker.get_available_languages().unwrap_or_default();
-                        let error_msg = format!(
-                            "Invalid OCR language '{}': {}. Available languages: {}",
-                            language,
-                            e,
-                            available_languages.join(", ")
-                        );
-                        warn!("{}", error_msg);
-                        return Err(DocumentError::BadRequest(error_msg));
-                    }
-                }
-            }
-        } else if name == "label_ids" || name.starts_with("label_ids[") {
-            // Repeated fields or one comma-separated list of label UUIDs.
-            let value = field.text().await.map_err(|_| {
-                DocumentError::BadRequest("Failed to read label_ids field".to_string())
-            })?;
-            for id in value.split(',').map(str::trim).filter(|id| !id.is_empty()) {
-                label_ids.push(id.parse().map_err(|_| {
-                    DocumentError::BadRequest(format!("Invalid label id '{}'", id))
-                })?);
-            }
-        } else if name == "file" {
-            let filename = field
-                .file_name()
-                .ok_or_else(|| {
-                    let error_msg = "No filename provided in upload".to_string();
-                    error!("{}", error_msg);
-                    DocumentError::BadRequest(error_msg)
-                })?
-                .to_string();
+/// The multipart fields an upload understands.
+#[derive(Debug, PartialEq, Eq)]
+enum UploadField {
+    File,
+    OcrLanguage,
+    OcrLanguages,
+    LabelIds,
+    Unknown,
+}
 
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-
-            let data = field.bytes().await.map_err(|e| {
-                let error_msg = format!("Failed to read file data: {}", e);
-                error!("{}", error_msg);
-                DocumentError::BadRequest(error_msg)
-            })?;
-
-            uploaded_file = Some((filename, content_type, data.to_vec()));
+impl UploadField {
+    /// `ocr_languages` and `label_ids` may repeat, with or without a `[]`
+    /// or `[n]` suffix.
+    fn from_name(name: &str) -> Self {
+        let base = name.split_once('[').map_or(name, |(base, _)| base);
+        match base {
+            "file" if base == name => Self::File,
+            "ocr_language" if base == name => Self::OcrLanguage,
+            "ocr_languages" => Self::OcrLanguages,
+            "label_ids" => Self::LabelIds,
+            _ => Self::Unknown,
         }
     }
+}
 
-    let (filename, content_type, data) = uploaded_file.ok_or_else(|| {
-        let error_msg = "No file found in upload".to_string();
+/// An upload form as its fields arrive.
+#[derive(Default)]
+struct UploadForm {
+    file: Option<(String, String, Vec<u8>)>,
+    ocr_language: Option<String>,
+    ocr_languages: Vec<String>,
+    label_ids: Vec<uuid::Uuid>,
+}
+
+impl UploadForm {
+    async fn add_field(
+        &mut self,
+        field: axum::extract::multipart::Field<'_>,
+    ) -> Result<(), DocumentError> {
+        match UploadField::from_name(field.name().unwrap_or("")) {
+            UploadField::File => self.file = Some(read_file_field(field).await?),
+            UploadField::OcrLanguage => {
+                if let Some(language) =
+                    validated_ocr_language(&read_text_field(field, "language").await?)?
+                {
+                    self.ocr_language = Some(language);
+                }
+            }
+            UploadField::OcrLanguages => {
+                if let Some(language) =
+                    validated_ocr_language(&read_text_field(field, "language").await?)?
+                {
+                    self.ocr_languages.push(language);
+                }
+            }
+            UploadField::LabelIds => {
+                self.label_ids.extend(parse_label_ids(
+                    &read_text_field(field, "label_ids").await?,
+                )?);
+            }
+            UploadField::Unknown => {}
+        }
+        Ok(())
+    }
+
+    fn into_request(self) -> Result<documents_service::UploadRequest, DocumentError> {
+        let (filename, mime_type, data) = self.file.ok_or_else(|| {
+            let error_msg = "No file found in upload".to_string();
+            error!("{}", error_msg);
+            DocumentError::BadRequest(error_msg)
+        })?;
+        Ok(documents_service::UploadRequest {
+            filename,
+            mime_type,
+            data,
+            ocr_languages: self.ocr_languages,
+            ocr_language: self.ocr_language,
+            label_ids: self.label_ids,
+        })
+    }
+}
+
+async fn read_text_field(
+    field: axum::extract::multipart::Field<'_>,
+    what: &str,
+) -> Result<String, DocumentError> {
+    field
+        .text()
+        .await
+        .map_err(|_| DocumentError::BadRequest(format!("Failed to read {} field", what)))
+}
+
+/// The uploaded file: (filename, content type, bytes).
+async fn read_file_field(
+    field: axum::extract::multipart::Field<'_>,
+) -> Result<(String, String, Vec<u8>), DocumentError> {
+    let filename = field
+        .file_name()
+        .ok_or_else(|| {
+            let error_msg = "No filename provided in upload".to_string();
+            error!("{}", error_msg);
+            DocumentError::BadRequest(error_msg)
+        })?
+        .to_string();
+    let content_type = field
+        .content_type()
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    let data = field.bytes().await.map_err(|e| {
+        let error_msg = format!("Failed to read file data: {}", e);
         error!("{}", error_msg);
         DocumentError::BadRequest(error_msg)
     })?;
+    Ok((filename, content_type, data.to_vec()))
+}
 
-    let response = documents_service::upload_document(
-        &state,
-        &auth_user.user,
-        documents_service::UploadRequest {
-            filename,
-            mime_type: content_type,
-            data,
-            ocr_languages,
-            ocr_language,
-            label_ids,
-        },
-    )
-    .await?;
-    Ok(Json(response))
+/// A trimmed OCR language that tesseract has data for; `None` for a blank
+/// value.
+fn validated_ocr_language(raw: &str) -> Result<Option<String>, DocumentError> {
+    let language = raw.trim();
+    if language.is_empty() {
+        return Ok(None);
+    }
+    let health_checker = crate::ocr::health::OcrHealthChecker::new();
+    match health_checker.validate_language(language) {
+        Ok(_) => {
+            debug!("OCR language validated: {}", language);
+            Ok(Some(language.to_string()))
+        }
+        Err(e) => {
+            let available_languages = health_checker.get_available_languages().unwrap_or_default();
+            let error_msg = format!(
+                "Invalid OCR language '{}': {}. Available languages: {}",
+                language,
+                e,
+                available_languages.join(", ")
+            );
+            warn!("{}", error_msg);
+            Err(DocumentError::BadRequest(error_msg))
+        }
+    }
+}
+
+/// Label UUIDs from one field value: a single id or a comma-separated list.
+fn parse_label_ids(value: &str) -> Result<Vec<uuid::Uuid>, DocumentError> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(|id| {
+            id.parse()
+                .map_err(|_| DocumentError::BadRequest(format!("Invalid label id '{}'", id)))
+        })
+        .collect()
 }
 
 /// Get a specific document by ID
@@ -502,4 +548,97 @@ pub async fn get_user_duplicates(
     });
 
     Ok(Json(response))
+}
+
+#[cfg(test)]
+mod upload_form_tests {
+    use super::*;
+
+    #[test]
+    fn field_names_are_classified() {
+        assert_eq!(UploadField::from_name("file"), UploadField::File);
+        assert_eq!(
+            UploadField::from_name("ocr_language"),
+            UploadField::OcrLanguage
+        );
+        for name in ["ocr_languages", "ocr_languages[]", "ocr_languages[2]"] {
+            assert_eq!(
+                UploadField::from_name(name),
+                UploadField::OcrLanguages,
+                "{name}"
+            );
+        }
+        for name in ["label_ids", "label_ids[]", "label_ids[0]"] {
+            assert_eq!(
+                UploadField::from_name(name),
+                UploadField::LabelIds,
+                "{name}"
+            );
+        }
+        for name in [
+            "",
+            "files",
+            "file[0]",
+            "ocr_language[]",
+            "ocr_languagesx",
+            "label_idsx",
+            "other",
+        ] {
+            assert_eq!(UploadField::from_name(name), UploadField::Unknown, "{name}");
+        }
+    }
+
+    #[test]
+    fn label_ids_accept_one_id_or_a_comma_separated_list() {
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        assert_eq!(parse_label_ids(&a.to_string()).unwrap(), vec![a]);
+        assert_eq!(
+            parse_label_ids(&format!(" {a} , {b} ,")).unwrap(),
+            vec![a, b]
+        );
+        assert!(parse_label_ids("").unwrap().is_empty());
+        assert!(matches!(
+            parse_label_ids("not-a-uuid"),
+            Err(DocumentError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn blank_ocr_language_is_ignored() {
+        assert!(validated_ocr_language("   ").unwrap().is_none());
+    }
+
+    #[test]
+    fn upload_without_a_file_is_a_bad_request() {
+        let form = UploadForm {
+            ocr_language: Some("eng".into()),
+            ..Default::default()
+        };
+        assert!(matches!(
+            form.into_request(),
+            Err(DocumentError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn upload_form_carries_every_field_into_the_request() {
+        let label = uuid::Uuid::new_v4();
+        let form = UploadForm {
+            file: Some(("a.pdf".into(), "application/pdf".into(), vec![1, 2, 3])),
+            ocr_language: Some("eng".into()),
+            ocr_languages: vec!["eng".into(), "deu".into()],
+            label_ids: vec![label],
+        };
+        let request = form.into_request().unwrap();
+        assert_eq!(request.filename, "a.pdf");
+        assert_eq!(request.mime_type, "application/pdf");
+        assert_eq!(request.data, vec![1, 2, 3]);
+        assert_eq!(request.ocr_language.as_deref(), Some("eng"));
+        assert_eq!(
+            request.ocr_languages,
+            vec!["eng".to_string(), "deu".to_string()]
+        );
+        assert_eq!(request.label_ids, vec![label]);
+    }
 }
