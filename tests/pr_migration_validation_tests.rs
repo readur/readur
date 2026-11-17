@@ -40,7 +40,7 @@ mod pr_migration_validation_tests {
         verify_migrations_with_data(pool, &test_data).await;
 
         // Step 3: Test specific migration scenarios if they involve data transformation
-        if migrations_touch_failed_documents(&new_migrations) {
+        if migrations_backfill_failed_documents(&new_migrations) {
             test_data_transformation_integrity(pool, &test_data).await;
         }
 
@@ -888,11 +888,46 @@ mod pr_migration_validation_tests {
     /// UPDATE ... SET, say) made every such PR fail on rows it never meant to move. Migrations
     /// that transform other data get their own before/after tests (see
     /// tests/new_migration_data_tests.rs).
-    fn migrations_touch_failed_documents(migrations: &[String]) -> bool {
+    /// Whether a migration copies rows into failed_documents when it runs, as the original
+    /// backfill did. Only statement-level inserts count: a function body (between dollar
+    /// quotes) that inserts later, at runtime, does not move existing documents, and its
+    /// behaviour is tested in tests/new_migration_data_tests.rs.
+    fn migrations_backfill_failed_documents(migrations: &[String]) -> bool {
         migrations.iter().any(|migration_file| {
             std::fs::read_to_string(migration_file)
-                .map(|content| content.to_lowercase().contains("failed_documents"))
+                .map(|content| backfills_failed_documents(&content))
                 .unwrap_or(false)
         })
+    }
+
+    fn backfills_failed_documents(sql: &str) -> bool {
+        // Even-numbered pieces are outside $$ ... $$ (or $tag$ ... $tag$) bodies.
+        let dollar_quote = regex::Regex::new(r"\$[A-Za-z_]*\$").unwrap();
+        let sql = sql.to_lowercase();
+        let found = dollar_quote.split(&sql).step_by(2).any(|outside| {
+            outside
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(3)
+                .any(|w| w == ["insert", "into", "failed_documents"])
+        });
+        found
+    }
+
+    #[test]
+    fn only_statement_level_inserts_count_as_a_backfill() {
+        let backfill = std::fs::read_to_string(
+            "migrations/20250628000004_migrate_failed_ocr_to_failed_documents.sql",
+        )
+        .unwrap();
+        assert!(backfills_failed_documents(&backfill));
+        let function_only = std::fs::read_to_string(
+            "migrations/20261117130000_reset_stuck_ocr_jobs_fails_exhausted_documents.sql",
+        )
+        .unwrap();
+        assert!(!backfills_failed_documents(&function_only));
+        assert!(!backfills_failed_documents(
+            "CREATE TABLE failed_documents (id uuid);"
+        ));
     }
 }
