@@ -24,9 +24,9 @@ CONCURRENT_OCR_JOBS=8
 OCR_TIMEOUT_SECONDS=600
 ```
 
-`CONCURRENT_OCR_JOBS` and `OCR_TIMEOUT_SECONDS` are server-wide. The **Concurrent OCR Jobs** and **OCR Timeout** fields in **Settings → OCR** are stored per user but do not change how the OCR queue runs. `MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only printed in the startup log; they do not limit anything.
+`CONCURRENT_OCR_JOBS` is server-wide. `OCR_TIMEOUT_SECONDS` is the time limit for documents whose owner has not set their own **OCR Timeout** in **Settings → OCR**; either stops at 600 seconds. `MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only printed in the startup log; they do not limit anything.
 
-Per-user OCR settings do change the work done for that user's documents: the selected languages, and the image enhancement options in **Settings → OCR** (preprocessing scanned images takes extra time).
+Per-user OCR settings do change the work done for that user's documents: the selected languages, the OCR timeout, DPI and engine options, and the image enhancement options in **Settings → OCR** (preprocessing scanned images takes extra time; a higher DPI renders larger page images).
 
 ### Managing the Queue
 

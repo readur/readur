@@ -6,7 +6,9 @@ pub mod health;
 pub mod image_ocr;
 pub mod priority;
 pub mod queue;
+pub mod tesseract_params;
 pub mod tests;
+pub mod user_settings;
 pub mod xml_extractor;
 
 use crate::ocr::error::OcrError;
@@ -32,7 +34,7 @@ pub struct OcrConfig {
 impl Default for OcrConfig {
     fn default() -> Self {
         Self {
-            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+            temp_dir: crate::config::temp_dir_string(),
         }
     }
 }
@@ -41,7 +43,7 @@ impl OcrService {
     pub fn new() -> Self {
         Self {
             health_checker: OcrHealthChecker::new(),
-            temp_dir: std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string()),
+            temp_dir: crate::config::temp_dir_string(),
         }
     }
 
@@ -114,7 +116,7 @@ impl OcrService {
             }
 
             // Create temporary file for text extraction
-            let temp_dir = std::env::var("TEMP_DIR").unwrap_or_else(|_| "/tmp".to_string());
+            let temp_dir = crate::config::temp_dir_string();
             let temp_text_path = format!("{}/pdf_text_{}.txt", temp_dir, std::process::id());
 
             // Progressive extraction with fallback strategies

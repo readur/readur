@@ -364,17 +364,16 @@ impl OcrQueueService {
                     "Processing OCR job {} for document {} | File: '{}' | Type: {} | Size: {:.2} MB",
                     item.id, item.document_id, filename, mime_type, file_size_mb
                 );
-                // Get user's OCR settings or use defaults
-                let settings = if let Some(user_id) = user_id {
-                    self.db
-                        .get_user_settings(user_id)
-                        .await
-                        .ok()
-                        .flatten()
-                        .unwrap_or_default()
-                } else {
-                    crate::models::Settings::default()
+                // The owner's OCR settings (timeout, language, engine options),
+                // or the defaults with the server's OCR timeout
+                let stored = match user_id {
+                    Some(user_id) => self.db.get_user_settings(user_id).await.ok().flatten(),
+                    None => None,
                 };
+                let settings = crate::ocr::user_settings::settings_for_processing(
+                    stored,
+                    self.ocr_timeout_seconds,
+                );
 
                 // Create progress callback to report page-level OCR progress
                 let progress_pool = self.pool.clone();
@@ -694,7 +693,7 @@ impl OcrQueueService {
     pub async fn start_worker(self: Arc<Self>) -> Result<()> {
         let semaphore = Arc::new(Semaphore::new(self.max_concurrent_jobs));
         let ocr_service = Arc::new(EnhancedOcrService::new(
-            "/tmp".to_string(),
+            crate::config::temp_dir_string(),
             (*self.file_service).clone(),
             self.max_pdf_size_mb,
             self.max_office_document_size_mb,

@@ -18,9 +18,12 @@ test.describe('Settings Management', () => {
   const sectionNav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
 
   async function saveGroup(page: Page) {
-    const put = page.waitForResponse((r) => r.url().includes('/api/settings') && r.request().method() === 'PUT', {
-      timeout: TIMEOUTS.medium,
-    });
+    const put = page.waitForResponse(
+      (r) => r.url().includes('/api/settings') && r.request().method() === 'PUT',
+      {
+        timeout: TIMEOUTS.medium,
+      },
+    );
     await page.getByRole('main').getByRole('button', { name: 'Save', exact: true }).click();
     const response = await put;
     expect(response.ok()).toBe(true);
@@ -34,10 +37,23 @@ test.describe('Settings Management', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'General' })).toBeVisible();
 
     const nav = sectionNav(page);
-    for (const name of ['General', 'Account', 'OCR', 'Users', 'Server', 'API keys', 'Labels', 'Debug', 'Appearance']) {
+    for (const name of [
+      'General',
+      'Account',
+      'OCR',
+      'Users',
+      'Server',
+      'API keys',
+      'Labels',
+      'Debug',
+      'Appearance',
+    ]) {
       await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
     }
-    await expect(nav.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('link', { name: 'General' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
 
     // Each section has its own URL
     await nav.getByRole('link', { name: 'OCR' }).click();
@@ -55,8 +71,13 @@ test.describe('Settings Management', () => {
     const languages = page.getByRole('region', { name: 'Languages' });
 
     await languages.getByRole('button', { name: /Add more languages/ }).click();
-    await languages.getByRole('group', { name: 'Available Languages' }).getByText('Spanish', { exact: true }).click();
-    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish');
+    await languages
+      .getByRole('group', { name: 'Available Languages' })
+      .getByText('Spanish', { exact: true })
+      .click();
+    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText(
+      'Spanish',
+    );
 
     const body = await saveGroup(page);
     expect(body.preferred_languages).toEqual(['eng', 'spa']);
@@ -74,7 +95,12 @@ test.describe('Settings Management', () => {
     await page.getByRole('button', { name: 'Edit Watch Folder Configuration' }).click();
     const watch = page.getByRole('region', { name: 'Watch Folder Configuration' });
     await expect(watch.getByRole('term').filter({ hasText: 'Watch Interval' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'File Upload Configuration' }).getByRole('term').filter({ hasText: 'Watch Folder' })).toBeAttached();
+    await expect(
+      page
+        .getByRole('region', { name: 'File Upload Configuration' })
+        .getByRole('term')
+        .filter({ hasText: 'Watch Folder' }),
+    ).toBeAttached();
   });
 
   test('should update search settings', async ({ dynamicAdminPage: page }) => {
@@ -82,16 +108,18 @@ test.describe('Settings Management', () => {
     await page.getByRole('button', { name: 'Edit Search Configuration' }).click();
     const group = page.getByRole('region', { name: 'Search Configuration' });
 
-    await group.getByRole('spinbutton', { name: 'Snippet Length' }).fill('240');
-    await expect(page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+    await group.getByRole('spinbutton', { name: 'Fuzzy Search Threshold' }).fill('0.7');
+    await expect(
+      page.getByRole('main').getByRole('button', { name: 'Cancel', exact: true }),
+    ).toBeVisible();
 
     const body = await saveGroup(page);
     // Only the changed key is sent
-    expect(Object.keys(body)).toEqual(['search_snippet_length']);
-    expect(body.search_snippet_length).toBe(240);
+    expect(Object.keys(body)).toEqual(['fuzzy_search_threshold']);
+    expect(body.fuzzy_search_threshold).toBe(0.7);
 
     await page.reload();
-    await expect(page.getByText(/240 chars/)).toBeVisible();
+    await expect(page.getByText('fuzzy 0.7')).toBeVisible();
   });
 
   test('should validate settings before saving', async ({ dynamicAdminPage: page }) => {
@@ -117,11 +145,20 @@ test.describe('Settings Management', () => {
   test('should display current system status', async ({ dynamicAdminPage: page }) => {
     await page.goto('/settings/server');
     await expect(page.getByRole('heading', { level: 2, name: 'Server' })).toBeVisible();
-    for (const group of ['File Upload Configuration', 'OCR Processing Configuration', 'Server Information']) {
+    for (const group of [
+      'File Upload Configuration',
+      'OCR Processing Configuration',
+      'Server Information',
+    ]) {
       await expect(page.getByRole('heading', { level: 3, name: group })).toBeVisible();
     }
     await page.getByRole('button', { name: 'Edit Server Information' }).click();
-    await expect(page.getByRole('region', { name: 'Server Information' }).getByRole('term').filter({ hasText: 'Version' })).toBeVisible();
+    await expect(
+      page
+        .getByRole('region', { name: 'Server Information' })
+        .getByRole('term')
+        .filter({ hasText: 'Version' }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Refresh Configuration' })).toBeVisible();
   });
 
@@ -149,7 +186,9 @@ test.describe('Settings Management', () => {
     await dialog.getByRole('button', { name: /update/i }).click();
     expect((await put).ok()).toBe(true);
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('grid', { name: 'User Management' }).getByRole('row', { name })).toContainText(newEmail);
+    await expect(
+      page.getByRole('grid', { name: 'User Management' }).getByRole('row', { name }),
+    ).toContainText(newEmail);
     expect(testAdmin.credentials.username).not.toBe(name);
   });
 
@@ -166,7 +205,9 @@ test.describe('Settings Management', () => {
     expect((await put).ok()).toBe(true);
 
     // The new password works, the old one does not
-    await expect(auth.loginUserAPI({ username: other.credentials.username, password: 'changedpass456' })).resolves.toBeTruthy();
+    await expect(
+      auth.loginUserAPI({ username: other.credentials.username, password: 'changedpass456' }),
+    ).resolves.toBeTruthy();
     await expect(auth.loginUserAPI(other.credentials)).rejects.toThrow();
   });
 });

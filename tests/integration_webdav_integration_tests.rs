@@ -1,20 +1,16 @@
-use std::sync::Arc;
 use axum::{
-    body::{Body, to_bytes},
+    body::{to_bytes, Body},
     http::{Request, StatusCode},
     Router,
 };
-use tower::ServiceExt;
 use serde_json::{json, Value};
+use std::sync::Arc;
+use tower::ServiceExt;
 use uuid::Uuid;
 
 use readur::{
-    models::*,
-    routes,
+    config::Config, db::Database, models::*, routes, test_helpers::create_test_config_with_db,
     AppState,
-    config::Config,
-    db::Database,
-    test_helpers::create_test_config_with_db,
 };
 
 // Removed constant - will use environment variables instead
@@ -24,21 +20,11 @@ fn create_empty_update_settings() -> UpdateSettings {
         ocr_language: None,
         preferred_languages: None,
         primary_language: None,
-        auto_detect_language_combination: None,
-        concurrent_ocr_jobs: None,
         ocr_timeout_seconds: None,
         max_file_size_mb: None,
-        allowed_file_types: None,
         auto_rotate_images: None,
         enable_image_preprocessing: None,
-        search_results_per_page: None,
-        search_snippet_length: None,
         fuzzy_search_threshold: None,
-        retention_days: None,
-        enable_auto_cleanup: None,
-        enable_compression: None,
-        memory_limit_mb: None,
-        cpu_priority: None,
         enable_background_ocr: None,
         ocr_page_segmentation_mode: None,
         ocr_engine_mode: None,
@@ -75,12 +61,14 @@ fn create_empty_update_settings() -> UpdateSettings {
         webdav_sync_interval_minutes: None,
         // Office document extraction configuration
         office_extraction_timeout_seconds: None,
-        office_extraction_enable_detailed_logging: None,
     }
 }
 
 async fn setup_test_app() -> (Router, Arc<AppState>) {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
 
     // Create test configuration with custom database URL
     let mut config = create_test_config_with_db(&database_url);
@@ -93,26 +81,43 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
 
     // Create test services
     let db = Database::new(&database_url).await.unwrap();
-    
+
     // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: "/tmp/test_uploads".to_string() };
-    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage("/tmp/test_uploads".to_string(), storage_backend));
-    
-    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 4, file_service.clone(), 100, 100, 300));
-    
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: "/tmp/test_uploads".to_string(),
+    };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config)
+        .await
+        .unwrap();
+    let file_service =
+        std::sync::Arc::new(readur::services::file_service::FileService::with_storage(
+            "/tmp/test_uploads".to_string(),
+            storage_backend,
+        ));
+
+    let queue_service = std::sync::Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.pool.clone(),
+        4,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
+
     // Create AppState
-    let state = Arc::new(AppState { 
-        db: db.clone(), 
+    let state = Arc::new(AppState {
+        db: db.clone(),
         config,
         file_service,
         webdav_scheduler: None,
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
 
@@ -134,14 +139,17 @@ async fn create_test_user(state: &AppState) -> (User, String) {
         role: Some(UserRole::User),
     };
 
-    let user = state.db.create_user(create_user).await
+    let user = state
+        .db
+        .create_user(create_user)
+        .await
         .expect("Failed to create test user");
 
     // Create a proper JWT token
     let jwt_token = readur::auth::create_jwt(&user, &state.config.jwt_secret)
         .expect("Failed to create JWT token");
     let token = format!("Bearer {}", jwt_token);
-    
+
     (user, token)
 }
 
@@ -158,21 +166,11 @@ async fn setup_webdav_settings(state: &AppState, user_id: Uuid) {
         ocr_language: None,
         preferred_languages: None,
         primary_language: None,
-        auto_detect_language_combination: None,
-        concurrent_ocr_jobs: None,
         ocr_timeout_seconds: None,
         max_file_size_mb: None,
-        allowed_file_types: None,
         auto_rotate_images: None,
         enable_image_preprocessing: None,
-        search_results_per_page: None,
-        search_snippet_length: None,
         fuzzy_search_threshold: None,
-        retention_days: None,
-        enable_auto_cleanup: None,
-        enable_compression: None,
-        memory_limit_mb: None,
-        cpu_priority: None,
         enable_background_ocr: None,
         ocr_page_segmentation_mode: None,
         ocr_engine_mode: None,
@@ -201,10 +199,12 @@ async fn setup_webdav_settings(state: &AppState, user_id: Uuid) {
         ocr_skip_enhancement: None,
         // Office document extraction configuration
         office_extraction_timeout_seconds: None,
-        office_extraction_enable_detailed_logging: None,
     };
 
-    state.db.create_or_update_settings(user_id, &update_settings).await
+    state
+        .db
+        .create_or_update_settings(user_id, &update_settings)
+        .await
         .expect("Failed to setup WebDAV settings");
 }
 
@@ -231,8 +231,10 @@ async fn test_webdav_test_connection_endpoint() {
     // Add timeout to prevent hanging on external network connections
     let response = match tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        app.clone().oneshot(request)
-    ).await {
+        app.clone().oneshot(request),
+    )
+    .await
+    {
         Ok(Ok(response)) => response,
         Ok(Err(e)) => panic!("Request failed: {:?}", e),
         Err(_) => {
@@ -241,17 +243,17 @@ async fn test_webdav_test_connection_endpoint() {
             return;
         }
     };
-    
-    // Note: This will likely fail with connection error since demo.nextcloud.com 
+
+    // Note: This will likely fail with connection error since demo.nextcloud.com
     // may not accept these credentials, but we're testing the endpoint structure
     assert!(
-        response.status() == StatusCode::OK || 
-        response.status() == StatusCode::INTERNAL_SERVER_ERROR
+        response.status() == StatusCode::OK
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR
     );
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let result: Value = serde_json::from_slice(&body).unwrap();
-    
+
     // Should have a result structure even if connection fails
     assert!(result.get("success").is_some());
     assert!(result.get("message").is_some());
@@ -261,7 +263,7 @@ async fn test_webdav_test_connection_endpoint() {
 async fn test_webdav_estimate_crawl_endpoint() {
     let (app, state) = setup_test_app().await;
     let (user, token) = create_test_user(&state).await;
-    
+
     // Setup WebDAV settings first
     setup_webdav_settings(&state, user.id).await;
 
@@ -280,8 +282,10 @@ async fn test_webdav_estimate_crawl_endpoint() {
     // Add timeout to prevent hanging on external network connections
     let response = match tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        app.clone().oneshot(request)
-    ).await {
+        app.clone().oneshot(request),
+    )
+    .await
+    {
         Ok(Ok(response)) => response,
         Ok(Err(e)) => panic!("Request failed: {:?}", e),
         Err(_) => {
@@ -290,16 +294,16 @@ async fn test_webdav_estimate_crawl_endpoint() {
             return;
         }
     };
-    
+
     // Even if WebDAV connection fails, should return estimate structure
     assert!(
-        response.status() == StatusCode::OK ||
-        response.status() == StatusCode::INTERNAL_SERVER_ERROR
+        response.status() == StatusCode::OK
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR
     );
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let result: Value = serde_json::from_slice(&body).unwrap();
-    
+
     // Should have crawl estimate structure
     assert!(result.get("folders").is_some());
     assert!(result.get("total_files").is_some());
@@ -310,7 +314,7 @@ async fn test_webdav_estimate_crawl_endpoint() {
 async fn test_webdav_sync_status_endpoint() {
     let (app, state) = setup_test_app().await;
     let (user, token) = create_test_user(&state).await;
-    
+
     setup_webdav_settings(&state, user.id).await;
 
     let request = Request::builder()
@@ -325,7 +329,7 @@ async fn test_webdav_sync_status_endpoint() {
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let result: Value = serde_json::from_slice(&body).unwrap();
-    
+
     // Should return sync status structure
     assert!(result.get("is_running").is_some());
     assert!(result.get("files_processed").is_some());
@@ -337,7 +341,7 @@ async fn test_webdav_sync_status_endpoint() {
 async fn test_webdav_start_sync_endpoint() {
     let (app, state) = setup_test_app().await;
     let (user, token) = create_test_user(&state).await;
-    
+
     setup_webdav_settings(&state, user.id).await;
 
     let request = Request::builder()
@@ -350,8 +354,10 @@ async fn test_webdav_start_sync_endpoint() {
     // Add timeout to prevent hanging on external network connections
     let response = match tokio::time::timeout(
         std::time::Duration::from_secs(15),
-        app.clone().oneshot(request)
-    ).await {
+        app.clone().oneshot(request),
+    )
+    .await
+    {
         Ok(Ok(response)) => response,
         Ok(Err(e)) => panic!("Request failed: {:?}", e),
         Err(_) => {
@@ -360,18 +366,18 @@ async fn test_webdav_start_sync_endpoint() {
             return;
         }
     };
-    
+
     // Should accept the sync request (even if it fails later due to invalid credentials)
     let status = response.status();
     assert!(
         status == StatusCode::OK ||
         status == StatusCode::BAD_REQUEST ||  // If WebDAV not properly configured
-        status == StatusCode::INTERNAL_SERVER_ERROR  // If connection fails
+        status == StatusCode::INTERNAL_SERVER_ERROR // If connection fails
     );
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let result: Value = serde_json::from_slice(&body).unwrap();
-    
+
     if status == StatusCode::OK {
         assert_eq!(result.get("success").unwrap(), &json!(true));
         assert!(result.get("message").is_some());
@@ -395,7 +401,10 @@ async fn test_notifications_endpoints() {
         })),
     };
 
-    let notification = state.db.create_notification(user.id, &create_notification).await
+    let notification = state
+        .db
+        .create_notification(user.id, &create_notification)
+        .await
         .expect("Failed to create test notification");
 
     // Test GET /api/notifications
@@ -504,14 +513,24 @@ async fn test_settings_webdav_integration() {
 
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let settings: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(settings.get("webdav_enabled").unwrap(), &json!(true));
-    assert_eq!(settings.get("webdav_server_url").unwrap(), &json!("https://test.nextcloud.com"));
+    assert_eq!(
+        settings.get("webdav_server_url").unwrap(),
+        &json!("https://test.nextcloud.com")
+    );
     assert_eq!(settings.get("webdav_username").unwrap(), &json!("testuser"));
     assert_eq!(settings.get("webdav_auto_sync").unwrap(), &json!(true));
-    assert_eq!(settings.get("webdav_sync_interval_minutes").unwrap(), &json!(30));
-    
-    let folders = settings.get("webdav_watch_folders").unwrap().as_array().unwrap();
+    assert_eq!(
+        settings.get("webdav_sync_interval_minutes").unwrap(),
+        &json!(30)
+    );
+
+    let folders = settings
+        .get("webdav_watch_folders")
+        .unwrap()
+        .as_array()
+        .unwrap();
     assert_eq!(folders.len(), 2);
     assert!(folders.contains(&json!("/Documents")));
     assert!(folders.contains(&json!("/Photos")));
@@ -534,7 +553,10 @@ async fn test_notification_database_operations() {
         })),
     };
 
-    let notification = state.db.create_notification(user.id, &create_notification).await
+    let notification = state
+        .db
+        .create_notification(user.id, &create_notification)
+        .await
         .expect("Failed to create notification");
 
     assert_eq!(notification.user_id, user.id);
@@ -543,49 +565,72 @@ async fn test_notification_database_operations() {
     assert!(!notification.read);
 
     // Test getting user notifications
-    let notifications = state.db.get_user_notifications(user.id, 10, 0).await
+    let notifications = state
+        .db
+        .get_user_notifications(user.id, 10, 0)
+        .await
         .expect("Failed to get notifications");
-    
+
     assert!(notifications.len() >= 1);
-    let found_notification = notifications.iter()
+    let found_notification = notifications
+        .iter()
         .find(|n| n.id == notification.id)
         .expect("Created notification not found");
-    
+
     assert_eq!(found_notification.title, "WebDAV Sync Started");
 
     // Test getting unread count
-    let unread_count = state.db.get_unread_notification_count(user.id).await
+    let unread_count = state
+        .db
+        .get_unread_notification_count(user.id)
+        .await
         .expect("Failed to get unread count");
-    
+
     assert!(unread_count >= 1);
 
     // Test marking as read
-    state.db.mark_notification_read(user.id, notification.id).await
+    state
+        .db
+        .mark_notification_read(user.id, notification.id)
+        .await
         .expect("Failed to mark notification as read");
 
-    let updated_notifications = state.db.get_user_notifications(user.id, 10, 0).await
+    let updated_notifications = state
+        .db
+        .get_user_notifications(user.id, 10, 0)
+        .await
         .expect("Failed to get updated notifications");
-    
-    let updated_notification = updated_notifications.iter()
+
+    let updated_notification = updated_notifications
+        .iter()
         .find(|n| n.id == notification.id)
         .expect("Notification not found after update");
-    
+
     assert!(updated_notification.read);
 
     // Test getting notification summary
-    let summary = state.db.get_notification_summary(user.id).await
+    let summary = state
+        .db
+        .get_notification_summary(user.id)
+        .await
         .expect("Failed to get notification summary");
-    
+
     assert!(summary.recent_notifications.len() >= 1);
     assert!(summary.unread_count >= 0);
 
     // Test deleting notification
-    state.db.delete_notification(user.id, notification.id).await
+    state
+        .db
+        .delete_notification(user.id, notification.id)
+        .await
         .expect("Failed to delete notification");
 
-    let final_notifications = state.db.get_user_notifications(user.id, 10, 0).await
+    let final_notifications = state
+        .db
+        .get_user_notifications(user.id, 10, 0)
+        .await
         .expect("Failed to get final notifications");
-    
+
     assert!(!final_notifications.iter().any(|n| n.id == notification.id));
 }
 
@@ -602,7 +647,10 @@ async fn test_webdav_settings_validation() {
     invalid_settings.webdav_password = Some(Some("password".to_string()));
 
     // This should succeed in database but fail when trying to create WebDAV config
-    let settings = state.db.create_or_update_settings(user.id, &invalid_settings).await
+    let settings = state
+        .db
+        .create_or_update_settings(user.id, &invalid_settings)
+        .await
         .expect("Failed to save settings");
 
     assert!(settings.webdav_enabled);
@@ -620,12 +668,21 @@ async fn test_webdav_settings_validation() {
     valid_settings.webdav_auto_sync = Some(true);
     valid_settings.webdav_sync_interval_minutes = Some(60);
 
-    let valid_result = state.db.create_or_update_settings(user.id, &valid_settings).await
+    let valid_result = state
+        .db
+        .create_or_update_settings(user.id, &valid_settings)
+        .await
         .expect("Failed to save valid settings");
 
     assert!(valid_result.webdav_enabled);
-    assert_eq!(valid_result.webdav_server_url, Some("https://valid.nextcloud.com".to_string()));
+    assert_eq!(
+        valid_result.webdav_server_url,
+        Some("https://valid.nextcloud.com".to_string())
+    );
     assert_eq!(valid_result.webdav_username, Some("validuser".to_string()));
-    assert_eq!(valid_result.webdav_watch_folders, vec!["/Documents".to_string()]);
+    assert_eq!(
+        valid_result.webdav_watch_folders,
+        vec!["/Documents".to_string()]
+    );
     assert_eq!(valid_result.webdav_sync_interval_minutes, 60);
 }

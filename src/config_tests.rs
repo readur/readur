@@ -26,7 +26,10 @@ mod s3_env_tests {
         // legacy documented alias S3_PATH_STYLE
         assert_eq!(parse_force_path_style(None, Some("true")), Some(true));
         // primary wins over legacy
-        assert_eq!(parse_force_path_style(Some("false"), Some("true")), Some(false));
+        assert_eq!(
+            parse_force_path_style(Some("false"), Some("true")),
+            Some(false)
+        );
         // unset -> default for the endpoint type
         assert_eq!(parse_force_path_style(None, None), None);
     }
@@ -42,7 +45,10 @@ mod jwt_secret_tests {
         assert!(validate_jwt_secret("short").is_err());
         assert!(validate_jwt_secret("<output of: openssl rand -hex 32>").is_err());
         for weak in KNOWN_WEAK_JWT_SECRETS {
-            assert!(validate_jwt_secret(weak).is_err(), "{weak} should be rejected");
+            assert!(
+                validate_jwt_secret(weak).is_err(),
+                "{weak} should be rejected"
+            );
         }
         assert!(validate_jwt_secret("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a6978").is_ok());
     }
@@ -50,12 +56,22 @@ mod jwt_secret_tests {
     #[test]
     fn weak_configured_secret_falls_back_to_stored_key() {
         // Shipped by the v2.9.x docker-compose.yml; upgrades must keep starting.
-        assert_eq!(resolve_jwt_setting("your-secret-key-change-this-in-production", false), "");
+        assert_eq!(
+            resolve_jwt_setting("your-secret-key-change-this-in-production", false),
+            ""
+        );
         for weak in KNOWN_WEAK_JWT_SECRETS {
-            assert_eq!(resolve_jwt_setting(weak, false), "", "{weak} should be ignored");
+            assert_eq!(
+                resolve_jwt_setting(weak, false),
+                "",
+                "{weak} should be ignored"
+            );
         }
         assert_eq!(resolve_jwt_setting("my-own-secret-123", false), "");
-        assert_eq!(resolve_jwt_setting("<output of: openssl rand -hex 32>", false), "");
+        assert_eq!(
+            resolve_jwt_setting("<output of: openssl rand -hex 32>", false),
+            ""
+        );
         assert_eq!(resolve_jwt_setting("   ", false), "");
     }
 
@@ -107,12 +123,30 @@ mod jwt_secret_tests {
     #[test]
     fn literal_extraction() {
         assert_eq!(literal_jwt_secret("JWT_SECRET=abc"), Some("abc".into()));
-        assert_eq!(literal_jwt_secret("  JWT_SECRET: \"abc\"  # note"), Some("abc".into()));
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:-dflt}"), Some("dflt".into()));
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:?required}"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET: ${{ env.CI_JWT_SECRET }}"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET=$(openssl rand -hex 32)"), None);
-        assert_eq!(literal_jwt_secret("JWT_SECRET: {{ .Values.x | b64enc }}"), None);
+        assert_eq!(
+            literal_jwt_secret("  JWT_SECRET: \"abc\"  # note"),
+            Some("abc".into())
+        );
+        assert_eq!(
+            literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:-dflt}"),
+            Some("dflt".into())
+        );
+        assert_eq!(
+            literal_jwt_secret("JWT_SECRET: ${JWT_SECRET:?required}"),
+            None
+        );
+        assert_eq!(
+            literal_jwt_secret("JWT_SECRET: ${{ env.CI_JWT_SECRET }}"),
+            None
+        );
+        assert_eq!(
+            literal_jwt_secret("JWT_SECRET=$(openssl rand -hex 32)"),
+            None
+        );
+        assert_eq!(
+            literal_jwt_secret("JWT_SECRET: {{ .Values.x | b64enc }}"),
+            None
+        );
         assert_eq!(literal_jwt_secret("`JWT_SECRET` is required"), None);
         assert_eq!(literal_jwt_secret("JWT_SECRET="), None);
     }
@@ -123,7 +157,10 @@ mod jwt_secret_tests {
     fn committed_jwt_secrets_are_rejected() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(root).expect("read repository root").flatten() {
+        for entry in std::fs::read_dir(root)
+            .expect("read repository root")
+            .flatten()
+        {
             let name = entry.file_name().to_string_lossy().into_owned();
             let is_compose = name.starts_with("docker-compose")
                 && (name.ends_with(".yml") || name.ends_with(".yaml"));
@@ -139,7 +176,9 @@ mod jwt_secret_tests {
         let mut checked = 0;
         let mut accepted = Vec::new();
         for file in &files {
-            let Ok(content) = std::fs::read_to_string(file) else { continue };
+            let Ok(content) = std::fs::read_to_string(file) else {
+                continue;
+            };
             for (n, line) in content.lines().enumerate() {
                 if let Some(value) = literal_jwt_secret(line) {
                     checked += 1;
@@ -149,7 +188,10 @@ mod jwt_secret_tests {
                 }
             }
         }
-        assert!(checked > 0, "expected to find JWT_SECRET examples in the repository");
+        assert!(
+            checked > 0,
+            "expected to find JWT_SECRET examples in the repository"
+        );
         assert!(
             accepted.is_empty(),
             "committed JWT_SECRET values must be listed in KNOWN_WEAK_JWT_SECRETS:\n{}",
@@ -176,10 +218,22 @@ mod security_setting_tests {
 
     #[test]
     fn cors_origins_are_normalized() {
-        assert_eq!(normalize_cors_origin("https://app.example.com/").unwrap(), "https://app.example.com");
-        assert_eq!(normalize_cors_origin(" HTTPS://App.Example.com ").unwrap(), "https://app.example.com");
-        assert_eq!(normalize_cors_origin("http://localhost:5173").unwrap(), "http://localhost:5173");
-        assert_eq!(normalize_cors_origin("https://app.example.com:443").unwrap(), "https://app.example.com");
+        assert_eq!(
+            normalize_cors_origin("https://app.example.com/").unwrap(),
+            "https://app.example.com"
+        );
+        assert_eq!(
+            normalize_cors_origin(" HTTPS://App.Example.com ").unwrap(),
+            "https://app.example.com"
+        );
+        assert_eq!(
+            normalize_cors_origin("http://localhost:5173").unwrap(),
+            "http://localhost:5173"
+        );
+        assert_eq!(
+            normalize_cors_origin("https://app.example.com:443").unwrap(),
+            "https://app.example.com"
+        );
     }
 
     #[test]

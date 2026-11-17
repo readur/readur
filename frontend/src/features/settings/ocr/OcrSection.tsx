@@ -21,7 +21,7 @@ import {
 } from './ocrFields';
 import { useOcrStatus } from './useOcrStatus';
 
-const { OC, EC, QT, AP, IS } = PREFIX;
+const { EC, QT, AP, IS } = PREFIX;
 
 /** OCR languages, processing, admin pause/resume and every image-processing setting. */
 export default function OcrSection() {
@@ -29,10 +29,12 @@ export default function OcrSection() {
   const isAdmin = useIsAdmin();
   const { values: v, isLoading, loadError, save } = useSettingsData();
   const ocr = useOcrStatus(isAdmin);
-  const onOff = (b: boolean) => (b ? t('settings.summary.on', 'on') : t('settings.summary.off', 'off'));
+  const onOff = (b: boolean) =>
+    b ? t('settings.summary.on', 'on') : t('settings.summary.off', 'off');
   const noise = NOISE_OPTIONS.find((o) => o.value === v.ocr_noise_reduction_level);
 
-  if (isLoading) return <Skeleton lines={4} height={48} label={t('common.status.loading', 'Loading...')} />;
+  if (isLoading)
+    return <Skeleton lines={4} height={48} label={t('common.status.loading', 'Loading...')} />;
 
   return (
     <div className={shared.stack}>
@@ -41,32 +43,20 @@ export default function OcrSection() {
       <SettingGroup
         id="ocr-languages"
         title={t('settings.groups.languages', 'Languages')}
-        summary={t('settings.summary.languages', '{{languages}} · auto-detect {{auto}}', {
-          languages: v.preferred_languages.length
+        summary={
+          v.preferred_languages.length
             ? v.preferred_languages.map((l) => l.toUpperCase()).join(', ')
-            : t('settings.summary.defaultLanguage', 'default'),
-          auto: onOff(v.auto_detect_language_combination),
-        })}
+            : t('settings.summary.defaultLanguage', 'default')
+        }
       >
-        <div className={formStyles.form}>
-          <LanguagesForm values={v} onSave={save} />
-          <SettingSwitch
-            settingKey="auto_detect_language_combination"
-            label={t(`${OC}.autoDetectLanguageCombination`)}
-            description={t(`${OC}.autoDetectLanguageCombinationHelper`)}
-            isSelected={v.auto_detect_language_combination}
-            onSave={save}
-          />
-        </div>
+        <LanguagesForm values={v} onSave={save} />
       </SettingGroup>
 
       <SettingGroup
         id="ocr-processing"
         title={t('settings.groups.processing', 'Processing')}
-        summary={t('settings.summary.processing', '{{jobs}} jobs · {{timeout}}s · {{priority}} priority', {
-          jobs: v.concurrent_ocr_jobs,
+        summary={t('settings.summary.processing', '{{timeout}}s per document', {
           timeout: v.ocr_timeout_seconds,
-          priority: v.cpu_priority,
         })}
       >
         <SettingsForm fields={PROCESSING_FIELDS} values={v} onSave={save} />
@@ -84,7 +74,12 @@ export default function OcrSection() {
               : '—'
           }
         >
-          <OcrControls status={ocr.status} busy={ocr.busy} onPause={ocr.pause} onResume={ocr.resume} />
+          <OcrControls
+            status={ocr.status}
+            busy={ocr.busy}
+            onPause={ocr.pause}
+            onResume={ocr.resume}
+          />
         </SettingGroup>
       ) : null}
 
@@ -94,14 +89,26 @@ export default function OcrSection() {
         summary={
           v.ocr_skip_enhancement
             ? t('settings.summary.enhancementSkipped', 'skipped · original images only')
-            : t('settings.summary.enhancement', 'brightness {{b}} · contrast {{c}}× · noise {{n}} · sharpen {{s}}', {
-                b: v.ocr_brightness_boost,
-                c: v.ocr_contrast_multiplier,
-                n: noise ? t(noise.label, noise.fallback).toLowerCase() : v.ocr_noise_reduction_level,
-                s: v.ocr_sharpening_strength,
-              })
+            : t(
+                'settings.summary.enhancement',
+                'brightness {{b}} · contrast {{c}}× · noise {{n}} · sharpen {{s}}',
+                {
+                  b: v.ocr_brightness_boost,
+                  c: v.ocr_contrast_multiplier,
+                  n: noise
+                    ? t(noise.label, noise.fallback).toLowerCase()
+                    : v.ocr_noise_reduction_level,
+                  s: v.ocr_sharpening_strength,
+                },
+              )
         }
       >
+        <p className={formStyles.help}>
+          {t(
+            'settings.ocrSettings.preprocessingOnlyNote',
+            'These apply only when image preprocessing is on (General → File processing).',
+          )}
+        </p>
         <SettingsForm
           fields={ENHANCEMENT_FIELDS}
           values={v}
@@ -120,12 +127,16 @@ export default function OcrSection() {
       <SettingGroup
         id="ocr-thresholds"
         title={t('settings.groups.qualityThresholds', 'Quality thresholds')}
-        summary={t('settings.summary.thresholds', 'brightness {{b}} · contrast {{c}} · noise {{n}} · sharpness {{s}}', {
-          b: v.ocr_quality_threshold_brightness,
-          c: v.ocr_quality_threshold_contrast,
-          n: v.ocr_quality_threshold_noise,
-          s: v.ocr_quality_threshold_sharpness,
-        })}
+        summary={t(
+          'settings.summary.thresholds',
+          'brightness {{b}} · contrast {{c}} · noise {{n}} · sharpness {{s}}',
+          {
+            b: v.ocr_quality_threshold_brightness,
+            c: v.ocr_quality_threshold_contrast,
+            n: v.ocr_quality_threshold_noise,
+            s: v.ocr_quality_threshold_sharpness,
+          },
+        )}
       >
         <p className={formStyles.help}>{t(`${QT}.title`)}</p>
         <SettingsForm fields={THRESHOLD_FIELDS} values={v} onSave={save} />
@@ -134,12 +145,16 @@ export default function OcrSection() {
       <SettingGroup
         id="ocr-advanced"
         title={t(`${AP}.title`)}
-        summary={t('settings.summary.advanced', 'window {{w}} · morphology {{m}} · equalization {{h}} · save images {{s}}', {
-          w: v.ocr_adaptive_threshold_window_size,
-          m: onOff(v.ocr_morphological_operations),
-          h: onOff(v.ocr_histogram_equalization),
-          s: onOff(v.save_processed_images),
-        })}
+        summary={t(
+          'settings.summary.advanced',
+          'window {{w}} · morphology {{m}} · equalization {{h}} · save images {{s}}',
+          {
+            w: v.ocr_adaptive_threshold_window_size,
+            m: onOff(v.ocr_morphological_operations),
+            h: onOff(v.ocr_histogram_equalization),
+            s: onOff(v.save_processed_images),
+          },
+        )}
       >
         <SettingsForm
           fields={ADVANCED_FIELDS}

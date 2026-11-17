@@ -4,14 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServerSection from '../server/ServerSection';
 import { apiMock, httpError, ok, renderSettings } from './settingsTestUtils';
 
-vi.mock('../../../services/api', async (importOriginal) => (await import('./apiMock')).mockApiModule(importOriginal));
+vi.mock('../../../services/api', async (importOriginal) =>
+  (await import('./apiMock')).mockApiModule(importOriginal),
+);
 
 const CONFIG = {
   max_file_size_mb: 50,
   concurrent_ocr_jobs: 4,
   ocr_timeout_seconds: 300,
-  memory_limit_mb: 512,
-  cpu_priority: 'normal',
   server_host: '0.0.0.0',
   server_port: 8000,
   jwt_secret_set: true,
@@ -22,7 +22,6 @@ const CONFIG = {
   watch_interval_seconds: 30,
   file_stability_check_ms: 500,
   max_file_age_hours: null,
-  enable_background_ocr: false,
   version: '2.7.0',
   build_info: 'abc123',
 };
@@ -37,6 +36,7 @@ describe('ServerSection', () => {
   it('summarises each area and reads /settings/config', async () => {
     render();
     expect(await screen.findByText('50 MB · ./uploads')).toBeInTheDocument();
+    expect(screen.getByText('4 · 300s · eng')).toBeInTheDocument();
     expect(screen.getByText('0.0.0.0:8000 · v2.7.0')).toBeInTheDocument();
     expect(apiMock.get).toHaveBeenCalledWith('/settings/config');
   });
@@ -50,7 +50,11 @@ describe('ServerSection', () => {
     expect(within(upload).getByText('pdf')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit OCR Processing Configuration' }));
     const ocr = screen.getByRole('region', { name: 'OCR Processing Configuration' });
-    expect(within(ocr).getByText('Disabled')).toBeInTheDocument();
+    expect(within(ocr).getByText('300s')).toBeInTheDocument();
+    expect(within(ocr).queryByText('Memory Limit')).not.toBeInTheDocument();
+    expect(within(ocr).queryByText('CPU Priority')).not.toBeInTheDocument();
+    expect(within(ocr).queryByText('Background OCR')).not.toBeInTheDocument();
+    expect(within(ocr).queryByText(/Enabled|Disabled/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit Server Information' }));
     const info = screen.getByRole('region', { name: 'Server Information' });
     expect(within(info).getByText('Configured')).toBeInTheDocument();
@@ -71,7 +75,11 @@ describe('ServerSection', () => {
   it('explains a forbidden load', async () => {
     apiMock.get.mockRejectedValue(httpError(403));
     render();
-    expect(await screen.findByText('Admin access required to view server configuration')).toBeInTheDocument();
-    expect(screen.getByText('Failed to load server configuration. Admin access may be required.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Admin access required to view server configuration'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Failed to load server configuration. Admin access may be required.'),
+    ).toBeInTheDocument();
   });
 });

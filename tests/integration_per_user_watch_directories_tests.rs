@@ -14,21 +14,20 @@ use uuid::Uuid;
 use readur::{
     models::UserRole,
     services::user_watch_service::UserWatchService,
-    test_utils::{TestContext, TestAuthHelper},
+    test_utils::{TestAuthHelper, TestContext},
     AppState,
 };
-
 
 #[tokio::test]
 async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
     let ctx = TestContext::new().await;
-    
+
     // Enable per-user watch for this test
     let mut config = ctx.state.config.clone();
     let temp_user_watch = TempDir::new()?;
     config.user_watch_base_dir = temp_user_watch.path().to_string_lossy().to_string();
     config.enable_per_user_watch = true;
-    
+
     // Update the state with the new config and user watch service
     let user_watch_service = Some(Arc::new(UserWatchService::new(&config.user_watch_base_dir)));
     let updated_state = Arc::new(AppState {
@@ -41,10 +40,9 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
-    
+
     let app = Router::new()
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/auth", readur::routes::auth::router())
@@ -53,11 +51,15 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
     // Create admin user and regular user using TestAuthHelper
     let auth_helper = TestAuthHelper::with_db(app.clone(), ctx.state.db.clone());
     let admin_user = auth_helper.create_admin_user().await;
-    let admin_token = auth_helper.login_user(&admin_user.username, &admin_user.password).await;
+    let admin_token = auth_helper
+        .login_user(&admin_user.username, &admin_user.password)
+        .await;
     let admin_id = admin_user.user_response.id;
-    
+
     let regular_user = auth_helper.create_test_user().await;
-    let user_token = auth_helper.login_user(&regular_user.username, &regular_user.password).await;
+    let user_token = auth_helper
+        .login_user(&regular_user.username, &regular_user.password)
+        .await;
     let user_id = regular_user.user_response.id;
 
     // Test 1: Get user watch directory info (should not exist initially)
@@ -73,14 +75,17 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .await?;
 
     assert_eq!(get_response.status(), StatusCode::OK);
-    
+
     let get_body = axum::body::to_bytes(get_response.into_body(), usize::MAX).await?;
     let watch_info: Value = serde_json::from_slice(&get_body)?;
-    
+
     assert_eq!(watch_info["username"], regular_user.username);
     assert_eq!(watch_info["exists"], false);
     assert_eq!(watch_info["enabled"], true);
-    assert!(watch_info["watch_directory_path"].as_str().unwrap().contains(&regular_user.username));
+    assert!(watch_info["watch_directory_path"]
+        .as_str()
+        .unwrap()
+        .contains(&regular_user.username));
 
     // Test 2: Create user watch directory
     let create_req = json!({
@@ -100,12 +105,15 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .await?;
 
     assert_eq!(create_response.status(), StatusCode::OK);
-    
+
     let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await?;
     let create_result: Value = serde_json::from_slice(&create_body)?;
-    
+
     assert_eq!(create_result["success"], true);
-    assert!(create_result["message"].as_str().unwrap().contains(&regular_user.username));
+    assert!(create_result["message"]
+        .as_str()
+        .unwrap()
+        .contains(&regular_user.username));
     assert!(create_result["watch_directory_path"].is_string());
 
     // Verify directory was created on filesystem
@@ -126,10 +134,10 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .await?;
 
     assert_eq!(get_response2.status(), StatusCode::OK);
-    
+
     let get_body2 = axum::body::to_bytes(get_response2.into_body(), usize::MAX).await?;
     let watch_info2: Value = serde_json::from_slice(&get_body2)?;
-    
+
     assert_eq!(watch_info2["exists"], true);
 
     // Test 4: Regular user can access their own watch directory
@@ -173,10 +181,10 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
         .await?;
 
     assert_eq!(delete_response.status(), StatusCode::OK);
-    
+
     let delete_body = axum::body::to_bytes(delete_response.into_body(), usize::MAX).await?;
     let delete_result: Value = serde_json::from_slice(&delete_body)?;
-    
+
     assert_eq!(delete_result["success"], true);
 
     // Verify directory was removed from filesystem
@@ -208,7 +216,7 @@ async fn test_per_user_watch_directory_lifecycle() -> Result<()> {
 async fn test_user_watch_service_security() -> Result<()> {
     let temp_user_watch = TempDir::new()?;
     let user_watch_service = UserWatchService::new(temp_user_watch.path());
-    
+
     // Create test user
     let test_user = readur::models::User {
         id: Uuid::new_v4(),
@@ -250,7 +258,9 @@ async fn test_user_watch_service_security() -> Result<()> {
         is_active: true,
     };
 
-    let malicious_result = user_watch_service.ensure_user_directory(&malicious_user).await;
+    let malicious_result = user_watch_service
+        .ensure_user_directory(&malicious_user)
+        .await;
     assert!(malicious_result.is_err());
 
     // Verify no malicious directory was created outside the base directory
@@ -283,13 +293,13 @@ async fn test_user_watch_service_security() -> Result<()> {
 #[tokio::test]
 async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     let ctx = TestContext::new().await;
-    
+
     // Enable per-user watch for this test
     let mut config = ctx.state.config.clone();
     let temp_user_watch = TempDir::new()?;
     config.user_watch_base_dir = temp_user_watch.path().to_string_lossy().to_string();
     config.enable_per_user_watch = true;
-    
+
     // Update the state with the new config and user watch service
     let user_watch_service = Some(Arc::new(UserWatchService::new(&config.user_watch_base_dir)));
     let state = Arc::new(AppState {
@@ -302,14 +312,16 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
-    
+
     // Create user watch manager to test file path mapping
     let user_watch_service = state.user_watch_service.as_ref().unwrap();
-    let user_watch_manager = readur::scheduling::user_watch_manager::UserWatchManager::new(state.db.clone(), (**user_watch_service).clone());
-    
+    let user_watch_manager = readur::scheduling::user_watch_manager::UserWatchManager::new(
+        state.db.clone(),
+        (**user_watch_service).clone(),
+    );
+
     // Create test user
     let test_user = readur::models::User {
         id: Uuid::new_v4(),
@@ -328,16 +340,21 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     };
 
     // Insert user into database
-    let created_user = state.db.create_user(readur::models::CreateUser {
-        username: test_user.username.clone(),
-        email: test_user.email.clone(), 
-        password: "test_password".to_string(),
-        role: Some(UserRole::User),
-    }).await?;
+    let created_user = state
+        .db
+        .create_user(readur::models::CreateUser {
+            username: test_user.username.clone(),
+            email: test_user.email.clone(),
+            password: "test_password".to_string(),
+            role: Some(UserRole::User),
+        })
+        .await?;
 
     // Create user watch directory
     let user_watch_service = state.user_watch_service.as_ref().unwrap();
-    let user_dir_path = user_watch_service.ensure_user_directory(&created_user).await?;
+    let user_dir_path = user_watch_service
+        .ensure_user_directory(&created_user)
+        .await?;
 
     // Test file path to user mapping
     let test_file_path = user_dir_path.join("test_document.pdf");
@@ -347,9 +364,11 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Test that the user watch manager can map file paths to users
-    let mapped_user_result = user_watch_manager.get_user_by_file_path(&test_file_path).await?;
+    let mapped_user_result = user_watch_manager
+        .get_user_by_file_path(&test_file_path)
+        .await?;
     let mapped_user_id = mapped_user_result.as_ref().map(|user| user.id);
-    
+
     // The user should be discoverable via file path
     assert!(mapped_user_id.is_some());
     if let Some(user_id) = mapped_user_id {
@@ -358,7 +377,9 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
 
     // Test invalid path (should not map to any user)
     let invalid_path = PathBuf::from("/invalid/path/document.pdf");
-    let invalid_mapping_result = user_watch_manager.get_user_by_file_path(&invalid_path).await?;
+    let invalid_mapping_result = user_watch_manager
+        .get_user_by_file_path(&invalid_path)
+        .await?;
     assert!(invalid_mapping_result.is_none());
 
     // Cleanup
@@ -369,14 +390,14 @@ async fn test_user_watch_directory_file_processing_simulation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]  
+#[tokio::test]
 async fn test_per_user_watch_disabled() -> Result<()> {
     let ctx = TestContext::new().await;
-    
+
     // Ensure per-user watch is disabled
     let mut config = ctx.state.config.clone();
     config.enable_per_user_watch = false;
-    
+
     // Update the state with the disabled config (no user watch service)
     let updated_state = Arc::new(AppState {
         db: ctx.state.db.clone(),
@@ -388,10 +409,9 @@ async fn test_per_user_watch_disabled() -> Result<()> {
         oidc_client: None,
         sync_progress_tracker: ctx.state.sync_progress_tracker.clone(),
         user_watch_service: None, // Disabled
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     });
-    
+
     let app = Router::new()
         .nest("/api/users", readur::routes::users::router())
         .nest("/api/auth", readur::routes::auth::router())
@@ -400,8 +420,10 @@ async fn test_per_user_watch_disabled() -> Result<()> {
     // Create admin user and regular user using TestAuthHelper
     let auth_helper = TestAuthHelper::with_db(app.clone(), ctx.state.db.clone());
     let admin_user = auth_helper.create_admin_user().await;
-    let admin_token = auth_helper.login_user(&admin_user.username, &admin_user.password).await;
-    
+    let admin_token = auth_helper
+        .login_user(&admin_user.username, &admin_user.password)
+        .await;
+
     let regular_user = auth_helper.create_test_user().await;
     let user_id = regular_user.user_response.id;
 

@@ -128,18 +128,28 @@ All metrics are gauges unless marked as counters. "Today" means since midnight o
 |--------|---------|
 | `readur_data_consistency_score` | 100 when the OCR queue and the documents agree; 10 points are subtracted for each queue entry whose document no longer exists and each document marked completed whose queue entry is not |
 
-**Placeholders**
+**Process and storage**
 
-These metrics are emitted but do not measure anything yet. Do not alert on them.
+| Metric | Meaning |
+|--------|---------|
+| `readur_uptime_seconds` (counter) | Seconds since the server process started (fractional) |
+| `readur_memory_usage_bytes` | Resident memory of the server process. Omitted where the platform does not report it |
+| `readur_storage_usage_percent` | Used space on the filesystem holding `UPLOAD_PATH`. Omitted with S3 storage, whose usage Readur cannot measure |
 
-| Metric | Value |
-|--------|-------|
-| `readur_uptime_seconds` (counter) | Always `3600` |
-| `readur_memory_usage_bytes` | Always `0` |
-| `readur_storage_usage_percent` | Always `0` |
-| `readur_failed_logins_today` (counter) | Always `0` |
-| `readur_document_access_today` (counter) | Documents created today (the same figure as `readur_documents_uploaded_today`), not document accesses |
-| `readur_webdav_sessions_total`, `readur_webdav_sessions_successful`, `readur_webdav_sessions_failed`, `readur_webdav_success_rate`, `readur_webdav_files_processed`, `readur_webdav_bytes_processed`, `readur_webdav_avg_session_duration_seconds`, `readur_webdav_avg_processing_rate`, `readur_webdav_http_requests_total`, `readur_webdav_request_success_rate`, `readur_webdav_avg_request_duration_ms`, `readur_webdav_sessions_active_last_hour`, `readur_webdav_error_rate_last_hour` | Always `0`: WebDAV syncs do not report to this collector. Check the Sources page instead |
+**WebDAV sources**
+
+These come from the WebDAV sources' records (the same figures the Sources page shows), summed over all users.
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_webdav_sources` | WebDAV sources configured |
+| `readur_webdav_sources_enabled` | WebDAV sources that are enabled |
+| `readur_webdav_sources_syncing` | WebDAV sources syncing now |
+| `readur_webdav_sources_error` | WebDAV sources whose last sync failed |
+| `readur_webdav_files_synced` | Files synced, as recorded on each source |
+| `readur_webdav_bytes_synced` | Bytes synced, as recorded on each source |
+| `readur_webdav_files_pending` | Files found but not yet synced |
+| `readur_webdav_oldest_sync_age_seconds` | Seconds since the least recently synced enabled source last synced. Omitted until an enabled source has synced |
 
 ### Example Alert Rules
 
@@ -190,9 +200,7 @@ curl -H "Authorization: Bearer $admin_token" http://localhost:8000/api/metrics
 ```json
 {
   "database": {
-    "active_connections": 5,
-    "total_queries_today": 0,
-    "avg_query_time_ms": 0.0
+    "active_connections": 5
   },
   "ocr": {
     "pending_jobs": 3,
@@ -217,7 +225,7 @@ curl -H "Authorization: Bearer $admin_token" http://localhost:8000/api/metrics
     "new_registrations_today": 0
   },
   "system": {
-    "uptime_seconds": 3600,
+    "uptime_seconds": 86400,
     "app_version": "3.1.3",
     "rust_version": "unknown"
   },
@@ -225,9 +233,9 @@ curl -H "Authorization: Bearer $admin_token" http://localhost:8000/api/metrics
 }
 ```
 
-- `database.active_connections` is the number of connections open in the pool. `total_queries_today` and `avg_query_time_ms` are always `0`.
+- `database.active_connections` is the number of connections open in the pool.
 - `ocr.avg_processing_time_minutes` is the average queue wait time, like `readur_ocr_avg_processing_minutes`; it and `oldest_pending_minutes` are `null` when there is no value.
-- `system.uptime_seconds` is always `3600`; `app_version` is the Readur version.
+- `system.uptime_seconds` is the time since the server process started; `app_version` is the Readur version.
 - `timestamp` is in Unix seconds.
 
 The OCR queue alone is also available from `GET /api/queue/stats` (see [OCR and Queue Endpoints](../api-reference.md#ocr-and-queue-endpoints)).
@@ -256,8 +264,8 @@ Without `RUST_LOG`, Readur logs at `info` and quietens two noisy dependencies (t
 
 - **Is it up?** `GET /api/health` from an uptime checker, plus `up{job="readur"}` in Prometheus.
 - **Is OCR keeping up?** `readur_ocr_queue_pending`, `readur_ocr_queue_oldest_pending_minutes` and `readur_ocr_stuck_jobs`. Failed jobs can be put back in the queue with `POST /api/queue/requeue/failed`.
-- **Is the disk filling up?** Readur does not report free space (`readur_storage_usage_percent` is a placeholder). Watch the volume behind `UPLOAD_PATH` and the PostgreSQL data volume with node-exporter or your platform's volume metrics.
-- **Source syncs:** the WebDAV metrics are placeholders; source health and errors are shown on the Sources page.
+- **Is the disk filling up?** With local storage, alert on `readur_storage_usage_percent` (the filesystem holding `UPLOAD_PATH`). Watch the PostgreSQL data volume, and S3 buckets, with node-exporter or your platform's volume metrics.
+- **Source syncs:** alert on `readur_webdav_sources_error > 0` or a growing `readur_webdav_oldest_sync_age_seconds`; the Sources page shows each source's health and errors.
 
 ## Related Documentation
 

@@ -18,12 +18,11 @@ All server settings are environment variables, read at startup; restart Readur a
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `CONCURRENT_OCR_JOBS` | `4` | Documents OCRed in parallel. Values are clamped to 1-15. Each running job needs roughly one CPU core and the memory of one decoded page or image |
-| `OCR_TIMEOUT_SECONDS` | `300` | Time limit for the OCR of one document. A job that exceeds it fails; the queue tries it again until its attempts (3 by default) are used up |
-| `MAX_FILE_SIZE_MB` | `50` | Largest request body, so the largest upload. Source syncs skip files larger than this |
+| `OCR_TIMEOUT_SECONDS` | `300` | Time limit for the OCR of one document whose owner has not saved their own **OCR Timeout**. A job that exceeds it fails; the queue tries it again until its attempts (3 by default) are used up |
+| `MAX_FILE_SIZE_MB` | `50` | Largest request body, so the largest upload; a user's own **Max File Size** can only lower it. Source syncs skip files larger than this |
 | `MAX_PDF_SIZE_MB` | `100` | Larger PDFs are not processed for text |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | `100` | Larger Office documents are not processed for text |
 | `OCR_LANGUAGE` | `eng` | Default OCR language. Every extra language in a combination (such as `eng+deu`) makes Tesseract slower |
-| `OCR_LOW_MEMORY_MODE` | `false` | Read only by the image OCR service behind `GET /api/ocr/health`; the document OCR pipeline does not use it, so it has no measurable effect on processing |
 
 `MEMORY_LIMIT_MB` and `CPU_PRIORITY` are only printed in the startup log; they do not limit memory or change process priority. Use container limits instead (below).
 
@@ -36,7 +35,7 @@ All server settings are environment variables, read at startup; restart Readur a
 ### Choosing `OCR_TIMEOUT_SECONDS`
 
 - Large scanned PDFs take the longest. If they fail with a timeout, raise the limit.
-- Every 5 minutes, Readur resets jobs that have been in `processing` for more than 10 minutes back to `pending` (or to `failed` once their attempts are used up), to recover jobs from a crashed or restarted server. A job that legitimately runs longer than 10 minutes is caught by this too, so keep `OCR_TIMEOUT_SECONDS` below 600.
+- Every 5 minutes, Readur resets jobs that have been in `processing` for more than 10 minutes back to `pending` (or to `failed` once their attempts are used up), to recover jobs from a crashed or restarted server. A job that legitimately runs longer than 10 minutes is caught by this too, so OCR timeouts (the server's and each user's) stop at 600 seconds: a larger value acts as 600.
 
 ## Per-User OCR Settings
 
@@ -45,10 +44,16 @@ Each user's OCR options are stored in the database and edited on the **Settings*
 - **OCR languages** (`ocr_language`, `preferred_languages`, `primary_language`): fewer languages means faster OCR.
 - **Enable Image Preprocessing** (`enable_image_preprocessing`): when on, images are analysed and, if they fall below the quality thresholds, enhanced (brightness, contrast, noise reduction, sharpening) before OCR. Turning it off saves CPU time on clean scans.
 - **Skip enhancement** (`ocr_skip_enhancement`) and the quality thresholds (`ocr_quality_threshold_*`): decide when preprocessing enhances an image.
-- **Page segmentation mode** (`ocr_page_segmentation_mode`): passed to Tesseract.
+- **Maximum image size** and **upscale factor** (`ocr_max_image_width`, `ocr_max_image_height`, `ocr_upscale_factor`): preprocessing scales images to fit within the maximum size (never above 2048 pixels on the long edge), then by the upscale factor.
+- **Page segmentation mode** and **OCR engine mode** (`ocr_page_segmentation_mode`, 0-13; `ocr_engine_mode`, 0-3): passed to Tesseract for images and PDF pages, and to ocrmypdf as `--tesseract-pagesegmode` and `--tesseract-oem`. Engine modes 0 and 2 need Tesseract's legacy language data; without it OCR of that user's documents fails with an error naming the engine mode.
+- **DPI** (`ocr_dpi`, 70-1200, default 300): the resolution PDF pages are rendered at for OCR, and the resolution Tesseract assumes for images. Higher values cost time and memory roughly with their square.
+- **Character whitelist / blacklist** (`ocr_whitelist_chars`, `ocr_blacklist_chars`): restrict the characters Tesseract may recognise, in every OCR path.
+- **OCR Timeout** (`ocr_timeout_seconds`, 10-600): the time limit for each of the user's documents, in place of `OCR_TIMEOUT_SECONDS`.
+- **Max File Size** (`max_file_size_mb`, 1-500, empty for the server's limit): the largest file the user may upload. `MAX_FILE_SIZE_MB` still caps it.
+- **Enable Background OCR** (`enable_background_ocr`): when off, the user's uploads and synced files are stored but not queued for OCR; retry OCR on a document to process it.
 - **Save processed images** (`save_processed_images`): keeps the preprocessed image for each document, which costs disk space.
 
-The **Concurrent OCR Jobs**, **OCR Timeout** and **Max File Size** fields on the Settings page are saved with the user's settings, but the OCR worker and the upload limit use the server's `CONCURRENT_OCR_JOBS`, `OCR_TIMEOUT_SECONDS` and `MAX_FILE_SIZE_MB`. The OCR engine mode and DPI fields are stored but not used by the OCR pipeline either.
+How many documents are OCRed at once is server-wide (`CONCURRENT_OCR_JOBS`), so it is not a user setting.
 
 ## Container Resources
 

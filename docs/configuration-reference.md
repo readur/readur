@@ -108,12 +108,11 @@ See [Watch Folder](WATCH_FOLDER.md) and [Per-User Watch Directories](per-user-wa
 |----------|------|---------|-------------|----------|
 | `OCR_LANGUAGE` | String | `eng` | Default Tesseract language code(s), e.g. `eng` or `eng+deu`; users can choose their own in Settings | No |
 | `CONCURRENT_OCR_JOBS` | Integer | `4` | Documents OCRed in parallel, clamped to 1-15 | No |
-| `OCR_TIMEOUT_SECONDS` | Integer | `300` | Time limit for processing one document | No |
-| `MAX_FILE_SIZE_MB` | Integer | `50` | Largest accepted request body, and so the largest upload | No |
+| `OCR_TIMEOUT_SECONDS` | Integer | `300` | Time limit for processing one document whose owner has not saved their own OCR timeout in Settings; at most 600 takes effect | No |
+| `MAX_FILE_SIZE_MB` | Integer | `50` | Largest accepted request body, and so the largest upload; a user's own Max File Size can only be lower | No |
 | `MAX_PDF_SIZE_MB` | Integer | `100` | Largest PDF that is processed for text | No |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Largest Office document that is processed for text | No |
-| `OCR_LOW_MEMORY_MODE` | Boolean | `false` | Read only by the image OCR service behind `GET /api/ocr/health`; document processing does not use it | No |
-| `TEMP_DIR` | String | `/tmp` | Has no effect on document processing, which writes its temporary files to `/tmp` | No |
+| `TEMP_DIR` | String | the platform temporary directory (`TMPDIR`, else `/tmp`) | Directory for temporary files: OCR scratch images, PDF page renders, ocrmypdf output and thumbnails. Created if missing | No |
 | `MEMORY_LIMIT_MB` | Integer | `512` | Reported in the startup log only; it does not limit anything | No |
 | `CPU_PRIORITY` | String | `normal` | Reported in the startup log only; it does not change process priority | No |
 

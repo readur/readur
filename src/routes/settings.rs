@@ -134,26 +134,30 @@ fn stored_webdav_password_reusable(stored: Option<&Settings>, update: &UpdateSet
         && new_username.trim() == stored.webdav_username.as_deref().unwrap_or_default().trim()
 }
 
+/// The server-wide configuration (environment variables), for administrators.
+/// Per-user settings are under `GET /api/settings`.
 #[derive(Debug, Serialize, utoipa::ToSchema, TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 struct ServerConfiguration {
+    /// `MAX_FILE_SIZE_MB`: no upload may be larger, whatever a user's own limit.
     max_file_size_mb: u64,
-    concurrent_ocr_jobs: i32,
-    ocr_timeout_seconds: i32,
-    memory_limit_mb: u64,
-    cpu_priority: String,
+    /// `CONCURRENT_OCR_JOBS`: OCR jobs the worker runs at once.
+    concurrent_ocr_jobs: u64,
+    /// `OCR_TIMEOUT_SECONDS`: the OCR timeout for documents whose owner has no settings saved.
+    ocr_timeout_seconds: u64,
     server_host: String,
     server_port: u16,
     jwt_secret_set: bool,
     upload_path: String,
     watch_folder: Option<String>,
+    /// `OCR_LANGUAGE`: the default OCR language.
     ocr_language: String,
+    /// `ALLOWED_FILE_TYPES`: extensions the watch folder and batch import accept.
     allowed_file_types: Vec<String>,
     watch_interval_seconds: Option<u64>,
     file_stability_check_ms: Option<u64>,
     max_file_age_hours: Option<u64>,
-    enable_background_ocr: bool,
     version: String,
     build_info: Option<String>,
 }
@@ -173,20 +177,15 @@ struct ServerConfiguration {
     )
 )]
 async fn get_server_configuration(
-    auth_user: AdminUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ServerConfiguration>, StatusCode> {
-    let config = &state.config;
+    Ok(Json(server_configuration(&state.config)))
+}
 
-    // Get user settings from database, fallback to defaults
-    let user_settings = state
-        .db
-        .get_user_settings(auth_user.user.id)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(crate::models::Settings::default);
-
+/// What `GET /api/settings/config` reports: the server's own configuration,
+/// never the calling administrator's user settings.
+fn server_configuration(config: &crate::config::Config) -> ServerConfiguration {
     // Parse server_address to get host and port
     let (server_host, server_port) = if let Some(colon_pos) = config.server_address.rfind(':') {
         let host = config.server_address[..colon_pos].to_string();
@@ -198,28 +197,23 @@ async fn get_server_configuration(
         (config.server_address.clone(), 8000)
     };
 
-    let server_config = ServerConfiguration {
-        max_file_size_mb: user_settings.max_file_size_mb as u64,
-        concurrent_ocr_jobs: user_settings.concurrent_ocr_jobs,
-        ocr_timeout_seconds: user_settings.ocr_timeout_seconds,
-        memory_limit_mb: user_settings.memory_limit_mb as u64,
-        cpu_priority: user_settings.cpu_priority,
+    ServerConfiguration {
+        max_file_size_mb: config.max_file_size_mb,
+        concurrent_ocr_jobs: config.concurrent_ocr_jobs as u64,
+        ocr_timeout_seconds: config.ocr_timeout_seconds,
         server_host,
         server_port,
         jwt_secret_set: !config.jwt_secret.is_empty(),
         upload_path: config.upload_path.clone(),
         watch_folder: Some(config.watch_folder.clone()),
-        ocr_language: user_settings.ocr_language,
-        allowed_file_types: user_settings.allowed_file_types,
+        ocr_language: config.ocr_language.clone(),
+        allowed_file_types: config.allowed_file_types.clone(),
         watch_interval_seconds: Some(config.effective_watch_interval_seconds()),
         file_stability_check_ms: Some(config.effective_file_stability_check_ms()),
         max_file_age_hours: config.max_file_age_hours,
-        enable_background_ocr: user_settings.enable_background_ocr,
         version: env!("CARGO_PKG_VERSION").to_string(),
         build_info: option_env!("BUILD_INFO").map(|s| s.to_string()),
-    };
-
-    Ok(Json(server_config))
+    }
 }
 
 #[cfg(test)]
@@ -237,6 +231,29 @@ mod tests {
 
     fn update(value: serde_json::Value) -> UpdateSettings {
         serde_json::from_value(value).expect("valid settings update")
+    }
+
+    #[test]
+    fn server_configuration_reports_the_environment_configuration() {
+        let config = crate::test_utils::TestConfigBuilder::default()
+            .with_concurrent_ocr_jobs(3)
+            .with_max_file_size_mb(77)
+            .build("postgres://unused".to_string());
+        let reported = serde_json::to_value(server_configuration(&config)).unwrap();
+        assert_eq!(reported["concurrent_ocr_jobs"], 3);
+        assert_eq!(reported["max_file_size_mb"], 77);
+        assert_eq!(reported["ocr_timeout_seconds"], config.ocr_timeout_seconds);
+        assert_eq!(reported["ocr_language"], config.ocr_language.as_str());
+        assert_eq!(
+            reported["allowed_file_types"],
+            serde_json::json!(config.allowed_file_types)
+        );
+        for gone in ["memory_limit_mb", "cpu_priority", "enable_background_ocr"] {
+            assert!(
+                reported.get(gone).is_none(),
+                "{gone} is not server configuration"
+            );
+        }
     }
 
     #[test]

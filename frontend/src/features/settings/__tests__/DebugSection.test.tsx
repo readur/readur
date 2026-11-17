@@ -14,7 +14,7 @@ const DEBUG_INFO = {
   filename: 'invoice.pdf',
   overall_status: 'failed',
   debug_timestamp: '2026-09-01T10:00:00Z',
-  user_settings: { enable_background_ocr: true, ocr_min_confidence: 30, max_file_size_mb: 50 },
+  user_settings: { enable_background_ocr: true, ocr_min_confidence: 30, max_file_size_mb: null },
   pipeline_steps: [
     {
       step: 1,
@@ -170,6 +170,8 @@ describe('DebugSection', () => {
     expect(screen.getByText('Queue History')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'User Settings' }));
     expect(screen.getByText('OCR Settings')).toBeInTheDocument();
+    expect(screen.getByText('server limit')).toBeInTheDocument();
+    expect(screen.queryByText('N/A MB')).not.toBeInTheDocument();
   });
 
   it('loads the original and processed images through the signed-in client', async () => {

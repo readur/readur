@@ -710,16 +710,8 @@
       "ocrConfiguration": {
         "title": "Configuración de OCR",
         "description": "Configura idiomas para la extracción de texto OCR. Múltiples idiomas ayudan con documentos en varios idiomas.",
-        "autoDetectLanguageCombination": "Auto-detectar combinaciones de idiomas",
-        "autoDetectLanguageCombinationHelper": "Sugerir automáticamente combinaciones óptimas de idiomas basadas en el análisis del contenido del documento",
-        "concurrentOcrJobs": "Trabajos OCR Concurrentes",
-        "concurrentOcrJobsHelper": "Número de trabajos OCR que pueden ejecutarse simultáneamente",
         "ocrTimeout": "Tiempo de Espera OCR (segundos)",
-        "ocrTimeoutHelper": "Tiempo máximo para el procesamiento OCR por archivo",
-        "cpuPriority": "Prioridad de CPU",
-        "cpuPriorityLow": "Baja",
-        "cpuPriorityNormal": "Normal",
-        "cpuPriorityHigh": "Alta"
+        "ocrTimeoutHelper": "Tiempo límite de OCR para cada uno de sus documentos, como máximo 10 minutos (600 segundos)"
       },
       "ocrControls": {
         "title": "Controles de Procesamiento OCR (Solo Administrador)",
@@ -735,9 +727,7 @@
       "fileProcessing": {
         "title": "Procesamiento de Archivos",
         "maxFileSize": "Tamaño Máximo de Archivo (MB)",
-        "maxFileSizeHelper": "Tamaño máximo permitido de archivo para subidas",
-        "memoryLimit": "Límite de Memoria (MB)",
-        "memoryLimitHelper": "Límite de memoria por trabajo OCR",
+        "maxFileSizeHelper": "El archivo más grande que puede subir. Déjelo vacío para usar el límite del servidor, que también limita cualquier valor indicado aquí.",
         "autoRotateImages": "Rotar Imágenes Automáticamente",
         "autoRotateImagesHelper": "Detectar y corregir automáticamente la orientación de la imagen",
         "enableImagePreprocessing": "Habilitar Preprocesamiento de Imágenes",
@@ -748,24 +738,13 @@
       },
       "searchConfiguration": {
         "title": "Configuración de Búsqueda",
-        "resultsPerPage": "Resultados por Página",
-        "snippetLength": "Longitud del Fragmento",
-        "snippetLengthHelper": "Caracteres a mostrar en vistas previas de resultados de búsqueda",
         "fuzzySearchThreshold": "Umbral de Búsqueda Difusa",
         "fuzzySearchThresholdHelper": "Cuánto debe parecerse una palabra a la consulta en la búsqueda por ortografía similar: 1.0 solo acepta la ortografía exacta; valores más bajos toleran más errores (0.5 por defecto)"
-      },
-      "storageManagement": {
-        "title": "Gestión de Almacenamiento",
-        "retentionDays": "Días de Retención",
-        "retentionDaysHelper": "Eliminar automáticamente documentos después de X días (dejar vacío para deshabilitar)",
-        "enableAutoCleanup": "Habilitar Limpieza Automática",
-        "enableAutoCleanupHelper": "Eliminar automáticamente archivos huérfanos y limpiar almacenamiento",
-        "enableCompression": "Habilitar Compresión",
-        "enableCompressionHelper": "Comprimir documentos almacenados para ahorrar espacio en disco"
       }
     },
     "ocrSettings": {
       "title": "Configuración de Procesamiento de Imágenes OCR",
+      "preprocessingOnlyNote": "Solo se aplican cuando el preprocesamiento de imágenes está activado (General → Procesamiento de archivos).",
       "enhancementControls": {
         "title": "Controles de Mejora",
         "skipEnhancement": "Omitir Toda Mejora de Imagen (Usar Solo Imágenes Originales)",
@@ -868,12 +847,7 @@
         "title": "Configuración de Procesamiento OCR",
         "concurrentOcrJobs": "Trabajos OCR Concurrentes",
         "ocrTimeout": "Tiempo de Espera OCR",
-        "memoryLimit": "Límite de Memoria",
-        "ocrLanguage": "Idioma OCR",
-        "cpuPriority": "Prioridad de CPU",
-        "backgroundOcr": "OCR en Segundo Plano",
-        "enabled": "Habilitado",
-        "disabled": "Deshabilitado"
+        "ocrLanguage": "Idioma OCR"
       },
       "serverInformation": {
         "title": "Información del Servidor",
@@ -1071,22 +1045,19 @@
     },
     "summary": {
       "advanced": "ventana {{w}} · morfología {{m}} · ecualización {{h}} · guardar imágenes {{s}}",
-      "days_one": "{{count}} día",
-      "days_other": "{{count}} días",
       "defaultLanguage": "predeterminado",
       "enhancement": "brillo {{b}} · contraste {{c}}× · ruido {{n}} · nitidez {{s}}",
       "enhancementSkipped": "omitida · solo imágenes originales",
-      "fileProcessing": "{{size}} MB máx. · {{memory}} MB de memoria · rotar {{rotate}}",
-      "forever": "siempre",
+      "fileProcessing": "{{size}} · rotar {{rotate}}",
+      "maxSize": "{{size}} MB máx.",
       "imageSize": "{{w}} × {{h}} px · escalado {{u}}×",
-      "languages": "{{languages}} · detección automática {{auto}}",
       "off": "no",
       "on": "sí",
       "paused": "en pausa",
-      "processing": "{{jobs}} trabajos · {{timeout}} s · prioridad {{priority}}",
+      "processing": "{{timeout}} s por documento",
       "running": "en marcha",
-      "search": "{{perPage}} por página · {{snippet}} caracteres · difusa {{fuzzy}}",
-      "storage": "conservar {{retention}} · limpieza {{cleanup}} · compresión {{compression}}",
+      "serverLimit": "límite del servidor",
+      "search": "difusa {{fuzzy}}",
       "thresholds": "brillo {{b}} · contraste {{c}} · ruido {{n}} · nitidez {{s}}"
     },
     "users": {

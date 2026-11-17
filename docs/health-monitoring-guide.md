@@ -59,7 +59,7 @@ The response has `status` (`healthy` or `unhealthy`), `tesseract_installed`, `av
 
 | Section | Fields |
 |---------|--------|
-| `database` | `active_connections`, `total_queries_today`, `avg_query_time_ms` |
+| `database` | `active_connections` |
 | `ocr` | `pending_jobs`, `processing_jobs`, `failed_jobs`, `completed_today`, `avg_processing_time_minutes`, `queue_depth`, `oldest_pending_minutes` |
 | `documents` | `total_documents`, `documents_uploaded_today`, `total_storage_bytes`, `avg_document_size_bytes`, `documents_with_ocr`, `documents_without_ocr` |
 | `users` | `total_users`, `active_users_today`, `new_registrations_today` |
