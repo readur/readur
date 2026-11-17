@@ -65,12 +65,11 @@ fn validate_account_fields(
     Ok(())
 }
 
-/// Map a failed user insert/update to the REST error. A username or email clash is recognised
-/// by SQLSTATE 23505 and the name of the unique constraint it hit, not by the error text.
-/// Classify a failed user write. Only unique violations on the username and
-/// email constraints are client errors; everything else is a 500. A user that
-/// no longer exists is not an error here: `Database::update_user` reports it
-/// as `Ok(None)`.
+/// Map a failed user insert/update to the REST error. Only a unique
+/// violation (SQLSTATE 23505) on the username or email constraint, recognised
+/// by the constraint's name rather than the error text, is a client error
+/// (409); everything else is a 500. A user that no longer exists is not an
+/// error here: `Database::update_user` reports it as `Ok(None)`.
 fn map_user_write_error(e: anyhow::Error, username: &str, email: &str) -> UserError {
     match violated_unique_constraint_in(&e) {
         Some(USERS_USERNAME_UNIQUE) => UserError::duplicate_username(username),

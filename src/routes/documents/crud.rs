@@ -272,7 +272,7 @@ pub async fn list_documents(
     .await
     .map_err(|e| {
         error!("Database error listing documents: {}", e);
-        DocumentError::InternalServerError("Failed to list documents".to_string())
+        DocumentError::InternalServerError("Failed to list documents")
     })?;
     Ok(Json(response))
 }

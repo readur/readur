@@ -281,7 +281,7 @@ impl FileProcessor {
     }
 
     async fn queue_ocr(&self, request_id: Uuid, document: &Document, file_size: i64) {
-        let priority = ocr_priority(file_size);
+        let priority = crate::ocr::priority::priority_for_file_size(file_size);
         match self
             .state
             .queue_service
@@ -297,18 +297,6 @@ impl FileProcessor {
                 request_id, document.id, e
             ),
         }
-    }
-}
-
-/// Smaller files are OCRed first.
-fn ocr_priority(file_size: i64) -> i32 {
-    const MB: i64 = 1024 * 1024;
-    match file_size {
-        size if size <= MB => 10,
-        size if size <= 5 * MB => 8,
-        size if size <= 10 * MB => 6,
-        size if size <= 50 * MB => 4,
-        _ => 2,
     }
 }
 
@@ -374,23 +362,4 @@ pub async fn process_files_for_deep_scan(
         elapsed
     );
     Ok(processed)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ocr_priority;
-
-    /// Smaller files are queued with a higher OCR priority; the bands are
-    /// inclusive at their upper bound.
-    #[test]
-    fn ocr_priority_bands() {
-        const MB: i64 = 1024 * 1024;
-        assert_eq!(ocr_priority(0), 10);
-        assert_eq!(ocr_priority(MB), 10);
-        assert_eq!(ocr_priority(MB + 1), 8);
-        assert_eq!(ocr_priority(5 * MB), 8);
-        assert_eq!(ocr_priority(10 * MB), 6);
-        assert_eq!(ocr_priority(50 * MB), 4);
-        assert_eq!(ocr_priority(50 * MB + 1), 2);
-    }
 }

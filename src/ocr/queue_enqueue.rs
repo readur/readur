@@ -15,6 +15,52 @@ use uuid::Uuid;
 
 use super::OcrQueueService;
 
+/// The SQL predicate for a job a worker will claim: pending with attempts
+/// left. The dequeue query, [`OcrQueueService::has_active_job`] and the
+/// retirement of exhausted jobs all build on this one definition, so what
+/// counts as "queued" can never drift from what the worker actually runs.
+macro_rules! claimable_job {
+    () => {
+        "(status = 'pending' AND attempts < max_attempts)"
+    };
+}
+
+/// A job that will run or is running: claimable, or claimed by a worker.
+/// A 'processing' job counts whatever its attempts, since the claim itself
+/// spends one; a crashed worker's job is reset by `recover_stale_items`.
+macro_rules! active_job {
+    () => {
+        concat!("(status = 'processing' OR ", claimable_job!(), ")")
+    };
+}
+
+/// Selects and locks the next job to claim, highest priority first.
+pub(super) const NEXT_CLAIMABLE_JOB_SQL: &str = concat!(
+    "SELECT id, document_id, priority, status, attempts, max_attempts, \
+     created_at, started_at, completed_at, error_message, \
+     worker_id, processing_time_ms, file_size \
+     FROM ocr_queue WHERE ",
+    claimable_job!(),
+    " ORDER BY priority DESC, created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1"
+);
+
+const HAS_ACTIVE_JOB_SQL: &str = concat!(
+    "SELECT EXISTS(SELECT 1 FROM ocr_queue WHERE document_id = $1 AND ",
+    active_job!(),
+    ")"
+);
+
+/// Fails the document's pending jobs that no worker will ever claim. The
+/// attempt columns are nullable, and a NULL makes the claimable predicate
+/// NULL rather than false, so it is coalesced: such a job is never claimed
+/// and must be retired too.
+const RETIRE_UNCLAIMABLE_SQL: &str = concat!(
+    "UPDATE ocr_queue SET status = 'failed' \
+     WHERE document_id = $1 AND status = 'pending' AND NOT COALESCE(",
+    claimable_job!(),
+    ", FALSE)"
+);
+
 /// What an enqueue did.
 #[must_use = "an already queued document gets no new job; decide whether that matters"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,14 +137,15 @@ impl OcrQueueService {
         Ok(ids)
     }
 
-    /// Whether the document has a pending or processing OCR job.
+    /// Whether the document's OCR will run without further action: it has
+    /// a job a worker will claim, or one a worker is running. A pending job
+    /// with no attempts left is not active: no worker claims it, so the
+    /// document needs a retry (which retires that job).
     pub async fn has_active_job(&self, document_id: Uuid) -> Result<bool> {
-        let active = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM ocr_queue WHERE document_id = $1 AND status IN ('pending', 'processing'))",
-        )
-        .bind(document_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let active = sqlx::query_scalar::<_, bool>(HAS_ACTIVE_JOB_SQL)
+            .bind(document_id)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(active)
     }
 }
@@ -110,16 +157,13 @@ async fn insert_job(
     priority: i32,
     file_size: i64,
 ) -> Result<EnqueueOutcome> {
-    // A pending job that has used up its attempts is never dequeued, yet it
-    // would hold the unique index and make the document unqueueable for
+    // A pending job no worker will claim (its attempts are used up) would
+    // still hold the unique index and make the document unqueueable for
     // good. Retire it so it cannot block this enqueue.
-    sqlx::query(
-        "UPDATE ocr_queue SET status = 'failed' \
-         WHERE document_id = $1 AND status = 'pending' AND attempts >= max_attempts",
-    )
-    .bind(document_id)
-    .execute(&mut **tx)
-    .await?;
+    sqlx::query(RETIRE_UNCLAIMABLE_SQL)
+        .bind(document_id)
+        .execute(&mut **tx)
+        .await?;
 
     let inserted = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO ocr_queue (document_id, priority, file_size) VALUES ($1, $2, $3) \

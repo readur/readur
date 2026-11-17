@@ -335,3 +335,183 @@ async fn retry_service_counts_only_documents_it_actually_queued() {
     assert_eq!(active_jobs(&ctx, queued.id).await, 1);
     assert_eq!(active_jobs(&ctx, fresh.id).await, 1);
 }
+
+async fn insert_job(
+    ctx: &TestContext,
+    document_id: Uuid,
+    status: &str,
+    attempts: i32,
+    max_attempts: i32,
+) {
+    sqlx::query(
+        "INSERT INTO ocr_queue (document_id, priority, file_size, status, attempts, max_attempts) \
+         VALUES ($1, 5, 1, $2, $3, $4)",
+    )
+    .bind(document_id)
+    .bind(status)
+    .bind(attempts)
+    .bind(max_attempts)
+    .execute(&ctx.state().db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn a_pending_job_with_no_attempts_left_is_not_active() {
+    // No worker claims it, so reporting it as active would promise OCR
+    // that never happens.
+    let ctx = TestContext::new().await;
+    let (alice, _) = user(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    insert_job(&ctx, doc.id, "pending", 3, 3).await;
+    let queue = &ctx.state().queue_service;
+
+    assert!(!queue.has_active_job(doc.id).await.unwrap());
+    assert!(
+        queue.dequeue().await.unwrap().is_none(),
+        "the worker must not claim it either"
+    );
+}
+
+#[tokio::test]
+async fn claimable_and_running_jobs_are_active() {
+    let ctx = TestContext::new().await;
+    let (alice, _) = user(&ctx).await;
+    let queue = &ctx.state().queue_service;
+    for (status, attempts) in [("pending", 2), ("processing", 3)] {
+        let doc = insert(
+            &ctx,
+            document_helpers::create_document_with_ocr_error(alice),
+        )
+        .await;
+        insert_job(&ctx, doc.id, status, attempts, 3).await;
+        assert!(
+            queue.has_active_job(doc.id).await.unwrap(),
+            "{status} with {attempts}/3 attempts"
+        );
+    }
+}
+
+#[tokio::test]
+async fn has_active_job_agrees_with_what_the_worker_claims() {
+    // `has_active_job` and `dequeue` share one predicate; this pins that a
+    // job is active exactly when a worker will claim it or is running it.
+    let ctx = TestContext::new().await;
+    let (alice, _) = user(&ctx).await;
+    let queue = &ctx.state().queue_service;
+    let statuses = ["pending", "processing", "failed", "completed"];
+    // (attempts, max_attempts); the table's check constraint keeps
+    // attempts <= max_attempts.
+    let attempts = [(0, 3), (2, 3), (3, 3), (0, 0), (0, 1), (1, 1)];
+    for status in statuses {
+        for (attempts, max_attempts) in attempts {
+            let case = format!("{status} with {attempts}/{max_attempts} attempts");
+            sqlx::query("DELETE FROM ocr_queue")
+                .execute(&ctx.state().db.pool)
+                .await
+                .unwrap();
+            let doc = insert(
+                &ctx,
+                document_helpers::create_document_with_ocr_error(alice),
+            )
+            .await;
+            insert_job(&ctx, doc.id, status, attempts, max_attempts).await;
+
+            let active = queue.has_active_job(doc.id).await.unwrap();
+            let expected =
+                status == "processing" || (status == "pending" && attempts < max_attempts);
+            assert_eq!(active, expected, "{case}");
+
+            let claimed = queue.dequeue().await.unwrap();
+            if let Some(item) = &claimed {
+                assert_eq!(item.document_id, doc.id, "{case}");
+            }
+            assert_eq!(
+                active,
+                claimed.is_some() || status == "processing",
+                "{case}: active must mean claimable or running"
+            );
+            if claimed.is_some() {
+                assert!(
+                    queue.has_active_job(doc.id).await.unwrap(),
+                    "{case}: a claimed job stays active while it runs"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn mcp_ocr_text_for_a_job_with_no_attempts_left_points_to_retry() {
+    // The job is still 'pending' but no worker will claim it: telling the
+    // model to check back would have it poll a document that never changes.
+    let ctx = TestContext::new().await;
+    let (alice, token) = user(&ctx).await;
+    let doc = insert(&ctx, document_helpers::create_document_without_ocr(alice)).await;
+    insert_job(&ctx, doc.id, "pending", 3, 3).await;
+
+    let ocr = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert_eq!(ocr["isError"], json!(false), "{ocr}");
+    let text = ocr["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(!text.to_lowercase().contains("check back"), "{ocr}");
+    assert!(text.contains("retry_document_ocr"), "{ocr}");
+
+    // The retry it points to retires the stuck job and queues one the
+    // worker will run.
+    let retry = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_eq!(retry["isError"], json!(false), "{retry}");
+    assert_eq!(retry["structuredContent"]["queued"], json!(true), "{retry}");
+    assert!(ctx
+        .state()
+        .queue_service
+        .has_active_job(doc.id)
+        .await
+        .unwrap());
+    assert_eq!(
+        jobs(&ctx, doc.id).await,
+        vec![("failed".to_string(), 3), ("pending".to_string(), 0)]
+    );
+}
+
+#[tokio::test]
+async fn a_pending_job_with_null_attempt_limits_is_retired_not_left_blocking() {
+    // The attempt columns are nullable. NULL makes the claimable predicate
+    // NULL, so the worker never claims such a job; the enqueue must still
+    // retire it rather than report the document as already queued.
+    let ctx = TestContext::new().await;
+    let (alice, _) = user(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    sql(
+        &ctx,
+        "INSERT INTO ocr_queue (document_id, priority, file_size, status, attempts, max_attempts) \
+         VALUES ($1, 5, 1, 'pending', 0, NULL)",
+        doc.id,
+    )
+    .await;
+    let queue = &ctx.state().queue_service;
+    assert!(!queue.has_active_job(doc.id).await.unwrap());
+
+    let outcome = queue.enqueue_document(doc.id, 5, 1).await.unwrap();
+    assert!(outcome.queue_id().is_some(), "{outcome:?}");
+    assert!(queue.has_active_job(doc.id).await.unwrap());
+    let statuses: Vec<String> = sqlx::query_scalar(
+        "SELECT status FROM ocr_queue WHERE document_id = $1 ORDER BY created_at",
+    )
+    .bind(doc.id)
+    .fetch_all(&ctx.state().db.pool)
+    .await
+    .unwrap();
+    assert_eq!(statuses, vec!["failed".to_string(), "pending".to_string()]);
+}

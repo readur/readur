@@ -22,12 +22,9 @@ use crate::{
         DocumentSortField, DocumentUploadResponse, FileIngestionInfo, PaginatedDocumentsResponse,
         SortOrder, User,
     },
-    ocr::queue::EnqueueOutcome,
+    ocr::{priority::USER_PRIORITY, queue::EnqueueOutcome},
     AppState,
 };
-
-/// Priority for documents queued by a user action (upload, manual retry).
-const USER_OCR_PRIORITY: i32 = 5;
 
 /// Upload warnings (`DocumentUploadResponse::warnings`). Public so the MCP
 /// upload tool can recognise them and tell the model what to do next.
@@ -301,9 +298,9 @@ async fn ingest_upload(
             existing_document_id
         ))),
         Err(e) => {
-            error!(
-                "Failed to ingest document: {} (failed after {:?})",
-                e,
+            warn!(
+                "Upload of {} failed after {:?}",
+                filename,
                 ingestion_start.elapsed()
             );
             Err(categorize_ingestion_error(&e.to_string()))
@@ -409,7 +406,7 @@ async fn check_label_ownership(
         .await
         .map_err(|e| {
             error!("Failed to verify upload labels: {}", e);
-            DocumentError::InternalServerError("Failed to verify labels".to_string())
+            DocumentError::InternalServerError("Failed to verify labels")
         })?;
     if owns_labels {
         Ok(())
@@ -457,7 +454,7 @@ async fn queue_upload_for_ocr(
 ) -> Option<String> {
     match state
         .queue_service
-        .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
+        .enqueue_document(document.id, USER_PRIORITY, document.file_size)
         .await
     {
         // A brand-new document cannot already have a job, but if it does
@@ -553,22 +550,30 @@ async fn save_preferred_languages(
     }
 }
 
-/// Maps an ingestion failure onto the closest client-facing error.
-fn categorize_ingestion_error(message: &str) -> DocumentError {
-    if message.contains("constraint") || message.contains("duplicate") {
-        DocumentError::DatabaseConstraintViolation(format!(
-            "Database constraint violation during upload: {}",
-            message
-        ))
-    } else if message.contains("timeout") {
-        DocumentError::UploadTimeout(format!("Upload processing timed out: {}", message))
-    } else if message.contains("ocr") || message.contains("processing") {
-        DocumentError::OcrProcessingError(format!("OCR processing error: {}", message))
-    } else if message.contains("file") || message.contains("read") {
-        DocumentError::FileProcessingError(format!("File processing error: {}", message))
+/// Maps an ingestion failure onto the closest client-facing error. The raw
+/// error can name tables, constraints and storage paths, so it is logged
+/// here and never put in the message: the client gets the category's status
+/// and `error_code` with a fixed, generic message.
+fn categorize_ingestion_error(raw: &str) -> DocumentError {
+    let error = if raw.contains("constraint") || raw.contains("duplicate") {
+        DocumentError::DatabaseConstraintViolation(
+            "The document conflicts with existing data and was not stored",
+        )
+    } else if raw.contains("timeout") {
+        DocumentError::UploadTimeout("Upload processing timed out")
+    } else if raw.contains("ocr") || raw.contains("processing") {
+        DocumentError::OcrProcessingError("The document could not be processed")
+    } else if raw.contains("file") || raw.contains("read") {
+        DocumentError::FileProcessingError("The file could not be processed")
     } else {
-        DocumentError::InternalServerError(format!("Failed to ingest document: {}", message))
-    }
+        DocumentError::InternalServerError("Failed to ingest document")
+    };
+    error!(
+        "Upload ingestion failed ({}): {}",
+        error.status_and_code().1,
+        raw
+    );
+    error
 }
 
 /// Outcome of a manual OCR retry.
@@ -595,7 +600,7 @@ pub async fn retry_document_ocr(
         .await
         .map_err(|e| {
             error!("Database error getting document {}: {}", document_id, e);
-            DocumentError::InternalServerError("Failed to load document".to_string())
+            DocumentError::InternalServerError("Failed to load document")
         })?
         .ok_or(DocumentError::NotFound)?;
 
@@ -630,11 +635,11 @@ pub async fn retry_document_ocr(
 
     let outcome = state
         .queue_service
-        .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
+        .enqueue_document(document.id, USER_PRIORITY, document.file_size)
         .await
         .map_err(|e| {
             error!("Failed to queue document {} for OCR: {}", document_id, e);
-            DocumentError::InternalServerError("Failed to queue document for OCR".to_string())
+            DocumentError::InternalServerError("Failed to queue document for OCR")
         })?;
     if outcome == EnqueueOutcome::AlreadyQueued {
         return Ok(OcrRetryOutcome {
@@ -647,4 +652,80 @@ pub async fn retry_document_ocr(
         queued: true,
         message: "Document queued for OCR processing".to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    /// Raw ingestion errors of each category, as the database and storage
+    /// layers word them.
+    const RAW_ERRORS: [(&str, u16, &str); 5] = [
+        (
+            "error returned from database: duplicate key value violates unique constraint \"idx_documents_user_file_hash\"",
+            409,
+            "UPLOAD_DB_CONSTRAINT",
+        ),
+        (
+            "canceling statement due to statement timeout on postgres://readur@db/readur",
+            408,
+            "UPLOAD_TIMEOUT",
+        ),
+        (
+            "processing failed: SELECT * FROM documents WHERE id = $1",
+            422,
+            "UPLOAD_OCR_ERROR",
+        ),
+        (
+            "failed to write file /var/lib/readur/uploads/7f3a/secret.pdf: No space left on device",
+            422,
+            "UPLOAD_FILE_PROCESSING_ERROR",
+        ),
+        (
+            "error communicating with database: Connection refused (os error 111) at /run/postgresql/.s.PGSQL.5432",
+            500,
+            "UPLOAD_INTERNAL_ERROR",
+        ),
+    ];
+
+    async fn body_of(error: DocumentError) -> (u16, serde_json::Value) {
+        let response = error.into_response();
+        let status = response.status().as_u16();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn ingestion_errors_keep_their_category_but_not_their_detail() {
+        for (raw, status, code) in RAW_ERRORS {
+            let (actual_status, body) = body_of(categorize_ingestion_error(raw)).await;
+            assert_eq!(actual_status, status, "{raw}");
+            assert_eq!(body["status"], status, "{raw}");
+            assert_eq!(body["error_code"], code, "{raw}");
+            // Every other field is fixed or generated, so the message is
+            // the only place raw detail could appear.
+            let message = body["error"].as_str().unwrap();
+            assert!(!message.is_empty(), "{raw}");
+            let shown = message.to_lowercase();
+            for leak in [
+                "constraint",
+                "idx_",
+                "select ",
+                "postgres",
+                "/var/lib",
+                "/run/",
+                "os error",
+                "no space left",
+                "connection refused",
+            ] {
+                assert!(
+                    !shown.contains(leak),
+                    "{leak:?} leaked from {raw:?}: {body}"
+                );
+            }
+        }
+    }
 }

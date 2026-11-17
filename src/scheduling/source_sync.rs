@@ -716,11 +716,7 @@ impl SourceSyncService {
         if enable_background_ocr && should_queue_ocr {
             debug!("Background OCR enabled, queueing document {} for processing", document.id);
 
-            let priority = if file_info.size <= 1024 * 1024 { 10 }
-            else if file_info.size <= 5 * 1024 * 1024 { 8 }
-            else if file_info.size <= 10 * 1024 * 1024 { 6 }
-            else if file_info.size <= 50 * 1024 * 1024 { 4 }
-            else { 2 };
+            let priority = crate::ocr::priority::priority_for_file_size(file_info.size);
 
             if let Err(e) = state.queue_service.enqueue_document(document.id, priority, file_info.size).await {
                 // Without a queue row the document would stay pending forever and
