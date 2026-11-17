@@ -1,10 +1,14 @@
 // Documents database operations organized into focused modules
 
-mod helpers;
 mod crud;
-mod search;
+mod helpers;
 mod management;
 mod operations;
+mod search;
+mod search_query;
+mod snippets;
 
 // Re-export helper functions for use by other modules if needed
-pub use helpers::*;pub mod sync_identity;
+pub use helpers::*;
+pub use search_query::boolean_to_tsquery;
+pub mod sync_identity;

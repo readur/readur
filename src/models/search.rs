@@ -264,10 +264,11 @@ impl SearchRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[derive(Debug, Default, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub enum SearchMode {
     /// Simple text search with basic word matching
+    #[default]
     #[serde(rename = "simple")]
     Simple,
     /// Exact phrase matching
@@ -276,16 +277,12 @@ pub enum SearchMode {
     /// Fuzzy search using similarity matching (good for typos and partial matches)
     #[serde(rename = "fuzzy")]
     Fuzzy,
-    /// Boolean search: OR / `|`, NOT / `!` / leading `-`, implicit AND
-    /// (`AND` / `&` accepted), "quoted phrases"
+    /// Boolean search: `AND` / `&` / adjacency, `OR` / `|`, `NOT` / `!` /
+    /// leading `-` (keywords in any case), `( )` grouping, "quoted phrases",
+    /// `word:*` / `word*` prefixes and `<->` / `<N>` followed-by. Parsed by
+    /// `db::documents::boolean_to_tsquery`; malformed input never errors.
     #[serde(rename = "boolean")]
     Boolean,
-}
-
-impl Default for SearchMode {
-    fn default() -> Self {
-        SearchMode::Simple
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, TS)]

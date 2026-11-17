@@ -107,8 +107,24 @@ Every tool acts as the user who owns the key and sees exactly what that user see
 | Tool | What it does |
 |------|--------------|
 | `search_documents` | Full-text search over document names and OCR text |
-| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match. Boolean mode understands `OR` / `\|`, `NOT` / `!` / a leading `-`, implicit AND (`AND` / `&` accepted) and `"quoted phrases"` |
+| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match. See [Boolean search syntax](#boolean-search-syntax) |
 | `get_search_facets` | Document counts per MIME type and tag, for narrowing a search |
+
+#### Boolean search syntax
+
+With `search_mode: "boolean"`, `enhanced_search` (and the web UI's operator mode, `GET /api/search/enhanced?search_mode=boolean`) understands:
+
+| Syntax | Meaning |
+|--------|---------|
+| `invoice paid`, `invoice & paid`, `invoice AND paid` | Both words |
+| `invoice \| receipt`, `invoice OR receipt` | Either word |
+| `!draft`, `NOT draft`, `-draft` | Leave a word out. A `-` only negates when attached to what follows (`e-mail` is one word) |
+| `(invoice \| receipt) & 2024` | Parentheses group. AND binds tighter than OR, so `a \| b c` means `a \| (b & c)` |
+| `"total due"` | Exact phrase. `-"draft copy"` and `NOT (draft \| copy)` negate a phrase or a group |
+| `inv:*`, `inv*` | Prefix: words starting with `inv` (invoice, inventory) |
+| `total <-> due`, `invoice <2> 17` | Followed by: the second word right after the first, or N words after it |
+
+`AND`, `OR` and `NOT` work in any case (as search words they are stop words that never match). Words are stemmed, so `invoices` also finds `invoice`. Malformed input never fails the search: stray operators and empty groups are ignored, and an unclosed parenthesis or quote is closed at the end of the query. Snippets highlight only the words a match must contain, not negated ones.
 
 ### Labels
 
