@@ -35,7 +35,7 @@ Documents already in S3 are dropped from that selection afterwards, so a later r
 
 - A source checkout of Readur and a Rust toolchain. The tool is not included in the Docker image, which contains only the `readur` server binary.
 - The same environment as the server: database settings (`DATABASE_URL` or the `POSTGRES_*` variables) and `UPLOAD_PATH`.
-- S3 settings: `S3_ENABLED=true` (or `STORAGE_BACKEND=s3`), `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and as needed `S3_REGION` (default `us-east-1`), `S3_ENDPOINT_URL` and `S3_FORCE_PATH_STYLE` for S3-compatible services. See the [configuration reference](../configuration-reference.md).
+- S3 settings: `S3_ENABLED=true` (or `STORAGE_BACKEND=s3`), `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and as needed `S3_REGION` (default `us-east-1`), `S3_ENDPOINT_URL` and `S3_FORCE_PATH_STYLE` for S3-compatible services. If `S3_PREFIX` is set, migrated documents, thumbnails and processed images are written below that prefix, just like new uploads. See the [configuration reference](../configuration-reference.md).
 - Read access to the document files **at the paths stored in the database**. In the Docker setup these are absolute paths under `/app/uploads`, so the tool must run where the uploads directory is available at that same path. Relative paths are resolved against the tool's working directory.
 
 ### Before you start
