@@ -601,6 +601,11 @@ impl Config {
                 // S3_ENDPOINT is the documented var name; S3_ENDPOINT_URL is kept for
                 // backward compatibility and takes precedence if both are set.
                 let endpoint_url = env::var("S3_ENDPOINT_URL").ok().or_else(|| env::var("S3_ENDPOINT").ok());
+                // S3_PREFIX places every object the storage backend writes
+                // (documents, thumbnails, processed images) below this key
+                // prefix. Existing documents are read and deleted by the key
+                // recorded at upload, so setting or changing it later does
+                // not strand objects already stored.
                 let prefix = env::var("S3_PREFIX").ok();
                 let force_path_style = parse_force_path_style(
                     env::var("S3_FORCE_PATH_STYLE").ok().as_deref(),
@@ -616,7 +621,7 @@ impl Config {
                         println!("✅ S3_ENDPOINT_URL: {} (loaded from env)", endpoint);
                     }
                     if let Some(ref pref) = prefix {
-                        println!("✅ S3_PREFIX: {} (loaded from env)", pref);
+                        println!("✅ S3_PREFIX: {} (loaded from env; prefix for new stored object keys)", pref);
                     }
                     if let Some(force_path_style_value) = force_path_style {
                         println!("✅ S3_FORCE_PATH_STYLE: {} (loaded from env)", force_path_style_value);

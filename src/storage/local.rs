@@ -2,16 +2,18 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::RwLock;
-use tracing::{info, error, warn, debug};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use super::StorageBackend;
-use crate::utils::security::{validate_filename, validate_and_sanitize_path, validate_path_within_base};
+use crate::utils::security::{
+    validate_and_sanitize_path, validate_filename, validate_path_within_base,
+};
 
 /// Local filesystem storage backend
 pub struct LocalStorageBackend {
@@ -23,7 +25,7 @@ pub struct LocalStorageBackend {
 impl LocalStorageBackend {
     /// Create a new local storage backend
     pub fn new(upload_path: String) -> Self {
-        Self { 
+        Self {
             upload_path,
             path_cache: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -67,7 +69,10 @@ impl LocalStorageBackend {
             if let Some(cached_result) = cache.get(file_path) {
                 return match cached_result {
                     Some(resolved_path) => {
-                        debug!("Cache hit for file path: {} -> {}", file_path, resolved_path);
+                        debug!(
+                            "Cache hit for file path: {} -> {}",
+                            file_path, resolved_path
+                        );
                         Ok(resolved_path.clone())
                     }
                     None => {
@@ -80,7 +85,7 @@ impl LocalStorageBackend {
 
         // Generate candidate paths in order of likelihood
         let candidates = self.generate_path_candidates(file_path);
-        
+
         // Check candidates efficiently
         let mut found_path = None;
         for candidate in &candidates {
@@ -103,7 +108,7 @@ impl LocalStorageBackend {
         {
             let mut cache = self.path_cache.write().await;
             cache.insert(file_path.to_string(), found_path.clone());
-            
+
             // Prevent cache from growing too large
             if cache.len() > 10000 {
                 // Clear oldest 20% of entries (simple cache eviction)
@@ -125,8 +130,8 @@ impl LocalStorageBackend {
             None => {
                 debug!("File not found in any candidate location: {}", file_path);
                 Err(anyhow::anyhow!(
-                    "File not found: {} (checked {} locations)", 
-                    file_path, 
+                    "File not found: {} (checked {} locations)",
+                    file_path,
                     candidates.len()
                 ))
             }
@@ -136,30 +141,32 @@ impl LocalStorageBackend {
     /// Generate candidate paths for file resolution
     fn generate_path_candidates(&self, file_path: &str) -> Vec<String> {
         let mut candidates = Vec::new();
-        
+
         // 1. Original path (most likely for new files)
         candidates.push(file_path.to_string());
-        
+
         // 2. For legacy compatibility - try structured directory
         if file_path.starts_with("./uploads/") && !file_path.contains("/documents/") {
             candidates.push(file_path.replace("./uploads/", "./uploads/documents/"));
         }
-        
+
         // 3. Try without ./ prefix in structured directory
         if file_path.starts_with("uploads/") && !file_path.contains("/documents/") {
             candidates.push(file_path.replace("uploads/", "uploads/documents/"));
         }
-        
+
         // 4. Try relative to our configured upload path
         if !file_path.starts_with(&self.upload_path) {
             let relative_path = Path::new(&self.upload_path).join(file_path);
             candidates.push(relative_path.to_string_lossy().to_string());
-            
+
             // Also try in documents subdirectory
-            let documents_path = Path::new(&self.upload_path).join("documents").join(file_path);
+            let documents_path = Path::new(&self.upload_path)
+                .join("documents")
+                .join(file_path);
             candidates.push(documents_path.to_string_lossy().to_string());
         }
-        
+
         // 5. Try absolute path if it looks like a filename only
         if !file_path.contains('/') && !file_path.contains('\\') {
             // Try in documents directory
@@ -168,7 +175,7 @@ impl LocalStorageBackend {
                 .join(file_path);
             candidates.push(abs_documents_path.to_string_lossy().to_string());
         }
-        
+
         candidates
     }
 
@@ -186,6 +193,122 @@ impl LocalStorageBackend {
         debug!("Invalidated cache entry for: {}", file_path);
     }
 
+    /// Delete the document file recorded at `file_path`. A recorded
+    /// `s3://<key>` path is resolved below the upload directory, as
+    /// `FileService::read_file` does. Resolution falls back to the legacy
+    /// layouts; a path that resolves outside the upload directory is refused.
+    async fn delete_stored_file(
+        &self,
+        document_id: Uuid,
+        file_path: &str,
+        report: &mut DeletionReport,
+    ) {
+        let recorded = file_path.strip_prefix("s3://").unwrap_or(file_path);
+        let sanitized = match validate_and_sanitize_path(recorded) {
+            Ok(path) => path,
+            Err(e) => {
+                report.errors.push(format!(
+                    "Refusing to delete document file {}: {}",
+                    file_path, e
+                ));
+                return;
+            }
+        };
+        let resolved = match self.resolve_file_path(&sanitized).await {
+            Ok(path) => path,
+            Err(_) => {
+                info!(
+                    "Document file {} for document {} is already gone",
+                    file_path, document_id
+                );
+                return;
+            }
+        };
+        if let Err(e) = validate_path_within_base(&resolved, &self.upload_path) {
+            report.errors.push(format!(
+                "Refusing to delete document file {} outside the upload directory: {}",
+                resolved, e
+            ));
+            return;
+        }
+        self.invalidate_cache_entry(&sanitized).await;
+        self.delete_path(Path::new(&resolved), report).await;
+    }
+
+    /// Thumbnails and OCR review images derived from a document. Their paths
+    /// are not recorded, so every name a writer uses is covered:
+    /// `<id>_thumb.jpg` and `<stem of the stored file>_thumb.jpg` (the
+    /// thumbnail cache keys by file stem), `<id>_processed.png`, and the OCR
+    /// queue's timestamped `<id>_processed_<ts>.<ext>` review copies.
+    async fn derived_file_paths(
+        &self,
+        document_id: Uuid,
+        file_path: &str,
+        report: &mut DeletionReport,
+    ) -> Vec<PathBuf> {
+        let thumbnails = self.get_thumbnails_path();
+        let mut paths = vec![thumbnails.join(format!("{}_thumb.jpg", document_id))];
+        if let Some(stem) = Path::new(file_path).file_stem().and_then(|s| s.to_str()) {
+            if !stem.is_empty() && stem != document_id.to_string() {
+                paths.push(thumbnails.join(format!("{}_thumb.jpg", stem)));
+            }
+        }
+
+        let processed_dir = self.get_processed_images_path();
+        let processed_prefix = format!("{}_processed", document_id);
+        match fs::read_dir(&processed_dir).await {
+            Ok(mut entries) => loop {
+                match entries.next_entry().await {
+                    Ok(Some(entry)) => {
+                        if entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(&processed_prefix)
+                        {
+                            paths.push(entry.path());
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        report.errors.push(format!(
+                            "Failed to list {}: {}",
+                            processed_dir.display(),
+                            e
+                        ));
+                        break;
+                    }
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                report
+                    .errors
+                    .push(format!("Failed to list {}: {}", processed_dir.display(), e))
+            }
+        }
+        paths
+    }
+
+    /// Delete one file; a file that is already gone is not an error.
+    async fn delete_path(&self, path: &Path, report: &mut DeletionReport) {
+        let path_str = path.to_string_lossy().to_string();
+        match fs::remove_file(path).await {
+            Ok(()) => {
+                info!("Deleted file: {}", path.display());
+                report.deleted += 1;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                debug!("File already deleted: {}", path.display());
+            }
+            Err(e) => {
+                report
+                    .errors
+                    .push(format!("Failed to delete file {}: {}", path.display(), e))
+            }
+        }
+        self.invalidate_cache_entry(&path_str).await;
+    }
+
     /// Save a file with generated UUID filename (legacy method)
     pub async fn save_file(&self, filename: &str, data: &[u8]) -> Result<String> {
         let file_id = Uuid::new_v4();
@@ -193,253 +316,226 @@ impl LocalStorageBackend {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        
+
         let saved_filename = if extension.is_empty() {
             file_id.to_string()
         } else {
             format!("{}.{}", file_id, extension)
         };
-        
+
         // Save to documents subdirectory
         let documents_dir = self.get_documents_path();
         let file_path = documents_dir.join(&saved_filename);
-        
+
         // Ensure the documents directory exists
         if let Err(e) = fs::create_dir_all(&documents_dir).await {
             error!("Failed to create documents directory: {}", e);
-            return Err(anyhow::anyhow!("Failed to create documents directory: {}", e));
+            return Err(anyhow::anyhow!(
+                "Failed to create documents directory: {}",
+                e
+            ));
         }
-        
+
         fs::write(&file_path, data).await?;
-        
+
         Ok(file_path.to_string_lossy().to_string())
+    }
+}
+
+/// Outcome of deleting a document's files: what was removed and what failed.
+#[derive(Default)]
+struct DeletionReport {
+    deleted: usize,
+    errors: Vec<String>,
+}
+
+impl DeletionReport {
+    fn finish(self, document_id: Uuid) -> Result<()> {
+        if !self.errors.is_empty() {
+            error!(
+                "Errors occurred while deleting files for document {}: {}",
+                document_id,
+                self.errors.join("; ")
+            );
+            return Err(anyhow::anyhow!(
+                "File deletion errors: {}",
+                self.errors.join("; ")
+            ));
+        }
+        if self.deleted == 0 {
+            info!(
+                "No files needed deletion for document {} (all files already removed)",
+                document_id
+            );
+        } else {
+            info!(
+                "Successfully deleted {} files for document {}",
+                self.deleted, document_id
+            );
+        }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl StorageBackend for LocalStorageBackend {
-    async fn store_document(&self, _user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
+    async fn store_document(
+        &self,
+        _user_id: Uuid,
+        document_id: Uuid,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<String> {
         // Validate and sanitize the filename
         let sanitized_filename = validate_filename(filename)?;
-        
+
         let extension = Path::new(&sanitized_filename)
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        
+
         let document_filename = if extension.is_empty() {
             document_id.to_string()
         } else {
             format!("{}.{}", document_id, extension)
         };
-        
+
         let documents_dir = self.get_documents_path();
         let file_path = documents_dir.join(&document_filename);
-        
+
         // Validate that the final path is within our base directory
-        validate_path_within_base(
-            &file_path.to_string_lossy(), 
-            &self.upload_path
-        )?;
-        
+        validate_path_within_base(&file_path.to_string_lossy(), &self.upload_path)?;
+
         // Ensure the documents directory exists
         fs::create_dir_all(&documents_dir).await?;
-        
+
         // Validate data size (prevent extremely large files from causing issues)
-        if data.len() > 1_000_000_000 { // 1GB limit
+        if data.len() > 1_000_000_000 {
+            // 1GB limit
             return Err(anyhow::anyhow!("File too large for storage (max 1GB)"));
         }
-        
+
         fs::write(&file_path, data).await?;
-        
+
         // Invalidate any cached negative results for this path
         let path_str = file_path.to_string_lossy().to_string();
         self.invalidate_cache_entry(&path_str).await;
-        
+
         info!("Stored document locally: {}", file_path.display());
         Ok(path_str)
     }
 
-    async fn store_thumbnail(&self, _user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+    async fn store_thumbnail(
+        &self,
+        _user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String> {
         let thumbnails_dir = self.get_thumbnails_path();
         fs::create_dir_all(&thumbnails_dir).await?;
 
         let thumbnail_filename = format!("{}_thumb.jpg", document_id);
         let thumbnail_path = thumbnails_dir.join(&thumbnail_filename);
-        
+
         // Validate that the final path is within our base directory
-        validate_path_within_base(
-            &thumbnail_path.to_string_lossy(), 
-            &self.upload_path
-        )?;
-        
+        validate_path_within_base(&thumbnail_path.to_string_lossy(), &self.upload_path)?;
+
         // Validate data size for thumbnails (should be much smaller)
-        if data.len() > 10_000_000 { // 10MB limit for thumbnails
+        if data.len() > 10_000_000 {
+            // 10MB limit for thumbnails
             return Err(anyhow::anyhow!("Thumbnail too large (max 10MB)"));
         }
-        
+
         fs::write(&thumbnail_path, data).await?;
-        
+
         // Invalidate any cached negative results for this path
         let path_str = thumbnail_path.to_string_lossy().to_string();
         self.invalidate_cache_entry(&path_str).await;
-        
+
         info!("Stored thumbnail locally: {}", thumbnail_path.display());
         Ok(path_str)
     }
 
-    async fn store_processed_image(&self, _user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
+    async fn store_processed_image(
+        &self,
+        _user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String> {
         let processed_dir = self.get_processed_images_path();
         fs::create_dir_all(&processed_dir).await?;
 
         let processed_filename = format!("{}_processed.png", document_id);
         let processed_path = processed_dir.join(&processed_filename);
-        
+
         // Validate that the final path is within our base directory
-        validate_path_within_base(
-            &processed_path.to_string_lossy(), 
-            &self.upload_path
-        )?;
-        
+        validate_path_within_base(&processed_path.to_string_lossy(), &self.upload_path)?;
+
         // Validate data size for processed images
-        if data.len() > 50_000_000 { // 50MB limit for processed images
+        if data.len() > 50_000_000 {
+            // 50MB limit for processed images
             return Err(anyhow::anyhow!("Processed image too large (max 50MB)"));
         }
-        
+
         fs::write(&processed_path, data).await?;
-        
+
         // Invalidate any cached negative results for this path
         let path_str = processed_path.to_string_lossy().to_string();
         self.invalidate_cache_entry(&path_str).await;
-        
-        info!("Stored processed image locally: {}", processed_path.display());
+
+        info!(
+            "Stored processed image locally: {}",
+            processed_path.display()
+        );
         Ok(path_str)
     }
 
     async fn retrieve_file(&self, path: &str) -> Result<Vec<u8>> {
         // Validate and sanitize the input path
         let sanitized_path = validate_and_sanitize_path(path)?;
-        
+
         let resolved_path = self.resolve_file_path(&sanitized_path).await?;
-        
+
         // Validate that the resolved path is within our base directory
         validate_path_within_base(&resolved_path, &self.upload_path)?;
-        
+
         let data = fs::read(&resolved_path).await?;
-        
+
         // Additional safety check on file size when reading
-        if data.len() > 1_000_000_000 { // 1GB limit
-            warn!("Attempted to read extremely large file: {} ({} bytes)", resolved_path, data.len());
+        if data.len() > 1_000_000_000 {
+            // 1GB limit
+            warn!(
+                "Attempted to read extremely large file: {} ({} bytes)",
+                resolved_path,
+                data.len()
+            );
             return Err(anyhow::anyhow!("File too large to read safely"));
         }
-        
+
         Ok(data)
     }
 
-    async fn delete_document_files(&self, _user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
-        let mut deleted_files = Vec::new();
-        let mut serious_errors = Vec::new();
+    async fn delete_document_files(
+        &self,
+        _user_id: Uuid,
+        document_id: Uuid,
+        file_path: &str,
+    ) -> Result<()> {
+        let mut report = DeletionReport::default();
 
-        // Helper function to safely delete a file
-        let storage_backend = self;
-        async fn safe_delete(path: &Path, serious_errors: &mut Vec<String>, backend: &LocalStorageBackend) -> Option<String> {
-            match fs::remove_file(path).await {
-                Ok(_) => {
-                    info!("Deleted file: {}", path.display());
-                    let path_str = path.to_string_lossy().to_string();
-                    
-                    // Invalidate cache entry for the deleted file
-                    backend.invalidate_cache_entry(&path_str).await;
-                    
-                    Some(path_str)
-                }
-                Err(e) => {
-                    match e.kind() {
-                        std::io::ErrorKind::NotFound => {
-                            info!("File already deleted: {}", path.display());
-                            // Still invalidate cache in case it was cached as existing
-                            let path_str = path.to_string_lossy().to_string();
-                            backend.invalidate_cache_entry(&path_str).await;
-                            None
-                        }
-                        _ => {
-                            serious_errors.push(format!("Failed to delete file {}: {}", path.display(), e));
-                            None
-                        }
-                    }
-                }
-            }
+        // The document file is deleted at the path recorded for it, never at
+        // a path guessed from its id or filename (which could name a file
+        // that belongs to another document, and misses renamed layouts).
+        self.delete_stored_file(document_id, file_path, &mut report)
+            .await;
+        for path in self
+            .derived_file_paths(document_id, file_path, &mut report)
+            .await
+        {
+            self.delete_path(&path, &mut report).await;
         }
 
-        // Try multiple strategies to find and delete the main document file
-        let extension = Path::new(filename)
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-        
-        // Strategy 1: Try document ID-based filename (new structured approach)
-        let document_filename = if extension.is_empty() {
-            document_id.to_string()
-        } else {
-            format!("{}.{}", document_id, extension)
-        };
-        let main_file_structured = self.get_documents_path().join(&document_filename);
-        
-        // Strategy 2: Try original filename in documents directory
-        let main_file_original = self.get_documents_path().join(filename);
-        
-        // Strategy 3: Try in the base upload directory (legacy flat structure)
-        let main_file_legacy = Path::new(&self.upload_path).join(filename);
-        
-        // Try to delete main document file using all strategies
-        let main_file_candidates = [
-            &main_file_structured,
-            &main_file_original,  
-            &main_file_legacy,
-        ];
-        
-        let mut main_file_deleted = false;
-        for candidate_path in &main_file_candidates {
-            if candidate_path.exists() {
-                if let Some(deleted_path) = safe_delete(candidate_path, &mut serious_errors, storage_backend).await {
-                    deleted_files.push(deleted_path);
-                    main_file_deleted = true;
-                    break; // Only delete the first match we find
-                }
-            }
-        }
-        
-        if !main_file_deleted {
-            info!("Main document file not found in any expected location for document {}", document_id);
-        }
-
-        // Delete thumbnail if it exists
-        let thumbnail_filename = format!("{}_thumb.jpg", document_id);
-        let thumbnail_path = self.get_thumbnails_path().join(&thumbnail_filename);
-        if let Some(deleted_path) = safe_delete(&thumbnail_path, &mut serious_errors, storage_backend).await {
-            deleted_files.push(deleted_path);
-        }
-
-        // Delete processed image if it exists
-        let processed_image_filename = format!("{}_processed.png", document_id);
-        let processed_image_path = self.get_processed_images_path().join(&processed_image_filename);
-        if let Some(deleted_path) = safe_delete(&processed_image_path, &mut serious_errors, storage_backend).await {
-            deleted_files.push(deleted_path);
-        }
-
-        // Only fail if there were serious errors (not "file not found")
-        if !serious_errors.is_empty() {
-            error!("Serious errors occurred while deleting files for document {}: {}", document_id, serious_errors.join("; "));
-            return Err(anyhow::anyhow!("File deletion errors: {}", serious_errors.join("; ")));
-        }
-
-        if deleted_files.is_empty() {
-            info!("No files needed deletion for document {} (all files already removed)", document_id);
-        } else {
-            info!("Successfully deleted {} files for document {}", deleted_files.len(), document_id);
-        }
-
-        Ok(())
+        report.finish(document_id)
     }
 
     async fn file_exists(&self, path: &str) -> Result<bool> {
@@ -448,7 +544,7 @@ impl StorageBackend for LocalStorageBackend {
             Ok(p) => p,
             Err(_) => return Ok(false), // Invalid paths don't exist
         };
-        
+
         match self.resolve_file_path(&sanitized_path).await {
             Ok(resolved_path) => {
                 // Additional validation that the resolved path is within base directory
@@ -467,25 +563,28 @@ impl StorageBackend for LocalStorageBackend {
 
     async fn initialize(&self) -> Result<()> {
         let base_path = Path::new(&self.upload_path);
-        
+
         // Create subdirectories for organized file storage
         let directories = [
             "documents",        // Final uploaded documents
             "thumbnails",       // Document thumbnails
             "processed_images", // OCR processed images for review
-            "temp",            // Temporary files during processing
-            "backups",         // Document backups
+            "temp",             // Temporary files during processing
+            "backups",          // Document backups
         ];
-        
+
         for dir in directories.iter() {
             let dir_path = base_path.join(dir);
             if let Err(e) = fs::create_dir_all(&dir_path).await {
                 error!("Failed to create directory {:?}: {}", dir_path, e);
-                return Err(anyhow::anyhow!("Failed to create directory structure: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to create directory structure: {}",
+                    e
+                ));
             }
             info!("Ensured directory exists: {:?}", dir_path);
         }
-        
+
         Ok(())
     }
 }
