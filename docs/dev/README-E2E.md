@@ -7,7 +7,7 @@ End-to-end tests drive the real UI in a browser with Playwright. They live in `f
 - Node.js and npm (CI uses Node 26)
 - Rust and Cargo, to build the backend
 - PostgreSQL. The migrations need only `pg_trgm` from the standard contrib package, no vector or other third-party extension. The wrapper below creates its scratch database on `localhost:5432` as `postgres`/`postgres` unless E2E_DB_HOST, E2E_DB_PORT, E2E_DB_USER and E2E_DB_PASSWORD say otherwise (E2E_DB_NAME names the database, default `readur_e2e_test`; it is dropped and recreated).
-- `psql`, `createdb` and `dropdb` (the PostgreSQL client tools), `curl` and `setsid`, for the wrapper
+- `psql`, `createdb` and `dropdb` (the PostgreSQL client tools) and `curl`, for the wrapper. It starts the backend and the dev server in their own process groups with `setsid` where available (Linux) and with `perl` otherwise (macOS).
 - Tesseract with the languages the OCR tests use (CI installs eng, spa, fra, deu, ita and por), plus ocrmypdf and poppler-utils
 
 Install the frontend dependencies (the wrapper does this itself when `frontend/node_modules` is missing):
@@ -59,12 +59,16 @@ env E2E_DB_HOST=127.0.0.1 E2E_DB_PORT=55432 \
     scripts/run-e2e-local.sh -- e2e/search.spec.ts --project=chromium
 ```
 
+On NixOS the backend binary also needs the OpenSSL, Leptonica and Tesseract libraries on `LD_LIBRARY_PATH`; running the wrapper inside `nix-shell -p pkg-config leptonica tesseract openssl postgresql` with that variable pointing at their `lib` directories is enough.
+
 `./run-tests.sh e2e` is the Docker variant: it starts the containers of `docker-compose.test.yml` (Readur on port 8001 and a Vite dev server container on port 5174 that proxies to it) and runs Playwright on the host against the dev server. It seeds the Readur container and runs the suite with the same admin password, `ADMIN_PASSWORD` from your shell or `readur-test-admin-password`, the compose file's default.
 
 ## How the tests reach the server
 
 - With `PLAYWRIGHT_BASE_URL` set, the tests run against that URL and Playwright starts nothing.
 - Without it (and outside CI), Playwright starts the Vite dev server (`npm run dev`) on `http://localhost:5173`, or reuses one that is already running. The dev server proxies `/api`, WebSockets included, to `http://localhost:8000`, so a backend must be running there. (The proxy target can be changed with the `BACKEND_PORT` or `VITE_API_PROXY_TARGET` variables of `frontend/vite.config.ts`.)
+
+The backend only accepts a WebSocket whose `Origin` matches the host the browser addressed. Behind the dev server that host arrives in the `X-Forwarded-Host` header the proxy sets, and the backend honours it only from a peer listed in `TRUSTED_PROXIES` (its default trusts loopback and private networks). If you set `TRUSTED_PROXIES` yourself, include `127.0.0.1` and `::1`, or list the dev server's origin in `CORS_ALLOWED_ORIGINS`; otherwise WebSocket specs fail with the sync panel stuck on "Reconnecting". `scripts/run-e2e-local.sh` starts its backend with `TRUSTED_PROXIES="127.0.0.1,::1"`.
 
 The suite provisions its own test users through the API, logged in as the admin account the server creates at startup. It needs that admin's password: set E2E_ADMIN_PASSWORD (or `ADMIN_PASSWORD`) in the test environment to the `ADMIN_PASSWORD` the server was started with. The username defaults to `admin` (override with E2E_ADMIN_USERNAME). See `frontend/e2e/utils/test-auth-helper.ts`.
 
