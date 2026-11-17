@@ -6,9 +6,9 @@ use axum::{
     Router,
 };
 use sqlx::Row;
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
-use crate::{auth::AdminUser, ocr::queue::QueueStats, AppState};
+use crate::{auth::AdminUser, models::QueueStatsResponse, AppState};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -46,31 +46,6 @@ async fn get_queue_stats(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(QueueStatsResponse::from(stats)))
-}
-
-/// OCR queue statistics as the API reports them. Shared with the MCP
-/// `get_queue_stats` tool.
-#[derive(Debug, serde::Serialize)]
-pub struct QueueStatsResponse {
-    pub pending: i64,
-    pub processing: i64,
-    pub failed: i64,
-    pub completed_today: i64,
-    pub avg_wait_time_minutes: Option<f64>,
-    pub oldest_pending_minutes: Option<f64>,
-}
-
-impl From<QueueStats> for QueueStatsResponse {
-    fn from(stats: QueueStats) -> Self {
-        Self {
-            pending: stats.pending_count,
-            processing: stats.processing_count,
-            failed: stats.failed_count,
-            completed_today: stats.completed_today,
-            avg_wait_time_minutes: stats.avg_wait_time_minutes,
-            oldest_pending_minutes: stats.oldest_pending_minutes,
-        }
-    }
 }
 
 #[utoipa::path(
@@ -247,11 +222,11 @@ async fn enqueue_pending_documents(
 
             // Calculate priority based on file size
             let priority = match file_size {
-                0..=1048576 => 10, // <= 1MB: highest priority
-                ..=5242880 => 8,   // 1-5MB: high priority
-                ..=10485760 => 6,  // 5-10MB: medium priority
-                ..=52428800 => 4,  // 10-50MB: low priority
-                _ => 2,            // > 50MB: lowest priority
+                ..=1_048_576 => 10,           // <= 1MB: highest priority
+                1_048_577..=5_242_880 => 8,   // 1-5MB: high priority
+                5_242_881..=10_485_760 => 6,  // 5-10MB: medium priority
+                10_485_761..=52_428_800 => 4, // 10-50MB: low priority
+                _ => 2,                       // > 50MB: lowest priority
             };
 
             (document_id, priority, file_size)

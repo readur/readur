@@ -15,6 +15,7 @@ use crate::{
         normalize_endpoint_for_comparison, SecretReuseRefused, Settings, SettingsResponse,
         UpdateSettings,
     },
+    services::settings::settings_response_for_user,
     utils::outbound::validate_outbound_url_for_config,
     AppState,
 };
@@ -54,19 +55,6 @@ async fn get_settings(
         })?;
 
     Ok(Json(response))
-}
-
-/// A user's settings as the API reports them, or the defaults for a user who
-/// has never saved any. Shared with the MCP `get_settings` tool.
-pub async fn settings_response_for_user(
-    db: &crate::db::Database,
-    user_id: uuid::Uuid,
-) -> anyhow::Result<SettingsResponse> {
-    Ok(db
-        .get_user_settings(user_id)
-        .await?
-        .unwrap_or_default()
-        .into())
 }
 
 #[utoipa::path(
@@ -130,11 +118,7 @@ async fn update_settings(
 /// username it was entered for must stay the same.
 fn stored_webdav_password_reusable(stored: Option<&Settings>, update: &UpdateSettings) -> bool {
     let Some(stored) = stored else { return true };
-    if stored
-        .webdav_password
-        .as_deref()
-        .map_or(true, str::is_empty)
-    {
+    if stored.webdav_password.as_deref().is_none_or(str::is_empty) {
         return true;
     }
     let effective = |update: &Option<Option<String>>, current: &Option<String>| match update {

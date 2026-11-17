@@ -5,92 +5,24 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Row};
+use sqlx::Row;
 use std::sync::Arc;
-use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
-    db::labels::{is_label_name_taken, LabelAssignOutcome, LabelRemoveOutcome},
+    db::labels::{
+        is_label_name_taken, LabelAssignOutcome, LabelRemoveOutcome, LabelReplaceOutcome,
+    },
     errors::label::LabelError,
     AppState,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema, TS)]
-#[ts(export)]
-pub struct Label {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub color: String,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    #[serde(default)]
-    pub document_count: i64,
-    #[serde(default)]
-    pub source_count: i64,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct CreateLabel {
-    pub name: String,
-    pub description: Option<String>,
-    #[serde(default = "default_color")]
-    #[ts(optional = nullable)]
-    pub color: String,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-}
-
-fn default_color() -> String {
-    "#0969da".to_string()
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct UpdateLabel {
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub color: Option<String>,
-    pub background_color: Option<String>,
-    pub icon: Option<String>,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct LabelAssignment {
-    pub label_ids: Vec<Uuid>,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
-#[ts(export, optional_fields)]
-pub struct LabelQuery {
-    #[serde(default)]
-    #[ts(optional = nullable)]
-    pub include_counts: bool,
-}
-
-#[derive(Debug, Deserialize, ToSchema, TS)]
-#[ts(export, optional_fields)]
-pub struct BulkUpdateRequest {
-    pub document_ids: Vec<Uuid>,
-    pub label_ids: Vec<Uuid>,
-    #[serde(default = "default_bulk_mode")]
-    #[ts(optional = nullable)]
-    pub mode: String, // "replace", "add", or "remove"
-}
-
-fn default_bulk_mode() -> String {
-    "replace".to_string()
-}
+// The label API's request and response types live in `models::label`; re-exported here because
+// they are this endpoint group's wire format.
+pub use crate::models::label::{
+    BulkUpdateRequest, CreateLabel, Label, LabelAssignment, LabelQuery, UpdateLabel,
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -330,78 +262,20 @@ pub async fn update_document_labels(
     auth_user: AuthUser,
     Json(payload): Json<LabelAssignment>,
 ) -> Result<Json<Vec<Label>>, StatusCode> {
-    let user_id = auth_user.user.id;
-
-    let owned = state
+    let outcome = state
         .db
-        .user_owns_document(document_id, user_id)
+        .replace_document_labels_for_user(document_id, &payload.label_ids, auth_user.user.id)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to verify document ownership: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    if !owned {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    // Verify all labels exist and are accessible
-    if !payload.label_ids.is_empty() {
-        let label_count =
-            sqlx::query("SELECT COUNT(*) as count FROM labels WHERE id = ANY($1) AND user_id = $2")
-                .bind(&payload.label_ids)
-                .bind(user_id)
-                .fetch_one(state.db.get_pool())
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to verify labels: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-
-        let count: i64 = label_count.try_get("count").unwrap_or(0);
-        if count as usize != payload.label_ids.len() {
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    }
-
-    // Begin transaction
-    let mut tx = state.db.get_pool().begin().await.map_err(|e| {
-        tracing::error!("Failed to begin transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Remove existing labels
-    sqlx::query("DELETE FROM document_labels WHERE document_id = $1")
-        .bind(document_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to remove existing labels: {}", e);
+            tracing::error!("Failed to update document labels: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Add new labels
-    for label_id in &payload.label_ids {
-        sqlx::query(
-            "INSERT INTO document_labels (document_id, label_id, assigned_by) VALUES ($1, $2, $3)",
-        )
-        .bind(document_id)
-        .bind(label_id)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to add label: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    match outcome {
+        LabelReplaceOutcome::Replaced(labels) => Ok(Json(labels)),
+        LabelReplaceOutcome::DocumentNotFound => Err(StatusCode::NOT_FOUND),
+        LabelReplaceOutcome::LabelNotFound => Err(StatusCode::BAD_REQUEST),
     }
-
-    tx.commit().await.map_err(|e| {
-        tracing::error!("Failed to commit transaction: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Return updated labels
-    get_document_labels(Path(document_id), State(state), auth_user).await
 }
 
 #[utoipa::path(

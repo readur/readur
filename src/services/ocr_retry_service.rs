@@ -3,8 +3,54 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{ocr::queue::EnqueueOutcome, routes::documents_ocr_retry::OcrRetryFilter, AppState};
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use ts_rs::TS;
+use utoipa::ToSchema;
+
+use crate::{ocr::queue::EnqueueOutcome, AppState};
+
+// Which failed documents a filtered OCR retry targets. Part of the
+// `POST /api/documents/ocr/retry/bulk` request and of retry recommendations.
+// (A plain comment, not a doc comment: ts-rs and utoipa would publish a doc comment.)
+#[derive(Debug, Default, Deserialize, Serialize, Clone, ToSchema, TS)]
+#[ts(export, optional_fields)]
+pub struct OcrRetryFilter {
+    /// Filter by MIME types
+    pub mime_types: Option<Vec<String>>,
+    /// Filter by file extensions
+    pub file_extensions: Option<Vec<String>>,
+    /// Filter by OCR failure reasons
+    pub failure_reasons: Option<Vec<String>>,
+    /// Filter by minimum file size (bytes)
+    pub min_file_size: Option<i64>,
+    /// Filter by maximum file size (bytes)
+    pub max_file_size: Option<i64>,
+    /// Filter by date range - documents created after this date
+    pub created_after: Option<chrono::DateTime<chrono::Utc>>,
+    /// Filter by date range - documents created before this date
+    pub created_before: Option<chrono::DateTime<chrono::Utc>>,
+    /// Filter by tags
+    pub tags: Option<Vec<String>>,
+    /// Maximum number of documents to retry
+    pub limit: Option<i64>,
+}
+
+/// Queue priority for a retried document: an explicit override (clamped to
+/// 1-20), else smaller files first.
+pub fn retry_priority(file_size: i64, override_priority: Option<i32>) -> i32 {
+    if let Some(priority) = override_priority {
+        return priority.clamp(1, 20);
+    }
+
+    match file_size {
+        ..=1_048_576 => 15,           // <= 1MB: highest priority
+        1_048_577..=5_242_880 => 12,  // 1-5MB: high priority
+        5_242_881..=10_485_760 => 10, // 5-10MB: medium priority
+        10_485_761..=52_428_800 => 8, // 10-50MB: low priority
+        _ => 6,                       // > 50MB: lowest priority
+    }
+}
 
 #[derive(Clone)]
 pub struct OcrRetryService {
@@ -254,7 +300,7 @@ impl OcrRetryService {
         let matched_count = documents.len();
 
         for doc in documents {
-            let priority = self.calculate_priority(doc.file_size, priority_override);
+            let priority = retry_priority(doc.file_size, priority_override);
 
             // Reset OCR status
             if let Err(e) = self.reset_document_ocr_status(doc.id).await {
@@ -333,20 +379,6 @@ impl OcrRetryService {
         .await?;
 
         Ok(())
-    }
-
-    fn calculate_priority(&self, file_size: i64, override_priority: Option<i32>) -> i32 {
-        if let Some(priority) = override_priority {
-            return priority.clamp(1, 20);
-        }
-
-        match file_size {
-            0..=1048576 => 15, // <= 1MB: highest priority
-            ..=5242880 => 12,  // 1-5MB: high priority
-            ..=10485760 => 10, // 5-10MB: medium priority
-            ..=52428800 => 8,  // 10-50MB: low priority
-            _ => 6,            // > 50MB: lowest priority
-        }
     }
 
     async fn is_admin(&self, user_id: Uuid) -> Result<bool> {
@@ -428,20 +460,4 @@ struct FailureStatistic {
     count: i64,
     avg_file_size_mb: f64,
     recent_failures: i64,
-}
-
-impl Default for OcrRetryFilter {
-    fn default() -> Self {
-        Self {
-            mime_types: None,
-            file_extensions: None,
-            failure_reasons: None,
-            min_file_size: None,
-            max_file_size: None,
-            created_after: None,
-            created_before: None,
-            tags: None,
-            limit: None,
-        }
-    }
 }

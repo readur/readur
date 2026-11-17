@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::AuthUser,
+    db::unique_violation::is_source_name_taken,
     errors::source::SourceError,
     models::{
         merge_stored_secrets, CreateSource, SourceResponse, SourceType, SourceWithStats,
@@ -17,6 +18,7 @@ use crate::{
     },
     services::local_folder_service::{authorize_local_folder_paths, LocalFolderPathError},
     services::s3_service::S3Service,
+    services::sources::source_responses_for_user,
     services::webdav::WebDAVConfig,
     utils::outbound::{validate_outbound_url, validate_outbound_url_for_config},
     AppState,
@@ -50,38 +52,6 @@ pub async fn list_sources(
         })?;
 
     Ok(Json(responses))
-}
-
-/// A user's sources with document counts, credentials redacted. Shared with
-/// the MCP `list_sources` tool.
-pub async fn source_responses_for_user(
-    db: &crate::db::Database,
-    user_id: Uuid,
-) -> anyhow::Result<Vec<SourceResponse>> {
-    let sources = db.get_sources(user_id).await?;
-
-    // Get source IDs for batch counting
-    let source_ids: Vec<Uuid> = sources.iter().map(|s| s.id).collect();
-
-    // Get document counts for all sources in one query
-    let counts = db.count_documents_for_sources(user_id, &source_ids).await?;
-
-    // Create a map for quick lookup
-    let count_map: std::collections::HashMap<Uuid, (i64, i64)> = counts
-        .into_iter()
-        .map(|(id, total, ocr)| (id, (total, ocr)))
-        .collect();
-
-    Ok(sources
-        .into_iter()
-        .map(|s| {
-            let (total_docs, total_ocr) = count_map.get(&s.id).copied().unwrap_or((0, 0));
-            let mut response: SourceResponse = s.into();
-            response.total_documents = total_docs;
-            response.total_documents_ocr = total_ocr;
-            response
-        })
-        .collect())
 }
 
 /// Create a new source
@@ -132,8 +102,7 @@ pub async fn create_source(
         .await
         .map_err(|e| {
             error!("Failed to create source in database: {}", e);
-            let error_msg = e.to_string();
-            if error_msg.contains("name") && error_msg.contains("unique") {
+            if is_source_name_taken(&e) {
                 SourceError::duplicate_name(&source_data.name)
             } else {
                 SourceError::connection_failed(format!("Database error: {}", e))

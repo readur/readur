@@ -84,8 +84,8 @@ pub async fn retry_ocr(
     )
     .await
     .map_err(|e| match e {
-        super::DocumentError::NotFound => StatusCode::NOT_FOUND,
-        super::DocumentError::BadRequest(_) => StatusCode::BAD_REQUEST,
+        crate::errors::document::DocumentError::NotFound => StatusCode::NOT_FOUND,
+        crate::errors::document::DocumentError::BadRequest(_) => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     })?;
     Ok(ResponseJson(serde_json::json!({

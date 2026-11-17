@@ -1,4 +1,4 @@
-//! Document operations shared by the REST handlers (`routes::documents`) and
+//! Document operations shared by the REST document handlers and
 //! the MCP tools (`mcp::tools::documents`), so both enforce the same access
 //! rules and run the same upload pipeline.
 //!
@@ -13,17 +13,16 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
+    errors::document::DocumentError,
     ingestion::document_ingestion::{
         DeduplicationPolicy, DocumentIngestionService, IngestionResult,
     },
     models::{
-        DocumentFilters, DocumentOcrResponse, DocumentResponse, DocumentSortField,
-        FileIngestionInfo, SortOrder, User,
+        DocumentFilters, DocumentOcrResponse, DocumentPaginationInfo, DocumentResponse,
+        DocumentSortField, DocumentUploadResponse, FileIngestionInfo, PaginatedDocumentsResponse,
+        SortOrder, User,
     },
     ocr::queue::EnqueueOutcome,
-    routes::documents::{
-        DocumentError, DocumentPaginationInfo, DocumentUploadResponse, PaginatedDocumentsResponse,
-    },
     AppState,
 };
 

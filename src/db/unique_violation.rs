@@ -2,7 +2,9 @@
 //!
 //! A clash is identified by SQLSTATE 23505 (`unique_violation`) plus the name of the constraint
 //! or unique index that rejected the row, never by the error text: the text changes with the
-//! server's `lc_messages`, and a substring test on it can match an unrelated error.
+//! server's `lc_messages`, and a substring test on it can match an unrelated error. Only the
+//! named constraint counts; any other unique violation is a genuine failure and must not be
+//! reported to the user as, say, a name clash.
 
 /// The unique constraint on `users.username` (the column's inline `UNIQUE` in the initial schema).
 pub const USERS_USERNAME_UNIQUE: &str = "users_username_key";
@@ -32,6 +34,29 @@ pub fn violated_unique_constraint_in(error: &anyhow::Error) -> Option<&str> {
         .find_map(|cause| cause.downcast_ref::<sqlx::Error>())
         .and_then(violated_unique_constraint)
 }
+
+/// Whether `error` is a unique violation of `constraint`.
+pub fn violates_unique_constraint(error: &sqlx::Error, constraint: &str) -> bool {
+    violated_unique_constraint(error) == Some(constraint)
+}
+
+/// [`violates_unique_constraint`] for an `anyhow` error, looking through its whole chain.
+pub fn chain_violates_unique_constraint(error: &anyhow::Error, constraint: &str) -> bool {
+    violated_unique_constraint_in(error) == Some(constraint)
+}
+
+/// The constraint that keeps each user's source names unique: the unnamed `UNIQUE(user_id,
+/// name)` in `migrations/20250620100011_add_sources_table.sql`, which Postgres names
+/// `<table>_<columns>_key`.
+pub const SOURCE_NAME_UNIQUE_CONSTRAINT: &str = "sources_user_id_name_key";
+
+/// Whether a failed source insert/update collided with a name the user already has.
+pub fn is_source_name_taken(error: &anyhow::Error) -> bool {
+    chain_violates_unique_constraint(error, SOURCE_NAME_UNIQUE_CONSTRAINT)
+}
+
+#[cfg(test)]
+pub(crate) use fake::fake_db_error;
 
 /// Builds `sqlx::Error`s with chosen fields, so tests can show classification reads the
 /// structured fields and ignores the message.
@@ -100,11 +125,20 @@ pub(crate) mod fake {
     pub(crate) fn unique_violation(message: &'static str, constraint: &'static str) -> sqlx::Error {
         db_error(message, Some("23505"), Some(constraint))
     }
+
+    /// A database error that is (SQLSTATE 23505) or is not a unique violation, on `constraint`.
+    pub(crate) fn fake_db_error(
+        message: &'static str,
+        unique_violation: bool,
+        constraint: Option<&'static str>,
+    ) -> sqlx::Error {
+        db_error(message, unique_violation.then_some("23505"), constraint)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::fake::{db_error, unique_violation};
+    use super::fake::{db_error, fake_db_error, unique_violation};
     use super::*;
 
     #[test]
@@ -149,5 +183,39 @@ mod tests {
             "duplicate key value violates unique constraint \"idx_documents_user_file_hash\""
         );
         assert_eq!(violated_unique_constraint_in(&plain), None);
+    }
+
+    #[test]
+    fn source_name_clash_is_recognised_through_anyhow_context() {
+        // What a server with lc_messages = 'fr_FR' sends, wrapped the way `db::sources` does.
+        let french = fake_db_error(
+            "la valeur d'une clé dupliquée rompt la contrainte unique « sources_user_id_name_key »",
+            true,
+            Some(SOURCE_NAME_UNIQUE_CONSTRAINT),
+        );
+        let wrapped = anyhow::Error::from(french).context("Failed to create source");
+        assert!(is_source_name_taken(&wrapped));
+    }
+
+    #[test]
+    fn source_name_text_without_the_constraint_is_not_a_clash() {
+        // The old text match ("name" and "unique" in the message) said yes to all of these.
+        let other_constraint = fake_db_error(
+            "duplicate key value violates unique constraint \"sources_pkey\" (name unique)",
+            true,
+            Some("sources_pkey"),
+        );
+        assert!(!is_source_name_taken(&other_constraint.into()));
+
+        let not_unique = fake_db_error(
+            "null value in column \"name\" violates not-null constraint; unique",
+            false,
+            Some(SOURCE_NAME_UNIQUE_CONSTRAINT),
+        );
+        assert!(!is_source_name_taken(&not_unique.into()));
+
+        assert!(!is_source_name_taken(&anyhow::anyhow!(
+            "name must be unique"
+        )));
     }
 }

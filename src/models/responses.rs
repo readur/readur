@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use utoipa::{ToSchema, IntoParams};
 use serde_json;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 use super::document::Document;
 
@@ -48,7 +48,7 @@ pub struct DocumentResponse {
     pub tags: Vec<String>,
     /// Labels associated with the document
     #[serde(default)]
-    pub labels: Vec<crate::routes::labels::Label>,
+    pub labels: Vec<crate::models::label::Label>,
     /// When the document was created
     pub created_at: DateTime<Utc>,
     /// When the document was last updated
@@ -136,7 +136,7 @@ pub struct EnhancedDocumentResponse {
     pub tags: Vec<String>,
     /// Labels associated with the document
     #[serde(default)]
-    pub labels: Vec<crate::routes::labels::Label>,
+    pub labels: Vec<crate::models::label::Label>,
     /// When the document was created
     pub created_at: DateTime<Utc>,
     /// When the document was last updated
@@ -301,6 +301,37 @@ pub struct BulkDeleteResponse {
     pub files_failed: i64,
     /// Any warnings or additional information
     pub warnings: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
+pub struct DocumentUploadResponse {
+    pub id: Uuid,
+    pub filename: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub status: String,
+    pub message: String,
+    /// Follow-up steps that failed after the document was stored (OCR
+    /// queueing, labelling). The upload itself succeeded.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct DocumentPaginationInfo {
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub has_more: bool,
+}
+
+#[derive(Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct PaginatedDocumentsResponse {
+    pub documents: Vec<DocumentResponse>,
+    pub pagination: DocumentPaginationInfo,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, TS)]

@@ -6,11 +6,8 @@ use rmcp::{
 
 use crate::{
     mcp::{format, ReadurMcp},
-    models::{UserResponse, UserRole},
-    routes::{
-        ocr::available_languages_for_user, queue::QueueStatsResponse,
-        settings::settings_response_for_user,
-    },
+    models::{QueueStatsResponse, UserResponse, UserRole},
+    services::{ocr_languages::available_languages_for_user, settings::settings_response_for_user},
 };
 
 #[tool_router(router = status_router, vis = "pub(crate)")]
