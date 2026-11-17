@@ -139,29 +139,41 @@ pub async fn get_ocr_status_batch(
     })))
 }
 
-/// Cancel OCR processing for a document
+/// Cancel a document's queued or running OCR
+#[utoipa::path(
+    post,
+    path = "/api/documents/{id}/ocr/stop",
+    tag = "documents",
+    security(
+        ("bearer_auth" = [])
+    ),
+    params(
+        ("id" = uuid::Uuid, Path, description = "Document ID")
+    ),
+    responses(
+        (status = 200, description = "Request handled: `cancelled` is true when a queued or running OCR job was cancelled (the document is left 'failed' with reason 'cancelled' and can be retried), false when there was nothing to cancel", body = super::types::CancelOcrResponse),
+        (status = 404, description = "Document not found"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn cancel_ocr(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
-) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
-    // Verify user has access to the document
-    let _document = state
-        .db
-        .get_document_by_id(document_id, auth_user.user.id, auth_user.user.role)
-        .await
-        .map_err(|e| {
-            error!("Database error getting document {}: {}", document_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    // Note: OCR queue removal not implemented in current queue service
-    info!("Stop OCR processing requested for document {}", document_id);
-    Ok(ResponseJson(serde_json::json!({
-        "success": true,
-        "message": "OCR processing stop requested"
-    })))
+) -> Result<ResponseJson<super::types::CancelOcrResponse>, StatusCode> {
+    info!(
+        "OCR cancel requested for document {} by user {}",
+        document_id, auth_user.user.id
+    );
+    let outcome =
+        crate::services::documents::cancel_document_ocr(&state, &auth_user.user, document_id)
+            .await
+            .map_err(|e| match e {
+                crate::errors::document::DocumentError::NotFound => StatusCode::NOT_FOUND,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            })?;
+    Ok(ResponseJson(outcome.into()))
 }
 
 /// Get OCR processing statistics

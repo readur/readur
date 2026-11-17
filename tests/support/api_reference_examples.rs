@@ -40,6 +40,7 @@ pub const EXAMPLES: &[(&str, Option<&str>)] = &[
     ("Get OCR Text", None),
     ("Retry OCR", None),
     ("Retry OCR While Already Queued", None),
+    ("Cancel OCR", None),
     ("Delete a Document", None),
     ("Search Documents", Some(SEARCH_TEST)),
     ("Enhanced Search", Some(SEARCH_TEST)),
@@ -264,6 +265,12 @@ pub async fn setup(heading: &str, fx: &Fixture) -> Setup {
             Setup::new(Alice)
                 .subst("{id}", id)
                 .schema::<RetryOcrRequest>("")
+        }
+        "Cancel OCR" => {
+            let id = fx.document().await;
+            let uri = format!("/api/documents/{id}/ocr/retry");
+            fx.call(Alice, "POST", &uri, json!({})).await;
+            Setup::new(Alice).subst("{id}", id)
         }
         "Create a Label" => Setup::new(Alice).schema::<CreateLabel>(""),
         "Set a Document's Labels" => Setup::new(Alice)

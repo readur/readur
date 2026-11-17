@@ -100,6 +100,7 @@ Every tool acts as the user who owns the key and sees exactly what that user see
 | `get_document_ocr_text` | The extracted text of a document, in pages (`offset` / `max_chars`) so large documents don't overflow the assistant's context |
 | `upload_document` | Upload a file (base64-encoded), optionally with labels; it is queued for OCR |
 | `retry_document_ocr` | Queue OCR again for a document |
+| `cancel_document_ocr` | Cancel a document's queued or running OCR; it can be queued again with `retry_document_ocr` |
 | `delete_document` | Delete a document. **Only available when `MCP_ALLOW_DELETE=true`** |
 
 ### Search

@@ -641,6 +641,27 @@ Content-Type: application/json
 }
 ```
 
+#### Cancel OCR
+
+Cancels the document's queued or running OCR:
+
+```http
+POST /api/documents/{id}/ocr/stop
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "cancelled": true,
+  "was_running": false,
+  "message": "Queued OCR was cancelled"
+}
+```
+
+A queued job is removed before any worker starts it. A running job is removed too (`was_running` is `true`): the worker finishes the page it is on, but its result is discarded, never written over the document. A cancelled document is left with `ocr_status` `failed` and `ocr_failure_reason` `cancelled`; text from an earlier completed OCR is kept, and [Retry OCR](#retry-ocr) queues it again. With nothing to cancel the request still succeeds, with `cancelled` `false`. `404 Not Found` when the document does not exist or belongs to another user.
+
 #### Delete a Document
 
 ```http

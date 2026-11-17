@@ -12,6 +12,7 @@ export type { BulkDeleteResponse } from './BulkDeleteResponse';
 export type { BulkOcrRetryRequest } from './BulkOcrRetryRequest';
 export type { BulkOcrRetryResponse } from './BulkOcrRetryResponse';
 export type { BulkUpdateRequest } from './BulkUpdateRequest';
+export type { CancelOcrResponse } from './CancelOcrResponse';
 export type { ChangePasswordRequest } from './ChangePasswordRequest';
 export type { CommentThread } from './CommentThread';
 export type { CommentWithAuthor } from './CommentWithAuthor';

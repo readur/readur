@@ -50,6 +50,15 @@ const HAS_ACTIVE_JOB_SQL: &str = concat!(
     ")"
 );
 
+/// Locks the document's active jobs so a cancel can remove them. Workers
+/// lock a job row before writing its outcome, so holding these locks makes a
+/// cancel and a finishing worker take turns: exactly one of them wins.
+pub(super) const LOCK_ACTIVE_JOBS_SQL: &str = concat!(
+    "SELECT id, status FROM ocr_queue WHERE document_id = $1 AND ",
+    active_job!(),
+    " FOR UPDATE"
+);
+
 /// Fails the document's pending jobs that no worker will ever claim. The
 /// attempt columns are nullable, and a NULL makes the claimable predicate
 /// NULL rather than false, so it is coalesced: such a job is never claimed

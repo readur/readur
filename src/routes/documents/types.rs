@@ -119,6 +119,34 @@ impl From<crate::services::documents::OcrRetryOutcome> for RetryOcrResponse {
     }
 }
 
+/// Response for `POST /api/documents/{id}/ocr/stop`.
+///
+/// `success` is true whenever the request was handled; `cancelled` says
+/// whether a queued or running OCR job was cancelled (true) or the document
+/// had none (false). A cancelled document is left with `ocr_status`
+/// 'failed' and `ocr_failure_reason` 'cancelled', and can be retried.
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct CancelOcrResponse {
+    pub success: bool,
+    pub cancelled: bool,
+    /// True when a worker was already running the job; its result is
+    /// discarded when it finishes.
+    pub was_running: bool,
+    pub message: String,
+}
+
+impl From<crate::services::documents::OcrCancelOutcome> for CancelOcrResponse {
+    fn from(outcome: crate::services::documents::OcrCancelOutcome) -> Self {
+        Self {
+            success: true,
+            cancelled: outcome.cancelled,
+            was_running: outcome.was_running,
+            message: outcome.message,
+        }
+    }
+}
+
 #[derive(Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct BulkDeleteResponse {

@@ -159,6 +159,8 @@ mod tests {
             idempotent,
             [
                 "add_document_label",
+                // A repeat finds nothing to cancel: same end state, success.
+                "cancel_document_ocr",
                 "remove_document_label",
                 "update_label"
             ]

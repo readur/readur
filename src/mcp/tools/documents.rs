@@ -448,6 +448,35 @@ impl ReadurMcp {
             Err(e) => Err(format::internal("retry OCR", format!("{e:?}"))),
         }
     }
+
+    #[tool(
+        description = "Cancel a document's queued or running OCR. A running job's result is discarded when it finishes. The document is left with OCR status 'failed' (reason 'cancelled') and can be queued again with retry_document_ocr. Reports cancelled=false when there was nothing to cancel.",
+        annotations(
+            title = "Cancel Document OCR",
+            read_only_hint = false,
+            // It stops work, but the document and any existing OCR text are
+            // kept, and retry_document_ocr undoes it.
+            destructive_hint = false,
+            // A repeat call finds nothing to cancel and changes nothing.
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn cancel_document_ocr(
+        &self,
+        Parameters(p): Parameters<DocumentIdParams>,
+        Extension(parts): Extension<Parts>,
+    ) -> Result<CallToolResult, McpError> {
+        let user: &User = Self::caller(&parts)?;
+        match service::cancel_document_ocr(&self.state, user, p.id).await {
+            Ok(outcome) => {
+                let text = format!("{} (document {}).", outcome.message, p.id);
+                format::text_and_json(text, &outcome)
+            }
+            Err(DocumentError::NotFound) => Ok(not_found(p.id)),
+            Err(e) => Err(format::internal("cancel OCR", format!("{e:?}"))),
+        }
+    }
 }
 
 /// What to tell the model about a document that has no OCR text yet. Only
