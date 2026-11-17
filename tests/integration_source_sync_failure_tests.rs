@@ -3,12 +3,12 @@
 
 use anyhow::anyhow;
 use readur::models::{CreateSource, FileIngestionInfo, SourceStatus, SourceType};
-use readur::scheduling::source_sync::{FolderDiscovery, SourceSyncService};
+use readur::scheduling::source_sync::{FolderDiscovery, PipelineRun, SourceSyncService};
+use readur::services::webdav::SyncProgress;
 use readur::test_utils::TestContext;
 use readur::utils::sync_cancelled::cancelled;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
-use readur::services::webdav::SyncProgress;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -46,13 +46,15 @@ async fn listing_failure_in_every_folder_fails_the_run() {
 
     let err = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            CancellationToken::new(),
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: CancellationToken::new(),
+                progress: &Arc::new(SyncProgress::new()),
+            },
             |folder| async move { Err(anyhow!("listing {folder} refused")) },
             |_| async { Ok(Vec::new()) },
         )
@@ -72,15 +74,21 @@ async fn listing_failure_in_one_folder_is_counted() {
 
     let outcome = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            CancellationToken::new(),
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: CancellationToken::new(),
+                progress: &Arc::new(SyncProgress::new()),
+            },
             |folder| async move {
-                if folder == "/bad" { Err(anyhow!("listing refused")) } else { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) }
+                if folder == "/bad" {
+                    Err(anyhow!("listing refused"))
+                } else {
+                    Ok(FolderDiscovery::from(listing_of(&["one.txt"])))
+                }
             },
             |_| async { Err(anyhow!("download refused")) },
         )
@@ -91,7 +99,14 @@ async fn listing_failure_in_one_folder_is_counted() {
     assert_eq!(outcome.discovered, 1, "{outcome:?}");
     assert_eq!(outcome.failed, 1, "{outcome:?}");
     assert!(!outcome.is_clean());
-    assert!(outcome.first_error.as_deref().unwrap().contains("listing refused"), "{outcome:?}");
+    assert!(
+        outcome
+            .first_error
+            .as_deref()
+            .unwrap()
+            .contains("listing refused"),
+        "{outcome:?}"
+    );
     let summary = outcome.failure_summary().unwrap();
     assert!(summary.contains("1 of 1 files failed"), "{summary}");
     assert!(summary.contains("1 of 2 folders"), "{summary}");
@@ -133,14 +148,31 @@ async fn unreadable_file_marks_the_source_as_failed_with_counts() {
         .await
         .unwrap();
 
-    let outcome = SourceSyncService::new(ctx.state().clone()).sync_source(&source, false).await.unwrap();
+    let outcome = SourceSyncService::new(ctx.state().clone())
+        .sync_source(&source, false)
+        .await
+        .unwrap();
 
     assert_eq!(outcome.discovered, 2, "{outcome:?}");
     assert_eq!(outcome.processed, 1, "{outcome:?}");
     assert_eq!(outcome.failed, 1, "{outcome:?}");
-    assert_eq!(ctx.state().db.count_documents_for_source(user_id, source.id).await.unwrap().0, 1);
+    assert_eq!(
+        ctx.state()
+            .db
+            .count_documents_for_source(user_id, source.id)
+            .await
+            .unwrap()
+            .0,
+        1
+    );
 
-    let source = ctx.state().db.get_source(user_id, source.id).await.unwrap().unwrap();
+    let source = ctx
+        .state()
+        .db
+        .get_source(user_id, source.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(source.status, SourceStatus::Error);
     let last_error = source.last_error.clone().unwrap_or_default();
     assert!(last_error.contains("1 of 2 files failed"), "{last_error}");
@@ -158,17 +190,22 @@ async fn unlisted_subdirectory_marks_the_run_not_clean_but_syncs_listed_files() 
 
     let outcome = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            CancellationToken::new(),
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: CancellationToken::new(),
+                progress: &Arc::new(SyncProgress::new()),
+            },
             |_| async move {
                 Ok(FolderDiscovery {
                     files: listing_of(&["one.txt"]),
-                    failed_directories: vec!["/docs/broken".to_string(), "/docs/broken/deeper".to_string()],
+                    failed_directories: vec![
+                        "/docs/broken".to_string(),
+                        "/docs/broken/deeper".to_string(),
+                    ],
                     directory_commit: None,
                 })
             },
@@ -182,8 +219,14 @@ async fn unlisted_subdirectory_marks_the_run_not_clean_but_syncs_listed_files() 
     assert_eq!(outcome.discovered, 1, "{outcome:?}");
     assert!(!outcome.is_clean());
     let summary = outcome.failure_summary().unwrap();
-    assert!(summary.contains("2 subdirectories could not be listed"), "{summary}");
-    assert!(summary.contains("directory /docs/broken: could not be listed"), "{summary}");
+    assert!(
+        summary.contains("2 subdirectories could not be listed"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("directory /docs/broken: could not be listed"),
+        "{summary}"
+    );
 }
 
 /// A download that fails for a real reason while the stop request arrives is
@@ -198,13 +241,15 @@ async fn a_real_failure_during_cancellation_is_still_counted() {
 
     let outcome = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            token,
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: token,
+                progress: &Arc::new(SyncProgress::new()),
+            },
             |_| async move { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) },
             move |_| {
                 let cancel = cancel.clone();
@@ -219,7 +264,14 @@ async fn a_real_failure_during_cancellation_is_still_counted() {
 
     assert!(outcome.cancelled, "{outcome:?}");
     assert_eq!(outcome.failed, 1, "{outcome:?}");
-    assert!(outcome.first_error.as_deref().unwrap().contains("download refused"), "{outcome:?}");
+    assert!(
+        outcome
+            .first_error
+            .as_deref()
+            .unwrap()
+            .contains("download refused"),
+        "{outcome:?}"
+    );
     let _ = ctx.cleanup_and_close().await;
 }
 
@@ -235,13 +287,15 @@ async fn the_cancellation_error_itself_is_not_a_failure() {
 
     let outcome = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            token,
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: token,
+                progress: &Arc::new(SyncProgress::new()),
+            },
             |_| async move { Ok(FolderDiscovery::from(listing_of(&["one.txt"]))) },
             move |_| {
                 let cancel = cancel.clone();
@@ -272,13 +326,15 @@ async fn a_stop_request_during_listing_is_a_cancelled_run_not_a_failed_one() {
 
     let outcome = service
         .run_pipeline(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &folders,
-            &["txt".to_string()],
-            false,
-            token,
-            &Arc::new(SyncProgress::new()),
+            PipelineRun {
+                user_id: Uuid::new_v4(),
+                source_id: Uuid::new_v4(),
+                watch_folders: &folders,
+                file_extensions: &["txt".to_string()],
+                enable_background_ocr: false,
+                cancellation_token: token,
+                progress: &Arc::new(SyncProgress::new()),
+            },
             move |folder| {
                 let cancel = cancel.clone();
                 async move {

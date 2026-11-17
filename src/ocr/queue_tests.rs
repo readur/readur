@@ -1,5 +1,5 @@
 //! Unit tests for `crate::ocr::queue`, kept in a sibling file so the module
-//! itself stays under its file-length baseline.
+//! itself stays under the 1000-line file-length cap.
 
 use super::*;
 use sqlx::postgres::PgPoolOptions;
