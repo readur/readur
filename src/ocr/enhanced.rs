@@ -161,11 +161,12 @@ impl EnhancedOcrService {
             word_count, confidence, processing_time
         );
         
-        // Return the processed image path (caller will handle cleanup/saving);
-        // it is only kept on disk when it is saved for review
-        let result_processed_image_path = processed_image.map(|image| {
-            if settings.save_processed_images { image.keep() } else { image.as_str().to_string() }
-        });
+        // The preprocessed image is handed to the caller, who then owns it,
+        // only when it is to be saved for review; otherwise its guard removes
+        // it here and no path to a deleted file is returned
+        let result_processed_image_path = processed_image
+            .filter(|_| settings.save_processed_images)
+            .map(TempPath::keep);
         
         let result = OcrResult {
             text,
@@ -1042,12 +1043,8 @@ impl EnhancedOcrService {
     async fn extract_pdf_text_quick(&self, file_path: &str) -> Result<(String, u64)> {
         let start_time = std::time::Instant::now();
 
-        // Generate temporary file path for text extraction
-        let temp_text_filename = format!("quick_text_{}_{}.txt",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis()
-        );
-        let temp_text = TempPath::new(format!("{}/{}", self.temp_dir, temp_text_filename));
+        // A per-call sidecar: concurrent jobs must not read or delete each other's
+        let temp_text = TempPath::unique(&self.temp_dir, "quick_text", "txt");
         let temp_text_path = temp_text.as_str();
 
         // Strategy 1: Fast text extraction using pdftotext (for existing text)
@@ -1211,9 +1208,11 @@ impl EnhancedOcrService {
     /// Convert PDF pages to PNG images using pdftoppm
     #[cfg(feature = "ocr")]
     pub(crate) async fn extract_pdf_pages_as_images(&self, file_path: &str, params: &TesseractParams) -> Result<TempPageImages> {
-        let temp_prefix = format!("{}/pdf_page_{}", self.temp_dir, uuid::Uuid::new_v4());
-        // Owns every page pdftoppm writes, even if this future is dropped mid-render
-        let mut pages = TempPageImages::new(&temp_prefix, "png");
+        // A directory of this render's own: its guard removes every page pdftoppm
+        // writes, even if this future is dropped mid-render, without scanning the
+        // shared temp dir
+        let mut pages = TempPageImages::create(&self.temp_dir, "pdf_pages").await?;
+        let temp_prefix = pages.prefix().to_string_lossy().into_owned();
 
         // Render every page as PNG at the owner's OCR DPI (killed on timeout)
         let output = tokio::process::Command::new("pdftoppm")
@@ -1256,6 +1255,9 @@ impl EnhancedOcrService {
 
         // Convert pages to images
         let image_paths = self.extract_pdf_pages_as_images(file_path, &TesseractParams::from_settings(settings)).await?;
+        // A page's preprocessed image is never saved for review, so each page's
+        // extraction removes its own
+        let page_settings = Settings { save_processed_images: false, ..settings.clone() };
 
         // OCR each page
         let mut all_text = String::new();
@@ -1271,7 +1273,7 @@ impl EnhancedOcrService {
                 cb((i + 1) as i32, page_count as i32);
             }
 
-            match self.extract_text_from_image(image_path, settings).await {
+            match self.extract_text_from_image(image_path, &page_settings).await {
                 Ok(result) => {
                     if !all_text.is_empty() && !result.text.is_empty() {
                         all_text.push_str("\n\n--- Page Break ---\n\n");
@@ -1280,8 +1282,6 @@ impl EnhancedOcrService {
                     total_confidence += result.confidence;
                     total_words += result.word_count;
                     successful_pages += 1;
-                    // A page's preprocessed image is not saved for review
-                    drop(result.processed_image_path.map(TempPath::new));
                 }
                 Err(e) => {
                     warn!("Failed to OCR page {}: {}", i + 1, e);

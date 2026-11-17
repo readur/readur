@@ -105,10 +105,15 @@ async fn success_paths_leave_the_temp_dir_empty() {
         save_processed_images: false,
         ..Settings::default()
     };
-    ocr.extract_text_from_image(&fixture("tests/test_images/test1.png"), &not_kept)
+    let result = ocr
+        .extract_text_from_image(&fixture("tests/test_images/test1.png"), &not_kept)
         .await
         .expect("tesseract is required for this test");
     assert_empty(dir.path(), "image extraction without review saving");
+    assert_eq!(
+        result.processed_image_path, None,
+        "a preprocessed image that was not kept is not handed out"
+    );
 }
 
 #[tokio::test]
@@ -118,8 +123,25 @@ async fn a_dropped_page_render_leaves_no_page_images() {
     // 468 pages: pdftoppm is still rendering when the first page lands
     let pdf = fixture("test_files/porters-handbook_en.pdf");
     let params = TesseractParams::from_settings(&Settings::default());
+    // Pages land in the render's own directory under the temp dir
+    let a_page_landed = || {
+        std::fs::read_dir(dir.path()).unwrap().any(|entry| {
+            let path = entry.unwrap().path();
+            path.is_dir() && std::fs::read_dir(&path).is_ok_and(|mut pages| pages.next().is_some())
+        })
+    };
+    let render = ocr.extract_pdf_pages_as_images(&pdf, &params);
+    let landed = async {
+        while !a_page_landed() {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+    };
+    let dropped_mid_render = tokio::select! {
+        _ = render => false,
+        () = landed => true,
+    };
     assert!(
-        drop_once_files_appear(dir.path(), ocr.extract_pdf_pages_as_images(&pdf, &params)).await,
+        dropped_mid_render,
         "pdftoppm finished 468 pages before the first one was seen"
     );
     assert_empty_after_drop(dir.path(), "a dropped pdftoppm render").await;
@@ -152,4 +174,67 @@ async fn a_dropped_quick_extraction_leaves_no_files() {
         // Finished first: the success path must still have cleaned up
         assert_empty(dir.path(), "quick pdftotext extraction");
     }
+}
+
+/// Two documents' quick extractions running at once each read their own
+/// sidecar: a name shared between concurrent calls (pid + millisecond) hands
+/// one job the other's text, or lets one guard delete the other's file.
+#[tokio::test]
+async fn concurrent_quick_extractions_read_their_own_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let ocr = service(dir.path());
+    let pdfs = [
+        fixture("test_files/complex_content.pdf"),
+        fixture("test_files/multipage_test.pdf"),
+    ];
+    let mut expected = Vec::new();
+    for pdf in &pdfs {
+        expected.push(ocr.extract_pdf_text_quick(pdf).await.expect("pdftotext").0);
+    }
+    assert_ne!(expected[0], expected[1], "the fixtures must differ");
+    let runs = (0..16).map(|i| {
+        let ocr = &ocr;
+        let pdf = &pdfs[i % 2];
+        async move { (i % 2, ocr.extract_pdf_text_quick(pdf).await) }
+    });
+    for (which, got) in futures::future::join_all(runs).await {
+        let text = got.expect("each run finds its own text").0;
+        assert_eq!(
+            text, expected[which],
+            "run of fixture {which} read another document"
+        );
+    }
+    assert_empty(dir.path(), "concurrent quick extractions");
+}
+
+/// The same for [`crate::ocr::OcrService::extract_text_from_pdf`], whose
+/// sidecar used to be one fixed name per process.
+#[tokio::test]
+async fn concurrent_service_pdf_extractions_read_their_own_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let ocr = crate::ocr::OcrService::new_with_config(crate::ocr::OcrConfig {
+        temp_dir: dir.path().to_string_lossy().into_owned(),
+    });
+    let pdfs = [
+        fixture("test_files/complex_content.pdf"),
+        fixture("test_files/multipage_test.pdf"),
+    ];
+    let mut expected = Vec::new();
+    for pdf in &pdfs {
+        expected.push(ocr.extract_text_from_pdf(pdf).await.expect("pdftotext"));
+    }
+    assert_ne!(expected[0], expected[1], "the fixtures must differ");
+    let runs = (0..16).map(|i| {
+        let ocr = &ocr;
+        let pdf = &pdfs[i % 2];
+        async move { (i % 2, ocr.extract_text_from_pdf(pdf).await) }
+    });
+    for (which, got) in futures::future::join_all(runs).await {
+        let text = got.expect("each run finds its own text");
+        assert_eq!(
+            text, expected[which],
+            "run of fixture {which} read another document"
+        );
+    }
+    assert_empty(dir.path(), "concurrent service extractions");
 }
