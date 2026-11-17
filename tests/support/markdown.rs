@@ -100,22 +100,50 @@ pub fn code_blocks(text: &str) -> Vec<CodeBlock> {
     blocks
 }
 
-/// Every `.md` file under `dir`, recursively, sorted.
-pub fn markdown_files(dir: &Path) -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                walk(&path, out);
-            } else if path.extension().is_some_and(|e| e == "md") {
-                out.push(path);
+/// Every file with `extension` under `dir`, recursively, sorted. Only files git tracks count, so
+/// local scratch files (gitignored notes, editor backups) can never make a docs test pass or
+/// fail; without a git checkout (e.g. a source tarball) every file on disk counts.
+pub fn tracked_files(dir: &Path, extension: &str) -> Vec<PathBuf> {
+    let repo = repo_path("");
+    let listed = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&repo)
+        .args(["ls-files", "-z", "--"])
+        .arg(dir)
+        .output()
+        .ok()
+        .filter(|output| output.status.success());
+    let mut out: Vec<PathBuf> = match listed {
+        Some(output) => output
+            .stdout
+            .split(|&b| b == 0)
+            .filter(|name| !name.is_empty())
+            .map(|name| repo.join(String::from_utf8_lossy(name).as_ref()))
+            .filter(|path| path.extension().is_some_and(|e| e == extension) && path.is_file())
+            .collect(),
+        None => {
+            fn walk(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
+                for entry in std::fs::read_dir(dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        walk(&path, extension, out);
+                    } else if path.extension().is_some_and(|e| e == extension) {
+                        out.push(path);
+                    }
+                }
             }
+            let mut out = Vec::new();
+            walk(dir, extension, &mut out);
+            out
         }
-    }
-    let mut out = Vec::new();
-    walk(dir, &mut out);
+    };
     out.sort();
     out
+}
+
+/// Every tracked `.md` file under `dir`, sorted (see [`tracked_files`]).
+pub fn markdown_files(dir: &Path) -> Vec<PathBuf> {
+    tracked_files(dir, "md")
 }
 
 /// README.md and every Markdown file under docs/.

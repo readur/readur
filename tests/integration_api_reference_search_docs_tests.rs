@@ -13,6 +13,9 @@ use tower::util::ServiceExt;
 use utoipa::OpenApi;
 use uuid::Uuid;
 
+#[path = "support/markdown.rs"]
+mod markdown;
+
 use readur::models::SearchRequest;
 use readur::test_utils::{document_helpers::create_test_document, TestContext};
 
@@ -162,17 +165,6 @@ fn search_urls(text: &str) -> Vec<(String, Vec<String>)> {
     urls
 }
 
-fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            markdown_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "md") {
-            out.push(path);
-        }
-    }
-}
-
 #[test]
 fn every_search_url_in_the_docs_is_a_real_route_with_real_parameters() {
     let parameters = sorted(documented_parameters(&api_reference()));
@@ -182,8 +174,7 @@ fn every_search_url_in_the_docs_is_a_real_route_with_real_parameters() {
         "/api/search/timeline",
         "/api/search/facets",
     ];
-    let mut files = vec![repo_path("README.md")];
-    markdown_files(&repo_path("docs"), &mut files);
+    let files = markdown::all_doc_files();
     let mut checked = 0;
     for file in files {
         let text = std::fs::read_to_string(&file).unwrap();

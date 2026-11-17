@@ -19,9 +19,12 @@
 //! builds its log filter with `EnvFilter::try_from_default_env`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use regex::Regex;
+
+#[path = "support/markdown.rs"]
+mod markdown;
 
 const DOCUMENTED_IN: &[&str] = &[
     "docs/configuration.md",
@@ -97,17 +100,6 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn files_with_extension(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            files_with_extension(&path, extension, out);
-        } else if path.extension().is_some_and(|e| e == extension) {
-            out.push(path);
-        }
-    }
-}
-
 /// Test-support modules of src/, whose variables configure tests rather than the server.
 fn is_test_support(path: &Path) -> bool {
     let name = path.file_name().unwrap().to_string_lossy();
@@ -119,8 +111,7 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
     let call =
         Regex::new(r#"(?:env::var(?:_os)?|env_flag|env_list)\(\s*"([A-Z][A-Z0-9_]*)""#).unwrap();
     let mut read: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    let mut sources = Vec::new();
-    files_with_extension(&repo().join("src"), "rs", &mut sources);
+    let sources = markdown::tracked_files(&repo().join("src"), "rs");
     for path in &sources {
         let text = std::fs::read_to_string(path).unwrap();
         let file = path.strip_prefix(repo()).unwrap().display().to_string();
@@ -213,8 +204,7 @@ fn every_documented_variable_is_read_by_the_code() {
 
 /// Every Markdown page outside [`DOCUMENTED_IN`] that names a variable.
 fn unchecked_pages_naming_variables() -> BTreeMap<String, BTreeSet<String>> {
-    let mut pages = vec![repo().join("README.md")];
-    files_with_extension(&repo().join("docs"), "md", &mut pages);
+    let pages = markdown::all_doc_files();
     pages
         .into_iter()
         .map(|path| path.strip_prefix(repo()).unwrap().display().to_string())
