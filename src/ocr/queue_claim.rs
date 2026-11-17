@@ -15,12 +15,15 @@
 //! run is never reset under its worker.
 //!
 //! Stopping a running job is the fast path on top: [`OcrQueueService::run_claimed`]
-//! registers a [`CancellationToken`] per job; a cancel in this process fires
+//! registers a [`CancellationToken`] per claim; a cancel in this process fires
 //! it, and a heartbeat that finds the claim gone fires it too (a cancel made
 //! by another process, or a stale reset). The job's future is then dropped,
 //! which stops extraction at its next await point -- external tools run with
 //! `kill_on_drop`, and an in-process Tesseract page finishes in the
 //! background with its result discarded -- and releases the worker's slot.
+//! Only extraction runs under the token: the worker's own outcome commit
+//! deletes or requeues the job, so a heartbeat after it would read the claim
+//! as lost; the outcome and what follows it are written outside the token.
 
 use anyhow::{anyhow, Result};
 use sqlx::{PgPool, Postgres, Row, Transaction};
@@ -115,32 +118,35 @@ pub enum JobRun<T> {
     Stopped(ClaimLoss),
 }
 
-/// Cancellation tokens of the jobs running in this process, by job id.
+/// Cancellation tokens of the jobs running in this process, by claim: the
+/// same job can be run twice here (a stale reset, then a reclaim while the
+/// first run is still winding down), and each run must unregister only
+/// itself.
 #[derive(Clone, Default)]
-pub(super) struct RunningJobs(Arc<Mutex<HashMap<Uuid, CancellationToken>>>);
+pub(super) struct RunningJobs(Arc<Mutex<HashMap<Uuid, (Uuid, CancellationToken)>>>);
 
 impl RunningJobs {
-    fn register(&self, job_id: Uuid) -> RunningJob {
+    fn register(&self, claim: &JobClaim) -> RunningJob {
         let token = CancellationToken::new();
-        self.lock().insert(job_id, token.clone());
+        self.lock()
+            .insert(claim.claim_id, (claim.job_id, token.clone()));
         RunningJob {
             jobs: self.clone(),
-            job_id,
+            claim_id: claim.claim_id,
             token,
         }
     }
 
-    /// Stops the given jobs if they run in this process.
+    /// Stops every run of the given jobs in this process.
     pub(super) fn cancel(&self, job_ids: &[Uuid]) {
-        let jobs = self.lock();
-        for id in job_ids {
-            if let Some(token) = jobs.get(id) {
+        for (job_id, token) in self.lock().values() {
+            if job_ids.contains(job_id) {
                 token.cancel();
             }
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, CancellationToken>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, (Uuid, CancellationToken)>> {
         // The map holds no invariant a panicking holder could break.
         self.0
             .lock()
@@ -148,16 +154,16 @@ impl RunningJobs {
     }
 }
 
-/// A job registered as running; unregisters it when dropped.
+/// A run registered as running; unregisters it (and only it) when dropped.
 struct RunningJob {
     jobs: RunningJobs,
-    job_id: Uuid,
+    claim_id: Uuid,
     token: CancellationToken,
 }
 
 impl Drop for RunningJob {
     fn drop(&mut self) {
-        self.jobs.lock().remove(&self.job_id);
+        self.jobs.lock().remove(&self.claim_id);
     }
 }
 
@@ -217,7 +223,7 @@ impl OcrQueueService {
         claim: JobClaim,
         work: F,
     ) -> Result<JobRun<F::Output>> {
-        let running = self.running_jobs.register(claim.job_id);
+        let running = self.running_jobs.register(&claim);
         if !self.heartbeat(&claim).await? {
             return Ok(JobRun::Stopped(self.claim_loss(&claim).await?));
         }
@@ -254,6 +260,22 @@ impl OcrQueueService {
     pub fn with_heartbeat_interval(mut self, interval: Duration) -> Self {
         self.heartbeat_interval = interval;
         self
+    }
+
+    /// A copy of this service that pauses for `pause` right after each job's
+    /// outcome commits, before the work that follows the commit: for
+    /// exercising a heartbeat or cancel landing in that window.
+    #[doc(hidden)]
+    pub fn with_post_commit_pause(mut self, pause: Duration) -> Self {
+        self.post_commit_pause = pause;
+        self
+    }
+
+    /// The [`Self::with_post_commit_pause`] test hook; a no-op by default.
+    pub(super) async fn pause_after_commit(&self) {
+        if !self.post_commit_pause.is_zero() {
+            tokio::time::sleep(self.post_commit_pause).await;
+        }
     }
 }
 
@@ -338,13 +360,43 @@ mod tests {
     #[test]
     fn cancel_fires_only_registered_tokens_and_drop_unregisters() {
         let jobs = RunningJobs::default();
-        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
-        let running = jobs.register(a);
-        jobs.cancel(&[b]);
+        let (a, b) = (claim(), claim());
+        let running = jobs.register(&a);
+        jobs.cancel(&[b.job_id]);
         assert!(!running.token.is_cancelled());
-        jobs.cancel(&[a]);
+        jobs.cancel(&[a.job_id]);
         assert!(running.token.is_cancelled());
         drop(running);
         assert!(jobs.lock().is_empty());
+    }
+
+    /// Two runs of one job: the first, stale run's claim was reset and the
+    /// job claimed again in this process. Whichever ends first must leave the
+    /// other registered and cancellable.
+    #[test]
+    fn a_rerun_of_the_same_job_keeps_its_own_registration() {
+        for stale_ends_first in [true, false] {
+            let jobs = RunningJobs::default();
+            let stale = claim();
+            let live = JobClaim {
+                claim_id: Uuid::new_v4(),
+                ..stale
+            };
+            let stale_run = jobs.register(&stale);
+            let live_run = jobs.register(&live);
+            let (ended, remaining) = if stale_ends_first {
+                (stale_run, live_run)
+            } else {
+                (live_run, stale_run)
+            };
+            drop(ended);
+            jobs.cancel(&[stale.job_id]);
+            assert!(
+                remaining.token.is_cancelled(),
+                "stale_ends_first={stale_ends_first}: the remaining run was unregistered"
+            );
+            drop(remaining);
+            assert!(jobs.lock().is_empty());
+        }
     }
 }
