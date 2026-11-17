@@ -24,6 +24,8 @@ Perfect for scenarios where you want to automatically process files from:
 4. **OCR processing** - Files are automatically processed to extract searchable text
 5. **Search and find** - Your documents become searchable in the Readur web interface
 
+Documents imported from the watch folder belong to the admin account named by `ADMIN_USERNAME` (default `admin`), the account Readur creates on first start. If no account with that name exists, or it is not an admin, the files are skipped and an error is logged; they are picked up after the account exists once they change or the watcher restarts. Files in [per-user watch directories](per-user-watch-directories.md) belong to the directory's user.
+
 ## Key Features
 
 ✅ **Works with any storage type** - Local drives, network shares, cloud mounts  

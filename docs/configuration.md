@@ -38,7 +38,7 @@ Variables not listed here or in the [Configuration Reference](configuration-refe
 |----------|---------|-------------|
 | `READUR_INSECURE_DEV_MODE` | `false` | Allows startup with a short or example `JWT_SECRET`. Throwaway local development and CI only; never in production |
 | `JWT_TTL_HOURS` | `12` | Lifetime of login tokens in hours (1-720) |
-| `ADMIN_USERNAME` | `admin` | Username of the initial admin account |
+| `ADMIN_USERNAME` | `admin` | Username of the initial admin account, which also owns files imported from `WATCH_FOLDER` |
 | `ADMIN_EMAIL` | `<username>@localhost` | Email of the initial admin account |
 | `ADMIN_PASSWORD` | _(none)_ | Initial admin password (min 8 chars). If unset, a random 24-character password is generated and written to a file instead of the logs |
 | `ADMIN_PASSWORD_FILE` | `<UPLOAD_PATH>/.readur/initial-admin-password` | Location of the generated admin password file (mode `0600`); `/app/uploads/.readur/initial-admin-password` in the Docker image |

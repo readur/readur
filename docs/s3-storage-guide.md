@@ -162,7 +162,7 @@ Flags:
 | `-l`, `--limit <N>` | Migrate at most N documents |
 | `-u`, `--user-id <UUID>` | Only migrate this user's documents |
 | `--enable-rollback` | On the first failed document, undo all migrations done in this run and exit with an error |
-| `--resume-from <UUID>` | Start at this document in the list. An ID that is not in the list is ignored and the run starts at the beginning |
+| `--resume-from <UUID>` | Start at this document (documents are taken oldest first). An ID that does not exist is an error |
 
 For each document with a local `file_path` (paths starting with `s3://` are skipped) the tool:
 
@@ -173,10 +173,10 @@ For each document with a local `file_path` (paths starting with `s3://` are skip
 
 Which documents are picked up:
 
-- Without `--user-id`, the tool takes the 500 most recent documents of each user, and `--limit` caps the total.
-- With `--user-id`, it takes that user's most recent documents, up to `--limit` (1000 when `--limit` is not given).
+- Every document whose `file_path` does not start with `s3://` (only the given user's with `--user-id`), oldest first, fetched in pages of 500.
+- `--limit` stops the run after that many documents; without it the tool goes through all of them.
 
-Documents already in S3 are counted in these limits before they are skipped. For a user with more documents than that, run the tool per user with `--user-id` and a `--limit` larger than the user's document count.
+Documents already in S3 are never selected, so a second run migrates only what is still local (new documents and earlier failures) and finds nothing once everything has been moved.
 
 The tool writes its progress to `migration_state.json` in the current directory (every 10 migrated documents and at the end), including `completed_migrations` and `failed_migrations` with the error for each failed document. If a rollback itself fails, the errors are written to `rollback_errors.json`.
 

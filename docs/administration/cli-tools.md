@@ -20,7 +20,6 @@ Readur has two kinds of command-line tools:
 | `debug_pdf_extraction` | Compare text extraction methods on one PDF |
 | `test_metadata` | Print the metadata extracted from a few test files |
 | `analyze-webdav-performance` | Turn a WebDAV stress test metrics file into a report |
-| `test_runner` | Run the unit, integration and frontend test suites |
 
 ## readur
 
@@ -165,13 +164,13 @@ cargo run --release --bin migrate_to_s3 -- [OPTIONS]
 |--------|-------------|
 | `-d`, `--dry-run` | Log the documents that would be migrated and exit without changing anything. Still requires working database and S3 connections |
 | `--delete-local` | Delete the local file, thumbnail and processed image of each document after uploading it |
-| `-l`, `--limit <N>` | Without `--user-id`: stop collecting documents once N are gathered. With `--user-id`: the number of that user's newest documents to consider (default 1000) |
+| `-l`, `--limit <N>` | Migrate at most N documents (default: all) |
 | `-u`, `--user-id <ID>` | Only migrate documents owned by this user (UUID) |
 | `--enable-rollback` | On the first failed document, undo every migration of this run (restore database paths, delete the uploaded S3 objects) and exit with status 1 |
-| `--resume-from <ID>` | Skip the selected documents before this document ID. Starts from the beginning if the ID is not in the selection |
+| `--resume-from <ID>` | Start at this document (oldest first), skipping older ones. The tool exits with an error if the ID does not exist |
 | `-h`, `--help` | Print help |
 
-Without `--user-id`, the tool considers the newest 500 documents of each user. Documents whose path already starts with `s3://` are skipped, so running the tool again retries only what is left.
+The tool goes through every document whose path does not start with `s3://`, oldest first, fetching them in pages of 500. Documents already in S3 are never selected, so running the tool again picks up only what is left: new documents and earlier failures.
 
 ### Behaviour
 
@@ -190,7 +189,7 @@ cargo run --release --bin migrate_to_s3 -- --dry-run
 # Migrate everything, undo this run if any document fails
 cargo run --release --bin migrate_to_s3 -- --enable-rollback
 
-# One user, up to 5000 documents
+# One user's documents, at most 5000 of them
 cargo run --release --bin migrate_to_s3 -- --user-id 3f6c1e2a-8d4b-4c1e-9a77-2b1f0c9d5e10 --limit 5000
 
 # Migrate and delete the local copies
@@ -264,24 +263,6 @@ cargo run --bin analyze-webdav-performance -- --metrics-file <FILE> [--output-fo
 
 Exit status: 0 for a healthy or warning result, 1 for a critical result, 2 if the health is unknown.
 
-## test_runner
-
-**Purpose:** An old wrapper that runs test suites from the repository root. It is out of date: the `unit` and `integration` suites it runs are Cargo test targets named `unit_tests` and `integration_tests`, which no longer exist, so those suites fail. Run the tests as described in the [Testing Guide](../dev/TESTING.md) instead.
-
-### Usage
-```bash
-cargo run --bin test_runner -- [TEST_TYPE]
-```
-
-| TEST_TYPE | Runs |
-|-----------|------|
-| `unit` | the missing `unit_tests` target |
-| `integration` | the missing `integration_tests` target, only when a server answers `http://localhost:8000/api/health` |
-| `frontend` | `npm test -- --run` in `frontend/` |
-| `all` (default) | Unit and frontend tests, plus integration tests if the server is running |
-
-It prints a summary and exits with status 1 if any suite failed. Other arguments are rejected with a usage message.
-
 ## Environment Variables
 
 The tools read the same environment variables as the server; the full list is in the [configuration reference](../configuration-reference.md). The ones most relevant here:
@@ -318,7 +299,7 @@ cargo run --release --bin migrate_to_s3 -- --help
 cargo run --release --bin batch_ingest -- --help
 ```
 
-`enqueue_pending_ocr`, `debug_pdf_extraction`, `test_metadata` and `test_runner` have no `--help` option.
+`enqueue_pending_ocr`, `debug_pdf_extraction` and `test_metadata` have no `--help` option.
 
 ## Security Considerations
 

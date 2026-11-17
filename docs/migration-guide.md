@@ -127,11 +127,11 @@ The tool's options (from `src/bin/migrate_to_s3.rs`):
 | `-l`, `--limit <N>` | Migrate at most N documents |
 | `-u`, `--user-id <UUID>` | Only migrate this user's documents |
 | `--enable-rollback` | When a document fails, point every document migrated in this run back at its original local path, delete the uploaded objects and stop. This only helps while the local files still exist, so do not combine it with `--delete-local` |
-| `--resume-from <DOCUMENT_ID>` | Start at this document in the list instead of at the beginning |
+| `--resume-from <DOCUMENT_ID>` | Start at this document (documents are taken oldest first) instead of at the oldest |
 
 Documents whose path already starts with `s3://` are skipped. The tool writes the migrated and failed documents to `migration_state.json` in the current directory (and rollback problems to `rollback_errors.json`); without `--enable-rollback` it carries on past failed documents and lists them there. Keep the local files (do not use `--delete-local`) until you have checked that documents open after switching the server to S3.
 
-The tool looks at each user's 500 newest documents per run (1000 with `--user-id`, unless `--limit` is given). Compare the document count with the number the dry run reports before relying on it for users with more documents than that.
+The tool goes through every local document in one run, oldest first, however many there are; a second run finds only what is still local.
 
 ### S3 to a different bucket or provider
 

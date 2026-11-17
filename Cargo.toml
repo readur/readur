@@ -8,10 +8,6 @@ name = "readur"
 path = "src/main.rs"
 
 [[bin]]
-name = "test_runner"
-path = "src/bin/test_runner.rs"
-
-[[bin]]
 name = "analyze-webdav-performance"
 path = "src/bin/analyze-webdav-performance.rs"
 

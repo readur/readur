@@ -7,6 +7,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
     },
     models::FileIngestionInfo,
     ocr::queue::{EnqueueOutcome, OcrQueueService},
-    scheduling::user_watch_manager::UserWatchManager,
+    scheduling::{user_watch_manager::UserWatchManager, watch_owner::WatchFolderOwner},
     services::{file_service::FileService, user_watch_service::UserWatchService},
 };
 
@@ -79,35 +80,32 @@ pub async fn start_folder_watcher(
 
     info!("Using watch strategy: {:?}", watch_strategy);
 
+    let owner = WatchFolderOwner::from_env();
+    info!(
+        "Global watch folder files are assigned to the admin account '{}' (ADMIN_USERNAME)",
+        owner.username()
+    );
+    let ctx = WatchContext {
+        config,
+        db,
+        file_service,
+        queue_service,
+        user_watch_manager,
+        owner,
+    };
+
     match watch_strategy {
-        WatchStrategy::PollingBased => {
-            start_polling_watcher(config, db, file_service, queue_service, user_watch_manager).await
-        }
+        WatchStrategy::PollingBased => start_polling_watcher(ctx).await,
         WatchStrategy::Hybrid => {
             // Start both methods concurrently
-            let config_clone = config.clone();
-            let db_clone = db.clone();
-            let file_service_clone = file_service.clone();
-            let queue_service_clone = queue_service.clone();
-            let user_watch_manager_clone = user_watch_manager.clone();
-
+            let notify_ctx = ctx.clone();
             let notify_handle = tokio::spawn(async move {
-                if let Err(e) = start_notify_watcher(
-                    config_clone,
-                    db_clone,
-                    file_service_clone,
-                    queue_service_clone,
-                    user_watch_manager_clone,
-                )
-                .await
-                {
+                if let Err(e) = start_notify_watcher(notify_ctx).await {
                     warn!("Notify watcher failed, continuing with polling: {}", e);
                 }
             });
 
-            let polling_result =
-                start_polling_watcher(config, db, file_service, queue_service, user_watch_manager)
-                    .await;
+            let polling_result = start_polling_watcher(ctx).await;
 
             // Cancel notify watcher if polling completes
             notify_handle.abort();
@@ -115,6 +113,19 @@ pub async fn start_folder_watcher(
             polling_result
         }
     }
+}
+
+/// Everything [`process_file`] needs, built once per watcher.
+#[derive(Clone)]
+pub struct WatchContext {
+    pub config: Config,
+    pub db: Database,
+    pub file_service: std::sync::Arc<FileService>,
+    pub queue_service: OcrQueueService,
+    /// Set when per-user watch directories are enabled.
+    pub user_watch_manager: Option<UserWatchManager>,
+    /// Owner of files from the global watch folder.
+    pub owner: WatchFolderOwner,
 }
 
 #[derive(Debug, Clone)]
@@ -149,13 +160,8 @@ async fn determine_watch_strategy(path: &Path) -> Result<WatchStrategy> {
     Ok(WatchStrategy::Hybrid)
 }
 
-async fn start_notify_watcher(
-    config: Config,
-    db: Database,
-    file_service: std::sync::Arc<FileService>,
-    queue_service: OcrQueueService,
-    user_watch_manager: Option<UserWatchManager>,
-) -> Result<()> {
+async fn start_notify_watcher(ctx: WatchContext) -> Result<()> {
+    let config = &ctx.config;
     let (tx, mut rx) = mpsc::channel(100);
 
     let mut watcher = RecommendedWatcher::new(
@@ -232,16 +238,7 @@ async fn start_notify_watcher(
 
                     let stability_ms = config.effective_file_stability_check_ms();
                     if is_file_stable(&path, stability_ms).await {
-                        if let Err(e) = process_file(
-                            &path,
-                            &db,
-                            &file_service,
-                            &queue_service,
-                            &config,
-                            &user_watch_manager,
-                        )
-                        .await
-                        {
+                        if let Err(e) = process_file(&path, &ctx).await {
                             error!("Failed to process file {:?}: {}", path, e);
                         } else {
                             // Update tracking on successful processing
@@ -262,13 +259,8 @@ async fn start_notify_watcher(
     Ok(())
 }
 
-async fn start_polling_watcher(
-    config: Config,
-    db: Database,
-    file_service: std::sync::Arc<FileService>,
-    queue_service: OcrQueueService,
-    user_watch_manager: Option<UserWatchManager>,
-) -> Result<()> {
+async fn start_polling_watcher(ctx: WatchContext) -> Result<()> {
+    let config = &ctx.config;
     info!("Started polling-based watcher on: {}", config.watch_folder);
 
     let mut known_files: HashSet<(PathBuf, SystemTime)> = HashSet::new();
@@ -281,16 +273,7 @@ async fn start_polling_watcher(
         "Starting initial scan of global watch directory: {}",
         config.watch_folder
     );
-    scan_directory(
-        &config.watch_folder,
-        &mut known_files,
-        &db,
-        &file_service,
-        &queue_service,
-        &config,
-        &user_watch_manager,
-    )
-    .await?;
+    scan_directory(&config.watch_folder, &mut known_files, &ctx).await?;
 
     // Initial scan of user watch directories if enabled
     if config.enable_per_user_watch {
@@ -298,16 +281,7 @@ async fn start_polling_watcher(
             "Starting initial scan of user watch directories: {}",
             config.user_watch_base_dir
         );
-        scan_directory(
-            &config.user_watch_base_dir,
-            &mut known_files,
-            &db,
-            &file_service,
-            &queue_service,
-            &config,
-            &user_watch_manager,
-        )
-        .await?;
+        scan_directory(&config.user_watch_base_dir, &mut known_files, &ctx).await?;
     }
 
     info!(
@@ -319,33 +293,15 @@ async fn start_polling_watcher(
         interval.tick().await;
 
         // Scan global watch directory
-        if let Err(e) = scan_directory(
-            &config.watch_folder,
-            &mut known_files,
-            &db,
-            &file_service,
-            &queue_service,
-            &config,
-            &user_watch_manager,
-        )
-        .await
-        {
+        if let Err(e) = scan_directory(&config.watch_folder, &mut known_files, &ctx).await {
             error!("Error during global watch directory scan: {}", e);
             // Continue polling even if one scan fails
         }
 
         // Scan user watch directories if enabled
         if config.enable_per_user_watch {
-            if let Err(e) = scan_directory(
-                &config.user_watch_base_dir,
-                &mut known_files,
-                &db,
-                &file_service,
-                &queue_service,
-                &config,
-                &user_watch_manager,
-            )
-            .await
+            if let Err(e) =
+                scan_directory(&config.user_watch_base_dir, &mut known_files, &ctx).await
             {
                 error!("Error during user watch directory scan: {}", e);
                 // Continue polling even if one scan fails
@@ -357,11 +313,7 @@ async fn start_polling_watcher(
 async fn scan_directory(
     watch_folder: &str,
     known_files: &mut HashSet<(PathBuf, SystemTime)>,
-    db: &Database,
-    file_service: &FileService,
-    queue_service: &OcrQueueService,
-    config: &Config,
-    user_watch_manager: &Option<UserWatchManager>,
+    ctx: &WatchContext,
 ) -> Result<()> {
     let mut current_files: HashSet<(PathBuf, SystemTime)> = HashSet::new();
 
@@ -383,19 +335,10 @@ async fn scan_directory(
                     // Check if this is a new file or modified file
                     if !known_files.contains(&file_info) {
                         // Wait a bit to ensure file is fully written
-                        let stability_ms = config.effective_file_stability_check_ms();
+                        let stability_ms = ctx.config.effective_file_stability_check_ms();
                         if is_file_stable(&path, stability_ms).await {
                             debug!("Found new/modified file: {:?}", path);
-                            if let Err(e) = process_file(
-                                &path,
-                                db,
-                                file_service,
-                                queue_service,
-                                config,
-                                user_watch_manager,
-                            )
-                            .await
-                            {
+                            if let Err(e) = process_file(&path, ctx).await {
                                 error!("Failed to process file {:?}: {}", path, e);
                             }
                         }
@@ -448,14 +391,11 @@ fn is_relevant_event(kind: &EventKind) -> bool {
     )
 }
 
-async fn process_file(
-    path: &std::path::Path,
-    db: &Database,
-    file_service: &FileService,
-    queue_service: &OcrQueueService,
-    config: &Config,
-    user_watch_manager: &Option<UserWatchManager>,
-) -> Result<()> {
+/// Ingest one file from a watch directory and queue it for OCR. Files that
+/// should not be ingested (hidden, disallowed type, too large, no owner,
+/// ...) are skipped with `Ok(())`.
+pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<()> {
+    let (db, file_service, config) = (&ctx.db, ctx.file_service.as_ref(), &ctx.config);
     if !path.is_file() {
         return Ok(());
     }
@@ -582,54 +522,9 @@ async fn process_file(
         return Ok(());
     }
 
-    // Determine which user this file belongs to
-    let target_user_id = if let Some(ref manager) = user_watch_manager {
-        // Check if file is in user watch directory
-        if manager.is_user_watch_path(path) {
-            // Extract user from file path
-            match manager.get_user_by_file_path(path).await? {
-                Some(user) => {
-                    info!(
-                        "File {} belongs to user: {} ({})",
-                        filename, user.username, user.id
-                    );
-                    user.id
-                }
-                None => {
-                    warn!(
-                        "File {} is in user watch directory but no user found - assigning to admin",
-                        filename
-                    );
-                    // Fallback to admin
-                    let admin_user = db.get_user_by_username("admin").await?.ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Admin user not found. Please ensure the admin user is created."
-                        )
-                    })?;
-                    admin_user.id
-                }
-            }
-        } else {
-            // File is in global watch directory, assign to admin
-            debug!(
-                "File {} is in global watch directory - assigning to admin",
-                filename
-            );
-            let admin_user = db.get_user_by_username("admin").await?.ok_or_else(|| {
-                anyhow::anyhow!("Admin user not found. Please ensure the admin user is created.")
-            })?;
-            admin_user.id
-        }
-    } else {
-        // Per-user watch is disabled, always use admin
-        debug!(
-            "Per-user watch disabled - assigning file {} to admin",
-            filename
-        );
-        let admin_user = db.get_user_by_username("admin").await?.ok_or_else(|| {
-            anyhow::anyhow!("Admin user not found. Please ensure the admin user is created.")
-        })?;
-        admin_user.id
+    let Some(target_user_id) = file_owner(path, &filename, ctx).await? else {
+        warn!("Skipping watch folder file {} - it has no owner", filename);
+        return Ok(());
     };
 
     // Validate PDF files before processing
@@ -691,7 +586,8 @@ async fn process_file(
             // Enqueue for OCR processing with priority based on file size and type
             let priority = calculate_priority(file_info.size, &file_info.mime_type);
             // A new document has no job yet; if one exists, OCR runs anyway.
-            let _queued: EnqueueOutcome = queue_service
+            let _queued: EnqueueOutcome = ctx
+                .queue_service
                 .enqueue_document(doc.id, priority, file_info.size)
                 .await?;
 
@@ -726,6 +622,37 @@ async fn process_file(
     }
 
     Ok(())
+}
+
+/// The user a watched file belongs to: the user of the per-user watch
+/// directory it sits in, otherwise the global watch folder's owner. `None`
+/// when that owner cannot be resolved (already logged).
+async fn file_owner(path: &Path, filename: &str, ctx: &WatchContext) -> Result<Option<Uuid>> {
+    if let Some(manager) = ctx
+        .user_watch_manager
+        .as_ref()
+        .filter(|m| m.is_user_watch_path(path))
+    {
+        if let Some(user) = manager.get_user_by_file_path(path).await? {
+            info!(
+                "File {} belongs to user: {} ({})",
+                filename, user.username, user.id
+            );
+            return Ok(Some(user.id));
+        }
+        warn!(
+            "File {} is in a user watch directory but no user owns it - assigning to the admin '{}'",
+            filename,
+            ctx.owner.username()
+        );
+    } else {
+        debug!(
+            "File {} is in the global watch directory - assigning to the admin '{}'",
+            filename,
+            ctx.owner.username()
+        );
+    }
+    ctx.owner.resolve(&ctx.db).await
 }
 
 /// Extract FileIngestionInfo from filesystem path and metadata (for watcher)

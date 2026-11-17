@@ -115,7 +115,7 @@ Tests live in `__tests__` directories next to the code they test, mostly under `
 
 The Readur container's admin password is `ADMIN_PASSWORD` from your shell (default `readur-test-admin-password`), while the script passes `ADMIN_PASSWORD` to the tests with a different default (`test-admin-password`). Export `ADMIN_PASSWORD` before running so both use the same value. The `e2e` mode does not currently work; see the [E2E Testing Guide](README-E2E.md).
 
-The `test_runner` binary (`src/bin/test_runner.rs`) is outdated: it runs test targets named `unit_tests` and `integration_tests`, which no longer exist. Use the commands above.
+The old `test_runner` binary has been removed; use the commands above.
 
 ## Debugging failures
 

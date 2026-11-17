@@ -22,14 +22,13 @@ For every selected document whose stored file path does not start with `s3://`, 
 4. Uploads the thumbnail `<UPLOAD_PATH>/thumbnails/<document-id>_thumb.jpg` to `thumbnails/<user-id>/<document-id>_thumb.jpg` and the processed image `<UPLOAD_PATH>/processed_images/<document-id>_processed.png` to `processed_images/<user-id>/<document-id>_processed.png`, if those files exist. A failure here is logged as a warning and does not fail the document.
 5. With `--delete-local`, deletes the local original, thumbnail and processed image after they were uploaded.
 
-Documents are processed one at a time, in order.
+Documents are processed one at a time, oldest first.
 
 ### Which documents are selected
 
-- Without `--user-id`: for each user, the newest 500 documents owned by that user. With `--limit N`, collection stops once N documents have been gathered.
-- With `--user-id ID`: the newest documents of that user, up to `--limit` (default 1000).
+Every document whose file path does not start with `s3://` (with `--user-id ID`, only that user's), oldest first. The tool reads them in pages of 500, so any number of documents is covered in one run. With `--limit N` it stops after N documents.
 
-Documents already in S3 are dropped from that selection afterwards, so a later run does not reach a user's older documents beyond those numbers. For users with more documents, run the tool per user with `--user-id` and a `--limit` larger than that user's document count.
+Documents already in S3 are never selected, so a later run migrates only what is still local (documents added since, and earlier failures), and a run after everything has moved finds nothing to do.
 
 ## Prerequisites
 
@@ -157,7 +156,7 @@ With `--enable-rollback`, the first failed document stops the run. The tool then
 
 ### Resuming
 
-Because documents already in S3 are skipped, rerunning the tool after an interruption continues with the remaining documents. `--resume-from <document-id>` additionally skips every selected document before that ID (in the selection order); if the ID is not in the selection, the tool starts from the beginning.
+Because documents already in S3 are skipped, rerunning the tool after an interruption continues with the remaining documents. `--resume-from <document-id>` additionally skips every document older than that one (it starts at that document); an ID that does not exist is an error.
 
 ```bash
 ./target/release/migrate_to_s3 --resume-from 7d1e4b9a-2c3f-4e5a-8b6c-1d2e3f4a5b6c
