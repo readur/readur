@@ -1,8 +1,17 @@
 # Scope code scanning to code that ships. Test suites hold deliberate fixtures
 # (literal passwords for throwaway accounts, usernames in assertion messages)
 # that the "hard-coded credential" and "cleartext logging" queries flag as
-# vulnerabilities in production code.
+# vulnerabilities in production code. Patterns without "**" match only from
+# the repository root.
 paths-ignore:
+  # Rust: integration tests, in-crate test modules and test-only helpers
   - tests
+  - src/tests
+  - "src/**/*_tests.rs"
+  - "src/test_*.rs"
+  # Frontend: Playwright, test setup and unit tests (in __tests__ or co-located)
   - frontend/e2e
+  - frontend/src/test
   - "**/__tests__"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"

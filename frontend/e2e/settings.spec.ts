@@ -123,11 +123,18 @@ test.describe('Settings Management', () => {
   });
 
   test('should validate settings before saving', async ({ dynamicAdminPage: page }) => {
+    const settingsLoaded = page.waitForResponse(
+      (r) => r.url().endsWith('/api/settings') && r.request().method() === 'GET' && r.ok(),
+    );
     await page.goto('/settings');
+    const stored = (await (await settingsLoaded).json()) as { max_file_size_mb: number | null };
+    // A new user has no personal limit; the server's MAX_FILE_SIZE_MB applies.
+    expect(stored.max_file_size_mb).toBeNull();
+    const savedValue = stored.max_file_size_mb === null ? '' : String(stored.max_file_size_mb);
+
     await page.getByRole('button', { name: 'Edit File Processing' }).click();
     const field = page.getByRole('spinbutton', { name: 'Max File Size (MB)' });
-    // Empty for a new user: no personal limit, the server's MAX_FILE_SIZE_MB applies.
-    const savedValue = await field.inputValue();
+    await expect(field).toHaveValue(savedValue);
 
     let saved = false;
     page.on('request', (r) => {

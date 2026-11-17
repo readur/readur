@@ -4,9 +4,11 @@ import type { WebSocketMessage } from './types';
 
 /**
  * The sync progress WebSocket URL, on the page's own origin: `wss:` on an `https:` page,
- * `ws:` otherwise. The Vite dev server proxies the socket to the backend, keeping the
- * browser's Host header, which the server's Origin check needs; in production the same
- * origin serves both.
+ * `ws:` otherwise. In production the same origin serves both. In development the Vite
+ * dev server proxies the socket to the backend and sends the host the browser addressed in
+ * `X-Forwarded-Host`; the backend's Origin check honours that header only from a peer in
+ * `TRUSTED_PROXIES` (loopback is trusted by default), so a dev backend that overrides it
+ * without loopback answers the handshake with 403.
  */
 export function buildWebSocketUrl(
   sourceId: string,
