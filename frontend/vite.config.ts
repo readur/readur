@@ -18,12 +18,24 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: PROXY_TARGET,
-        // Keep the browser's Host header: the server accepts a WebSocket handshake only when
-        // its Origin matches Host (src/routes/sources/progress_ws.rs), and the browser's Origin
-        // is this dev server.
-        changeOrigin: false,
+        // Send the target's own Host, so name-based and HTTPS upstreams work.
+        changeOrigin: true,
         // Sync progress streams over a WebSocket under /api (see services/api/syncProgress.ts).
         ws: true,
+        configure: (proxy) => {
+          // The server accepts a WebSocket handshake only from an Origin it recognises
+          // (src/routes/sources/progress_ws.rs). The browser's Origin is this dev server, which
+          // no longer matches Host once changeOrigin rewrites it, so tell the server which host
+          // the browser addressed. It believes X-Forwarded-Host only from TRUSTED_PROXIES
+          // (loopback and private networks by default), and still compares it with the
+          // untouched Origin, so a foreign page stays rejected.
+          proxy.on('proxyReqWs', (proxyReq, req) => {
+            if (!req.headers.host) return;
+            const encrypted = 'encrypted' in req.socket && Boolean(req.socket.encrypted);
+            proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+            proxyReq.setHeader('X-Forwarded-Proto', encrypted ? 'https' : 'http');
+          });
+        },
       },
     },
   },

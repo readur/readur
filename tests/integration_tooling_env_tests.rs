@@ -8,10 +8,12 @@
 //! - the frontend tooling: `process.env.NAME` in frontend/vite.config.ts,
 //!   frontend/playwright.config.ts or a file under frontend/e2e/, or `import.meta.env.NAME`
 //!   under frontend/src/;
-//! - another script: `$NAME` / `${NAME...}` in a tracked shell script other than the one
-//!   setting it (a script reading its own variable proves nothing about its children), or
-//!   `${NAME...}` interpolation in a tracked compose file; for a workflow, `${{ env.NAME }}`
-//!   in the same workflow;
+//! - a script the setter runs: `$NAME` / `${NAME...}` in a tracked shell script, or `${NAME...}`
+//!   interpolation in a tracked compose file, that the setter names (by path or file name, see
+//!   [`scripts_run_by`]). A script reading its own variable proves nothing about its children,
+//!   and neither does an unrelated script that happens to read a variable of the same name.
+//!   .env.test is handed to the scripts that load it, and to what those run; for a workflow,
+//!   `${{ env.NAME }}` in the same workflow also counts;
 //! - third-party software, listed with the reason in [`THIRD_PARTY`].
 //!
 //! A variable is "handed to a process" when it is
@@ -52,16 +54,13 @@ const THIRD_PARTY: &[(&str, &str)] = &[
     ("CARGO_TERM_COLOR", "cargo"),
 ];
 
-fn repo() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
-fn read(file: &str) -> String {
-    std::fs::read_to_string(repo().join(file)).unwrap_or_else(|e| panic!("{file}: {e}"))
-}
+use markdown::{read, repo_path};
 
 fn relative(path: &Path) -> String {
-    path.strip_prefix(repo()).unwrap().display().to_string()
+    path.strip_prefix(repo_path(""))
+        .unwrap()
+        .display()
+        .to_string()
 }
 
 fn add(read: &mut BTreeMap<String, BTreeSet<String>>, name: &str, file: &str) {
@@ -78,7 +77,7 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
     let call =
         Regex::new(r#"(?:env::var(?:_os)?|env_flag|env_list)\(\s*"([A-Z][A-Z0-9_]*)""#).unwrap();
     for dir in ["src", "tests"] {
-        for path in markdown::tracked_files(&repo().join(dir), "rs") {
+        for path in markdown::tracked_files(&repo_path(dir), "rs") {
             let text = std::fs::read_to_string(&path).unwrap();
             let file = relative(&path);
             for caps in call.captures_iter(&text) {
@@ -96,7 +95,7 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
         "frontend/playwright.config.ts".into(),
     ];
     frontend.extend(
-        markdown::tracked_files(&repo().join("frontend/e2e"), "ts")
+        markdown::tracked_files(&repo_path("frontend/e2e"), "ts")
             .iter()
             .map(|p| relative(p)),
     );
@@ -107,7 +106,7 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
     }
     let meta_env = Regex::new(r"import\.meta\.env\.([A-Z][A-Z0-9_]*)").unwrap();
     for ext in ["ts", "tsx"] {
-        for path in markdown::tracked_files(&repo().join("frontend/src"), ext) {
+        for path in markdown::tracked_files(&repo_path("frontend/src"), ext) {
             let text = std::fs::read_to_string(&path).unwrap();
             for caps in meta_env.captures_iter(&text) {
                 add(&mut out, &caps[1], &relative(&path));
@@ -124,12 +123,12 @@ fn variables_read() -> BTreeMap<String, BTreeSet<String>> {
 /// Every tracked shell script and compose file, with the variables it reads by expansion.
 fn script_readers() -> BTreeMap<String, BTreeSet<String>> {
     let expansion = Regex::new(r"\$\{?([A-Z][A-Z0-9_]*)").unwrap();
-    let mut files: Vec<String> = markdown::tracked_files(repo(), "sh")
+    let mut files: Vec<String> = markdown::tracked_files(&repo_path(""), "sh")
         .iter()
         .map(|p| relative(p))
         .collect();
     files.extend(
-        markdown::tracked_files(repo(), "yml")
+        markdown::tracked_files(&repo_path(""), "yml")
             .iter()
             .map(|p| relative(p))
             .filter(|f| {
@@ -259,6 +258,77 @@ fn dotenv_keys(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// Whether `text` names `script`: its repository path or its file name, as a whole word (so
+/// `run.sh` does not match `prerun.sh`).
+fn names_script(text: &str, script: &str) -> bool {
+    let name = Path::new(script)
+        .file_name()
+        .map_or(script.to_string(), |n| n.to_string_lossy().into_owned());
+    let word = Regex::new(&format!(
+        r"(?:^|[^A-Za-z0-9_.-])(?:{}|{})\b",
+        regex::escape(script),
+        regex::escape(&name)
+    ))
+    .unwrap();
+    word.is_match(text)
+}
+
+/// `text` followed by the Dockerfiles a compose file builds its services from (`dockerfile:`),
+/// whose CMD runs the service's script.
+fn with_built_dockerfiles(text: &str) -> String {
+    let dockerfile = Regex::new(r"(?m)^\s*dockerfile:\s*(\S+)\s*$").unwrap();
+    let mut all = text.to_string();
+    for caps in dockerfile.captures_iter(text) {
+        all.push('\n');
+        all.push_str(&read(&caps[1]));
+    }
+    all
+}
+
+/// The scripts (of `scripts`) that `file`, with contents `text`, hands its environment to.
+/// A shell script, compose file or workflow runs the scripts it names (a compose service also
+/// those its Dockerfile names); .env.test reaches the scripts that name (and load) it, and
+/// whatever those run.
+fn scripts_run_by<'a>(
+    file: &str,
+    text: &str,
+    scripts: &'a BTreeMap<String, BTreeSet<String>>,
+) -> BTreeSet<&'a str> {
+    let named_in = |text: &str, setter: &str| -> BTreeSet<&'a str> {
+        let text = with_built_dockerfiles(text);
+        scripts
+            .keys()
+            .filter(|script| script.as_str() != setter && names_script(&text, script))
+            .map(String::as_str)
+            .collect()
+    };
+    if !DOTENV_TOOLING.contains(&file) {
+        return named_in(text, file);
+    }
+    let loaders: BTreeSet<&'a str> = scripts
+        .keys()
+        .filter(|script| names_script(&read(script), file))
+        .map(String::as_str)
+        .collect();
+    let mut run = loaders.clone();
+    for loader in loaders {
+        run.extend(named_in(&read(loader), loader));
+    }
+    run
+}
+
+/// Whether one of the scripts `file` runs reads `name` (see [`scripts_run_by`]).
+fn read_by_a_script_it_runs(
+    file: &str,
+    text: &str,
+    name: &str,
+    scripts: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    scripts_run_by(file, text, scripts)
+        .into_iter()
+        .any(|script| scripts[script].contains(name))
+}
+
 fn handed_to_processes(file: &str) -> BTreeSet<String> {
     let text = read(file);
     if SHELL_TOOLING.contains(&file) {
@@ -290,11 +360,12 @@ fn every_variable_the_tooling_sets_is_read() {
         } else {
             BTreeSet::new()
         };
+        let text = read(file);
         for name in names {
-            let by_other_script = scripts
-                .iter()
-                .any(|(script, reads)| script != file && reads.contains(&name));
-            if !read_by.contains_key(&name) && !by_other_script && !same_workflow.contains(&name) {
+            if !read_by.contains_key(&name)
+                && !read_by_a_script_it_runs(file, &text, &name, &scripts)
+                && !same_workflow.contains(&name)
+            {
                 unread.push(format!("{file}: {name}"));
             }
         }
@@ -315,7 +386,7 @@ fn binaries() -> BTreeSet<String> {
         .captures_iter(&read("Cargo.toml"))
         .map(|c| c[1].to_string())
         .collect();
-    for path in markdown::tracked_files(&repo().join("src/bin"), "rs") {
+    for path in markdown::tracked_files(&repo_path("src/bin"), "rs") {
         bins.insert(path.file_stem().unwrap().to_string_lossy().into_owned());
     }
     bins
@@ -440,25 +511,43 @@ fn the_dev_server_proxies_api_websockets() {
         "the sync-progress WebSocket moved out of /api; revisit the dev server proxy"
     );
     let vite = read("frontend/vite.config.ts");
-    let api_proxy = Regex::new(r"'/api':\s*\{([^}]*)\}").unwrap();
-    let block = api_proxy
-        .captures(&vite)
-        .expect("vite.config.ts proxies '/api'")[1]
+    let block = vite
+        .split_once("'/api': {")
+        .and_then(|(_, rest)| rest.split_once("\n      },"))
+        .expect("vite.config.ts proxies '/api'")
+        .0
         .to_string();
     assert!(block.contains("target: PROXY_TARGET"), "{block}");
     assert!(
         block.contains("ws: true"),
         "the /api proxy must forward WebSockets: {block}"
     );
-    // The server accepts a handshake only when Origin (the dev server) matches Host, so the
-    // proxy must not rewrite Host to the backend's address.
+    // Name-based and HTTPS upstreams need their own Host.
     assert!(
-        block.contains("changeOrigin: false"),
-        "the /api proxy must keep the browser's Host header: {block}"
+        block.contains("changeOrigin: true"),
+        "the /api proxy must send the target's Host: {block}"
     );
+    // With Host rewritten, the server's WebSocket Origin check needs the host the browser
+    // addressed, which it reads from X-Forwarded-Host (and the scheme from X-Forwarded-Proto).
+    for header in ["X-Forwarded-Host", "X-Forwarded-Proto"] {
+        assert!(
+            block.contains("'proxyReqWs'") && block.contains(&format!("setHeader('{header}'")),
+            "the /api proxy must set {header} on WebSocket handshakes: {block}"
+        );
+    }
+    let server = read("src/routes/sources/progress_ws.rs");
     assert!(
-        read("src/routes/sources/progress_ws.rs").contains("fn websocket_origin_allowed"),
-        "the WebSocket origin check moved; revisit changeOrigin in vite.config.ts"
+        server.contains("fn websocket_origin_allowed")
+            && server.contains("first_entry(\"x-forwarded-host\")")
+            && server.contains("via_trusted_proxy && matches_forwarded_host"),
+        "the WebSocket origin check no longer honours X-Forwarded-Host from trusted proxies; \
+         revisit the proxy in vite.config.ts"
+    );
+    // The local runner's backend believes the dev server's forwarding headers whatever
+    // TRUSTED_PROXIES the calling shell has.
+    assert!(
+        read("scripts/run-e2e-local.sh").contains("TRUSTED_PROXIES=\"127.0.0.1,::1\""),
+        "scripts/run-e2e-local.sh must trust the loopback dev server"
     );
 }
 
@@ -549,4 +638,42 @@ services:
     ] {
         assert!(!read_by.contains_key(name), "{name} is read now?");
     }
+}
+
+/// A variable counts as read by another script only when the setter runs that script: an
+/// unrelated script reading a variable of the same name proves nothing.
+#[test]
+fn only_scripts_the_setter_runs_count_as_readers() {
+    let scripts: BTreeMap<String, BTreeSet<String>> = [
+        ("scripts/child.sh", &["CHILD_ONLY"][..]),
+        ("scripts/unrelated.sh", &["UNRELATED_ONLY"][..]),
+        ("scripts/prechild.sh", &["PRECHILD_ONLY"][..]),
+        ("docker-compose.test.yml", &["COMPOSE_ONLY"][..]),
+    ]
+    .into_iter()
+    .map(|(file, names)| {
+        let names = names.iter().map(|n| n.to_string()).collect();
+        (file.to_string(), names)
+    })
+    .collect();
+    let setter = r#"
+export CHILD_ONLY=1 UNRELATED_ONLY=1 PRECHILD_ONLY=1 COMPOSE_ONLY=1
+"$REPO_ROOT/scripts/child.sh"
+COMPOSE_FILE="docker-compose.test.yml"
+"#;
+    let reads = |name: &str| read_by_a_script_it_runs("run-tests.sh", setter, name, &scripts);
+    assert!(reads("CHILD_ONLY"), "the child it runs reads it");
+    assert!(reads("COMPOSE_ONLY"), "the compose file it names reads it");
+    // The old rule accepted these: another script mentions them, but this one never runs it.
+    assert!(!reads("UNRELATED_ONLY"));
+    // `child.sh` must not be taken for `prechild.sh`.
+    assert!(!reads("PRECHILD_ONLY"));
+
+    // A script reading its own variable proves nothing about its children.
+    assert!(!read_by_a_script_it_runs(
+        "scripts/child.sh",
+        "export CHILD_ONLY=1\n./scripts/child.sh",
+        "CHILD_ONLY",
+        &scripts
+    ));
 }

@@ -19,6 +19,10 @@ pub struct TestConfigBuilder {
     /// Whether self-registered accounts start inactive, as they always do in
     /// production. Off by default because tests register users and log in.
     pub(super) registration_requires_approval: bool,
+    /// `TRUSTED_PROXIES`; none by default.
+    pub(super) trusted_proxies: Vec<ipnet::IpNet>,
+    /// `CORS_ALLOWED_ORIGINS`; none by default.
+    pub(super) cors_allowed_origins: Vec<String>,
 }
 
 impl Default for TestConfigBuilder {
@@ -33,6 +37,8 @@ impl Default for TestConfigBuilder {
             oidc_enabled: false,
             mcp: crate::config::McpConfig::default(),
             registration_requires_approval: false,
+            trusted_proxies: Vec::new(),
+            cors_allowed_origins: Vec::new(),
         }
     }
 }
@@ -65,6 +71,19 @@ impl TestConfigBuilder {
 
     pub fn with_registration_requires_approval(mut self, required: bool) -> Self {
         self.registration_requires_approval = required;
+        self
+    }
+
+    /// Trust forwarding headers from these peers, given as `TRUSTED_PROXIES`
+    /// would be (IPs or CIDRs). Panics on an invalid entry.
+    pub fn with_trusted_proxies(mut self, proxies: &str) -> Self {
+        self.trusted_proxies = crate::utils::client_ip::parse_proxy_ranges(Some(proxies))
+            .expect("valid TRUSTED_PROXIES");
+        self
+    }
+
+    pub fn with_cors_allowed_origins(mut self, origins: &[&str]) -> Self {
+        self.cors_allowed_origins = origins.iter().map(|o| o.to_string()).collect();
         self
     }
 
@@ -131,6 +150,8 @@ impl TestConfigBuilder {
             security: crate::config::SecurityConfig {
                 allow_registration: true,
                 registration_requires_approval: self.registration_requires_approval,
+                trusted_proxies: self.trusted_proxies,
+                cors_allowed_origins: self.cors_allowed_origins,
                 ..Default::default()
             },
             mcp: self.mcp,
