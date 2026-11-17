@@ -2,12 +2,17 @@ use anyhow::Result;
 use sqlx::Row;
 use uuid::Uuid;
 
-use super::Database;
 use super::sanitize::ToDb;
+use super::Database;
 use crate::models::source::{
-    WebDAVSyncState, UpdateWebDAVSyncState, WebDAVFile, CreateWebDAVFile,
-    WebDAVDirectory, CreateWebDAVDirectory, UpdateWebDAVDirectory,
+    CreateWebDAVDirectory, CreateWebDAVFile, UpdateWebDAVDirectory, UpdateWebDAVSyncState,
+    WebDAVDirectory, WebDAVFile, WebDAVSyncState,
 };
+
+/// The error a WebDAV sync left running by a previous server instance is
+/// marked with at startup. The scheduler resumes exactly the syncs carrying
+/// this entry (compared for equality, never by substring).
+pub const WEBDAV_SYNC_INTERRUPTED_MESSAGE: &str = "Sync interrupted by server restart";
 
 impl Database {
     pub async fn get_webdav_sync_state(&self, user_id: Uuid) -> Result<Option<WebDAVSyncState>> {
@@ -15,33 +20,38 @@ impl Database {
             let row = sqlx::query(
                 r#"SELECT id, user_id, last_sync_at, sync_cursor, is_running, files_processed, 
                    files_remaining, current_folder, errors, created_at, updated_at
-                   FROM webdav_sync_state WHERE user_id = $1"#
+                   FROM webdav_sync_state WHERE user_id = $1"#,
             )
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
 
-        match row {
-            Some(row) => Ok(Some(WebDAVSyncState {
-                id: row.get("id"),
-                user_id: row.get("user_id"),
-                last_sync_at: row.get("last_sync_at"),
-                sync_cursor: row.get("sync_cursor"),
-                is_running: row.get("is_running"),
-                files_processed: row.get("files_processed"),
-                files_remaining: row.get("files_remaining"),
-                current_folder: row.get("current_folder"),
-                errors: row.get("errors"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-            })),
-            None => Ok(None),
-        }
-        }).await
+            match row {
+                Some(row) => Ok(Some(WebDAVSyncState {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    last_sync_at: row.get("last_sync_at"),
+                    sync_cursor: row.get("sync_cursor"),
+                    is_running: row.get("is_running"),
+                    files_processed: row.get("files_processed"),
+                    files_remaining: row.get("files_remaining"),
+                    current_folder: row.get("current_folder"),
+                    errors: row.get("errors"),
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                })),
+                None => Ok(None),
+            }
+        })
+        .await
     }
 
-    pub async fn update_webdav_sync_state(&self, user_id: Uuid, state: &UpdateWebDAVSyncState) -> Result<()> {
+    pub async fn update_webdav_sync_state(
+        &self,
+        user_id: Uuid,
+        state: &UpdateWebDAVSyncState,
+    ) -> Result<()> {
         self.with_retry(|| async {
             sqlx::query(
                 r#"INSERT INTO webdav_sync_state (user_id, last_sync_at, sync_cursor, is_running, 
@@ -55,7 +65,7 @@ impl Database {
                    files_remaining = EXCLUDED.files_remaining,
                    current_folder = EXCLUDED.current_folder,
                    errors = EXCLUDED.errors,
-                   updated_at = NOW()"#
+                   updated_at = NOW()"#,
             )
             .bind(user_id)
             .bind(state.last_sync_at)
@@ -70,7 +80,64 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Database update failed: {}", e))?;
 
             Ok(())
-        }).await
+        })
+        .await
+    }
+
+    /// Claims the settings-level WebDAV sync of `user_id`: marks it running
+    /// and resets the run's counters, unless a sync is already marked running.
+    /// Returns whether this call made the claim. A single statement, so of any
+    /// number of concurrent callers exactly one wins. Deliberately not retried:
+    /// a retry after a claim whose reply was lost would report the run as
+    /// someone else's and leave it marked running.
+    pub async fn claim_webdav_sync(&self, user_id: Uuid) -> Result<bool> {
+        let claimed = sqlx::query(
+            r#"INSERT INTO webdav_sync_state (user_id, last_sync_at, sync_cursor, is_running,
+                   files_processed, files_remaining, current_folder, errors, updated_at)
+               VALUES ($1, NOW(), NULL, TRUE, 0, 0, NULL, ARRAY[]::TEXT[], NOW())
+               ON CONFLICT (user_id) DO UPDATE SET
+                   last_sync_at = NOW(),
+                   sync_cursor = NULL,
+                   is_running = TRUE,
+                   files_processed = 0,
+                   files_remaining = 0,
+                   current_folder = NULL,
+                   errors = ARRAY[]::TEXT[],
+                   updated_at = NOW()
+               WHERE webdav_sync_state.is_running IS NOT TRUE
+               RETURNING id"#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(claimed.is_some())
+    }
+
+    /// Records the progress of a running sync. Only a row still marked
+    /// running is updated, so a progress write can never undo a cancel that
+    /// landed in between. Returns whether the row was updated.
+    pub async fn update_running_webdav_sync_progress(
+        &self,
+        user_id: Uuid,
+        progress: &UpdateWebDAVSyncState,
+    ) -> Result<bool> {
+        let result = sqlx::query(
+            r#"UPDATE webdav_sync_state
+               SET files_processed = $2,
+                   files_remaining = $3,
+                   current_folder = $4,
+                   errors = $5,
+                   updated_at = NOW()
+               WHERE user_id = $1 AND is_running = TRUE"#,
+        )
+        .bind(user_id)
+        .bind(progress.files_processed)
+        .bind(progress.files_remaining)
+        .bind(progress.current_folder.for_db())
+        .bind(progress.errors.for_db())
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() == 1)
     }
 
     // Reset any running WebDAV syncs on startup (handles server restart during sync)
@@ -79,14 +146,11 @@ impl Database {
             r#"UPDATE webdav_sync_state 
                SET is_running = false, 
                    current_folder = NULL,
-                   errors = CASE 
-                       WHEN array_length(errors, 1) IS NULL OR array_length(errors, 1) = 0 
-                       THEN ARRAY['Sync interrupted by server restart']
-                       ELSE array_append(errors, 'Sync interrupted by server restart')
-                   END,
+                   errors = array_append(COALESCE(errors, ARRAY[]::TEXT[]), $1),
                    updated_at = NOW()
-               WHERE is_running = true"#
+               WHERE is_running = true"#,
         )
+        .bind(WEBDAV_SYNC_INTERRUPTED_MESSAGE)
         .execute(&self.pool)
         .await?;
 
@@ -105,7 +169,7 @@ impl Database {
                    END,
                    last_error_at = NOW(),
                    updated_at = NOW()
-               WHERE status = 'syncing'"#
+               WHERE status = 'syncing'"#,
         )
         .execute(&self.pool)
         .await?;
@@ -114,11 +178,15 @@ impl Database {
     }
 
     // WebDAV file tracking operations
-    pub async fn get_webdav_file_by_path(&self, user_id: Uuid, webdav_path: &str) -> Result<Option<WebDAVFile>> {
+    pub async fn get_webdav_file_by_path(
+        &self,
+        user_id: Uuid,
+        webdav_path: &str,
+    ) -> Result<Option<WebDAVFile>> {
         let row = sqlx::query(
             r#"SELECT id, user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error, created_at, updated_at
-               FROM webdav_files WHERE user_id = $1 AND webdav_path = $2"#
+               FROM webdav_files WHERE user_id = $1 AND webdav_path = $2"#,
         )
         .bind(user_id)
         .bind(webdav_path.for_db())
@@ -144,7 +212,10 @@ impl Database {
         }
     }
 
-    pub async fn create_or_update_webdav_file(&self, file: &CreateWebDAVFile) -> Result<WebDAVFile> {
+    pub async fn create_or_update_webdav_file(
+        &self,
+        file: &CreateWebDAVFile,
+    ) -> Result<WebDAVFile> {
         let row = sqlx::query(
             r#"INSERT INTO webdav_files (user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error)
@@ -159,7 +230,7 @@ impl Database {
                sync_error = EXCLUDED.sync_error,
                updated_at = NOW()
                RETURNING id, user_id, webdav_path, etag, last_modified, file_size, 
-               mime_type, document_id, sync_status, sync_error, created_at, updated_at"#
+               mime_type, document_id, sync_status, sync_error, created_at, updated_at"#,
         )
         .bind(file.user_id)
         .bind(file.webdav_path.for_db())
@@ -189,14 +260,18 @@ impl Database {
         })
     }
 
-    pub async fn get_pending_webdav_files(&self, user_id: Uuid, limit: i64) -> Result<Vec<WebDAVFile>> {
+    pub async fn get_pending_webdav_files(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<WebDAVFile>> {
         let rows = sqlx::query(
             r#"SELECT id, user_id, webdav_path, etag, last_modified, file_size, 
                mime_type, document_id, sync_status, sync_error, created_at, updated_at
                FROM webdav_files 
                WHERE user_id = $1 AND sync_status = 'pending'
                ORDER BY created_at ASC
-               LIMIT $2"#
+               LIMIT $2"#,
         )
         .bind(user_id)
         .bind(limit)
@@ -225,12 +300,16 @@ impl Database {
     }
 
     // Directory tracking functions for efficient sync optimization
-    pub async fn get_webdav_directory(&self, user_id: Uuid, directory_path: &str) -> Result<Option<WebDAVDirectory>> {
+    pub async fn get_webdav_directory(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+    ) -> Result<Option<WebDAVDirectory>> {
         self.with_retry(|| async {
             let row = sqlx::query(
                 r#"SELECT id, user_id, directory_path, directory_etag, last_scanned_at, 
                    file_count, total_size_bytes, created_at, updated_at
-                   FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#
+                   FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#,
             )
             .bind(user_id)
             .bind(directory_path.for_db())
@@ -252,10 +331,14 @@ impl Database {
                 })),
                 None => Ok(None),
             }
-        }).await
+        })
+        .await
     }
 
-    pub async fn create_or_update_webdav_directory(&self, directory: &CreateWebDAVDirectory) -> Result<WebDAVDirectory> {
+    pub async fn create_or_update_webdav_directory(
+        &self,
+        directory: &CreateWebDAVDirectory,
+    ) -> Result<WebDAVDirectory> {
         let row = sqlx::query(
             r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, 
                file_count, total_size_bytes, last_scanned_at, updated_at)
@@ -267,7 +350,7 @@ impl Database {
                last_scanned_at = NOW(),
                updated_at = NOW()
                RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
-               file_count, total_size_bytes, created_at, updated_at"#
+               file_count, total_size_bytes, created_at, updated_at"#,
         )
         .bind(directory.user_id)
         .bind(directory.directory_path.for_db())
@@ -290,7 +373,12 @@ impl Database {
         })
     }
 
-    pub async fn update_webdav_directory(&self, user_id: Uuid, directory_path: &str, update: &UpdateWebDAVDirectory) -> Result<()> {
+    pub async fn update_webdav_directory(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+        update: &UpdateWebDAVDirectory,
+    ) -> Result<()> {
         self.with_retry(|| async {
             sqlx::query(
                 r#"UPDATE webdav_directories SET 
@@ -299,7 +387,7 @@ impl Database {
                    file_count = $5,
                    total_size_bytes = $6,
                    updated_at = NOW()
-                   WHERE user_id = $1 AND directory_path = $2"#
+                   WHERE user_id = $1 AND directory_path = $2"#,
             )
             .bind(user_id)
             .bind(directory_path.for_db())
@@ -312,7 +400,8 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Database update failed: {}", e))?;
 
             Ok(())
-        }).await
+        })
+        .await
     }
 
     pub async fn list_webdav_directories(&self, user_id: Uuid) -> Result<Vec<WebDAVDirectory>> {
@@ -321,7 +410,7 @@ impl Database {
                file_count, total_size_bytes, created_at, updated_at
                FROM webdav_directories 
                WHERE user_id = $1
-               ORDER BY directory_path ASC"#
+               ORDER BY directory_path ASC"#,
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -347,20 +436,22 @@ impl Database {
 
     /// Clear all WebDAV directory tracking for a user (used for deep scan)
     pub async fn clear_webdav_directories(&self, user_id: Uuid) -> Result<i64> {
-        let result = sqlx::query(
-            r#"DELETE FROM webdav_directories WHERE user_id = $1"#
-        )
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query(r#"DELETE FROM webdav_directories WHERE user_id = $1"#)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() as i64)
     }
 
     /// Delete a specific WebDAV directory by path
-    pub async fn delete_webdav_directory(&self, user_id: Uuid, directory_path: &str) -> Result<bool> {
+    pub async fn delete_webdav_directory(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+    ) -> Result<bool> {
         let result = sqlx::query(
-            r#"DELETE FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#
+            r#"DELETE FROM webdav_directories WHERE user_id = $1 AND directory_path = $2"#,
         )
         .bind(user_id)
         .bind(directory_path.for_db())
@@ -375,33 +466,47 @@ impl Database {
         let rows = sqlx::query(
             r#"SELECT directory_path FROM webdav_directories 
                WHERE user_id = $1 AND scan_in_progress = TRUE
-               ORDER BY scan_started_at ASC"#
+               ORDER BY scan_started_at ASC"#,
         )
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|row| row.get("directory_path")).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| row.get("directory_path"))
+            .collect())
     }
 
     /// Find scans that have been running too long (possible crashes)
-    pub async fn get_stale_webdav_scans(&self, user_id: Uuid, timeout_minutes: i64) -> Result<Vec<String>> {
+    pub async fn get_stale_webdav_scans(
+        &self,
+        user_id: Uuid,
+        timeout_minutes: i64,
+    ) -> Result<Vec<String>> {
         let rows = sqlx::query(
             r#"SELECT directory_path FROM webdav_directories 
                WHERE user_id = $1 AND scan_in_progress = TRUE 
                AND scan_started_at < NOW() - INTERVAL '1 minute' * $2
-               ORDER BY scan_started_at ASC"#
+               ORDER BY scan_started_at ASC"#,
         )
         .bind(user_id)
         .bind(timeout_minutes)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|row| row.get("directory_path")).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| row.get("directory_path"))
+            .collect())
     }
 
     /// Mark a directory scan as in progress
-    pub async fn mark_webdav_scan_in_progress(&self, user_id: Uuid, directory_path: &str) -> Result<()> {
+    pub async fn mark_webdav_scan_in_progress(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+    ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO webdav_directories (user_id, directory_path, directory_etag, scan_in_progress, scan_started_at, last_scanned_at)
                VALUES ($1, $2, '', TRUE, NOW(), NOW())
@@ -417,12 +522,16 @@ impl Database {
     }
 
     /// Mark a directory scan as complete
-    pub async fn mark_webdav_scan_complete(&self, user_id: Uuid, directory_path: &str) -> Result<()> {
+    pub async fn mark_webdav_scan_complete(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+    ) -> Result<()> {
         sqlx::query(
             r#"UPDATE webdav_directories 
                SET scan_in_progress = FALSE, scan_started_at = NULL, scan_error = NULL,
                    last_scanned_at = NOW(), updated_at = NOW()
-               WHERE user_id = $1 AND directory_path = $2"#
+               WHERE user_id = $1 AND directory_path = $2"#,
         )
         .bind(user_id)
         .bind(directory_path.for_db())
@@ -433,11 +542,16 @@ impl Database {
     }
 
     /// Mark a directory scan as failed with error
-    pub async fn mark_webdav_scan_failed(&self, user_id: Uuid, directory_path: &str, error: &str) -> Result<()> {
+    pub async fn mark_webdav_scan_failed(
+        &self,
+        user_id: Uuid,
+        directory_path: &str,
+        error: &str,
+    ) -> Result<()> {
         sqlx::query(
             r#"UPDATE webdav_directories 
                SET scan_in_progress = FALSE, scan_error = $3, updated_at = NOW()
-               WHERE user_id = $1 AND directory_path = $2"#
+               WHERE user_id = $1 AND directory_path = $2"#,
         )
         .bind(user_id)
         .bind(directory_path.for_db())
@@ -450,7 +564,10 @@ impl Database {
 
     /// Bulk create or update WebDAV directories in a single transaction
     /// This ensures atomic updates and prevents race conditions during directory sync
-    pub async fn bulk_create_or_update_webdav_directories(&self, directories: &[CreateWebDAVDirectory]) -> Result<Vec<WebDAVDirectory>> {
+    pub async fn bulk_create_or_update_webdav_directories(
+        &self,
+        directories: &[CreateWebDAVDirectory],
+    ) -> Result<Vec<WebDAVDirectory>> {
         if directories.is_empty() {
             return Ok(Vec::new());
         }
@@ -470,7 +587,7 @@ impl Database {
                    last_scanned_at = NOW(),
                    updated_at = NOW()
                    RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
-                   file_count, total_size_bytes, created_at, updated_at"#
+                   file_count, total_size_bytes, created_at, updated_at"#,
             )
             .bind(directory.user_id)
             .bind(directory.directory_path.for_db())
@@ -499,7 +616,11 @@ impl Database {
 
     /// Delete directories that no longer exist on the WebDAV server
     /// Returns the number of directories deleted
-    pub async fn delete_missing_webdav_directories(&self, user_id: Uuid, existing_paths: &[String]) -> Result<i64> {
+    pub async fn delete_missing_webdav_directories(
+        &self,
+        user_id: Uuid,
+        existing_paths: &[String],
+    ) -> Result<i64> {
         if existing_paths.is_empty() {
             // If no directories exist, delete all for this user
             return self.clear_webdav_directories(user_id).await;
@@ -520,7 +641,7 @@ impl Database {
         // SQL interpolates only generated `$N` placeholders; the paths are binds.
         let mut query_builder = sqlx::query(sqlx::AssertSqlSafe(query));
         query_builder = query_builder.bind(user_id);
-        
+
         for path in existing_paths {
             query_builder = query_builder.bind(path.for_db());
         }
@@ -558,7 +679,7 @@ impl Database {
                    last_scanned_at = NOW(),
                    updated_at = NOW()
                    RETURNING id, user_id, directory_path, directory_etag, last_scanned_at,
-                   file_count, total_size_bytes, created_at, updated_at"#
+                   file_count, total_size_bytes, created_at, updated_at"#,
             )
             .bind(directory.user_id)
             .bind(directory.directory_path.for_db())
@@ -594,7 +715,7 @@ impl Database {
                    WHERE user_id = $1
                      AND (directory_path = $2
                           OR left(directory_path, char_length($2) + 1) = $2 || '/')
-                     AND directory_path <> ALL($3)"#
+                     AND directory_path <> ALL($3)"#,
             )
             .bind(user_id)
             .bind(scope.for_db())
