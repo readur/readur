@@ -130,7 +130,8 @@ test.describe('Settings Management', () => {
     const stored = (await (await settingsLoaded).json()) as { max_file_size_mb: number | null };
     // A new user has no personal limit; the server's MAX_FILE_SIZE_MB applies.
     expect(stored.max_file_size_mb).toBeNull();
-    const savedValue = stored.max_file_size_mb === null ? '' : String(stored.max_file_size_mb);
+    // A null limit is shown as an empty field.
+    const savedValue = '';
 
     await page.getByRole('button', { name: 'Edit File Processing' }).click();
     const field = page.getByRole('spinbutton', { name: 'Max File Size (MB)' });
