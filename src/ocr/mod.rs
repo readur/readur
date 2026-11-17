@@ -116,12 +116,9 @@ impl OcrService {
             }
 
             // Create temporary file for text extraction
-            let temp_dir = crate::config::temp_dir_string();
-            let temp_text = crate::utils::temp_files::TempPath::new(format!(
-                "{}/pdf_text_{}.txt",
-                temp_dir,
-                std::process::id()
-            ));
+            // A per-call sidecar: concurrent extractions must not share it
+            let temp_text =
+                crate::utils::temp_files::TempPath::unique(&self.temp_dir, "pdf_text", "txt");
             let temp_text_path = temp_text.as_str();
 
             // Progressive extraction with fallback strategies

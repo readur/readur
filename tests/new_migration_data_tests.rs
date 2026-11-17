@@ -13,6 +13,7 @@ use readur::test_db::TestDatabase;
 const OCR_QUEUE_DUPLICATES_VIA_INDEX: i64 = 20261116000001;
 const FUZZY_THRESHOLD_WORD_SIMILARITY: i64 = 20261116120000;
 const OCR_QUEUE_CLAIM_AND_HEARTBEAT: i64 = 20261117120000;
+const RESET_STUCK_FAILS_EXHAUSTED_DOCUMENTS: i64 = 20261117130000;
 
 /// The newest migration version older than `version`.
 fn version_before(version: i64) -> i64 {
@@ -285,4 +286,101 @@ fn the_migrations_under_test_exist() {
             "migration {version} is gone; update this test"
         );
     }
+}
+
+/// A document whose stale job had no attempts left and is processing.
+async fn exhausted_stale_job(pool: &PgPool, user: Uuid) -> Uuid {
+    let document = insert_document(pool, user).await;
+    sqlx::query("UPDATE documents SET ocr_status = 'processing' WHERE id = $1")
+        .bind(document)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ocr_queue (document_id, priority, file_size, status, started_at, \
+         heartbeat_at, attempts, max_attempts) \
+         VALUES ($1, 5, 1, 'processing', NOW() - INTERVAL '2 hours', \
+         NOW() - INTERVAL '31 minutes', 3, 3)",
+    )
+    .bind(document)
+    .execute(pool)
+    .await
+    .unwrap();
+    document
+}
+
+/// `(job status, document ocr_status, ocr_failure_reason, failure records)`.
+async fn exhausted_state(
+    pool: &PgPool,
+    document: Uuid,
+) -> (String, Option<String>, Option<String>, i64) {
+    sqlx::query_as(
+        "SELECT q.status, d.ocr_status, d.ocr_failure_reason, \
+         (SELECT COUNT(*) FROM failed_documents f \
+          WHERE f.user_id = d.user_id AND f.file_path = d.file_path) \
+         FROM ocr_queue q JOIN documents d ON d.id = q.document_id WHERE q.document_id = $1",
+    )
+    .bind(document)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// A stale job with no attempts left is failed by `reset_stuck_ocr_jobs`;
+/// before this migration its document stayed 'processing' forever, after it
+/// the document fails too ('ocr_timeout', with a failure record).
+#[tokio::test]
+async fn reset_stuck_ocr_jobs_fails_the_documents_of_exhausted_jobs() {
+    let (_db, pool) = database_at(version_before(RESET_STUCK_FAILS_EXHAUSTED_DOCUMENTS)).await;
+    let before = insert_user(&pool).await;
+    let stranded = exhausted_stale_job(&pool, before).await;
+    let reset: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs(30)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reset, 1);
+    let (job, doc, _, _) = exhausted_state(&pool, stranded).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref()),
+        ("failed", Some("processing")),
+        "the old function strands the document"
+    );
+
+    finish_migrations(&pool).await;
+
+    let after = insert_user(&pool).await;
+    let exhausted = exhausted_stale_job(&pool, after).await;
+    // Another owner: failure records are counted per owner and file.
+    let requeued = insert_document(&pool, insert_user(&pool).await).await;
+    sqlx::query("UPDATE documents SET ocr_status = 'processing' WHERE id = $1")
+        .bind(requeued)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ocr_queue (document_id, priority, file_size, status, started_at, \
+         heartbeat_at, attempts, max_attempts) \
+         VALUES ($1, 5, 1, 'processing', NOW() - INTERVAL '2 hours', \
+         NOW() - INTERVAL '31 minutes', 1, 3)",
+    )
+    .bind(requeued)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reset: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs(30)")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reset, 2);
+    let (job, doc, reason, records) = exhausted_state(&pool, exhausted).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref(), reason.as_deref(), records),
+        ("failed", Some("failed"), Some("ocr_timeout"), 1)
+    );
+    let (job, doc, _, records) = exhausted_state(&pool, requeued).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref(), records),
+        ("pending", Some("pending"), 0),
+        "a job with attempts left still goes back to the queue"
+    );
 }

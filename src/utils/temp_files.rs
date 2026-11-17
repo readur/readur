@@ -35,6 +35,13 @@ impl TempPath {
         Self(Some(path.into()))
     }
 
+    /// Guards a fresh, uniquely named file `<dir>/<stem>_<uuid>.<ext>`:
+    /// concurrent jobs in one process never share (or delete) each other's
+    /// scratch file.
+    pub fn unique(dir: &str, stem: &str, ext: &str) -> Self {
+        Self::new(format!("{}/{}_{}.{}", dir, stem, uuid::Uuid::new_v4(), ext))
+    }
+
     /// The guarded path.
     pub fn as_str(&self) -> &str {
         self.0.as_deref().unwrap_or_default()
@@ -60,34 +67,41 @@ impl Drop for TempPath {
     }
 }
 
-/// Every page image `pdftoppm` writes for `prefix` (`<prefix>-<N>.<ext>`),
-/// including pages written before they were listed: dropping the guard removes
-/// whatever matches at that moment. Derefs to the listed page paths.
+/// The page images of one `pdftoppm` render, written into a directory of
+/// their own: dropping the guard removes that directory with whatever pages
+/// are in it, including pages written before they were listed, and never
+/// scans the shared temp dir. Derefs to the listed page paths.
 #[derive(Debug)]
 pub struct TempPageImages {
-    prefix: PathBuf,
-    ext: &'static str,
+    dir: PathBuf,
     paths: Vec<String>,
 }
 
 impl TempPageImages {
-    /// Guards the page images of the pdftoppm output root `prefix`.
-    pub fn new(prefix: impl Into<PathBuf>, ext: &'static str) -> Self {
-        Self {
-            prefix: prefix.into(),
-            ext,
+    /// Creates a fresh `<parent>/<stem>_<uuid>` directory for one render.
+    /// The guard exists before the directory does, so no way out leaks it.
+    pub async fn create(parent: &str, stem: &str) -> std::io::Result<Self> {
+        let pages = Self {
+            dir: Path::new(parent).join(format!("{}_{}", stem, uuid::Uuid::new_v4())),
             paths: Vec::new(),
-        }
+        };
+        tokio::fs::create_dir(&pages.dir).await?;
+        Ok(pages)
     }
 
-    /// Records the page images found for the prefix, in page order.
+    /// Records the page images found for the render, in page order.
     pub fn set_paths(&mut self, paths: Vec<String>) {
         self.paths = paths;
     }
 
-    /// The pdftoppm output root.
-    pub fn prefix(&self) -> &Path {
-        &self.prefix
+    /// The pdftoppm output root, inside the render's directory.
+    pub fn prefix(&self) -> PathBuf {
+        self.dir.join("page")
+    }
+
+    /// The render's directory.
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 }
 
@@ -101,12 +115,13 @@ impl std::ops::Deref for TempPageImages {
 
 impl Drop for TempPageImages {
     fn drop(&mut self) {
-        match crate::utils::pdftoppm::list_page_images_blocking(&self.prefix, self.ext) {
-            Ok(pages) => pages.iter().for_each(|p| remove_quietly(p)),
+        // Bounded to this render's own pages.
+        match std::fs::remove_dir_all(&self.dir) {
+            Ok(()) => debug!("Cleaned up page images in {}", self.dir.display()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => warn!(
-                "Failed to list page images for '{}': {}",
-                self.prefix.display(),
+                "Failed to clean up page images in '{}': {}",
+                self.dir.display(),
                 e
             ),
         }
@@ -131,6 +146,17 @@ mod tests {
     }
 
     #[test]
+    fn unique_temp_paths_never_collide() {
+        let a = TempPath::unique("/tmp/x", "quick_text", "txt");
+        let b = TempPath::unique("/tmp/x", "quick_text", "txt");
+        assert_ne!(a.as_str(), b.as_str());
+        assert!(a.as_str().starts_with("/tmp/x/quick_text_"));
+        assert!(a.as_str().ends_with(".txt"));
+        // Never created: nothing to remove.
+        let _ = (a.keep(), b.keep());
+    }
+
+    #[test]
     fn temp_path_ignores_a_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         // Never created: dropping must neither panic nor create anything
@@ -151,43 +177,56 @@ mod tests {
         assert!(file.exists());
     }
 
-    #[test]
-    fn page_images_guard_removes_only_its_own_pages() {
+    #[tokio::test]
+    async fn page_images_live_in_their_own_directory_and_leave_with_it() {
         let dir = tempfile::tempdir().unwrap();
-        let prefix = dir.path().join("pdf_page_abc");
-        for name in [
-            "pdf_page_abc-1.png",
-            "pdf_page_abc-02.png",
-            "pdf_page_abc-003.png",
-        ] {
-            touch(&dir.path().join(name));
-        }
-        // Another job's pages and an unrelated file stay
-        let other = dir.path().join("pdf_page_abd-1.png");
-        let unrelated = dir.path().join("pdf_page_abc-1.txt");
+        let parent = dir.path().to_str().unwrap();
+        // Another job's file in the shared temp dir, with a page-like name
+        let other = dir.path().join("page-1.png");
         touch(&other);
-        touch(&unrelated);
 
-        let mut guard = TempPageImages::new(&prefix, "png");
-        assert_eq!(guard.prefix(), prefix);
-        guard.set_paths(vec!["pdf_page_abc-1.png".into()]);
-        assert_eq!(&*guard, ["pdf_page_abc-1.png"]);
+        let mut guard = TempPageImages::create(parent, "pdf_pages").await.unwrap();
+        let second = TempPageImages::create(parent, "pdf_pages").await.unwrap();
+        assert_ne!(
+            guard.dir(),
+            second.dir(),
+            "each render gets its own directory"
+        );
+        assert_eq!(guard.prefix().parent(), Some(guard.dir()));
+        assert_eq!(guard.dir().parent(), Some(dir.path()));
+        // Pages written whether or not they were listed
+        for page in ["page-01.png", "page-02.png"] {
+            touch(&guard.dir().join(page));
+        }
+        guard.set_paths(vec!["page-01.png".into()]);
+        assert_eq!(&*guard, ["page-01.png"]);
+        let gone = guard.dir().to_path_buf();
         drop(guard);
 
-        let mut left: Vec<_> = std::fs::read_dir(dir.path())
-            .unwrap()
-            .map(|e| e.unwrap().file_name().into_string().unwrap())
-            .collect();
-        left.sort();
-        assert_eq!(left, ["pdf_page_abc-1.txt", "pdf_page_abd-1.png"]);
+        assert!(!gone.exists());
+        assert!(second.dir().exists(), "another render's pages stay");
+        assert!(other.exists(), "the shared temp dir is not swept");
+        drop(second);
     }
 
-    #[test]
-    fn page_images_guard_tolerates_a_missing_directory() {
+    #[tokio::test]
+    async fn page_images_guard_tolerates_a_vanished_directory() {
         let dir = tempfile::tempdir().unwrap();
-        drop(TempPageImages::new(
-            dir.path().join("gone/pdf_page_x"),
-            "png",
-        ));
+        let guard = TempPageImages::create(dir.path().to_str().unwrap(), "pdf_pages")
+            .await
+            .unwrap();
+        std::fs::remove_dir(guard.dir()).unwrap();
+        drop(guard);
+    }
+
+    #[tokio::test]
+    async fn page_images_creation_fails_without_a_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("gone");
+        assert!(
+            TempPageImages::create(missing.to_str().unwrap(), "pdf_pages")
+                .await
+                .is_err()
+        );
     }
 }

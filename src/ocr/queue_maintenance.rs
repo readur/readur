@@ -148,30 +148,23 @@ impl OcrQueueService {
     /// for `stale_minutes`. A live worker heartbeats every
     /// [`super::HEARTBEAT_INTERVAL`] however long its OCR runs, so it is never
     /// reset under itself; the claim is cleared either way, so a worker that
-    /// was merely frozen writes nothing when it wakes. A job with no attempts
-    /// left fails instead: as 'pending' it would never be dequeued yet would
-    /// block the document from being queued again.
+    /// was merely frozen writes nothing when it wakes.
+    ///
+    /// A job with attempts left goes back to 'pending' with its document. A
+    /// job with none fails instead -- as 'pending' it would never be dequeued
+    /// yet would block the document from being queued again -- and so does its
+    /// document ('ocr_timeout', with a `failed_documents` record): left
+    /// 'processing' it would never finish. The database function
+    /// `reset_stuck_ocr_jobs` does all of this, so this recovery and the
+    /// guardrail one cannot drift apart.
     pub async fn recover_stale_items(&self, stale_minutes: i32) -> Result<i64> {
-        let result = sqlx::query(
-            r#"
-            UPDATE ocr_queue
-            SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
-                started_at = NULL,
-                worker_id = NULL,
-                claim_id = NULL,
-                heartbeat_at = NULL
-            WHERE status = 'processing'
-              AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 minute' * $1
-            "#,
-        )
-        .bind(stale_minutes)
-        .execute(&self.pool)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            warn!("Recovered {} stale OCR jobs", result.rows_affected());
+        let recovered: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs($1)")
+            .bind(stale_minutes)
+            .fetch_one(&self.pool)
+            .await?;
+        if recovered > 0 {
+            warn!("Recovered {} stale OCR jobs", recovered);
         }
-
-        Ok(result.rows_affected() as i64)
+        Ok(i64::from(recovered))
     }
 }

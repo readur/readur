@@ -187,6 +187,38 @@ async fn a_dead_workers_job_is_recovered() {
     assert!(!queue(&ctx).heartbeat(&item.claim().unwrap()).await.unwrap());
 }
 
+/// A dead worker's job with no attempts left fails, and so does its
+/// document: left 'processing' it would never finish.
+#[tokio::test]
+async fn a_dead_workers_exhausted_job_fails_its_document() {
+    let ctx = TestContext::new().await;
+    let dir = TempDir::new().unwrap();
+    let alice = owner(&ctx).await;
+    let doc = text_document(&ctx, &dir, alice).await;
+    enqueue(&ctx, &doc).await;
+    let item = claim(&ctx, &doc).await;
+    age(&ctx, item.id, 30, 11).await;
+    sqlx::query("UPDATE ocr_queue SET attempts = max_attempts WHERE id = $1")
+        .bind(item.id)
+        .execute(&ctx.state().db.pool)
+        .await
+        .unwrap();
+
+    assert_eq!(queue(&ctx).recover_stale_items(10).await.unwrap(), 1);
+    assert_eq!(job(&ctx, item.id).await.unwrap().0, "failed");
+    let (status, reason): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT ocr_status, ocr_failure_reason FROM documents WHERE id = $1")
+            .bind(doc.id)
+            .fetch_one(&ctx.state().db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (status.as_deref(), reason.as_deref()),
+        (Some("failed"), Some("ocr_timeout"))
+    );
+    assert_eq!(failure_records(&ctx, alice).await, 1);
+}
+
 #[tokio::test]
 async fn a_worker_whose_job_was_reclaimed_writes_nothing() {
     let ctx = TestContext::new().await;
@@ -449,5 +481,107 @@ async fn the_preprocessed_image_is_removed_on_every_way_out() {
     assert_eq!(
         doc_state(&ctx, doc.id).await.0.as_deref(),
         Some("completed")
+    );
+}
+
+/// `failed_documents` records of a user.
+async fn failure_records(ctx: &TestContext, user: Uuid) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM failed_documents WHERE user_id = $1")
+        .bind(user)
+        .fetch_one(&ctx.state().db.pool)
+        .await
+        .unwrap()
+}
+
+/// A service whose jobs heartbeat almost continuously and pause right after
+/// their outcome commits: the commit deletes or requeues the job, so the next
+/// heartbeat finds the claim gone while the post-commit work is still due.
+fn racing_heartbeat(ctx: &TestContext) -> OcrQueueService {
+    queue(ctx)
+        .clone()
+        .with_heartbeat_interval(Duration::from_millis(5))
+        .with_post_commit_pause(Duration::from_millis(300))
+}
+
+#[tokio::test]
+async fn a_heartbeat_right_after_a_failure_commits_keeps_its_failure_record() {
+    let ctx = TestContext::new().await;
+    let dir = TempDir::new().unwrap();
+    let alice = owner(&ctx).await;
+    let doc = text_document(&ctx, &dir, alice).await;
+    // Extraction fails: the file is gone.
+    std::fs::remove_file(&doc.file_path).unwrap();
+    enqueue(&ctx, &doc).await;
+    let item = claim(&ctx, &doc).await;
+
+    racing_heartbeat(&ctx)
+        .process_item(item.clone(), &ocr_service(&dir).await)
+        .await
+        .unwrap();
+
+    assert_eq!(doc_state(&ctx, doc.id).await.0.as_deref(), Some("failed"));
+    assert_eq!(job(&ctx, item.id).await.unwrap().0, "pending");
+    assert_eq!(
+        failure_records(&ctx, alice).await,
+        1,
+        "the failure record written after the commit was dropped"
+    );
+}
+
+#[tokio::test]
+async fn a_heartbeat_right_after_a_result_commits_keeps_its_review_copy() {
+    let ctx = TestContext::new().await;
+    let dir = TempDir::new().unwrap();
+    let alice = owner(&ctx).await;
+    let review = readur::models::UpdateSettings {
+        enable_image_preprocessing: Some(true),
+        save_processed_images: Some(true),
+        ..Default::default()
+    };
+    ctx.state()
+        .db
+        .create_or_update_settings(alice, &review)
+        .await
+        .unwrap();
+    let image = dir.path().join(format!("{}.png", Uuid::new_v4().simple()));
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/test_images/test4.png"),
+        &image,
+    )
+    .unwrap();
+    let mut doc = document_helpers::create_test_document(alice);
+    doc.filename = "scan.png".to_string();
+    doc.original_filename = "scan.png".to_string();
+    doc.file_path = image.to_string_lossy().into_owned();
+    doc.file_size = std::fs::metadata(&image).unwrap().len() as i64;
+    doc.mime_type = "image/png".to_string();
+    doc.ocr_text = None;
+    doc.ocr_status = Some("pending".to_string());
+    doc.file_hash = Some(Uuid::new_v4().simple().to_string());
+    let doc = ctx.state().db.create_document(doc).await.unwrap();
+    enqueue(&ctx, &doc).await;
+    let item = claim(&ctx, &doc).await;
+
+    racing_heartbeat(&ctx)
+        .process_item(item.clone(), &ocr_service(&dir).await)
+        .await
+        .unwrap();
+
+    let (status, error): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT ocr_status, ocr_error FROM documents WHERE id = $1")
+            .bind(doc.id)
+            .fetch_one(&ctx.state().db.pool)
+            .await
+            .unwrap();
+    assert_eq!(status.as_deref(), Some("completed"), "{error:?}");
+    let copies: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM processed_images WHERE document_id = $1")
+            .bind(doc.id)
+            .fetch_one(&ctx.state().db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        copies, 1,
+        "the review copy saved after the commit was dropped"
     );
 }

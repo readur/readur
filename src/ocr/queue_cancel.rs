@@ -186,6 +186,7 @@ impl OcrQueueService {
         }
         let status = write_failed_attempt(&mut tx, claim, &attempt).await?;
         tx.commit().await?;
+        self.pause_after_commit().await;
 
         if status.as_deref() == Some("failed") {
             error!(

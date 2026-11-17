@@ -57,20 +57,6 @@ pub async fn list_page_images(prefix: &str, ext: &str) -> std::io::Result<Vec<Pa
     Ok(sorted(pages))
 }
 
-/// [`list_page_images`] for synchronous contexts such as `Drop`.
-pub fn list_page_images_blocking(prefix: &Path, ext: &str) -> std::io::Result<Vec<PathBuf>> {
-    let (dir, prefix_name) = split_prefix(prefix)?;
-    let mut pages = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        if let Some(page) = name.to_str().and_then(|n| page_number(n, prefix_name, ext)) {
-            pages.push((page, entry.path()));
-        }
-    }
-    Ok(sorted(pages))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

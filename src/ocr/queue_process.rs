@@ -45,10 +45,11 @@ struct LoadedJob {
 }
 
 impl OcrQueueService {
-    /// Processes a claimed queue item: extracts its text and writes the
-    /// outcome, all under the item's claim. A claim lost before or during
-    /// the run (a cancel, or a stale reset and reclaim) stops it and writes
-    /// nothing.
+    /// Processes a claimed queue item: extracts its text under the item's
+    /// claim, then writes the outcome guarded by it. A claim lost before or
+    /// during extraction (a cancel, or a stale reset and reclaim) stops it
+    /// and writes nothing; one lost after extraction makes the guarded
+    /// outcome write discard it.
     pub async fn process_item(
         &self,
         item: OcrQueueItem,
@@ -77,24 +78,25 @@ impl OcrQueueService {
             job.file_size as f64 / (1024.0 * 1024.0)
         );
 
-        let work = async {
-            let extracted = ocr_service
-                .extract_text_with_context(
-                    &job.file_path,
-                    &job.mime_type,
-                    &job.filename,
-                    job.file_size,
-                    &job.settings,
-                    Some(self.progress_callback(claim)),
-                )
-                .await;
-            self.finish(&job, ocr_service, extracted).await
-        };
-        match self.run_claimed(claim, work).await? {
-            JobRun::Finished(result) => result,
+        // Only extraction runs under the claim's token: once the outcome is
+        // committed the job row is gone (stored) or no longer 'processing'
+        // (failed attempt), so the next heartbeat would read the claim as lost
+        // and drop the post-commit work -- the failure record, the review copy.
+        // The outcome write is claim-guarded itself, so a claim lost after
+        // extraction still writes nothing.
+        let extraction = ocr_service.extract_text_with_context(
+            &job.file_path,
+            &job.mime_type,
+            &job.filename,
+            job.file_size,
+            &job.settings,
+            Some(self.progress_callback(claim)),
+        );
+        match self.run_claimed(claim, extraction).await? {
+            JobRun::Finished(extracted) => self.conclude(Some(&job), ocr_service, extracted).await,
             JobRun::Stopped(loss) => {
                 info!(
-                    "OCR job {} for document {} stopped before finishing ({:?}); nothing written",
+                    "OCR job {} for document {} stopped during extraction ({:?}); nothing written",
                     item.id, item.document_id, loss
                 );
                 Ok(())
@@ -112,9 +114,24 @@ impl OcrQueueService {
         ocr_service: &EnhancedOcrService,
         extracted: Result<OcrResult>,
     ) -> Result<()> {
-        let _temp = extracted.as_ref().ok().and_then(temp_image);
-        match self.load_job(item).await? {
-            Some(job) => self.finish(&job, ocr_service, extracted).await,
+        let job = self.load_job(item).await?;
+        self.conclude(job.as_ref(), ocr_service, extracted).await
+    }
+
+    /// Writes the outcome of a finished extraction, outside the claim's
+    /// token: nothing here is dropped by a heartbeat or a cancel. The single
+    /// owner of the result's preprocessed image, removed once the outcome
+    /// (and its review copy) is written, or at once when the document is
+    /// gone.
+    async fn conclude(
+        &self,
+        job: Option<&LoadedJob>,
+        ocr_service: &EnhancedOcrService,
+        extracted: Result<OcrResult>,
+    ) -> Result<()> {
+        let _image = extracted.as_ref().ok().and_then(temp_image);
+        match job {
+            Some(job) => self.finish(job, ocr_service, extracted).await,
             None => Ok(()),
         }
     }
@@ -173,9 +190,6 @@ impl OcrQueueService {
             Ok(result) => result,
             Err(e) => return self.extraction_failed(job, &e).await,
         };
-        // Removes the preprocessed image however this returns.
-        let _temp = temp_image(&result);
-
         if let Err(validation_error) = ocr_service.validate_ocr_quality(&result, &job.settings) {
             let error_msg = format!("OCR quality validation failed: {}", validation_error);
             warn!(
@@ -245,6 +259,13 @@ impl OcrQueueService {
                 return self.fail(job, attempt).await;
             }
         }
+        self.stored(job, result).await;
+        Ok(())
+    }
+
+    /// What follows a stored result: its review copy, then the log line.
+    async fn stored(&self, job: &LoadedJob, result: &OcrResult) {
+        self.pause_after_commit().await;
         if job.settings.save_processed_images {
             self.save_for_review(job, result).await;
         }
@@ -253,7 +274,6 @@ impl OcrQueueService {
             job.filename, job.claim.job_id, job.claim.document_id, result.confidence,
             result.word_count, job.started.elapsed().as_millis(), result.preprocessing_applied
         );
-        Ok(())
     }
 
     /// Keeps the preprocessed image for review, when there is one.
