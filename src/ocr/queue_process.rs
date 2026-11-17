@@ -265,6 +265,8 @@ impl OcrQueueService {
 
     /// What follows a stored result: its review copy, then the log line.
     async fn stored(&self, job: &LoadedJob, result: &OcrResult) {
+        // Test builds only: see `with_post_commit_pause`.
+        #[cfg(any(test, feature = "test-utils"))]
         self.pause_after_commit().await;
         if job.settings.save_processed_images {
             self.save_for_review(job, result).await;

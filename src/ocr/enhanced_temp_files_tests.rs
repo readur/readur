@@ -47,8 +47,14 @@ async fn drop_once_a_file_matches<F: Future>(
     fut: F,
     wanted: impl Fn(&str) -> bool,
 ) -> bool {
+    drop_once_dir_shows(dir, fut, |dir| entries(dir).iter().any(|name| wanted(name))).await
+}
+
+/// Polls `fut` until `shows` holds for `dir`, then drops it. Returns false if
+/// the future finished first.
+async fn drop_once_dir_shows<F: Future>(dir: &Path, fut: F, shows: impl Fn(&Path) -> bool) -> bool {
     let appeared = async {
-        while !entries(dir).iter().any(|name| wanted(name)) {
+        while !shows(dir) {
             tokio::time::sleep(Duration::from_millis(2)).await;
         }
     };
@@ -124,22 +130,14 @@ async fn a_dropped_page_render_leaves_no_page_images() {
     let pdf = fixture("test_files/porters-handbook_en.pdf");
     let params = TesseractParams::from_settings(&Settings::default());
     // Pages land in the render's own directory under the temp dir
-    let a_page_landed = || {
-        std::fs::read_dir(dir.path()).unwrap().any(|entry| {
+    let a_page_landed = |dir: &Path| {
+        std::fs::read_dir(dir).unwrap().any(|entry| {
             let path = entry.unwrap().path();
             path.is_dir() && std::fs::read_dir(&path).is_ok_and(|mut pages| pages.next().is_some())
         })
     };
     let render = ocr.extract_pdf_pages_as_images(&pdf, &params);
-    let landed = async {
-        while !a_page_landed() {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    };
-    let dropped_mid_render = tokio::select! {
-        _ = render => false,
-        () = landed => true,
-    };
+    let dropped_mid_render = drop_once_dir_shows(dir.path(), render, a_page_landed).await;
     assert!(
         dropped_mid_render,
         "pdftoppm finished 468 pages before the first one was seen"

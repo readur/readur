@@ -14,6 +14,7 @@ const OCR_QUEUE_DUPLICATES_VIA_INDEX: i64 = 20261116000001;
 const FUZZY_THRESHOLD_WORD_SIMILARITY: i64 = 20261116120000;
 const OCR_QUEUE_CLAIM_AND_HEARTBEAT: i64 = 20261117120000;
 const RESET_STUCK_FAILS_EXHAUSTED_DOCUMENTS: i64 = 20261117130000;
+const RESET_STUCK_RECORDS_EVERY_EXHAUSTED_JOB: i64 = 20261117140000;
 
 /// The newest migration version older than `version`.
 fn version_before(version: i64) -> i64 {
@@ -280,6 +281,8 @@ fn the_migrations_under_test_exist() {
         OCR_QUEUE_DUPLICATES_VIA_INDEX,
         FUZZY_THRESHOLD_WORD_SIMILARITY,
         OCR_QUEUE_CLAIM_AND_HEARTBEAT,
+        RESET_STUCK_FAILS_EXHAUSTED_DOCUMENTS,
+        RESET_STUCK_RECORDS_EVERY_EXHAUSTED_JOB,
     ] {
         assert!(
             versions.contains(&version),
@@ -291,11 +294,23 @@ fn the_migrations_under_test_exist() {
 /// A document whose stale job had no attempts left and is processing.
 async fn exhausted_stale_job(pool: &PgPool, user: Uuid) -> Uuid {
     let document = insert_document(pool, user).await;
-    sqlx::query("UPDATE documents SET ocr_status = 'processing' WHERE id = $1")
+    set_ocr_status(pool, document, "processing").await;
+    insert_exhausted_stale_job(pool, document).await;
+    document
+}
+
+async fn set_ocr_status(pool: &PgPool, document: Uuid, ocr_status: &str) {
+    sqlx::query("UPDATE documents SET ocr_status = $2 WHERE id = $1")
         .bind(document)
+        .bind(ocr_status)
         .execute(pool)
         .await
         .unwrap();
+}
+
+/// A 'processing' job for `document` with no attempts left and no heartbeat
+/// for over 30 minutes.
+async fn insert_exhausted_stale_job(pool: &PgPool, document: Uuid) {
     sqlx::query(
         "INSERT INTO ocr_queue (document_id, priority, file_size, status, started_at, \
          heartbeat_at, attempts, max_attempts) \
@@ -306,7 +321,6 @@ async fn exhausted_stale_job(pool: &PgPool, user: Uuid) -> Uuid {
     .execute(pool)
     .await
     .unwrap();
-    document
 }
 
 /// `(job status, document ocr_status, ocr_failure_reason, failure records)`.
@@ -348,6 +362,13 @@ async fn reset_stuck_ocr_jobs_fails_the_documents_of_exhausted_jobs() {
 
     finish_migrations(&pool).await;
 
+    let (job, doc, reason, records) = exhausted_state(&pool, stranded).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref(), reason.as_deref(), records),
+        ("failed", Some("failed"), Some("ocr_timeout"), 1),
+        "a document the old function stranded is repaired"
+    );
+
     let after = insert_user(&pool).await;
     let exhausted = exhausted_stale_job(&pool, after).await;
     // Another owner: failure records are counted per owner and file.
@@ -383,4 +404,74 @@ async fn reset_stuck_ocr_jobs_fails_the_documents_of_exhausted_jobs() {
         ("pending", Some("pending"), 0),
         "a job with attempts left still goes back to the queue"
     );
+}
+
+/// Before 20261117140000 an exhausted stale job got a failure record only
+/// while its document was 'processing'; a document already 'failed' by an
+/// earlier attempt (dequeuing leaves it 'failed') was skipped. Now every
+/// exhausted job is recorded, as `record_failed_attempt` records it -- but a
+/// completed document keeps its status and text.
+#[tokio::test]
+async fn reset_stuck_ocr_jobs_records_every_exhausted_job() {
+    let (_db, pool) = database_at(version_before(RESET_STUCK_RECORDS_EVERY_EXHAUSTED_JOB)).await;
+    let skipped = exhausted_stale_job_of(&pool, "failed").await;
+    reset_stuck(&pool, 1).await;
+    let (_, doc, _, records) = exhausted_state(&pool, skipped).await;
+    assert_eq!(
+        (doc.as_deref(), records),
+        (Some("failed"), 0),
+        "the old function skips an already-failed document"
+    );
+
+    finish_migrations(&pool).await;
+
+    let failed_before = exhausted_stale_job_of(&pool, "failed").await;
+    let completed = exhausted_stale_job_of(&pool, "completed").await;
+    reset_stuck(&pool, 2).await;
+    let (job, doc, reason, records) = exhausted_state(&pool, failed_before).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref(), reason.as_deref(), records),
+        ("failed", Some("failed"), Some("ocr_timeout"), 1)
+    );
+    let (job, doc, reason, records) = exhausted_state(&pool, completed).await;
+    assert_eq!(
+        (job.as_str(), doc.as_deref(), reason.as_deref(), records),
+        ("failed", Some("completed"), None, 1),
+        "a completed document is not failed, though its job's failure is recorded"
+    );
+}
+
+/// `reset_stuck_ocr_jobs` used to RAISE NOTICE on every call, and the OCR
+/// queue's stale recovery calls it every few minutes; the Rust caller logs
+/// when it recovers anything instead.
+#[tokio::test]
+async fn reset_stuck_ocr_jobs_raises_no_notice() {
+    let (_db, pool) = database_at(version_before(RESET_STUCK_RECORDS_EVERY_EXHAUSTED_JOB)).await;
+    assert!(reset_stuck_source(&pool).await.contains("RAISE NOTICE"));
+    finish_migrations(&pool).await;
+    assert!(!reset_stuck_source(&pool).await.contains("RAISE NOTICE"));
+}
+
+async fn reset_stuck_source(pool: &PgPool) -> String {
+    sqlx::query_scalar("SELECT prosrc FROM pg_proc WHERE proname = 'reset_stuck_ocr_jobs'")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn reset_stuck(pool: &PgPool, expected: i32) {
+    let reset: i32 = sqlx::query_scalar("SELECT reset_stuck_ocr_jobs(30)")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(reset, expected);
+}
+
+/// An exhausted stale job whose document (of a new owner) has `ocr_status`.
+/// The status is set first: completing a document deletes its jobs.
+async fn exhausted_stale_job_of(pool: &PgPool, ocr_status: &str) -> Uuid {
+    let document = insert_document(pool, insert_user(pool).await).await;
+    set_ocr_status(pool, document, ocr_status).await;
+    insert_exhausted_stale_job(pool, document).await;
+    document
 }
