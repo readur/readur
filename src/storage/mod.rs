@@ -1,5 +1,5 @@
 //! Storage backend abstraction for document management
-//! 
+//!
 //! This module provides a clean abstraction over different storage backends
 //! (local filesystem, S3, etc.) with a unified interface.
 
@@ -7,8 +7,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-pub mod local;
 pub mod factory;
+pub mod local;
 
 /// Core storage backend trait that all storage implementations must implement
 #[async_trait]
@@ -19,28 +19,56 @@ pub trait StorageBackend: Send + Sync {
     }
     /// Store a document file
     /// Returns the storage path/key where the document was stored
-    async fn store_document(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String>;
-    
+    async fn store_document(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<String>;
+
     /// Store a thumbnail image
     /// Returns the storage path/key where the thumbnail was stored
-    async fn store_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String>;
-    
+    async fn store_thumbnail(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String>;
+
     /// Store a processed image (e.g., OCR processed image)
     /// Returns the storage path/key where the processed image was stored
-    async fn store_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String>;
-    
+    async fn store_processed_image(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String>;
+
     /// Retrieve file data by storage path/key
     async fn retrieve_file(&self, path: &str) -> Result<Vec<u8>>;
-    
-    /// Delete all files associated with a document (document, thumbnail, processed image)
-    async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()>;
-    
+
+    /// Delete all files associated with a document (document, thumbnail, processed image).
+    ///
+    /// `file_path` is the storage path recorded for the document at upload
+    /// (`documents.file_path`, as returned by [`store_document`](Self::store_document)).
+    /// The document file is deleted at exactly that path: backends must never
+    /// recompute it, since the layout may embed upload-time data (the S3 key
+    /// carries the upload month) or have changed since. A file that is
+    /// already gone is not an error; any other failure is.
+    async fn delete_document_files(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        file_path: &str,
+    ) -> Result<()>;
+
     /// Check if a file exists at the given path/key
     async fn file_exists(&self, path: &str) -> Result<bool>;
-    
+
     /// Get a human-readable identifier for this storage backend type
     fn storage_type(&self) -> &'static str;
-    
+
     /// Initialize the storage backend (create directories, validate access, etc.)
     async fn initialize(&self) -> Result<()>;
 }
@@ -49,9 +77,7 @@ pub trait StorageBackend: Send + Sync {
 #[derive(Debug, Clone)]
 pub enum StorageConfig {
     /// Local filesystem storage
-    Local {
-        upload_path: String,
-    },
+    Local { upload_path: String },
     /// S3-compatible storage
     #[cfg(feature = "s3")]
     S3 {

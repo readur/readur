@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::Datelike;
 use tracing::{debug, info, warn, error};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -22,6 +21,20 @@ use crate::models::{FileIngestionInfo, S3SourceConfig};
 use crate::storage::StorageBackend;
 use crate::utils::extension_filter::ExtensionFilter;
 use crate::utils::sync_cancelled::{cancelled, sleep_unless_cancelled};
+
+#[path = "s3_service_keys.rs"]
+mod keys;
+
+/// Result of deleting one object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectDeletion {
+    /// DeleteObject succeeded. AWS also answers this way for a key that did
+    /// not exist; it cannot be told apart.
+    Deleted,
+    /// The store reported the object missing (`NoSuchKey`, or a bare 404),
+    /// so there was nothing to delete.
+    AlreadyGone,
+}
 
 /// Threshold for using streaming multipart uploads (100MB)
 const STREAMING_THRESHOLD: usize = 100 * 1024 * 1024;
@@ -333,7 +346,7 @@ impl S3Service {
         
         #[cfg(feature = "s3")]
         {
-            let key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
+            let key = keys::thumbnail_key(self.config.prefix.as_deref(), user_id, document_id);
             self.store_file(&key, data, Some(self.get_image_metadata())).await?;
             Ok(key)
         }
@@ -348,7 +361,7 @@ impl S3Service {
         
         #[cfg(feature = "s3")]
         {
-            let key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+            let key = keys::processed_image_key(self.config.prefix.as_deref(), user_id, document_id);
             self.store_file(&key, data, Some(self.get_image_metadata())).await?;
             Ok(key)
         }
@@ -464,7 +477,7 @@ impl S3Service {
 
                     // Step 2: Upload parts in chunks
                     let mut completed_parts = Vec::new();
-                    let total_chunks = (data.len() + MULTIPART_CHUNK_SIZE - 1) / MULTIPART_CHUNK_SIZE;
+                    let total_chunks = data.len().div_ceil(MULTIPART_CHUNK_SIZE);
                     
                     for (chunk_index, chunk) in data.chunks(MULTIPART_CHUNK_SIZE).enumerate() {
                         let part_number = (chunk_index + 1) as i32;
@@ -541,27 +554,46 @@ impl S3Service {
         }
     }
 
-    /// Delete a file from S3
+    /// Delete one object. A key the store reports missing is not an error:
+    /// the object is gone either way.
     pub async fn delete_file(&self, key: &str) -> Result<()> {
+        self.delete_object(key).await.map(|_| ())
+    }
+
+    /// Delete one object, telling a deleted object from one the store
+    /// reported missing (classified from the typed service error, see
+    /// [`keys::is_missing_object`]). Other failures are retried, then returned.
+    pub async fn delete_object(&self, key: &str) -> Result<ObjectDeletion> {
         #[cfg(not(feature = "s3"))]
         {
             return Err(anyhow!("S3 support not compiled in"));
         }
-        
+
         #[cfg(feature = "s3")]
         {
             info!("Deleting file from S3: {}/{}", self.config.bucket_name, key);
+            let key_owned = key.to_string();
+            let bucket_name = self.config.bucket_name.clone();
+            let client = self.client.clone();
 
-            self.client
-                .delete_object()
-                .bucket(&self.config.bucket_name)
-                .key(key)
-                .send()
-                .await
-                .map_err(|e| anyhow!("Failed to delete file {}: {}", key, describe_error(&e)))?;
+            let outcome = self.retry_operation(&format!("delete_file: {}", key), || {
+                let key = key_owned.clone();
+                let bucket_name = bucket_name.clone();
+                let client = client.clone();
+                async move {
+                    match client.delete_object().bucket(&bucket_name).key(&key).send().await {
+                        Ok(_) => Ok(ObjectDeletion::Deleted),
+                        Err(e) if keys::is_missing_object(&e) => Ok(ObjectDeletion::AlreadyGone),
+                        Err(e) => Err(anyhow!("Failed to delete file {}: {}", key, describe_error(&e))),
+                    }
+                }
+            }).await?;
 
-            info!("Successfully deleted file: {}", key);
-            Ok(())
+            match outcome {
+                ObjectDeletion::Deleted => info!("Successfully deleted file: {}", key),
+                ObjectDeletion::AlreadyGone => info!("File already absent from S3: {}", key),
+            }
+            Ok(outcome)
         }
     }
 
@@ -569,23 +601,10 @@ impl S3Service {
     // HELPER METHODS
     // ========================================
 
-    /// Generate a structured S3 key for a document
+    /// Key for a document being stored now. Dated by the upload month, so it
+    /// is only valid at upload time: later operations use the recorded key.
     fn generate_document_key(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> String {
-        let now = chrono::Utc::now();
-        let year = now.year();
-        let month = now.month();
-        
-        // Extract file extension
-        let extension = std::path::Path::new(filename)
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-        
-        if extension.is_empty() {
-            format!("documents/{}/{:04}/{:02}/{}", user_id, year, month, document_id)
-        } else {
-            format!("documents/{}/{:04}/{:02}/{}.{}", user_id, year, month, document_id, extension)
-        }
+        keys::document_key(self.config.prefix.as_deref(), user_id, document_id, filename, chrono::Utc::now())
     }
 
     /// Get content type from S3 key/filename
@@ -653,39 +672,24 @@ impl StorageBackend for S3Service {
         Some(self)
     }
     async fn store_document(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
-        // Generate S3 key
-        let key = self.generate_document_key(user_id, document_id, filename);
-        
-        // Use streaming upload for large files
-        if data.len() > STREAMING_THRESHOLD {
-            info!("Using streaming multipart upload for large file: {} ({} bytes)", key, data.len());
-            self.store_file_multipart(&key, data, None).await?;
-        } else {
-            self.store_file(&key, data, None).await?;
-        }
-        
-        Ok(format!("s3://{}", key))
+        let key = S3Service::store_document(self, user_id, document_id, filename, data).await?;
+        Ok(format!("{}{}", keys::STORAGE_PATH_SCHEME, key))
     }
 
     async fn store_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        let key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
-        self.store_file(&key, data, Some(self.get_image_metadata())).await?;
-        Ok(format!("s3://{}", key))
+        let key = S3Service::store_thumbnail(self, user_id, document_id, data).await?;
+        Ok(format!("{}{}", keys::STORAGE_PATH_SCHEME, key))
     }
 
     async fn store_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        let key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
-        self.store_file(&key, data, Some(self.get_image_metadata())).await?;
-        Ok(format!("s3://{}", key))
+        let key = S3Service::store_processed_image(self, user_id, document_id, data).await?;
+        Ok(format!("{}{}", keys::STORAGE_PATH_SCHEME, key))
     }
 
     async fn retrieve_file(&self, path: &str) -> Result<Vec<u8>> {
-        // Handle s3:// prefix if present
-        let key = if path.starts_with("s3://") {
-            path.strip_prefix("s3://").unwrap_or(path)
-        } else {
-            path
-        };
+        // A recorded `s3://<key>` path names the key verbatim (prefix
+        // included); a bare key is accepted as-is.
+        let key = keys::key_from_stored_path(path).unwrap_or(path);
         
         #[cfg(not(feature = "s3"))]
         {
@@ -701,57 +705,38 @@ impl StorageBackend for S3Service {
         }
     }
 
-    async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, filename: &str) -> Result<()> {
-        #[cfg(not(feature = "s3"))]
-        {
-            return Err(anyhow!("S3 support not compiled in"));
+    async fn delete_document_files(&self, user_id: Uuid, document_id: Uuid, file_path: &str) -> Result<()> {
+        // The document object is deleted by the key recorded at upload; the
+        // key embeds the upload month, so recomputing it would miss every
+        // document not uploaded in the current month.
+        let mut targets = Vec::with_capacity(5);
+        match keys::key_from_stored_path(file_path) {
+            Some(key) => targets.push(("Document", key.to_string())),
+            None => info!(
+                "File {} of document {} is not an S3 storage path; nothing to delete from the bucket",
+                file_path, document_id
+            ),
         }
-        
-        #[cfg(feature = "s3")]
-        {
-            let document_key = self.generate_document_key(user_id, document_id, filename);
-            let thumbnail_key = format!("thumbnails/{}/{}_thumb.jpg", user_id, document_id);
-            let processed_key = format!("processed_images/{}/{}_processed.png", user_id, document_id);
+        targets.extend(keys::derived_object_keys(self.config.prefix.as_deref(), user_id, document_id));
 
-            let mut errors = Vec::new();
-
-            // Delete document file
-            if let Err(e) = self.delete_file(&document_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Document: {}", e));
-                }
+        let mut errors = Vec::new();
+        for (label, key) in &targets {
+            if let Err(e) = self.delete_object(key).await {
+                errors.push(format!("{}: {}", label, e));
             }
-
-            // Delete thumbnail
-            if let Err(e) = self.delete_file(&thumbnail_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Thumbnail: {}", e));
-                }
-            }
-
-            // Delete processed image
-            if let Err(e) = self.delete_file(&processed_key).await {
-                if !e.to_string().contains("NotFound") {
-                    errors.push(format!("Processed image: {}", e));
-                }
-            }
-
-            if !errors.is_empty() {
-                return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
-            }
-
-            info!("Successfully deleted all files for document {}", document_id);
-            Ok(())
         }
+        if !errors.is_empty() {
+            return Err(anyhow!("Failed to delete some files: {}", errors.join("; ")));
+        }
+
+        info!("Successfully deleted all files for document {}", document_id);
+        Ok(())
     }
 
     async fn file_exists(&self, path: &str) -> Result<bool> {
-        // Handle s3:// prefix if present
-        let key = if path.starts_with("s3://") {
-            path.strip_prefix("s3://").unwrap_or(path)
-        } else {
-            path
-        };
+        // A recorded `s3://<key>` path names the key verbatim (prefix
+        // included); a bare key is accepted as-is.
+        let key = keys::key_from_stored_path(path).unwrap_or(path);
         
         #[cfg(not(feature = "s3"))]
         {
