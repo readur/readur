@@ -32,43 +32,56 @@ test.describe('OCR Multiple Languages', () => {
   }
 
   async function seedFailedDocument(name: string): Promise<string> {
-    const id = await helpers.uploadBufferViaAPI(name, Buffer.from(`%PDF-1.4\nnot a real pdf ${Math.random()}\n`), 'application/pdf');
+    const id = await helpers.uploadBufferViaAPI(
+      name,
+      Buffer.from(`%PDF-1.4\nnot a real pdf ${Math.random()}\n`),
+      'application/pdf',
+    );
     expect((await helpers.waitForOCRComplete(id)).ocr_status).toBe('failed');
+    // Wait out the server's own automatic retries, so a manual retry is sure to queue a new job.
+    await helpers.waitForOcrRetriesExhausted(id);
     return id;
   }
 
   /** Open the failed document's panel in Needs attention and pick retry languages. */
   async function retryWithLanguages(page: Page, name: string, id: string, languages: string[]) {
     await helpers.openIntake('attention');
-    await page.getByRole('grid', { name: 'Failed documents' }).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) }).getByRole('rowheader').click();
+    await page
+      .getByRole('grid', { name: 'Failed documents' })
+      .getByRole('row', { name: new RegExp(name.replace('.', '\\.')) })
+      .getByRole('rowheader')
+      .click();
     const panel = page.getByRole('dialog', { name });
     const picker = panel.getByRole('region', { name: 'Retry with languages' });
     await picker.getByRole('button', { name: /Select OCR languages/ }).click();
     for (const language of languages) {
-      await picker.getByRole('group', { name: 'Available Languages' }).getByText(language, { exact: true }).click();
+      await picker
+        .getByRole('group', { name: 'Available Languages' })
+        .getByText(language, { exact: true })
+        .click();
     }
 
-    // The server refuses a manual retry while its own automatic retries are pending,
-    // so press Retry until it is accepted. The error toasts sit beside the panel, clear of its footer.
-    let body: Record<string, unknown> = {};
-    await expect(async () => {
-      const retry = page.waitForResponse(
-        (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
-        { timeout: TIMEOUTS.medium },
-      );
-      await panel.getByRole('button', { name: 'Retry OCR' }).click();
-      const response = await retry;
-      body = JSON.parse(response.request().postData() ?? '{}');
-      expect(response.ok()).toBe(true);
-    }).toPass({ timeout: 90000, intervals: [5000] });
+    const retry = page.waitForResponse(
+      (r) => r.url().includes(`/api/documents/${id}/ocr/retry`) && r.request().method() === 'POST',
+      { timeout: TIMEOUTS.medium },
+    );
+    await panel.getByRole('button', { name: 'Retry OCR' }).click();
+    const response = await retry;
+    expect(response.status()).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, queued: true });
+    const body: Record<string, unknown> = JSON.parse(response.request().postData() ?? '{}');
     return body;
   }
 
   test('should display OCR language selector in settings', async ({ dynamicUserPage: page }) => {
     const languages = await openLanguages(page);
 
-    await expect(languages.getByText('OCR Languages (1/4)')).toBeVisible({ timeout: TIMEOUTS.medium });
-    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText('English');
+    await expect(languages.getByText('OCR Languages (1/4)')).toBeVisible({
+      timeout: TIMEOUTS.medium,
+    });
+    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText(
+      'English',
+    );
 
     await languages.getByRole('button', { name: /Add more languages/ }).click();
     const available = languages.getByRole('group', { name: 'Available Languages' });
@@ -80,7 +93,10 @@ test.describe('OCR Multiple Languages', () => {
   test('should select multiple OCR languages', async ({ dynamicUserPage: page }) => {
     const languages = await openLanguages(page);
     await languages.getByRole('button', { name: /Add more languages/ }).click();
-    await languages.getByRole('group', { name: 'Available Languages' }).getByText('Spanish', { exact: true }).click();
+    await languages
+      .getByRole('group', { name: 'Available Languages' })
+      .getByText('Spanish', { exact: true })
+      .click();
 
     const selected = languages.getByRole('list', { name: 'Selected languages' });
     await expect(selected).toContainText('Spanish');
@@ -94,23 +110,35 @@ test.describe('OCR Multiple Languages', () => {
     await helpers.waitForToast(/Settings updated successfully/);
   });
 
-  test('should upload Spanish document and process with Spanish OCR', async ({ dynamicUserPage: page }) => {
+  test('should upload Spanish document and process with Spanish OCR', async ({
+    dynamicUserPage: page,
+  }) => {
     test.setTimeout(TIMEOUTS.ocr + 30000);
     await helpers.openIntake('upload');
 
     // Pick Spanish for this upload in the upload options
     const options = page.getByRole('region', { name: 'Apply to these uploads' });
     await options.getByRole('button', { name: /Add more languages/ }).click();
-    await options.getByRole('group', { name: 'Available Languages' }).getByText('Spanish', { exact: true }).click();
-    await expect(options.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish');
+    await options
+      .getByRole('group', { name: 'Available Languages' })
+      .getByText('Spanish', { exact: true })
+      .click();
+    await expect(options.getByRole('list', { name: 'Selected languages' })).toContainText(
+      'Spanish',
+    );
 
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.spanishTest);
-    const upload = page.waitForResponse((r) => /\/api\/documents$/.test(r.url()) && r.request().method() === 'POST', {
-      timeout: TIMEOUTS.upload,
-    });
+    const upload = page.waitForResponse(
+      (r) => /\/api\/documents$/.test(r.url()) && r.request().method() === 'POST',
+      {
+        timeout: TIMEOUTS.upload,
+      },
+    );
     await page.getByRole('button', { name: /^Upload all/ }).click();
     expect((await upload).ok()).toBe(true);
-    const row = page.getByRole('grid', { name: 'Files to upload' }).getByRole('row', { name: /spanish_test\.pdf/ });
+    const row = page
+      .getByRole('grid', { name: 'Files to upload' })
+      .getByRole('row', { name: /spanish_test\.pdf/ });
     await expect(row).toContainText(/OCR|Indexed/);
 
     // The document is read with Spanish: its text carries Spanish words
@@ -120,35 +148,52 @@ test.describe('OCR Multiple Languages', () => {
     expect((await helpers.waitForOCRComplete(docId)).ocr_status).toBe('completed');
     await page.reload();
     const text = ((await (await helpers.extractedText()).textContent()) ?? '').toLowerCase();
-    expect(['español', 'documento', 'reconocimiento', 'comunicación'].some((w) => text.includes(w))).toBe(true);
+    expect(
+      ['español', 'documento', 'reconocimiento', 'comunicación'].some((w) => text.includes(w)),
+    ).toBe(true);
   });
 
-  test('should upload English document and process with English OCR', async ({ dynamicUserPage: page }) => {
+  test('should upload English document and process with English OCR', async ({
+    dynamicUserPage: page,
+  }) => {
     await helpers.openIntake('upload');
     await expect(page.getByRole('group', { name: 'Drop files to add' })).toBeVisible();
 
     await page.locator('input[type="file"]').first().setInputFiles(TEST_FILES.englishTest);
-    const row = page.getByRole('grid', { name: 'Files to upload' }).getByRole('row', { name: /english_test\.pdf/ });
+    const row = page
+      .getByRole('grid', { name: 'Files to upload' })
+      .getByRole('row', { name: /english_test\.pdf/ });
     await expect(row).toBeVisible();
 
-    const upload = page.waitForResponse((r) => /\/api\/documents$/.test(r.url()) && r.request().method() === 'POST', {
-      timeout: TIMEOUTS.upload,
-    });
+    const upload = page.waitForResponse(
+      (r) => /\/api\/documents$/.test(r.url()) && r.request().method() === 'POST',
+      {
+        timeout: TIMEOUTS.upload,
+      },
+    );
     await page.getByRole('button', { name: /^Upload all/ }).click();
     expect((await upload).ok()).toBe(true);
 
     await expect(row).toContainText(/OCR|Indexed/);
-    await expect(page.getByRole('progressbar', { name: 'Upload progress for english_test.pdf' })).toHaveAttribute('aria-valuenow', '100');
+    await expect(
+      page.getByRole('progressbar', { name: 'Upload progress for english_test.pdf' }),
+    ).toHaveAttribute('aria-valuenow', '100');
   });
 
-  test('should validate OCR results contain expected language-specific content', async ({ dynamicUserPage: page }) => {
+  test('should validate OCR results contain expected language-specific content', async ({
+    dynamicUserPage: page,
+  }) => {
     const docId = await helpers.uploadDocumentViaAPI(TEST_FILES.englishTest);
     const doc = await helpers.waitForOCRComplete(docId);
     expect(doc.ocr_status).toBe('completed');
 
     await page.goto(`/documents?document=${docId}`);
     const content = (await (await helpers.extractedText()).textContent()) ?? '';
-    expect(EXPECTED_CONTENT.english.keywords.some((k) => content.toLowerCase().includes(k.toLowerCase()))).toBe(true);
+    expect(
+      EXPECTED_CONTENT.english.keywords.some((k) =>
+        content.toLowerCase().includes(k.toLowerCase()),
+      ),
+    ).toBe(true);
   });
 
   test('should retry failed OCR with different language', async ({ dynamicUserPage: page }) => {
@@ -165,27 +210,42 @@ test.describe('OCR Multiple Languages', () => {
     expect(['completed', 'failed']).toContain(doc.ocr_status);
 
     await page.goto(`/documents?document=${docId}`);
-    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({
+      timeout: TIMEOUTS.medium,
+    });
 
     if (doc.ocr_status === 'completed') {
       const content = ((await (await helpers.extractedText()).textContent()) ?? '').toLowerCase();
-      const hasSpanish = EXPECTED_CONTENT.mixed.spanish.some((w) => content.includes(w.toLowerCase()));
-      const hasEnglish = EXPECTED_CONTENT.mixed.english.some((w) => content.includes(w.toLowerCase()));
+      const hasSpanish = EXPECTED_CONTENT.mixed.spanish.some((w) =>
+        content.includes(w.toLowerCase()),
+      );
+      const hasEnglish = EXPECTED_CONTENT.mixed.english.some((w) =>
+        content.includes(w.toLowerCase()),
+      );
       expect(hasSpanish || hasEnglish).toBe(true);
     }
   });
 
   test('should persist language preference across sessions', async ({ dynamicUserPage: page }) => {
     await page.goto('/board');
-    await helpers.updateSettingsViaAPI({ preferred_languages: ['eng', 'spa'], primary_language: 'eng', ocr_language: 'eng' });
+    await helpers.updateSettingsViaAPI({
+      preferred_languages: ['eng', 'spa'],
+      primary_language: 'eng',
+      ocr_language: 'eng',
+    });
 
     let languages = await openLanguages(page);
-    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish', { timeout: TIMEOUTS.medium });
+    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText(
+      'Spanish',
+      { timeout: TIMEOUTS.medium },
+    );
 
     await page.reload();
     languages = page.getByRole('region', { name: 'Languages' });
     await page.getByRole('button', { name: 'Edit Languages' }).click();
-    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText('Spanish');
+    await expect(languages.getByRole('list', { name: 'Selected languages' })).toContainText(
+      'Spanish',
+    );
   });
 
   test('should display available languages from API', async ({ dynamicUserPage: page }) => {
@@ -207,7 +267,9 @@ test.describe('OCR Multiple Languages', () => {
     await expect(available.getByRole('checkbox')).not.toHaveCount(0);
   });
 
-  test('should handle bulk operations with multiple languages', async ({ dynamicUserPage: page }) => {
+  test('should handle bulk operations with multiple languages', async ({
+    dynamicUserPage: page,
+  }) => {
     const id1 = await helpers.uploadDocumentViaAPI(TEST_FILES.englishTest);
     const id2 = await helpers.uploadDocumentViaAPI(TEST_FILES.spanishTest);
     await helpers.waitForOCRComplete(id1);
@@ -228,26 +290,40 @@ test.describe('OCR Multiple Languages', () => {
 
   test('should handle OCR language errors gracefully', async ({ dynamicUserPage: page }) => {
     await page.route('**/api/ocr/languages', (route) =>
-      route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'boom' }) }),
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'boom' }),
+      }),
     );
     await page.goto('/settings/ocr');
     await page.getByRole('button', { name: 'Edit Languages' }).click();
 
     // Not a blank page: the selector reports the failure in an alert
-    await expect(page.getByRole('region', { name: 'Languages' }).getByRole('alert')).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('region', { name: 'Languages' }).getByRole('alert')).toBeVisible({
+      timeout: TIMEOUTS.medium,
+    });
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   });
 
-  test('should upload document with multiple languages selected', async ({ dynamicUserPage: page }) => {
+  test('should upload document with multiple languages selected', async ({
+    dynamicUserPage: page,
+  }) => {
     await page.goto('/board');
-    await helpers.updateSettingsViaAPI({ preferred_languages: ['eng', 'spa'], primary_language: 'eng', ocr_language: 'eng' });
+    await helpers.updateSettingsViaAPI({
+      preferred_languages: ['eng', 'spa'],
+      primary_language: 'eng',
+      ocr_language: 'eng',
+    });
 
     const docId = await helpers.uploadDocumentViaAPI(TEST_FILES.mixedLanguageTest);
     const doc = await helpers.waitForOCRComplete(docId);
     expect(['completed', 'failed']).toContain(doc.ocr_status);
 
     await page.goto(`/documents?document=${docId}`);
-    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({ timeout: TIMEOUTS.medium });
+    await expect(page.getByRole('dialog', { name: 'mixed_language_test.pdf' })).toBeVisible({
+      timeout: TIMEOUTS.medium,
+    });
   });
 
   test('should retry failed OCR with multiple languages', async ({ dynamicUserPage: page }) => {

@@ -96,6 +96,29 @@ pub struct RetryOcrRequest {
     pub languages: Option<Vec<String>>,
 }
 
+/// Answer to `POST /api/documents/{id}/ocr/retry`.
+///
+/// `success` is true whenever the request was handled; `queued` says whether
+/// it added a new OCR job (true) or found the document already queued or in
+/// progress, so it left the existing job alone (false).
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct RetryOcrResponse {
+    pub success: bool,
+    pub queued: bool,
+    pub message: String,
+}
+
+impl From<crate::services::documents::OcrRetryOutcome> for RetryOcrResponse {
+    fn from(outcome: crate::services::documents::OcrRetryOutcome) -> Self {
+        Self {
+            success: true,
+            queued: outcome.queued,
+            message: outcome.message,
+        }
+    }
+}
+
 #[derive(Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct BulkDeleteResponse {

@@ -6,45 +6,99 @@ End-to-end tests drive the real UI in a browser with Playwright. They live in `f
 
 - Node.js and npm (CI uses Node 26)
 - Rust and Cargo, to build the backend
-- PostgreSQL
+- PostgreSQL. The migrations need only `pg_trgm` from the standard contrib package, no vector or other third-party extension. The wrapper below creates its scratch database on `localhost:5432` as `postgres`/`postgres` unless E2E_DB_HOST, E2E_DB_PORT, E2E_DB_USER and E2E_DB_PASSWORD say otherwise (E2E_DB_NAME names the database, default `readur_e2e_test`; it is dropped and recreated).
+- `psql`, `createdb` and `dropdb` (the PostgreSQL client tools), `curl` and `setsid`, for the wrapper
 - Tesseract with the languages the OCR tests use (CI installs eng, spa, fra, deu, ita and por), plus ocrmypdf and poppler-utils
 
-Install the frontend dependencies and the browsers:
+Install the frontend dependencies (the wrapper does this itself when `frontend/node_modules` is missing):
 
 ```bash
 cd frontend
-npm install
-npx playwright install
+npm ci
 ```
+
+## Quick start
+
+From the repository root:
+
+```bash
+scripts/run-e2e-local.sh
+```
+
+It creates the scratch database, builds the backend (release profile) and starts it on `127.0.0.1:8001` with a known admin password (the server runs its migrations on startup), starts the Vite dev server on port 5174 proxying `/api` (HTTP and WebSocket) to that backend, checks the proxy reaches it, installs Playwright's Chromium, and runs the two Chromium projects as CI does. On exit it stops both servers, drops the database and deletes its upload directory; the logs stay in `frontend/test-results/e2e-local/`. It refuses to start when port 8001 or 5174 is already taken.
+
+### Script options
+
+```bash
+scripts/run-e2e-local.sh --headed     # show the browser
+scripts/run-e2e-local.sh --debug      # Playwright inspector
+scripts/run-e2e-local.sh --ui         # Playwright UI mode
+scripts/run-e2e-local.sh -- e2e/ocr-retry-workflow.spec.ts --project=chromium --workers=1
+```
+
+Arguments after `--` go to Playwright unchanged, replacing the default project selection. Settings come from the environment, all optional:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| E2E_DB_HOST, E2E_DB_PORT | localhost, 5432 | PostgreSQL server for the scratch database |
+| E2E_DB_USER, E2E_DB_PASSWORD | postgres, postgres | PostgreSQL account that creates and drops it |
+| E2E_DB_NAME | readur_e2e_test | Scratch database (dropped and recreated) |
+| E2E_BACKEND_PORT | 8001 | Backend port |
+| E2E_FRONTEND_PORT | 5174 | Vite dev server port |
+| E2E_CARGO_PROFILE | release | Cargo profile of the backend build (`dev` reuses a debug build) |
+| E2E_ADMIN_USERNAME, E2E_ADMIN_PASSWORD | admin, readur-e2e-admin-password | Admin the backend seeds and the suite creates its test users through |
+| CARGO | cargo | Cargo command (may include a wrapper) |
+| CARGO_TARGET_DIR | target | Where the built binary is looked for |
+| PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH | (unset) | Use a system Chromium instead of downloading one |
+
+For example, against a PostgreSQL on another port with a system Chromium (NixOS needs a writable PLAYWRIGHT_BROWSERS_PATH as well, for the ffmpeg Playwright records videos with):
+
+```bash
+env E2E_DB_HOST=127.0.0.1 E2E_DB_PORT=55432 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(command -v chromium)" PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+    scripts/run-e2e-local.sh -- e2e/search.spec.ts --project=chromium
+```
+
+`./run-tests.sh e2e` is the Docker variant: it starts the containers of `docker-compose.test.yml` (Readur on port 8001 and a Vite dev server container on port 5174 that proxies to it) and runs Playwright on the host against the dev server. It seeds the Readur container and runs the suite with the same admin password, `ADMIN_PASSWORD` from your shell or `readur-test-admin-password`, the compose file's default.
 
 ## How the tests reach the server
 
 - With `PLAYWRIGHT_BASE_URL` set, the tests run against that URL and Playwright starts nothing.
-- Without it (and outside CI), Playwright starts the Vite dev server (`npm run dev`) on `http://localhost:5173`, or reuses one that is already running. The dev server proxies `/api` to `http://localhost:8000`, so a backend must be running there. (The proxy target can be changed with the `BACKEND_PORT` or `VITE_API_PROXY_TARGET` variables of `frontend/vite.config.ts`.)
+- Without it (and outside CI), Playwright starts the Vite dev server (`npm run dev`) on `http://localhost:5173`, or reuses one that is already running. The dev server proxies `/api`, WebSockets included, to `http://localhost:8000`, so a backend must be running there. (The proxy target can be changed with the `BACKEND_PORT` or `VITE_API_PROXY_TARGET` variables of `frontend/vite.config.ts`.)
 
 The suite provisions its own test users through the API, logged in as the admin account the server creates at startup. It needs that admin's password: set E2E_ADMIN_PASSWORD (or `ADMIN_PASSWORD`) in the test environment to the `ADMIN_PASSWORD` the server was started with. The username defaults to `admin` (override with E2E_ADMIN_USERNAME). See `frontend/e2e/utils/test-auth-helper.ts`.
 
-## Running locally
+## Manual setup
 
-1. Start PostgreSQL and the backend with a known admin password. Migrations run automatically at startup.
+To keep a backend running between runs, start the pieces yourself. Ports 8001 and 5174 keep clear of a development server on 8000 and 5173.
+
+1. Create a database and start the backend with a known admin password. Migrations run automatically at startup.
 
    ```bash
    createdb readur_e2e
    DATABASE_URL=postgresql://postgres:postgres@localhost:5432/readur_e2e \
+   SERVER_ADDRESS=127.0.0.1:8001 \
    ADMIN_PASSWORD=e2e-admin-password \
    cargo run --release --bin readur
    ```
 
-2. In another terminal, run the tests (Playwright starts the dev server on port 5173):
+2. In a second terminal, start the dev server proxying to that backend:
 
    ```bash
    cd frontend
-   env E2E_ADMIN_PASSWORD=e2e-admin-password npm run test:e2e
+   VITE_API_PROXY_TARGET=http://127.0.0.1:8001 npm run dev -- --port 5174
    ```
 
-Alternatively, build the frontend (`npm run build` in `frontend/`): the backend serves `frontend/dist` itself, and the tests can run straight against it with `PLAYWRIGHT_BASE_URL` set to `http://localhost:8000`. This is what CI does.
+3. In a third, run the tests against the dev server:
 
-### Scripts
+   ```bash
+   cd frontend
+   env PLAYWRIGHT_BASE_URL=http://localhost:5174 E2E_ADMIN_PASSWORD=e2e-admin-password npm run test:e2e -- --project=chromium
+   ```
+
+Alternatively, build the frontend (`npm run build` in `frontend/`): the backend serves `frontend/dist` itself, and the tests can run straight against it with `PLAYWRIGHT_BASE_URL` set to the backend's URL. This is what CI does.
+
+### npm scripts
 
 | Command | What it does |
 |---------|--------------|
@@ -54,8 +108,6 @@ Alternatively, build the frontend (`npm run build` in `frontend/`): the backend 
 | `npm run test:e2e:ui` | Playwright UI mode |
 
 Extra Playwright arguments go after `--`, for example `npm run test:e2e -- --project=chromium e2e/search.spec.ts`.
-
-`scripts/run-e2e-local.sh` and `./run-tests.sh e2e` are older wrappers. They do not currently work as written: `run-e2e-local.sh` calls a `migrate` binary that does not exist and polls `/health` instead of `/api/health`, and both start a dev server that relies on VITE_API_BASE_URL, which `vite.config.ts` does not read. Use the steps above.
 
 ## Configuration (`frontend/playwright.config.ts`)
 
@@ -68,7 +120,7 @@ Extra Playwright arguments go after `--`, for example `npm run test:e2e -- --pro
 
 ## CI
 
-`.github/workflows/test-e2e.yml` runs on pushes and pull requests to `main` and `master`. It starts PostgreSQL 18 as a service, installs Tesseract and the other OCR tools, builds the backend (`cargo build --release`) and the frontend (`npm run build`), starts `./target/release/readur` with a generated `JWT_SECRET` and a fixed admin password, waits for `GET /api/health`, installs Chromium, and runs:
+`.github/workflows/test-e2e.yml` runs on pushes and pull requests to `main` and `master`. It starts PostgreSQL 18 as a service, installs Tesseract and the other OCR tools, builds the backend (`cargo build --release`) and the frontend (`npm run build`), and starts `./target/release/readur` on port 8000 with a generated `JWT_SECRET` and a fixed admin password; the backend serves the built frontend itself. It then waits up to a minute for `GET /api/health`, failing the job with the tail of the server log if the backend exits or never answers, installs Chromium, and runs:
 
 ```bash
 npm run test:e2e -- --project=chromium --project=chromium-websocket

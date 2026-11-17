@@ -2059,6 +2059,7 @@
     "toast": {
       "downloadFailed": "Impossible de télécharger le fichier",
       "retryQueued": "OCR remis en file d’attente",
+      "retryAlreadyQueued": "Déjà dans la file OCR",
       "retryFailed": "Impossible de remettre l’OCR en file d’attente",
       "deleted": "Document supprimé",
       "deleteFailed": "Impossible de supprimer le document",
@@ -2545,6 +2546,7 @@
       "retryPartial": "Certains documents n’ont pas été mis en file d’attente. Vérifiez-les et réessayez.",
       "retryQueued": "{{queued}} documents sur {{matched}} en file d’attente",
       "retryStarted": "Nouvelle tentative OCR en file d’attente",
+      "retryAlreadyQueued": "Déjà dans la file OCR",
       "retryWait": "{{name}} · environ {{minutes}} min",
       "size": "Taille",
       "source": "Source",

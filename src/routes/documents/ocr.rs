@@ -54,10 +54,10 @@ pub async fn get_document_ocr(
     ),
     request_body(content = super::types::RetryOcrRequest, description = "OCR retry options"),
     responses(
-        (status = 200, description = "OCR retry initiated"),
+        (status = 200, description = "Request handled: `queued` is true when a new OCR job was queued, false when the document was already queued or in progress", body = super::types::RetryOcrResponse),
+        (status = 400, description = "Invalid OCR language"),
         (status = 404, description = "Document not found"),
         (status = 401, description = "Unauthorized"),
-        (status = 409, description = "OCR already in progress"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -66,7 +66,7 @@ pub async fn retry_ocr(
     auth_user: AuthUser,
     Path(document_id): Path<uuid::Uuid>,
     Json(request): Json<super::types::RetryOcrRequest>,
-) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
+) -> Result<ResponseJson<super::types::RetryOcrResponse>, StatusCode> {
     debug!(
         "OCR retry request for document {} by user {}",
         document_id, auth_user.user.id
@@ -88,10 +88,7 @@ pub async fn retry_ocr(
         crate::errors::document::DocumentError::BadRequest(_) => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     })?;
-    Ok(ResponseJson(serde_json::json!({
-        "success": outcome.queued,
-        "message": outcome.message
-    })))
+    Ok(ResponseJson(outcome.into()))
 }
 
 /// Get OCR processing status for multiple documents

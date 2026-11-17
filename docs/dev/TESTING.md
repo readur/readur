@@ -113,7 +113,7 @@ Tests live in `__tests__` directories next to the code they test, mostly under `
 ./run-tests.sh integration keep-running   # leave the containers up afterwards
 ```
 
-The Readur container's admin password is `ADMIN_PASSWORD` from your shell (default `readur-test-admin-password`), while the script passes `ADMIN_PASSWORD` to the tests with a different default (`test-admin-password`). Export `ADMIN_PASSWORD` before running so both use the same value. The `e2e` mode does not currently work; see the [E2E Testing Guide](README-E2E.md).
+The Readur container's admin password is `ADMIN_PASSWORD` from your shell, default `readur-test-admin-password`; the script exports the same value to the tests, so the two always agree. `./run-tests.sh e2e` runs the Playwright suite against these containers; see the [E2E Testing Guide](README-E2E.md), which also describes `scripts/run-e2e-local.sh`, the variant without Docker.
 
 The old `test_runner` binary has been removed; use the commands above.
 

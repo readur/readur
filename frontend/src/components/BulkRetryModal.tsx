@@ -21,6 +21,7 @@ import {
   type OcrRetryFilter,
 } from '../services/api';
 import LanguageSelector from './LanguageSelector';
+import { ocrRetryOutcome } from '../lib/ocrRetry';
 import styles from './RetryModals.module.css';
 
 interface BulkRetryModalProps {
@@ -41,10 +42,18 @@ const COMMON_MIME_TYPES = [
 ];
 
 const COMMON_FAILURE_REASONS: Array<{ value: string; key: string; label: string }> = [
-  { value: 'pdf_font_encoding', key: 'intake.bulkRetry.reason.font', label: 'Font encoding issues' },
+  {
+    value: 'pdf_font_encoding',
+    key: 'intake.bulkRetry.reason.font',
+    label: 'Font encoding issues',
+  },
   { value: 'ocr_timeout', key: 'intake.bulkRetry.reason.timeout', label: 'Processing timeout' },
   { value: 'pdf_corruption', key: 'intake.bulkRetry.reason.corruption', label: 'File corruption' },
-  { value: 'low_ocr_confidence', key: 'intake.bulkRetry.reason.lowConfidence', label: 'Low confidence' },
+  {
+    value: 'low_ocr_confidence',
+    key: 'intake.bulkRetry.reason.lowConfidence',
+    label: 'Low confidence',
+  },
   { value: 'no_extractable_text', key: 'intake.bulkRetry.reason.noText', label: 'No text found' },
   { value: 'ocr_memory_limit', key: 'intake.bulkRetry.reason.memory', label: 'Memory limit' },
 ];
@@ -64,7 +73,12 @@ const formatFileSize = (bytes: number) => {
 };
 
 /** Retry OCR for all failed documents, the selected ones, or those matching criteria; preview first. */
-export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, onSuccess, selectedDocumentIds = [] }) => {
+export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({
+  open,
+  onClose,
+  onSuccess,
+  selectedDocumentIds = [],
+}) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>('all');
   const [filter, setFilter] = useState<OcrRetryFilter>({});
@@ -96,7 +110,10 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
   };
   const toggleIn = (key: 'mime_types' | 'failure_reasons', value: string) => {
     const current = filter[key] ?? [];
-    changeFilter(key, current.includes(value) ? current.filter((v) => v !== value) : [...current, value]);
+    changeFilter(
+      key,
+      current.includes(value) ? current.filter((v) => v !== value) : [...current, value],
+    );
   };
 
   const withLanguages = mode === 'specific' && languages.length > 0;
@@ -111,20 +128,37 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
 
   const describeError = (err: unknown, action: 'preview' | 'execute') => {
     const info = ErrorHelper.formatErrorForDisplay(err, true);
-    if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) || ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)) {
-      return t('intake.bulkRetry.errors.session', 'Your session has expired. Refresh the page and sign in again.');
+    if (
+      ErrorHelper.isErrorCode(err, ErrorCodes.USER_SESSION_EXPIRED) ||
+      ErrorHelper.isErrorCode(err, ErrorCodes.USER_TOKEN_EXPIRED)
+    ) {
+      return t(
+        'intake.bulkRetry.errors.session',
+        'Your session has expired. Refresh the page and sign in again.',
+      );
     }
     if (ErrorHelper.isErrorCode(err, ErrorCodes.USER_PERMISSION_DENIED)) {
-      return t('intake.bulkRetry.errors.permission', 'You do not have permission to retry documents.');
+      return t(
+        'intake.bulkRetry.errors.permission',
+        'You do not have permission to retry documents.',
+      );
     }
     if (ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_NOT_FOUND)) {
       return t('intake.bulkRetry.errors.none', 'No documents match these criteria.');
     }
     if (action === 'execute' && ErrorHelper.isErrorCode(err, ErrorCodes.DOCUMENT_OCR_FAILED)) {
-      return t('intake.bulkRetry.errors.ocr', 'Some documents cannot be retried because of processing issues.');
+      return t(
+        'intake.bulkRetry.errors.ocr',
+        'Some documents cannot be retried because of processing issues.',
+      );
     }
-    if (info.category === 'server') return t('intake.bulkRetry.errors.server', 'Server error. Try again later.');
-    if (info.category === 'network') return t('intake.bulkRetry.errors.network', 'Network error. Check your connection and try again.');
+    if (info.category === 'server')
+      return t('intake.bulkRetry.errors.server', 'Server error. Try again later.');
+    if (info.category === 'network')
+      return t(
+        'intake.bulkRetry.errors.network',
+        'Network error. Check your connection and try again.',
+      );
     return (
       info.message ||
       (action === 'preview'
@@ -155,8 +189,10 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
     const results = await Promise.allSettled(
       selectedDocumentIds.map((id) => ocrService.retryWithLanguage(id, undefined, languages)),
     );
+    // A document that was already queued (queued: false) is still on its way through OCR, so it
+    // counts as queued here; only a refused or failed request does not.
     const queued = results.filter(
-      (r) => r.status === 'fulfilled' && (r.value?.data as { success?: boolean } | undefined)?.success !== false,
+      (r) => r.status === 'fulfilled' && ocrRetryOutcome(r.value?.data) !== 'refused',
     ).length;
     return {
       success: queued > 0,
@@ -177,7 +213,12 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
         : (await documentService.bulkRetryOcr(buildRequest(false))).data;
       if (!result || !result.queued_count) {
         // A 200 that queued nothing is not a success: keep the dialog open and say so.
-        setError(t('intake.bulkRetry.errors.noneQueued', 'No documents were queued, so nothing will be retried.'));
+        setError(
+          t(
+            'intake.bulkRetry.errors.noneQueued',
+            'No documents were queued, so nothing will be retried.',
+          ),
+        );
         return;
       }
       onSuccess(result);
@@ -190,8 +231,10 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
   };
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 1) return t('intake.bulkRetry.seconds', '{{n}} seconds', { n: Math.round(minutes * 60) });
-    if (minutes < 60) return t('intake.bulkRetry.minutes', '{{n}} minutes', { n: Math.round(minutes) });
+    if (minutes < 1)
+      return t('intake.bulkRetry.seconds', '{{n}} seconds', { n: Math.round(minutes * 60) });
+    if (minutes < 60)
+      return t('intake.bulkRetry.minutes', '{{n}} minutes', { n: Math.round(minutes) });
     return t('intake.bulkRetry.hours', '{{n}} hours', { n: Math.round(minutes / 60) });
   };
 
@@ -211,7 +254,12 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
           <Button onPress={() => void handlePreview()} isDisabled={loading}>
             {t('intake.bulkRetry.preview', 'Preview')}
           </Button>
-          <Button variant="primary" onPress={() => void handleExecute()} isPending={loading} isDisabled={!preview || matched === 0}>
+          <Button
+            variant="primary"
+            onPress={() => void handleExecute()}
+            isPending={loading}
+            isDisabled={!preview || matched === 0}
+          >
             {t('intake.bulkRetry.execute', 'Retry {{count}} documents', { count: matched })}
           </Button>
         </>
@@ -237,8 +285,14 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
           <Radio value="all" className={styles.radio}>
             {t('intake.bulkRetry.modeAll', 'Retry all failed OCR documents')}
           </Radio>
-          <Radio value="specific" className={styles.radio} isDisabled={selectedDocumentIds.length === 0}>
-            {t('intake.bulkRetry.modeSelected', 'Retry selected documents ({{count}} selected)', { count: selectedDocumentIds.length })}
+          <Radio
+            value="specific"
+            className={styles.radio}
+            isDisabled={selectedDocumentIds.length === 0}
+          >
+            {t('intake.bulkRetry.modeSelected', 'Retry selected documents ({{count}} selected)', {
+              count: selectedDocumentIds.length,
+            })}
           </Radio>
           <Radio value="filter" className={styles.radio}>
             {t('intake.bulkRetry.modeFilter', 'Retry documents matching criteria')}
@@ -248,7 +302,11 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
         {mode === 'filter' ? (
           <fieldset className={styles.fieldset}>
             <legend className={styles.heading}>{t('intake.bulkRetry.criteria', 'Criteria')}</legend>
-            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.fileTypes', 'File types')}>
+            <div
+              className={styles.toggleRow}
+              role="group"
+              aria-label={t('intake.bulkRetry.fileTypes', 'File types')}
+            >
               <span className={styles.label}>{t('intake.bulkRetry.fileTypes', 'File types')}</span>
               {COMMON_MIME_TYPES.map(({ value, label }) => (
                 <ToggleButton
@@ -261,8 +319,14 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
                 </ToggleButton>
               ))}
             </div>
-            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.reasons', 'Failure reasons')}>
-              <span className={styles.label}>{t('intake.bulkRetry.reasons', 'Failure reasons')}</span>
+            <div
+              className={styles.toggleRow}
+              role="group"
+              aria-label={t('intake.bulkRetry.reasons', 'Failure reasons')}
+            >
+              <span className={styles.label}>
+                {t('intake.bulkRetry.reasons', 'Failure reasons')}
+              </span>
               {COMMON_FAILURE_REASONS.map(({ value, key, label }) => (
                 <ToggleButton
                   key={value}
@@ -274,14 +338,25 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
                 </ToggleButton>
               ))}
             </div>
-            <div className={styles.toggleRow} role="group" aria-label={t('intake.bulkRetry.maxSize', 'Maximum file size')}>
-              <span className={styles.label}>{t('intake.bulkRetry.maxSize', 'Maximum file size')}</span>
+            <div
+              className={styles.toggleRow}
+              role="group"
+              aria-label={t('intake.bulkRetry.maxSize', 'Maximum file size')}
+            >
+              <span className={styles.label}>
+                {t('intake.bulkRetry.maxSize', 'Maximum file size')}
+              </span>
               {FILE_SIZE_PRESETS.map(({ label, value }) => (
                 <ToggleButton
                   key={value}
                   className={styles.toggle}
                   isSelected={filter.max_file_size === value}
-                  onChange={() => changeFilter('max_file_size', filter.max_file_size === value ? undefined : value)}
+                  onChange={() =>
+                    changeFilter(
+                      'max_file_size',
+                      filter.max_file_size === value ? undefined : value,
+                    )
+                  }
                 >
                   {label}
                 </ToggleButton>
@@ -289,7 +364,9 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
             </div>
             {filter.max_file_size ? (
               <p className={styles.muted}>
-                {t('intake.bulkRetry.maxSizeValue', 'Up to {{size}}', { size: formatFileSize(filter.max_file_size) })}
+                {t('intake.bulkRetry.maxSizeValue', 'Up to {{size}}', {
+                  size: formatFileSize(filter.max_file_size),
+                })}
               </p>
             ) : null}
             <TextField
@@ -306,11 +383,19 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
         ) : null}
 
         <fieldset className={styles.fieldset}>
-          <legend className={styles.heading}>{t('intake.bulkRetry.languages', 'OCR languages')}</legend>
+          <legend className={styles.heading}>
+            {t('intake.bulkRetry.languages', 'OCR languages')}
+          </legend>
           <p className={styles.muted}>
             {mode === 'specific'
-              ? t('intake.bulkRetry.languagesHint', 'Optional. Read the selected documents again with these languages.')
-              : t('intake.bulkRetry.languagesSelectedOnly', 'Choosing languages applies to selected documents only.')}
+              ? t(
+                  'intake.bulkRetry.languagesHint',
+                  'Optional. Read the selected documents again with these languages.',
+                )
+              : t(
+                  'intake.bulkRetry.languagesSelectedOnly',
+                  'Choosing languages applies to selected documents only.',
+                )}
           </p>
           <LanguageSelector
             selectedLanguages={languages}
@@ -339,15 +424,26 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
             </p>
           ) : null}
           {usePriority ? (
-            <Slider className={styles.slider} minValue={1} maxValue={20} value={priority} onChange={(v) => setPriority(v as number)}>
+            <Slider
+              className={styles.slider}
+              minValue={1}
+              maxValue={20}
+              value={priority}
+              onChange={(v) => setPriority(v as number)}
+            >
               <div className={styles.headRow}>
-                <Label className={styles.label}>{t('intake.bulkRetry.priority', 'Priority (higher is more urgent)')}</Label>
+                <Label className={styles.label}>
+                  {t('intake.bulkRetry.priority', 'Priority (higher is more urgent)')}
+                </Label>
                 <SliderOutput className={styles.mono} />
               </div>
               <SliderTrack className={styles.track}>
                 {({ state }) => (
                   <>
-                    <div className={styles.trackFill} style={{ width: `${state.getThumbPercent(0) * 100}%` }} />
+                    <div
+                      className={styles.trackFill}
+                      style={{ width: `${state.getThumbPercent(0) * 100}%` }}
+                    />
                     <SliderThumb className={styles.thumb} />
                   </>
                 )}
@@ -357,7 +453,10 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
         </fieldset>
 
         {preview ? (
-          <section className={styles.stack} aria-label={t('intake.bulkRetry.previewResults', 'Preview results')}>
+          <section
+            className={styles.stack}
+            aria-label={t('intake.bulkRetry.previewResults', 'Preview results')}
+          >
             <Pass>
               <PassCell label={t('intake.bulkRetry.matched', 'Documents matched')} mono>
                 {String(preview.matched_count)}
@@ -372,12 +471,16 @@ export const BulkRetryModal: React.FC<BulkRetryModalProps> = ({ open, onClose, o
                   <li key={doc.id}>
                     <span>{doc.filename}</span>
                     <span className={styles.mono}> · {formatFileSize(doc.file_size)}</span>
-                    {doc.ocr_failure_reason ? <span className={styles.muted}> · {doc.ocr_failure_reason}</span> : null}
+                    {doc.ocr_failure_reason ? (
+                      <span className={styles.muted}> · {doc.ocr_failure_reason}</span>
+                    ) : null}
                   </li>
                 ))}
                 {preview.documents.length > 10 ? (
                   <li className={styles.muted}>
-                    {t('intake.bulkRetry.more', 'and {{count}} more', { count: preview.documents.length - 10 })}
+                    {t('intake.bulkRetry.more', 'and {{count}} more', {
+                      count: preview.documents.length - 10,
+                    })}
                   </li>
                 ) : null}
               </ul>

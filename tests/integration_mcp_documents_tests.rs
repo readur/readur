@@ -562,13 +562,21 @@ async fn rest_retry_ocr_twice_returns_200_not_500() {
     )
     .unwrap();
     assert_eq!(first["success"], json!(true), "{first}");
+    assert_eq!(first["queued"], json!(true), "{first}");
     let second: Value = serde_json::from_slice(
         &auth
             .make_authenticated_request("POST", &uri, Some(json!({})), &token)
             .await,
     )
     .expect("second retry must return JSON, not a 500");
-    assert_eq!(second["success"], json!(false), "{second}");
+    // The request itself succeeded; it just found the job already queued.
+    assert_eq!(second["success"], json!(true), "{second}");
+    assert_eq!(second["queued"], json!(false), "{second}");
+    assert_eq!(
+        second["message"],
+        json!("The document is already queued for OCR"),
+        "{second}"
+    );
 }
 
 #[tokio::test]
@@ -844,6 +852,7 @@ async fn stuck_processing_document_can_be_retried_via_rest() {
     )
     .unwrap();
     assert_eq!(body["success"], json!(true), "{body}");
+    assert_eq!(body["queued"], json!(true), "{body}");
     assert!(queued(&ctx, doc.id).await);
     assert_eq!(ocr_status(&ctx, doc.id).await.as_deref(), Some("pending"));
 }

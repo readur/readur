@@ -188,6 +188,7 @@ use crate::{
             // Document schemas
             BulkDeleteRequest, DocumentListResponse, DocumentOcrResponse, DocumentOperationResponse,
             BulkDeleteResponse, PaginationInfo, DocumentDuplicatesResponse, crate::routes::documents::RetryOcrRequest,
+            crate::routes::documents::RetryOcrResponse,
             // OCR schemas
             crate::models::AvailableLanguagesResponse, crate::models::LanguageInfo,
             crate::ocr::api::OcrHealthResponse, crate::errors::ApiErrorBody,

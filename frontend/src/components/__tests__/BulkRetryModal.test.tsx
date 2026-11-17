@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BulkRetryModal } from '../BulkRetryModal';
 
@@ -36,13 +36,18 @@ describe('BulkRetryModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    
+
     // Reset mock props
     mockProps.onClose.mockClear();
     mockProps.onSuccess.mockClear();
-    
+
     mockGetLanguages.mockResolvedValue({
-      data: { available_languages: [{ code: 'eng', name: 'English', installed: true }, { code: 'deu', name: 'German', installed: true }] },
+      data: {
+        available_languages: [
+          { code: 'eng', name: 'English', installed: true },
+          { code: 'deu', name: 'German', installed: true },
+        ],
+      },
     });
     mockRetryWithLanguage.mockResolvedValue({ data: { success: true } });
 
@@ -75,7 +80,7 @@ describe('BulkRetryModal', () => {
 
   test('closes modal when close button is clicked', async () => {
     const user = userEvent.setup();
-    
+
     render(<BulkRetryModal {...mockProps} />);
 
     const closeButton = screen.getByRole('button', { name: 'Cancel' });
@@ -131,14 +136,20 @@ describe('BulkRetryModal', () => {
     expect(mockBulkRetryOcr).toHaveBeenCalledWith({
       mode: 'filter',
       preview_only: true,
-      filter: { mime_types: ['application/pdf'], failure_reasons: ['ocr_timeout'], max_file_size: 5 * 1024 * 1024 },
+      filter: {
+        mime_types: ['application/pdf'],
+        failure_reasons: ['ocr_timeout'],
+        max_file_size: 5 * 1024 * 1024,
+      },
     });
   });
 
   test('starts in selected mode with languages available for the selection', async () => {
     render(<BulkRetryModal {...mockProps} selectedDocumentIds={['a', 'b']} />);
     expect(screen.getByLabelText('Retry selected documents (2 selected)')).toBeChecked();
-    expect(screen.getByText('Optional. Read the selected documents again with these languages.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Optional. Read the selected documents again with these languages.'),
+    ).toBeInTheDocument();
   });
 
   test('shows the server error when the preview fails', async () => {
@@ -151,10 +162,24 @@ describe('BulkRetryModal', () => {
 
   test('shows an error and stays open when the retry queued nothing', async () => {
     mockBulkRetryOcr.mockResolvedValueOnce({
-      data: { success: true, queued_count: 0, matched_count: 5, documents: [], estimated_total_time_minutes: 1, message: '' },
+      data: {
+        success: true,
+        queued_count: 0,
+        matched_count: 5,
+        documents: [],
+        estimated_total_time_minutes: 1,
+        message: '',
+      },
     });
     mockBulkRetryOcr.mockResolvedValueOnce({
-      data: { success: true, queued_count: 0, matched_count: 5, documents: [], estimated_total_time_minutes: 1, message: '' },
+      data: {
+        success: true,
+        queued_count: 0,
+        matched_count: 5,
+        documents: [],
+        estimated_total_time_minutes: 1,
+        message: '',
+      },
     });
     const user = userEvent.setup();
     render(<BulkRetryModal {...mockProps} />);
@@ -166,19 +191,48 @@ describe('BulkRetryModal', () => {
   });
 
   test('retries with languages per document, reports only real queues and no time estimate', async () => {
-    mockRetryWithLanguage.mockResolvedValueOnce({ data: { success: true } }).mockResolvedValueOnce({ data: { success: false } });
+    mockRetryWithLanguage
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { success: false } });
     const user = userEvent.setup();
     render(<BulkRetryModal {...mockProps} selectedDocumentIds={['a', 'b']} />);
     await user.click(await screen.findByRole('button', { name: /languages/i }));
     await user.click(await screen.findByRole('checkbox', { name: /German/ }));
     await user.click(screen.getByLabelText('Override processing priority'));
-    expect(screen.getByRole('note')).toHaveTextContent('does not apply when retrying with chosen languages');
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'does not apply when retrying with chosen languages',
+    );
     await user.click(screen.getByRole('button', { name: 'Preview' }));
     await user.click(await screen.findByRole('button', { name: 'Retry 5 documents' }));
     expect(mockRetryWithLanguage).toHaveBeenCalledWith('a', undefined, ['deu']);
     expect(mockRetryWithLanguage).toHaveBeenCalledWith('b', undefined, ['deu']);
     expect(mockProps.onSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ queued_count: 1, matched_count: 2, estimated_total_time_minutes: 0 }),
+      expect.objectContaining({
+        queued_count: 1,
+        matched_count: 2,
+        estimated_total_time_minutes: 0,
+      }),
+    );
+  });
+
+  test('counts a document that was already queued as queued, not as a failure', async () => {
+    mockRetryWithLanguage
+      .mockResolvedValueOnce({
+        data: { success: true, queued: true, message: 'Document queued for OCR processing' },
+      })
+      .mockResolvedValueOnce({
+        data: { success: true, queued: false, message: 'The document is already queued for OCR' },
+      });
+    const user = userEvent.setup();
+    render(<BulkRetryModal {...mockProps} selectedDocumentIds={['a', 'b']} />);
+    await user.click(await screen.findByRole('button', { name: /languages/i }));
+    await user.click(await screen.findByRole('checkbox', { name: /German/ }));
+    await user.click(screen.getByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry 5 documents' }));
+    await waitFor(() =>
+      expect(mockProps.onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ queued_count: 2, matched_count: 2 }),
+      ),
     );
   });
 

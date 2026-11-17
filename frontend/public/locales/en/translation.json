@@ -2059,6 +2059,7 @@
     "toast": {
       "downloadFailed": "Couldn't download the file",
       "retryQueued": "OCR queued again",
+      "retryAlreadyQueued": "Already queued for OCR",
       "retryFailed": "Couldn't queue OCR again",
       "deleted": "Document deleted",
       "deleteFailed": "Couldn't delete the document",
@@ -2545,6 +2546,7 @@
       "retryPartial": "Some documents were not queued. Check them and try again.",
       "retryQueued": "{{queued}} of {{matched}} documents queued",
       "retryStarted": "OCR retry queued",
+      "retryAlreadyQueued": "Already queued for OCR",
       "retryWait": "{{name}} · about {{minutes}} min",
       "size": "Size",
       "source": "Source",
