@@ -1,0 +1,90 @@
+# helm-unittest suite for templates/checks.yaml (render-time guards).
+suite: checks
+templates:
+  - templates/checks.yaml
+tests:
+  - it: accepts the default values
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts an existing uploads claim
+    set:
+      persistence.uploads.existingClaim: my-uploads
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: refuses to run without an uploads volume or S3
+    set:
+      persistence.uploads.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: persistence.uploads is disabled and S3 storage is not enabled
+
+  - it: accepts no uploads volume with S3_ENABLED=true
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env.S3_ENABLED: "TRUE"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts no uploads volume with STORAGE_BACKEND=s3
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env.STORAGE_BACKEND: s3
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts no uploads volume with S3_ENABLED taken from a Secret
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env.S3_ENABLED:
+        valueFrom:
+          secretKeyRef:
+            name: s3
+            key: S3_ENABLED
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: reads S3_ENABLED from the list form of env
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env:
+        - name: S3_ENABLED
+          value: "true"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: does not treat S3_ENABLED=false as S3
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env.S3_ENABLED: "false"
+    asserts:
+      - failedTemplate:
+          errorPattern: S3 storage is not enabled
+
+  - it: accepts an emptyDir uploads volume (explicit opt-in to ephemeral storage)
+    set:
+      persistence.uploads.type: emptyDir
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: refuses a chart-created PVC without a size
+    set:
+      persistence.watch.size: null
+    asserts:
+      - failedTemplate:
+          errorPattern: persistence.watch needs either existingClaim
+
+  - it: accepts no size when an existing claim is mounted
+    set:
+      persistence.uploads.size: null
+      persistence.uploads.existingClaim: my-uploads
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: refuses more than one replica
+    set:
+      controllers.main.replicas: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: run one Readur pod per database

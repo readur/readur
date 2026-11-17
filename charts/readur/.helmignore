@@ -28,3 +28,5 @@ OWNERS
 
 # helm unit tests
 tests/
+# CI value sets and the validation script (chart-testing reads them from source)
+ci/

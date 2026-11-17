@@ -1,0 +1,259 @@
+# helm-unittest suite: `helm unittest charts/readur` (after `helm dependency build`).
+suite: release (Deployment, PVCs)
+templates:
+  - templates/release.yaml
+release:
+  name: readur
+chart:
+  appVersion: 9.8.7
+tests:
+  - it: renders with default values, creating a retained PVC for uploads and watch
+    asserts:
+      - containsDocument:
+          kind: Deployment
+          apiVersion: apps/v1
+          name: readur
+          any: true
+      - hasDocuments:
+          count: 5
+      - containsDocument:
+          kind: PersistentVolumeClaim
+          apiVersion: v1
+          name: readur-uploads
+          any: true
+      - containsDocument:
+          kind: PersistentVolumeClaim
+          apiVersion: v1
+          name: readur-watch
+          any: true
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+        documentSelector:
+          path: metadata.name
+          value: readur-uploads
+      - equal:
+          path: spec.resources.requests.storage
+          value: 10Gi
+        documentSelector:
+          path: metadata.name
+          value: readur-uploads
+
+  - it: uses the published image, tagged with the chart's appVersion by default
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/readur/readur:9.8.7
+
+  - it: lets an explicit tag win over appVersion
+    set:
+      controllers.main.containers.readur.image.tag: "3.0.0"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/readur/readur:3.0.0
+
+  - it: mounts the chart-created claims
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: uploads
+            persistentVolumeClaim:
+              claimName: readur-uploads
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: watch
+            persistentVolumeClaim:
+              claimName: readur-watch
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: uploads
+            mountPath: /app/uploads
+
+  - it: mounts persistence.uploads.existingClaim instead of creating an uploads PVC
+    set:
+      persistence.uploads.existingClaim: my-uploads
+    asserts:
+      - hasDocuments:
+          count: 4
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: uploads
+            persistentVolumeClaim:
+              claimName: my-uploads
+        documentSelector:
+          path: kind
+          value: Deployment
+      # The watch claim keeps the name earlier chart versions gave it.
+      - containsDocument:
+          kind: PersistentVolumeClaim
+          apiVersion: v1
+          name: readur
+          any: true
+
+  - it: honours persistence.watch.enabled=false and keeps the uploads claim name
+    set:
+      persistence.watch.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 4
+      - containsDocument:
+          kind: PersistentVolumeClaim
+          apiVersion: v1
+          name: readur-uploads
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: watch
+            mountPath: /app/watch
+        documentSelector:
+          path: kind
+          value: Deployment
+
+  - it: honours persistence.uploads.retain=false (user false beats the chart default)
+    set:
+      persistence.uploads.retain: false
+    documentSelector:
+      path: metadata.name
+      value: readur-uploads
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: honours a disabled probe (user false beats the chart default)
+    set:
+      controllers.main.containers.readur.probes.liveness.enabled: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - exists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: mounts an emptyDir for uploads when asked to
+    set:
+      persistence.uploads.type: emptyDir
+    asserts:
+      - hasDocuments:
+          count: 4
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: uploads
+            emptyDir: {}
+        documentSelector:
+          path: kind
+          value: Deployment
+
+  - it: runs without an uploads volume when S3 storage is enabled
+    set:
+      persistence.uploads.enabled: false
+      controllers.main.containers.readur.env.S3_ENABLED: "true"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: uploads
+            mountPath: /app/uploads
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S3_ENABLED
+            value: "true"
+
+  - it: reads JWT_SECRET and ADMIN_PASSWORD from the auth Secret
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: readur-auth
+                key: ADMIN_PASSWORD
+                optional: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: readur-auth
+                key: JWT_SECRET
+                optional: true
+
+  - it: keeps the auth env when the user adds env vars of their own
+    set:
+      controllers.main.containers.readur.env.DATABASE_URL: postgresql://readur@db/readur
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            value: postgresql://readur@db/readur
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: readur-auth
+                key: ADMIN_PASSWORD
+                optional: true
+
+  - it: points the auth env at auth.existingSecret
+    set:
+      auth.existingSecret: my-auth
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-auth
+                key: ADMIN_PASSWORD
+                optional: true
+
+  - it: runs one pod with the Recreate strategy and a pinned init image
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: ^busybox:[0-9]+\.[0-9]+\.[0-9]+$

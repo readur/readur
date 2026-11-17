@@ -1,0 +1,40 @@
+{{- $image := .Values.controllers.main.containers.readur.image -}}
+Readur {{ $image.tag | default .Chart.AppVersion }} ({{ $image.repository }}) is deployed as release {{ .Release.Name }}.
+{{- if not (include "readur.databaseConfigured" .) }}
+
+WARNING: no database is configured. This chart does not deploy PostgreSQL;
+set DATABASE_URL (or the POSTGRES_* variables) under
+controllers.main.containers.readur.env, or add an envFrom source, otherwise
+Readur cannot start.
+{{- end }}
+
+Storage:
+{{- $uploads := .Values.persistence.uploads }}
+{{- if not $uploads.enabled }}
+  documents: S3 (no uploads volume)
+{{- else if eq (toString $uploads.type) "emptyDir" }}
+  documents: emptyDir -- WARNING: documents are lost whenever the pod restarts
+{{- else if $uploads.existingClaim }}
+  documents: existing PVC {{ $uploads.existingClaim }}
+{{- else }}
+  documents: PVC created by the chart{{ if $uploads.retain }} (kept after helm uninstall){{ end }}
+{{- end }}
+{{- if .Values.persistence.watch.enabled }}
+  watch folder: /app/watch
+{{- end }}
+{{- if not .Values.auth.existingSecret }}
+
+Initial admin password (user "admin" unless ADMIN_USERNAME is set):
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "readur.authSecretName" . }} -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
+{{- end }}
+{{- if .Values.ingress.main.enabled }}
+
+URL:
+{{- range .Values.ingress.main.hosts }}
+  http{{ if $.Values.ingress.main.tls }}s{{ end }}://{{ .host }}/
+{{- end }}
+{{- else }}
+
+Reach it with:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "readur.fullname" . }} 8000:8000
+{{- end }}

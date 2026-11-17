@@ -1,5 +1,29 @@
-{{- if .Values.persistence.uploads.enabled -}}
-  {{- if and (eq .Values.persistence.uploads.type "persistentVolumeClaim") (not .Values.persistence.uploads.existingClaim) -}}
-    {{- $name := .Values.persistence.uploads.existingClaim | required "You need to specify an existing PVC for uploads storage at persistence.uploads.existingClaim or let the chart create one" -}}
+{{- /*
+Render-time guards against configurations that lose data or cannot work.
+
+The uploads volume holds every document. By default the chart creates a
+retained PVC for it (or mounts persistence.uploads.existingClaim); what must not
+happen is running without it, which keeps documents in the container's
+filesystem until the next restart. That is only acceptable when documents go
+to S3, or when the user opts into it explicitly with `type: emptyDir`.
+*/ -}}
+{{- $uploads := .Values.persistence.uploads | default dict -}}
+{{- if and (not $uploads.enabled) (not (include "readur.s3Enabled" .)) -}}
+  {{- fail "persistence.uploads is disabled and S3 storage is not enabled, so documents would be lost whenever the pod restarts. Leave persistence.uploads enabled (the chart creates a PVC, or set persistence.uploads.existingClaim), enable S3 with S3_ENABLED: \"true\" under controllers.main.containers.readur.env (envFrom is not inspected), or set persistence.uploads.type=emptyDir to accept losing documents." -}}
+{{- end -}}
+
+{{- range $name := list "uploads" "watch" -}}
+  {{- $p := index $.Values.persistence $name | default dict -}}
+  {{- if and $p.enabled (eq (toString $p.type) "persistentVolumeClaim") (not $p.existingClaim) (not $p.size) -}}
+    {{- fail (printf "persistence.%s needs either existingClaim (an existing PVC to mount) or size (for the PVC the chart creates)" $name) -}}
   {{- end -}}
+{{- end -}}
+
+{{- /*
+One Readur instance per database: the OCR queue, schedulers and the
+ReadWriteOnce volumes assume a single pod (see docs/deployment.md).
+*/ -}}
+{{- $replicas := dig "controllers" "main" "replicas" 1 (.Values | toYaml | fromYaml) -}}
+{{- if gt (int $replicas) 1 -}}
+  {{- fail (printf "controllers.main.replicas is %v; run one Readur pod per database" $replicas) -}}
 {{- end -}}
