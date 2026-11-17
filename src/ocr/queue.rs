@@ -11,6 +11,10 @@ use uuid::Uuid;
 
 use crate::{db::Database, ocr::{enhanced::EnhancedOcrService, failure_reason::classify_ocr_error}, db_guardrails_simple::DocumentTransactionManager, monitoring::request_throttler::RequestThrottler};
 
+#[path = "queue_enqueue.rs"]
+mod enqueue;
+pub use enqueue::EnqueueOutcome;
+
 /// Upper bound on concurrent OCR jobs, to avoid exhausting the background DB pool.
 const MAX_CONCURRENT_OCR_JOBS: usize = 15;
 
@@ -94,77 +98,6 @@ impl OcrQueueService {
         }
     }
     
-
-    /// Add a document to the OCR queue
-    pub async fn enqueue_document(&self, document_id: Uuid, priority: i32, file_size: i64) -> Result<Uuid> {
-        crate::debug_log!("OCR_QUEUE",
-            "document_id" => document_id,
-            "priority" => priority,
-            "file_size" => file_size,
-            "message" => "Enqueueing document"
-        );
-        
-        let row = sqlx::query(
-            r#"
-            INSERT INTO ocr_queue (document_id, priority, file_size)
-            VALUES ($1, $2, $3)
-            RETURNING id
-            "#
-        )
-        .bind(document_id)
-        .bind(priority)
-        .bind(file_size)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| {
-            crate::debug_error!("OCR_QUEUE", format!("Failed to insert document {} into queue: {}", document_id, e));
-            e
-        })?;
-        
-        let id: Uuid = row.get("id");
-
-        crate::debug_log!("OCR_QUEUE",
-            "document_id" => document_id,
-            "queue_id" => id,
-            "priority" => priority,
-            "file_size" => file_size,
-            "message" => "Successfully enqueued document"
-        );
-        
-        info!("Enqueued document {} with priority {} for OCR processing", document_id, priority);
-        Ok(id)
-    }
-
-    /// Batch enqueue multiple documents
-    pub async fn enqueue_documents_batch(&self, documents: Vec<(Uuid, i32, i64)>) -> Result<Vec<Uuid>> {
-        let mut ids = Vec::new();
-        
-        // Use a transaction for batch insert
-        let mut tx = self.pool.begin().await?;
-        
-        for (document_id, priority, file_size) in documents {
-            let row = sqlx::query(
-                r#"
-                INSERT INTO ocr_queue (document_id, priority, file_size)
-                VALUES ($1, $2, $3)
-                RETURNING id
-                "#
-            )
-            .bind(document_id)
-            .bind(priority)
-            .bind(file_size)
-            .fetch_one(&mut *tx)
-            .await?;
-            
-            let id: Uuid = row.get("id");
-            ids.push(id);
-        }
-        
-        tx.commit().await?;
-        
-        info!("Batch enqueued {} documents for OCR processing", ids.len());
-        Ok(ids)
-    }
 
     /// Get the next item from the queue with atomic job claiming and retry logic
     pub async fn dequeue(&self) -> Result<Option<OcrQueueItem>> {
@@ -423,7 +356,7 @@ impl OcrQueueService {
                 // Get user's OCR settings or use defaults
                 let settings = if let Some(user_id) = user_id {
                     self.db.get_user_settings(user_id).await.ok().flatten()
-                        .unwrap_or_else(|| crate::models::Settings::default())
+                        .unwrap_or_default()
                 } else {
                     crate::models::Settings::default()
                 };
@@ -545,7 +478,7 @@ impl OcrQueueService {
                             }
                         } else {
                             // Handle empty text results - fail the document since no searchable content was extracted
-                            let error_msg = format!("No extractable text found in document (0 words)");
+                            let error_msg = "No extractable text found in document (0 words)".to_string();
                             warn!("⚠️  No searchable content extracted for '{}' | Job: {} | Document: {} | 0 words", 
                                   filename, item.id, item.document_id);
                             
@@ -810,10 +743,6 @@ impl OcrQueueService {
         info!("Ensured processed images directory exists: {:?}", processed_images_dir);
         
         // Generate a unique filename for the processed image
-        let file_stem = Path::new(processed_image_path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("processed");
         let extension = Path::new(processed_image_path)
             .extension()
             .and_then(|s| s.to_str())
@@ -1188,12 +1117,14 @@ impl OcrQueueService {
         Ok(result.rows_affected() as i64)
     }
 
-    /// Handle stale processing items (worker crashed)
+    /// Handle stale processing items (worker crashed). A job with no
+    /// attempts left fails instead: as 'pending' it would never be dequeued
+    /// yet would block the document from being queued again.
     pub async fn recover_stale_items(&self, stale_minutes: i32) -> Result<i64> {
         let result = sqlx::query(
             r#"
             UPDATE ocr_queue
-            SET status = 'pending',
+            SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
                 started_at = NULL,
                 worker_id = NULL
             WHERE status = 'processing'
@@ -1212,6 +1143,7 @@ impl OcrQueueService {
     }
 
     /// Helper function to create failed document record from OCR failure
+    #[allow(clippy::too_many_arguments)]
     async fn create_failed_document_from_ocr_error(
         &self,
         document_id: Uuid,

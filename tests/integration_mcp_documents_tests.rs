@@ -746,10 +746,11 @@ async fn wrapped_base64_upload_near_the_size_limit_is_accepted() {
 }
 
 #[tokio::test]
-async fn ocr_queue_still_rejects_duplicate_active_and_orphan_jobs() {
+async fn ocr_queue_index_still_rejects_duplicate_active_and_orphan_jobs() {
     // Migration 20261116000001 moved duplicate prevention from the guardrail
-    // trigger to the partial unique index; both guarantees must still hold
-    // for plain inserts (every enqueue path other than OCR retry).
+    // trigger to the partial unique index. The enqueue API tolerates
+    // duplicates (tests/integration_ocr_enqueue_tests.rs); the table itself
+    // must still refuse them for any raw insert.
     let ctx = TestContext::new().await;
     let (alice, _) = login(&ctx).await;
     let doc = insert(
@@ -757,31 +758,229 @@ async fn ocr_queue_still_rejects_duplicate_active_and_orphan_jobs() {
         document_helpers::create_document_with_ocr_error(alice),
     )
     .await;
-    let queue = &ctx.state().queue_service;
+    let pool = &ctx.state().db.pool;
+    let raw_insert = |document_id: Uuid| {
+        sqlx::query("INSERT INTO ocr_queue (document_id, priority, file_size) VALUES ($1, 5, 1)")
+            .bind(document_id)
+            .execute(pool)
+    };
 
-    queue
-        .enqueue_document(doc.id, 5, doc.file_size)
-        .await
-        .expect("first job is accepted");
+    raw_insert(doc.id).await.expect("first job is accepted");
     assert!(
-        queue
-            .enqueue_document(doc.id, 5, doc.file_size)
-            .await
-            .is_err(),
+        raw_insert(doc.id).await.is_err(),
         "a second pending job for the same document must be rejected"
     );
     assert!(
-        queue.enqueue_document(Uuid::new_v4(), 5, 1).await.is_err(),
+        raw_insert(Uuid::new_v4()).await.is_err(),
         "a job for a document that does not exist must be rejected"
     );
-    // Once the job is done, the document can be queued again.
     sqlx::query("UPDATE ocr_queue SET status = 'completed' WHERE document_id = $1")
         .bind(doc.id)
-        .execute(&ctx.state().db.pool)
+        .execute(pool)
         .await
         .unwrap();
-    queue
-        .enqueue_document(doc.id, 5, doc.file_size)
+    raw_insert(doc.id).await.expect("re-queue after completion");
+}
+
+async fn ocr_status(ctx: &TestContext, document_id: Uuid) -> Option<String> {
+    sqlx::query_scalar("SELECT ocr_status FROM documents WHERE id = $1")
+        .bind(document_id)
+        .fetch_one(&ctx.state().db.pool)
         .await
-        .expect("re-queue after completion");
+        .unwrap()
+}
+
+/// A document left at 'processing' with no queue job, as after a worker
+/// crash whose job was cleaned up.
+async fn stuck_processing_document(ctx: &TestContext, owner: Uuid) -> Document {
+    let mut doc = document_helpers::create_document_without_ocr(owner);
+    doc.ocr_status = Some("processing".to_string());
+    insert(ctx, doc).await
+}
+
+#[tokio::test]
+async fn stuck_processing_document_is_reported_and_can_be_retried_via_mcp() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = stuck_processing_document(&ctx, alice).await;
+
+    let before = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&before);
+    assert!(text(&before).contains("retry_document_ocr"), "{before}");
+    assert!(!text(&before).contains("Check back"), "{before}");
+
+    let retry = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&retry);
+    assert_eq!(retry["structuredContent"]["queued"], json!(true), "{retry}");
+    assert!(queued(&ctx, doc.id).await);
+    // The stale status is reset; the worker sets 'processing' when it starts.
+    assert_eq!(ocr_status(&ctx, doc.id).await.as_deref(), Some("pending"));
+
+    let after = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert!(text(&after).contains("waiting in the OCR queue"), "{after}");
+}
+
+#[tokio::test]
+async fn stuck_processing_document_can_be_retried_via_rest() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = stuck_processing_document(&ctx, alice).await;
+
+    let body: Value = serde_json::from_slice(
+        &ctx.auth_helper()
+            .make_authenticated_request(
+                "POST",
+                &format!("/api/documents/{}/ocr/retry", doc.id),
+                Some(json!({})),
+                &token,
+            )
+            .await,
+    )
+    .unwrap();
+    assert_eq!(body["success"], json!(true), "{body}");
+    assert!(queued(&ctx, doc.id).await);
+    assert_eq!(ocr_status(&ctx, doc.id).await.as_deref(), Some("pending"));
+}
+
+#[tokio::test]
+async fn processing_document_with_a_running_job_is_not_queued_again() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = stuck_processing_document(&ctx, alice).await;
+    sqlx::query(
+        "INSERT INTO ocr_queue (document_id, priority, file_size, status, started_at) \
+         VALUES ($1, 5, 1, 'processing', NOW())",
+    )
+    .bind(doc.id)
+    .execute(&ctx.state().db.pool)
+    .await
+    .unwrap();
+
+    let ocr = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert!(text(&ocr).contains("Check back shortly"), "{ocr}");
+
+    let retry = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&retry);
+    assert_eq!(
+        retry["structuredContent"]["queued"],
+        json!(false),
+        "{retry}"
+    );
+    assert!(text(&retry).contains("already queued"), "{retry}");
+    assert_eq!(
+        ocr_status(&ctx, doc.id).await.as_deref(),
+        Some("processing")
+    );
+}
+
+#[tokio::test]
+async fn identical_mcp_upload_returns_the_existing_document_with_labels() {
+    let uploads = tempfile::tempdir().unwrap();
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(uploads.path().to_str().unwrap()),
+    )
+    .await;
+    let (alice, token) = login(&ctx).await;
+    let label: Uuid = sqlx::query_scalar(
+        "INSERT INTO labels (user_id, name, color) VALUES ($1, 'reupload', '#123456') RETURNING id",
+    )
+    .bind(alice)
+    .fetch_one(&ctx.state().db.pool)
+    .await
+    .unwrap();
+    let content = Base64::encode_string(b"the same bytes twice");
+
+    let first = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "once.txt", "content_base64": content }),
+        )
+        .await;
+    assert_ok(&first);
+    let second = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "twice.txt", "content_base64": content, "label_ids": [label] }),
+        )
+        .await;
+    assert_ok(&second);
+    assert_eq!(
+        second["structuredContent"]["status"],
+        json!("duplicate"),
+        "{second}"
+    );
+    assert_eq!(
+        second["structuredContent"]["id"], first["structuredContent"]["id"],
+        "{second}"
+    );
+    assert!(text(&second).contains("already exists"), "{second}");
+
+    let id: Uuid = first["structuredContent"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let labels = ctx.state().db.get_document_labels(id).await.unwrap();
+    assert_eq!(labels.iter().map(|l| l.id).collect::<Vec<_>>(), vec![label]);
+}
+
+#[tokio::test]
+async fn identical_rest_upload_is_still_a_conflict() {
+    // The web UI treats any 2xx upload as a new document and shows the 409
+    // message as the reason a file was not added; keep that contract.
+    let uploads = tempfile::tempdir().unwrap();
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(uploads.path().to_str().unwrap()),
+    )
+    .await;
+    let (alice, token) = login(&ctx).await;
+    let upload = || {
+        let boundary = "readur-reupload-boundary";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"same.txt\"\r\n\
+             Content-Type: text/plain\r\n\r\nidentical REST upload\r\n--{boundary}--\r\n"
+        );
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/documents")
+            .header("Authorization", format!("Bearer {token}"))
+            .header(
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(axum::body::Body::from(body))
+            .unwrap();
+        tower::ServiceExt::oneshot(ctx.app().clone(), request)
+    };
+
+    let first = upload().await.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let second = upload().await.unwrap();
+    assert_eq!(second.status(), StatusCode::CONFLICT);
+    let body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(second.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(body.to_string().contains("already exists"), "{body}");
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM documents WHERE user_id = $1")
+        .bind(alice)
+        .fetch_one(&ctx.state().db.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
 }

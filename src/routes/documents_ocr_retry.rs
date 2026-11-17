@@ -16,6 +16,7 @@ use crate::{
     AppState,
     db::sanitize::{strip_nul, strip_nul_vec},
     models::UserRole,
+    ocr::queue::EnqueueOutcome,
 };
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
@@ -210,7 +211,12 @@ pub async fn bulk_retry_ocr(
             );
             
             match state.queue_service.enqueue_document(doc.id, priority, doc.file_size).await {
-                Ok(queue_id) => {
+                Ok(EnqueueOutcome::AlreadyQueued) => {
+                    // A job is already pending or running for it; that job
+                    // does the retry, so there is nothing to add or record.
+                    info!("Document {} is already queued for OCR; not queueing it again", doc.id);
+                }
+                Ok(EnqueueOutcome::Queued(queue_id)) => {
                     doc_info.queue_id = Some(queue_id);
                     queued_count += 1;
                     

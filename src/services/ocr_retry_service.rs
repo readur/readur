@@ -1,12 +1,9 @@
 use anyhow::Result;
 use std::sync::Arc;
+use tracing::{error, info, warn};
 use uuid::Uuid;
-use tracing::{info, warn, error};
 
-use crate::{
-    AppState,
-    routes::documents_ocr_retry::OcrRetryFilter,
-};
+use crate::{ocr::queue::EnqueueOutcome, routes::documents_ocr_retry::OcrRetryFilter, AppState};
 use sqlx::Row;
 
 #[derive(Clone)]
@@ -18,71 +15,105 @@ impl OcrRetryService {
     pub fn new(state: Arc<AppState>) -> Self {
         Self { state }
     }
-    
+
     /// Retry OCR for all failed documents for a user
-    pub async fn retry_all_failed(&self, user_id: Uuid, priority_override: Option<i32>) -> Result<RetryResult> {
-        info!("Starting bulk retry for all failed OCR documents for user {}", user_id);
-        
+    pub async fn retry_all_failed(
+        &self,
+        user_id: Uuid,
+        priority_override: Option<i32>,
+    ) -> Result<RetryResult> {
+        info!(
+            "Starting bulk retry for all failed OCR documents for user {}",
+            user_id
+        );
+
         let documents = self.get_all_failed_documents(user_id).await?;
-        let retry_result = self.process_documents_for_retry(
-            documents, 
-            user_id, 
-            "bulk_retry_all",
-            priority_override
-        ).await?;
-        
-        info!("Bulk retry completed: {} out of {} documents queued", 
-            retry_result.queued_count, retry_result.matched_count);
-        
+        let retry_result = self
+            .process_documents_for_retry(documents, user_id, "bulk_retry_all", priority_override)
+            .await?;
+
+        info!(
+            "Bulk retry completed: {} out of {} documents queued",
+            retry_result.queued_count, retry_result.matched_count
+        );
+
         Ok(retry_result)
     }
-    
+
     /// Retry OCR for documents matching specific criteria
-    pub async fn retry_by_criteria(&self, user_id: Uuid, filter: OcrRetryFilter, priority_override: Option<i32>) -> Result<RetryResult> {
+    pub async fn retry_by_criteria(
+        &self,
+        user_id: Uuid,
+        filter: OcrRetryFilter,
+        priority_override: Option<i32>,
+    ) -> Result<RetryResult> {
         info!("Starting filtered retry for user {} with criteria: mime_types={:?}, failure_reasons={:?}", 
             user_id, filter.mime_types, filter.failure_reasons);
-        
+
         let documents = self.get_filtered_documents(user_id, filter).await?;
-        let retry_result = self.process_documents_for_retry(
-            documents, 
-            user_id, 
-            "bulk_retry_filtered",
-            priority_override
-        ).await?;
-        
-        info!("Filtered retry completed: {} out of {} documents queued", 
-            retry_result.queued_count, retry_result.matched_count);
-        
+        let retry_result = self
+            .process_documents_for_retry(
+                documents,
+                user_id,
+                "bulk_retry_filtered",
+                priority_override,
+            )
+            .await?;
+
+        info!(
+            "Filtered retry completed: {} out of {} documents queued",
+            retry_result.queued_count, retry_result.matched_count
+        );
+
         Ok(retry_result)
     }
-    
+
     /// Retry OCR for specific document IDs
-    pub async fn retry_specific_documents(&self, user_id: Uuid, document_ids: Vec<Uuid>, priority_override: Option<i32>) -> Result<RetryResult> {
-        info!("Starting specific document retry for user {} with {} documents", user_id, document_ids.len());
-        
+    pub async fn retry_specific_documents(
+        &self,
+        user_id: Uuid,
+        document_ids: Vec<Uuid>,
+        priority_override: Option<i32>,
+    ) -> Result<RetryResult> {
+        info!(
+            "Starting specific document retry for user {} with {} documents",
+            user_id,
+            document_ids.len()
+        );
+
         let documents = self.get_specific_documents(user_id, document_ids).await?;
-        let retry_result = self.process_documents_for_retry(
-            documents, 
-            user_id, 
-            "bulk_retry_specific",
-            priority_override
-        ).await?;
-        
-        info!("Specific document retry completed: {} out of {} documents queued", 
-            retry_result.queued_count, retry_result.matched_count);
-        
+        let retry_result = self
+            .process_documents_for_retry(
+                documents,
+                user_id,
+                "bulk_retry_specific",
+                priority_override,
+            )
+            .await?;
+
+        info!(
+            "Specific document retry completed: {} out of {} documents queued",
+            retry_result.queued_count, retry_result.matched_count
+        );
+
         Ok(retry_result)
     }
-    
+
     /// Get retry recommendations based on failure patterns
-    pub async fn get_retry_recommendations(&self, user_id: Uuid) -> Result<Vec<RetryRecommendation>> {
+    pub async fn get_retry_recommendations(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<RetryRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // Get failure statistics
         let failure_stats = self.get_failure_statistics(user_id).await?;
-        
+
         // Recommend retrying recent font encoding errors (often transient)
-        if let Some(font_errors) = failure_stats.iter().find(|s| s.reason.contains("font_encoding")) {
+        if let Some(font_errors) = failure_stats
+            .iter()
+            .find(|s| s.reason.contains("font_encoding"))
+        {
             if font_errors.count > 0 && font_errors.recent_failures > 0 {
                 recommendations.push(RetryRecommendation {
                     reason: "pdf_font_encoding".to_string(),
@@ -97,9 +128,12 @@ impl OcrRetryService {
                 });
             }
         }
-        
+
         // Recommend retrying corrupted files with smaller size (might be fixed)
-        if let Some(corruption_errors) = failure_stats.iter().find(|s| s.reason.contains("corruption")) {
+        if let Some(corruption_errors) = failure_stats
+            .iter()
+            .find(|s| s.reason.contains("corruption"))
+        {
             if corruption_errors.count > 0 && corruption_errors.avg_file_size_mb < 10.0 {
                 recommendations.push(RetryRecommendation {
                     reason: "pdf_corruption".to_string(),
@@ -115,7 +149,7 @@ impl OcrRetryService {
                 });
             }
         }
-        
+
         // Recommend retrying timeout errors with higher priority
         if let Some(timeout_errors) = failure_stats.iter().find(|s| s.reason.contains("timeout")) {
             if timeout_errors.count > 0 {
@@ -132,28 +166,44 @@ impl OcrRetryService {
                 });
             }
         }
-        
+
         Ok(recommendations)
     }
-    
+
     // Helper methods
-    
-    async fn get_all_failed_documents(&self, user_id: Uuid) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
-        let user_filter = if self.is_admin(user_id).await? { None } else { Some(user_id) };
-        
+
+    async fn get_all_failed_documents(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
+        let user_filter = if self.is_admin(user_id).await? {
+            None
+        } else {
+            Some(user_id)
+        };
+
         crate::db::ocr_retry::get_eligible_documents_for_retry(
             self.state.db.get_pool(),
             user_filter,
-            None, // No MIME type filter
-            None, // No failure reason filter
+            None,    // No MIME type filter
+            None,    // No failure reason filter
             Some(5), // Max 5 retries
-            None, // No limit
-        ).await
+            None,    // No limit
+        )
+        .await
     }
-    
-    async fn get_filtered_documents(&self, user_id: Uuid, filter: OcrRetryFilter) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
-        let user_filter = if self.is_admin(user_id).await? { None } else { Some(user_id) };
-        
+
+    async fn get_filtered_documents(
+        &self,
+        user_id: Uuid,
+        filter: OcrRetryFilter,
+    ) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
+        let user_filter = if self.is_admin(user_id).await? {
+            None
+        } else {
+            Some(user_id)
+        };
+
         crate::db::ocr_retry::get_eligible_documents_for_retry(
             self.state.db.get_pool(),
             user_filter,
@@ -161,12 +211,21 @@ impl OcrRetryService {
             filter.failure_reasons.as_deref(),
             Some(5), // Max 5 retries
             filter.limit,
-        ).await
+        )
+        .await
     }
-    
-    async fn get_specific_documents(&self, user_id: Uuid, document_ids: Vec<Uuid>) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
-        let user_filter = if self.is_admin(user_id).await? { None } else { Some(user_id) };
-        
+
+    async fn get_specific_documents(
+        &self,
+        user_id: Uuid,
+        document_ids: Vec<Uuid>,
+    ) -> Result<Vec<crate::db::ocr_retry::EligibleDocument>> {
+        let user_filter = if self.is_admin(user_id).await? {
+            None
+        } else {
+            Some(user_id)
+        };
+
         let documents = sqlx::query_as::<_, crate::db::ocr_retry::EligibleDocument>(
             r#"
             SELECT id, filename, file_size, mime_type, ocr_failure_reason, ocr_retry_count, created_at, updated_at
@@ -180,32 +239,44 @@ impl OcrRetryService {
         .bind(user_filter)
         .fetch_all(self.state.db.get_pool())
         .await?;
-        
+
         Ok(documents)
     }
-    
+
     async fn process_documents_for_retry(
-        &self, 
-        documents: Vec<crate::db::ocr_retry::EligibleDocument>, 
+        &self,
+        documents: Vec<crate::db::ocr_retry::EligibleDocument>,
         user_id: Uuid,
         retry_reason: &str,
-        priority_override: Option<i32>
+        priority_override: Option<i32>,
     ) -> Result<RetryResult> {
         let mut queued_count = 0;
         let matched_count = documents.len();
-        
+
         for doc in documents {
             let priority = self.calculate_priority(doc.file_size, priority_override);
-            
+
             // Reset OCR status
             if let Err(e) = self.reset_document_ocr_status(doc.id).await {
                 warn!("Failed to reset OCR status for document {}: {}", doc.id, e);
                 continue;
             }
-            
+
             // Queue for OCR
-            match self.state.queue_service.enqueue_document(doc.id, priority, doc.file_size).await {
-                Ok(queue_id) => {
+            match self
+                .state
+                .queue_service
+                .enqueue_document(doc.id, priority, doc.file_size)
+                .await
+            {
+                Ok(EnqueueOutcome::AlreadyQueued) => {
+                    // The pending or running job does the retry.
+                    info!(
+                        "Document {} is already queued for OCR; not queueing it again",
+                        doc.id
+                    );
+                }
+                Ok(EnqueueOutcome::Queued(queue_id)) => {
                     // Record retry history
                     if let Err(e) = crate::db::ocr_retry::record_ocr_retry(
                         self.state.db.get_pool(),
@@ -214,25 +285,33 @@ impl OcrRetryService {
                         retry_reason,
                         priority,
                         Some(queue_id),
-                    ).await {
-                        warn!("Failed to record retry history for document {}: {}", doc.id, e);
+                    )
+                    .await
+                    {
+                        warn!(
+                            "Failed to record retry history for document {}: {}",
+                            doc.id, e
+                        );
                     }
-                    
+
                     queued_count += 1;
-                    info!("Queued document {} for OCR retry with priority {}", doc.id, priority);
+                    info!(
+                        "Queued document {} for OCR retry with priority {}",
+                        doc.id, priority
+                    );
                 }
                 Err(e) => {
                     error!("Failed to queue document {} for OCR retry: {}", doc.id, e);
                 }
             }
         }
-        
+
         Ok(RetryResult {
             queued_count,
             matched_count,
         })
     }
-    
+
     async fn reset_document_ocr_status(&self, document_id: Uuid) -> Result<()> {
         sqlx::query(
             r#"
@@ -247,43 +326,45 @@ impl OcrRetryService {
                 ocr_completed_at = NULL,
                 updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(document_id)
         .execute(self.state.db.get_pool())
         .await?;
-        
+
         Ok(())
     }
-    
+
     fn calculate_priority(&self, file_size: i64, override_priority: Option<i32>) -> i32 {
         if let Some(priority) = override_priority {
             return priority.clamp(1, 20);
         }
-        
+
         match file_size {
-            0..=1048576 => 15,      // <= 1MB: highest priority
-            ..=5242880 => 12,       // 1-5MB: high priority
-            ..=10485760 => 10,      // 5-10MB: medium priority  
-            ..=52428800 => 8,       // 10-50MB: low priority
-            _ => 6,                 // > 50MB: lowest priority
+            0..=1048576 => 15, // <= 1MB: highest priority
+            ..=5242880 => 12,  // 1-5MB: high priority
+            ..=10485760 => 10, // 5-10MB: medium priority
+            ..=52428800 => 8,  // 10-50MB: low priority
+            _ => 6,            // > 50MB: lowest priority
         }
     }
-    
+
     async fn is_admin(&self, user_id: Uuid) -> Result<bool> {
-        let role: Option<String> = sqlx::query_scalar(
-            "SELECT role FROM users WHERE id = $1"
-        )
-        .bind(user_id)
-        .fetch_optional(self.state.db.get_pool())
-        .await?;
-        
+        let role: Option<String> = sqlx::query_scalar("SELECT role FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(self.state.db.get_pool())
+            .await?;
+
         Ok(role.as_deref() == Some("admin"))
     }
-    
+
     async fn get_failure_statistics(&self, user_id: Uuid) -> Result<Vec<FailureStatistic>> {
-        let user_filter = if self.is_admin(user_id).await? { None } else { Some(user_id) };
-        
+        let user_filter = if self.is_admin(user_id).await? {
+            None
+        } else {
+            Some(user_id)
+        };
+
         let stats = sqlx::query(
             r#"
             SELECT 
@@ -296,13 +377,14 @@ impl OcrRetryService {
               AND ($1::uuid IS NULL OR user_id = $1)
             GROUP BY ocr_failure_reason
             ORDER BY count DESC
-            "#
+            "#,
         )
         .bind(user_filter)
         .fetch_all(self.state.db.get_pool())
         .await?;
-        
-        let statistics: Vec<FailureStatistic> = stats.into_iter()
+
+        let statistics: Vec<FailureStatistic> = stats
+            .into_iter()
             .map(|row| FailureStatistic {
                 reason: row.get::<String, _>("reason"),
                 count: row.get::<i64, _>("count"),
@@ -319,7 +401,7 @@ impl OcrRetryService {
                 recent_failures: row.get::<i64, _>("recent_failures"),
             })
             .collect();
-        
+
         Ok(statistics)
     }
 }
