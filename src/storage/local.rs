@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use super::StorageBackend;
+use super::{read_limited, LimitedRead, StorageBackend};
 use crate::utils::security::{
     validate_and_sanitize_path, validate_filename, validate_path_within_base,
 };
@@ -513,6 +513,16 @@ impl StorageBackend for LocalStorageBackend {
         }
 
         Ok(data)
+    }
+
+    async fn retrieve_file_limited(&self, path: &str, max_bytes: u64) -> Result<LimitedRead> {
+        // Same validation as `retrieve_file`.
+        let sanitized_path = validate_and_sanitize_path(path)?;
+        let resolved_path = self.resolve_file_path(&sanitized_path).await?;
+        validate_path_within_base(&resolved_path, &self.upload_path)?;
+
+        let file = fs::File::open(&resolved_path).await?;
+        Ok(read_limited(file, max_bytes).await?)
     }
 
     async fn delete_document_files(

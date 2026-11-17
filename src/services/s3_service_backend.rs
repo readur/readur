@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 #[cfg(feature = "s3")]
 use crate::services::s3_client::describe_error;
-use crate::storage::StorageBackend;
+use crate::storage::{LimitedRead, StorageBackend};
 
 use super::{keys, ObjectDeletion, S3Service};
 
@@ -132,6 +132,29 @@ impl StorageBackend for S3Service {
                 bytes.len()
             );
             Ok(bytes)
+        }
+    }
+
+    async fn retrieve_file_limited(&self, path: &str, max_bytes: u64) -> Result<LimitedRead> {
+        let key = keys::key_from_stored_path(path).unwrap_or(path);
+
+        #[cfg(not(feature = "s3"))]
+        {
+            let _ = (key, max_bytes);
+            return Err(anyhow!("S3 support not compiled in"));
+        }
+
+        #[cfg(feature = "s3")]
+        {
+            info!(
+                "Retrieving at most {} bytes of S3 object: {}/{}",
+                max_bytes, self.config.bucket_name, key
+            );
+            let range = super::prefix_range(max_bytes);
+            let bytes = self
+                .fetch_object_range_with_retry("retrieve_file_limited", key, Some(range))
+                .await?;
+            Ok(LimitedRead::from_prefix(bytes, max_bytes))
         }
     }
 

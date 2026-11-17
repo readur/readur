@@ -65,23 +65,40 @@ pub fn verify_content_length(key: &str, expected: Option<i64>, actual: usize) ->
     }
 }
 
-/// One GetObject attempt: fetch, read the body within a bound, and verify
-/// the length. Retrying is the caller's job.
+/// The `Range` header value asking for an object's first `max_bytes + 1`
+/// bytes (the end offset is inclusive). Getting more than `max_bytes` back
+/// is how a bounded read tells the object is over the limit.
+pub fn prefix_range(max_bytes: u64) -> String {
+    format!("bytes=0-{max_bytes}")
+}
+
+/// One GetObject attempt: fetch (the whole object, or only `range`), read
+/// the body within a bound, and verify the length. Retrying is the caller's
+/// job. A ranged request the store refuses as unsatisfiable means an empty
+/// object (every range sent starts at byte 0), so it yields no bytes.
 #[cfg(feature = "s3")]
-async fn fetch_object(client: &Client, bucket: &str, key: &str) -> Result<Vec<u8>> {
-    let response = client
+async fn fetch_object(
+    client: &Client,
+    bucket: &str,
+    key: &str,
+    range: Option<&str>,
+) -> Result<Vec<u8>> {
+    let request = client
         .get_object()
         .bucket(bucket)
         .key(key)
-        .send()
-        .await
-        .map_err(|e| {
-            anyhow!(
+        .set_range(range.map(str::to_string));
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(e) if range.is_some() && keys::is_unsatisfiable_range(&e) => return Ok(Vec::new()),
+        Err(e) => {
+            return Err(anyhow!(
                 "Failed to download S3 object {}: {}",
                 key,
                 describe_error(&e)
-            )
-        })?;
+            ))
+        }
+    };
 
     let expected = response.content_length();
     let body = tokio::time::timeout(DOWNLOAD_BODY_TIMEOUT, response.body.collect())
@@ -266,6 +283,19 @@ impl S3Service {
     /// storage-backend read path.
     #[cfg(feature = "s3")]
     async fn fetch_object_with_retry(&self, operation: &str, key: &str) -> Result<Vec<u8>> {
+        self.fetch_object_range_with_retry(operation, key, None)
+            .await
+    }
+
+    /// [`fetch_object_with_retry`](Self::fetch_object_with_retry), optionally
+    /// limited to a byte `range` (a `Range` header value).
+    #[cfg(feature = "s3")]
+    async fn fetch_object_range_with_retry(
+        &self,
+        operation: &str,
+        key: &str,
+        range: Option<String>,
+    ) -> Result<Vec<u8>> {
         let key_owned = key.to_string();
         let bucket_name = self.config.bucket_name.clone();
         let client = self.client.clone();
@@ -274,7 +304,8 @@ impl S3Service {
             let key = key_owned.clone();
             let bucket_name = bucket_name.clone();
             let client = client.clone();
-            async move { fetch_object(&client, &bucket_name, &key).await }
+            let range = range.clone();
+            async move { fetch_object(&client, &bucket_name, &key, range.as_deref()).await }
         })
         .await
     }

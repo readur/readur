@@ -48,6 +48,17 @@ pub trait StorageBackend: Send + Sync {
     /// Retrieve file data by storage path/key
     async fn retrieve_file(&self, path: &str) -> Result<Vec<u8>>;
 
+    /// Retrieve file data by storage path/key, reading at most
+    /// `max_bytes + 1` bytes: a file longer than `max_bytes` is reported as
+    /// [`LimitedRead::TooLarge`] without being loaded. Use this wherever a
+    /// size limit must bound memory: the size recorded at upload describes
+    /// the received bytes, and the stored file can differ (e.g. an image
+    /// re-encoded on rotation).
+    ///
+    /// Deliberately has no default: an implementation built on
+    /// `retrieve_file` would read the whole file and bound nothing.
+    async fn retrieve_file_limited(&self, path: &str, max_bytes: u64) -> Result<LimitedRead>;
+
     /// Delete all files associated with a document (document, thumbnail, processed image).
     ///
     /// `file_path` is the storage path recorded for the document at upload
@@ -71,6 +82,44 @@ pub trait StorageBackend: Send + Sync {
 
     /// Initialize the storage backend (create directories, validate access, etc.)
     async fn initialize(&self) -> Result<()>;
+}
+
+/// Outcome of a size-bounded read ([`StorageBackend::retrieve_file_limited`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LimitedRead {
+    /// The whole file, at most `max_bytes` long.
+    Within(Vec<u8>),
+    /// The file is longer than `max_bytes`; only enough of it was read to
+    /// tell, so its exact size is not known.
+    TooLarge,
+}
+
+impl LimitedRead {
+    /// Classify a buffer holding at most `max_bytes + 1` leading bytes of a
+    /// file: more than `max_bytes` means the file is over the limit.
+    pub fn from_prefix(bytes: Vec<u8>, max_bytes: u64) -> Self {
+        if bytes.len() as u64 > max_bytes {
+            Self::TooLarge
+        } else {
+            Self::Within(bytes)
+        }
+    }
+}
+
+/// Read `reader` to its end or to `max_bytes + 1` bytes, whichever comes
+/// first, and classify the result (see [`LimitedRead::from_prefix`]).
+pub async fn read_limited<R>(reader: R, max_bytes: u64) -> std::io::Result<LimitedRead>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    use tokio::io::AsyncReadExt;
+
+    let mut buf = Vec::new();
+    reader
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut buf)
+        .await?;
+    Ok(LimitedRead::from_prefix(buf, max_bytes))
 }
 
 /// Storage configuration enum for different backend types
