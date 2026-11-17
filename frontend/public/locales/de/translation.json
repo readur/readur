@@ -851,7 +851,7 @@
         "snippetLength": "Snippet-Länge",
         "snippetLengthHelper": "Zeichen in Suchergebnis-Vorschauen anzeigen",
         "fuzzySearchThreshold": "Fuzzy-Suchschwelle",
-        "fuzzySearchThresholdHelper": "Toleranz für Rechtschreibfehler (0.0-1.0)"
+        "fuzzySearchThresholdHelper": "Wie genau ein Wort der Suchanfrage bei der Suche nach ähnlicher Schreibweise entsprechen muss: 1.0 akzeptiert nur die exakte Schreibweise, niedrigere Werte lassen mehr Tippfehler zu (Standard 0.5)"
       },
       "storageManagement": {
         "title": "Speicherverwaltung",
@@ -2383,15 +2383,15 @@
       "boolean": "Operatoren",
       "booleanHint": "Mit & (und), | (oder), ! (nicht)",
       "exampleAnd": "Beide Wörter",
-      "exampleFuzzy": "Verzeiht Tippfehler",
+      "exampleFuzzy": "Findet „invoice“ trotz Tippfehler",
       "exampleNot": "Ein Wort ausschließen",
       "exampleOr": "Eines der Wörter",
       "examplePhrase": "Eine genaue Wortfolge",
       "exampleWord": "Dokumente, die ein Wort enthalten",
       "examples": "Ausprobieren",
       "fuzzy": "Ähnliche Schreibweise",
-      "fuzzyHint": "Findet auch Beinahe-Treffer und Tippfehler",
-      "intro": "Die Suche durchsucht Dateinamen und den aus jedem Dokument gelesenen Text.",
+      "fuzzyHint": "Wörter mit ähnlicher Schreibweise, so ähnlich wie in Ihren Einstellungen festgelegt",
+      "intro": "Die Suche durchsucht den aus jedem Dokument gelesenen Text, nicht Dateinamen oder Labels.",
       "match": "Abgleich",
       "open": "Suchhilfe",
       "phrase": "Genaue Wortfolge",
@@ -2428,7 +2428,7 @@
       "selectAll_one": "Den 1 Treffer auswählen",
       "selectAll_other": "Alle {{formatted}} Treffer auswählen",
       "selectPage": "Alle auf dieser Seite auswählen",
-      "startHint": "Readur durchsucht Dateinamen und jedes Wort, das aus Ihren Scans und PDFs gelesen wurde. Versuchen Sie einen Namen, einen Ort oder ein Thema, etwa „Schulter“ oder „Rechnung 2024“.",
+      "startHint": "Readur durchsucht jedes Wort, das aus Ihren Scans und PDFs gelesen wurde. Versuchen Sie einen Namen, einen Ort oder ein Thema, etwa „Schulter“ oder „Rechnung 2024“.",
       "startTitle": "Finden Sie alles in Ihren Dokumenten",
       "title": "Erweiterte Suche"
     },

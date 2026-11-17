@@ -5,8 +5,8 @@
 use crate::{
     errors::search::SearchError,
     models::{
-        EnhancedDocumentResponse, SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse,
-        User,
+        EnhancedDocumentResponse, FuzzyThreshold, MonthCount, SearchFacetsResponse, SearchMode,
+        SearchRequest, SearchResponse, User,
     },
     AppState,
 };
@@ -25,7 +25,7 @@ pub async fn run_basic_search(
     // list below always matches in simple mode, so the count does too.
     let total = state
         .db
-        .count_search_documents_in_mode(user.id, user.role, search_request, &SearchMode::Simple)
+        .count_basic_search_documents(user.id, user.role, search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
@@ -116,16 +116,21 @@ pub async fn run_enhanced_search(
 
     let start_time = std::time::Instant::now();
 
-    // Get total count (without pagination) for proper pagination support
+    let fuzzy = fuzzy_threshold_for(state, user, search_request)
+        .await
+        .map_err(|e| SearchError::index_unavailable(format!("Loading settings failed: {}", e)))?;
+
+    // Get total count (without pagination) for proper pagination support.
+    // Same request and cutoff as the list, so the two agree.
     let total = state
         .db
-        .count_search_documents(user.id, user.role, search_request)
+        .count_search_documents(user.id, user.role, search_request, fuzzy)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
     let documents = state
         .db
-        .enhanced_search_documents_with_role(user.id, user.role, search_request)
+        .enhanced_search_documents_with_role(user.id, user.role, search_request, fuzzy)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
@@ -137,6 +142,35 @@ pub async fn run_enhanced_search(
         query_time_ms: query_time,
         suggestions,
     })
+}
+
+/// The fuzzy-mode cutoff for `user`: their `fuzzy_search_threshold` setting,
+/// validated by `FuzzyThreshold::from_setting` (the default when unset).
+/// Other modes ignore the cutoff, so their searches skip the settings lookup.
+pub async fn fuzzy_threshold_for(
+    state: &AppState,
+    user: &User,
+    search_request: &SearchRequest,
+) -> anyhow::Result<FuzzyThreshold> {
+    if !matches!(search_request.search_mode, Some(SearchMode::Fuzzy)) {
+        return Ok(FuzzyThreshold::default());
+    }
+    let setting = state.db.get_fuzzy_search_threshold(user.id).await?;
+    Ok(FuzzyThreshold::from_setting(setting))
+}
+
+/// Matches per UTC creation month for `user`, with the same predicate (and
+/// fuzzy cutoff) as enhanced search's count. Backs `GET /api/search/timeline`.
+pub async fn load_search_timeline(
+    state: &AppState,
+    user: &User,
+    search_request: &SearchRequest,
+) -> anyhow::Result<Vec<MonthCount>> {
+    let fuzzy = fuzzy_threshold_for(state, user, search_request).await?;
+    state
+        .db
+        .search_timeline(user.id, user.role, search_request, fuzzy)
+        .await
 }
 
 fn generate_search_suggestions(query: &str) -> Vec<String> {

@@ -851,7 +851,7 @@
         "snippetLength": "Snippet Length",
         "snippetLengthHelper": "Characters to show in search result previews",
         "fuzzySearchThreshold": "Fuzzy Search Threshold",
-        "fuzzySearchThresholdHelper": "Tolerance for spelling mistakes (0.0-1.0)"
+        "fuzzySearchThresholdHelper": "How closely a word must be spelled like the query in Similar spelling search: 1.0 accepts only the exact spelling, lower values allow more typos (default 0.5)"
       },
       "storageManagement": {
         "title": "Storage Management",
@@ -2383,15 +2383,15 @@
       "boolean": "Operators",
       "booleanHint": "Use & (and), | (or), ! (not)",
       "exampleAnd": "Both words",
-      "exampleFuzzy": "Tolerates typos",
+      "exampleFuzzy": "Finds “invoice” despite the typo",
       "exampleNot": "Leave a word out",
       "exampleOr": "Either word",
       "examplePhrase": "An exact phrase",
       "exampleWord": "Documents that mention a word",
       "examples": "Try",
       "fuzzy": "Similar spelling",
-      "fuzzyHint": "Also finds near misses and typos",
-      "intro": "Search looks through file names and the text read from each document.",
+      "fuzzyHint": "Finds words spelled close to yours; Settings decides how close",
+      "intro": "Search looks through the text read from each document, not file names or labels.",
       "match": "Match",
       "open": "Search help",
       "phrase": "Exact phrase",
@@ -2428,7 +2428,7 @@
       "selectAll_one": "Select the 1 match",
       "selectAll_other": "Select all {{formatted}} matches",
       "selectPage": "Select all on this page",
-      "startHint": "Readur searches file names and every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.",
+      "startHint": "Readur searches every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.",
       "startTitle": "Find anything in your documents",
       "title": "Advanced search"
     },

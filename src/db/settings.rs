@@ -123,6 +123,18 @@ impl Database {
         }).await
     }
 
+    /// The user's stored fuzzy search threshold: `None` when the user has no
+    /// settings row or the column is NULL. Read on its own (not through
+    /// `get_user_settings`) because fuzzy search needs only this value.
+    pub async fn get_fuzzy_search_threshold(&self, user_id: Uuid) -> Result<Option<f32>> {
+        let threshold: Option<Option<f32>> =
+            sqlx::query_scalar("SELECT fuzzy_search_threshold FROM settings WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(threshold.flatten())
+    }
+
     pub async fn get_all_user_settings(&self) -> Result<Vec<crate::models::Settings>> {
         let rows = sqlx::query(
             r#"SELECT id, user_id, ocr_language,
@@ -186,7 +198,7 @@ impl Database {
     fn validate_settings_constraints(settings: &crate::models::UpdateSettings) -> Result<()> {
         // Validate OCR settings
         if let Some(concurrent_jobs) = settings.concurrent_ocr_jobs {
-            if concurrent_jobs < 1 || concurrent_jobs > 20 {
+            if !(1..=20).contains(&concurrent_jobs) {
                 return Err(anyhow!(
                     "Concurrent OCR jobs must be between 1 and 20, got: {}",
                     concurrent_jobs
@@ -195,7 +207,7 @@ impl Database {
         }
         
         if let Some(timeout) = settings.ocr_timeout_seconds {
-            if timeout < 10 || timeout > 1800 {
+            if !(10..=1800).contains(&timeout) {
                 return Err(anyhow!(
                     "OCR timeout must be between 10 and 1800 seconds, got: {}",
                     timeout
@@ -204,7 +216,7 @@ impl Database {
         }
         
         if let Some(max_size) = settings.max_file_size_mb {
-            if max_size < 1 || max_size > 500 {
+            if !(1..=500).contains(&max_size) {
                 return Err(anyhow!(
                     "Maximum file size must be between 1 and 500 MB, got: {}",
                     max_size
@@ -213,7 +225,7 @@ impl Database {
         }
         
         if let Some(memory_limit) = settings.memory_limit_mb {
-            if memory_limit < 64 || memory_limit > 8192 {
+            if !(64..=8192).contains(&memory_limit) {
                 return Err(anyhow!(
                     "Memory limit must be between 64 and 8192 MB, got: {}",
                     memory_limit
@@ -222,7 +234,7 @@ impl Database {
         }
         
         if let Some(results_per_page) = settings.search_results_per_page {
-            if results_per_page < 1 || results_per_page > 1000 {
+            if !(1..=1000).contains(&results_per_page) {
                 return Err(anyhow!(
                     "Search results per page must be between 1 and 1000, got: {}",
                     results_per_page
@@ -231,7 +243,7 @@ impl Database {
         }
         
         if let Some(snippet_length) = settings.search_snippet_length {
-            if snippet_length < 10 || snippet_length > 2000 {
+            if !(10..=2000).contains(&snippet_length) {
                 return Err(anyhow!(
                     "Search snippet length must be between 10 and 2000 characters, got: {}",
                     snippet_length
@@ -240,7 +252,7 @@ impl Database {
         }
         
         if let Some(threshold) = settings.fuzzy_search_threshold {
-            if threshold < 0.0 || threshold > 1.0 {
+            if !(0.0..=1.0).contains(&threshold) {
                 return Err(anyhow!(
                     "Fuzzy search threshold must be between 0.0 and 1.0, got: {}",
                     threshold
@@ -250,7 +262,7 @@ impl Database {
         
         // Validate WebDAV settings
         if let Some(sync_interval) = settings.webdav_sync_interval_minutes {
-            if sync_interval < 1 || sync_interval > 10080 { // max 1 week
+            if !(1..=10080).contains(&sync_interval) { // max 1 week
                 return Err(anyhow!(
                     "WebDAV sync interval must be between 1 and 10080 minutes (1 week), got: {}",
                     sync_interval

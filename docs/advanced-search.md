@@ -28,7 +28,7 @@ Choose the mode with the mode switch in the library's search help (the **?** but
 | All words | `simple` | contains every word of the query, anywhere, in any order |
 | Exact phrase | `phrase` | contains the query's words next to each other, in order |
 | Operators | `boolean` | satisfies the query's AND / OR / NOT / phrase / prefix expression |
-| Similar spelling | `fuzzy` | as a whole is spelled similarly to the query |
+| Similar spelling | `fuzzy` | contains a word (or run of words) spelled like the query, within your fuzzy search threshold |
 
 ### Simple Search (All Words)
 
@@ -55,14 +55,15 @@ annual budget                        # Finds both annual budget documents
 
 ### Fuzzy Search (Similar Spelling)
 
-Fuzzy mode compares the query with the document's **whole text** using trigram similarity (PostgreSQL `pg_trgm`), and finds documents whose similarity is above 0.3. The threshold is fixed: the fuzzy search threshold in the user settings is stored but not applied to search. Results are ranked by similarity.
+Fuzzy mode looks for the stretch of a document's text that is spelled most like the query, word by word, using PostgreSQL trigram word similarity (`pg_trgm` `word_similarity`: the share of the query's three-letter groups found in that stretch, from 0 to 1). A document matches when that score reaches your **fuzzy search threshold** (Settings, Search configuration; 0.5 unless you change it). Only the closest stretch counts, so document length does not matter: a misspelled word finds a 5000-word document containing the right word just as it finds a one-line one. Results are ranked by the score, so the query's own spelling (1.0) ranks above near misses.
 
-Because the comparison is with the entire text, fuzzy search finds short documents whose text is close to the query even with typos, but a word inside a longer text adds little to the similarity: a misspelled word does not find a long document that contains the correct word. For long documents, use simple mode, or an Operators-mode prefix such as `inv*`.
+Fuzzy mode compares letters, not words: there is no stemming or stop-word removal, and quotes and operators are ordinary characters. A slip changes a larger share of a short word than of a long one, and swapped letters (`reciept`) change more three-letter groups than a wrong or missing letter, so they need a lower threshold. Raising the threshold towards 1.0 accepts only spellings closer to the query (1.0: the exact spelling); lowering it lets more through, and below about 0.3 unrelated long documents start to match on chance letter overlap. Settings below 0.1 are treated as 0.1. Snippets highlight the query's words as typed, so a result found through a near miss may come without a snippet.
 
 ```
-waranty card                         # Finds a document whose text is "warranty card"
-warranty                             # Finds it as well: the query is most of its text
-invoce                               # Finds nothing: each invoice's text is much longer than the query
+invoce                               # Finds every document containing "invoice" (it scores 0.57 against "invoice")
+waranty card                         # Finds "warranty card"
+purchse order                        # Finds both documents with "purchase order"
+reciept                              # Finds nothing at 0.5 (it scores 0.38 against "receipt"); finds both receipts at a threshold of 0.35
 ```
 
 ### Boolean Search (Logical Operators)
@@ -160,7 +161,7 @@ There are no size filters, and no filters on modification or access time.
 
 ## Sorting and Paging
 
-Without a sort, `GET /api/search/enhanced` (and the library, when **Relevance** is chosen) orders results by relevance: full-text rank in simple, phrase and Operators mode, similarity in fuzzy mode, with ties broken by newest first. `GET /api/search` always orders newest first unless a sort is given.
+Without a sort, `GET /api/search/enhanced` (and the library, when **Relevance** is chosen) orders results by relevance: full-text rank in simple, phrase and Operators mode, word similarity in fuzzy mode, with ties broken by newest first. `GET /api/search` always orders newest first unless a sort is given.
 
 - `sort_by`: `created_at`, `updated_at`, `filename`, `file_size`, `ocr_status`, `mime_type` or `ocr_confidence`
 - `sort_order`: `asc` or `desc` (default `desc`)
@@ -251,7 +252,7 @@ Both search endpoints answer with this shape (one document shown, abbreviated va
 
 ### No Results Found
 
-- **Check the mode.** Phrase mode needs the words adjacent and in order; simple mode needs every word; fuzzy mode only finds documents whose whole text is close to the query.
+- **Check the mode.** Phrase mode needs the words adjacent and in order; simple mode needs every word; fuzzy mode needs a word spelled within your fuzzy search threshold of the query; lower the threshold in Settings to tolerate more mistakes.
 - **Check the filters.** Filters combine with AND, so one restrictive filter hides everything else. Clear them and add them back one at a time.
 - **Whole words only.** Simple and phrase mode do not match parts of words: search `invoice`, not `inv`, or use the Operators-mode prefix `inv*`.
 - **Field syntax is not supported.** `filename:`, `label:`, `type:` and similar are searched as plain words; use filters instead.
@@ -265,7 +266,7 @@ Both search endpoints answer with this shape (one document shown, abbreviated va
 
 ### OCR Errors in the Text
 
-Scanned documents can contain misrecognised words ("irwoice" for "invoice"). Fuzzy mode only helps for short documents; for longer ones, search for another word that was recognised correctly, use an Operators-mode prefix (`inv*`), or improve the scan quality and retry OCR.
+Scanned documents can contain misrecognised words ("irwoice" for "invoice"). Fuzzy mode finds such words in documents of any length when they are close enough to the query for your fuzzy search threshold (lower it in Settings for badly scanned documents). Otherwise search for another word that was recognised correctly, use an Operators-mode prefix (`inv*`), or improve the scan quality and retry OCR.
 
 ## Next Steps
 

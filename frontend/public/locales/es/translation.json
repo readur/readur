@@ -752,7 +752,7 @@
         "snippetLength": "Longitud del Fragmento",
         "snippetLengthHelper": "Caracteres a mostrar en vistas previas de resultados de búsqueda",
         "fuzzySearchThreshold": "Umbral de Búsqueda Difusa",
-        "fuzzySearchThresholdHelper": "Tolerancia para errores de ortografía (0.0-1.0)"
+        "fuzzySearchThresholdHelper": "Cuánto debe parecerse una palabra a la consulta en la búsqueda por ortografía similar: 1.0 solo acepta la ortografía exacta; valores más bajos toleran más errores (0.5 por defecto)"
       },
       "storageManagement": {
         "title": "Gestión de Almacenamiento",
@@ -2383,15 +2383,15 @@
       "boolean": "Operadores",
       "booleanHint": "Usa & (y), | (o), ! (no)",
       "exampleAnd": "Ambas palabras",
-      "exampleFuzzy": "Tolera errores de escritura",
+      "exampleFuzzy": "Encuentra «invoice» pese a la errata",
       "exampleNot": "Excluir una palabra",
       "exampleOr": "Cualquiera de las palabras",
       "examplePhrase": "Una frase exacta",
       "exampleWord": "Documentos que mencionan una palabra",
       "examples": "Prueba",
       "fuzzy": "Escritura parecida",
-      "fuzzyHint": "También encuentra casi coincidencias y erratas",
-      "intro": "La búsqueda revisa los nombres de archivo y el texto leído de cada documento.",
+      "fuzzyHint": "Palabras escritas de forma parecida a la tuya, según el umbral de tu configuración",
+      "intro": "La búsqueda revisa el texto leído de cada documento, no los nombres de archivo ni las etiquetas.",
       "match": "Coincidencia",
       "open": "Ayuda de búsqueda",
       "phrase": "Frase exacta",
@@ -2428,7 +2428,7 @@
       "selectAll_one": "Seleccionar la única coincidencia",
       "selectAll_other": "Seleccionar las {{formatted}} coincidencias",
       "selectPage": "Seleccionar todo en esta página",
-      "startHint": "Readur busca en los nombres de archivo y en cada palabra leída de tus escaneos y PDF. Prueba con un nombre, un lugar o un tema, como «hombro» o «factura 2024».",
+      "startHint": "Readur busca en cada palabra leída de tus escaneos y PDF. Prueba con un nombre, un lugar o un tema, como «hombro» o «factura 2024».",
       "startTitle": "Encuentra cualquier cosa en tus documentos",
       "title": "Búsqueda avanzada"
     },

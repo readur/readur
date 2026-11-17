@@ -11,7 +11,9 @@ use crate::{
     auth::AuthUser,
     errors::{search::SearchError, AppError},
     models::{MonthCount, SearchFacetsResponse, SearchRequest, SearchResponse},
-    services::search::{load_search_facets, run_basic_search, run_enhanced_search},
+    services::search::{
+        load_search_facets, load_search_timeline, run_basic_search, run_enhanced_search,
+    },
     AppState,
 };
 
@@ -121,9 +123,7 @@ async fn search_timeline(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let months = state
-        .db
-        .search_timeline(auth_user.user.id, auth_user.user.role, &search_request)
+    let months = load_search_timeline(&state, &auth_user.user, &search_request)
         .await
         .map_err(|e| {
             tracing::error!("Search timeline failed: {}", e);
