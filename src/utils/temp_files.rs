@@ -116,7 +116,7 @@ impl std::ops::Deref for TempPageImages {
 impl Drop for TempPageImages {
     fn drop(&mut self) {
         // Bounded to this render's own pages.
-        match std::fs::remove_dir_all(&self.dir) {
+        match remove_dir_retrying(&self.dir, |dir| std::fs::remove_dir_all(dir)) {
             Ok(()) => debug!("Cleaned up page images in {}", self.dir.display()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => warn!(
@@ -124,6 +124,34 @@ impl Drop for TempPageImages {
                 self.dir.display(),
                 e
             ),
+        }
+    }
+}
+
+/// Attempts [`remove_dir_retrying`] makes before giving up.
+const REMOVE_DIR_ATTEMPTS: u32 = 5;
+/// Pause between those attempts.
+const REMOVE_DIR_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// Runs `remove` on `dir`, retrying (briefly, a bounded number of times) when
+/// the directory is not empty. A cancelled render's `pdftoppm` is killed on
+/// drop but may not have exited yet, and can write one more page while the
+/// directory is being emptied; once it is gone the next attempt succeeds.
+fn remove_dir_retrying(
+    dir: &Path,
+    mut remove: impl FnMut(&Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let mut attempt = 1;
+    loop {
+        match remove(dir) {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::DirectoryNotEmpty
+                    && attempt < REMOVE_DIR_ATTEMPTS =>
+            {
+                attempt += 1;
+                std::thread::sleep(REMOVE_DIR_BACKOFF);
+            }
+            result => return result,
         }
     }
 }
@@ -207,6 +235,50 @@ mod tests {
         assert!(second.dir().exists(), "another render's pages stay");
         assert!(other.exists(), "the shared temp dir is not swept");
         drop(second);
+    }
+
+    /// A page written while the directory is being removed (a killed
+    /// pdftoppm that has not exited yet) fails the first attempt; the retry
+    /// removes the directory with that page.
+    #[test]
+    fn directory_removal_retries_while_a_page_lands() {
+        let parent = tempfile::tempdir().unwrap();
+        let dir = parent.path().join("render");
+        std::fs::create_dir(&dir).unwrap();
+        let mut attempts = 0;
+        let removed = remove_dir_retrying(&dir, |dir| {
+            attempts += 1;
+            if attempts == 1 {
+                touch(&dir.join("page-3.png"));
+                return Err(std::io::ErrorKind::DirectoryNotEmpty.into());
+            }
+            std::fs::remove_dir_all(dir)
+        });
+        removed.unwrap();
+        assert_eq!(attempts, 2);
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn directory_removal_gives_up_after_a_bounded_number_of_attempts() {
+        let mut attempts = 0;
+        let removed = remove_dir_retrying(Path::new("/nonexistent"), |_| {
+            attempts += 1;
+            Err(std::io::ErrorKind::DirectoryNotEmpty.into())
+        });
+        assert_eq!(
+            removed.unwrap_err().kind(),
+            std::io::ErrorKind::DirectoryNotEmpty
+        );
+        assert_eq!(attempts, REMOVE_DIR_ATTEMPTS);
+        // Any other error is final at once.
+        let mut attempts = 0;
+        let removed = remove_dir_retrying(Path::new("/nonexistent"), |_| {
+            attempts += 1;
+            Err(std::io::ErrorKind::PermissionDenied.into())
+        });
+        assert!(removed.is_err());
+        assert_eq!(attempts, 1);
     }
 
     #[tokio::test]
