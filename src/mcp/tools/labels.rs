@@ -366,10 +366,19 @@ impl ReadurMcp {
                     status: "removed",
                 },
             ),
-            LabelRemoveOutcome::NotAssigned => Ok(format::tool_error(format!(
-                "Document {} does not have label {}.",
-                p.document_id, p.label_id
-            ))),
+            // Already absent: the caller's goal holds, so this is success
+            // (mirroring add_document_label), which keeps the tool idempotent.
+            LabelRemoveOutcome::NotAssigned => format::text_and_json(
+                format!(
+                    "Document {} did not have label {}; nothing to remove.",
+                    p.document_id, p.label_id
+                ),
+                &LabelChange {
+                    document_id: p.document_id,
+                    label_id: p.label_id,
+                    status: "not_assigned",
+                },
+            ),
             LabelRemoveOutcome::DocumentNotFound => Ok(format::tool_error(format!(
                 "Document {} not found.",
                 p.document_id

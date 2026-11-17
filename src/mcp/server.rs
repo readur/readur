@@ -143,6 +143,51 @@ mod tests {
         ));
     }
 
+    /// Clients may retry tools annotated idempotent without asking, so the
+    /// claim must be true: repeating the call must succeed with the same
+    /// end state. Changing this list means checking that for the tool.
+    #[test]
+    fn idempotent_annotations_are_deliberate() {
+        let mut idempotent: Vec<String> = ReadurMcp::tools(true)
+            .list_all()
+            .into_iter()
+            .filter(|tool| tool.annotations.as_ref().and_then(|a| a.idempotent_hint) == Some(true))
+            .map(|tool| tool.name.to_string())
+            .collect();
+        idempotent.sort();
+        assert_eq!(
+            idempotent,
+            [
+                "add_document_label",
+                "remove_document_label",
+                "update_label"
+            ]
+        );
+    }
+
+    /// Every tool that changes nothing must say so, and every one that
+    /// changes something must say whether it destroys data.
+    #[test]
+    fn every_tool_declares_its_effects() {
+        for tool in ReadurMcp::tools(true).list_all() {
+            let annotations = tool
+                .annotations
+                .as_ref()
+                .unwrap_or_else(|| panic!("{} has no annotations", tool.name));
+            let read_only = annotations
+                .read_only_hint
+                .unwrap_or_else(|| panic!("{} lacks read_only_hint", tool.name));
+            if !read_only {
+                assert!(
+                    annotations.destructive_hint.is_some(),
+                    "{} lacks destructive_hint",
+                    tool.name
+                );
+            }
+            assert_eq!(annotations.open_world_hint, Some(false), "{}", tool.name);
+        }
+    }
+
     #[test]
     fn delete_tool_only_exists_when_allowed() {
         let without = names(&ReadurMcp::tools(false));

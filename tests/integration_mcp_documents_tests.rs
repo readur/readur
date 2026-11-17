@@ -674,3 +674,114 @@ async fn retry_ocr_with_languages_stores_them_as_the_users_preference() {
     assert_eq!(settings.preferred_languages, vec!["eng".to_string()]);
     assert_eq!(settings.primary_language, "eng");
 }
+
+#[tokio::test]
+async fn concurrent_ocr_retries_queue_exactly_one_job() {
+    // A double-click or a client retry sends several retries at once. With a
+    // check-then-insert they could all pass the check and all but one hit the
+    // queue's unique index (500). The insert itself must arbitrate.
+    let ctx = TestContext::with_config(TestConfigBuilder::default()).await;
+    let (alice, _) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    let user = ctx.state().db.get_user_by_id(alice).await.unwrap().unwrap();
+
+    let attempts = (0..8).map(|_| {
+        readur::services::documents::retry_document_ocr(ctx.state(), &user, doc.id, None, None)
+    });
+    let outcomes = futures::future::join_all(attempts).await;
+
+    let mut queued = 0;
+    for outcome in outcomes {
+        let outcome = outcome.unwrap_or_else(|e| panic!("a concurrent retry failed: {e:?}"));
+        if outcome.queued {
+            queued += 1;
+        }
+    }
+    assert_eq!(queued, 1, "exactly one retry should add a job");
+    let jobs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ocr_queue WHERE document_id = $1")
+        .bind(doc.id)
+        .fetch_one(&ctx.state().db.pool)
+        .await
+        .unwrap();
+    assert_eq!(jobs, 1);
+}
+
+#[tokio::test]
+async fn wrapped_base64_upload_near_the_size_limit_is_accepted() {
+    // Clients often send MIME-wrapped base64 (76 characters + CRLF). The
+    // JSON-RPC body limit must leave room for that, or rmcp rejects a file
+    // under MAX_FILE_SIZE_MB with a transport error before the tool runs.
+    let uploads = tempfile::tempdir().unwrap();
+    let ctx = TestContext::with_config(
+        TestConfigBuilder::default().with_upload_path(uploads.path().to_str().unwrap()),
+    )
+    .await;
+    let (_, token) = login(&ctx).await;
+    let max = ctx.state().config.max_file_size_mb as usize * 1024 * 1024;
+    let content: Vec<u8> = (0..max - 1024).map(|i| (i % 251) as u8).collect();
+    let encoded = Base64::encode_string(&content);
+    let wrapped = encoded
+        .as_bytes()
+        .chunks(76)
+        .map(|line| std::str::from_utf8(line).unwrap())
+        .collect::<Vec<_>>()
+        .join("\r\n");
+
+    let result = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "near-limit.bin", "content_base64": wrapped }),
+        )
+        .await;
+    assert_ok(&result);
+    assert_eq!(
+        result["structuredContent"]["file_size"],
+        json!(content.len())
+    );
+}
+
+#[tokio::test]
+async fn ocr_queue_still_rejects_duplicate_active_and_orphan_jobs() {
+    // Migration 20261116000001 moved duplicate prevention from the guardrail
+    // trigger to the partial unique index; both guarantees must still hold
+    // for plain inserts (every enqueue path other than OCR retry).
+    let ctx = TestContext::new().await;
+    let (alice, _) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    let queue = &ctx.state().queue_service;
+
+    queue
+        .enqueue_document(doc.id, 5, doc.file_size)
+        .await
+        .expect("first job is accepted");
+    assert!(
+        queue
+            .enqueue_document(doc.id, 5, doc.file_size)
+            .await
+            .is_err(),
+        "a second pending job for the same document must be rejected"
+    );
+    assert!(
+        queue.enqueue_document(Uuid::new_v4(), 5, 1).await.is_err(),
+        "a job for a document that does not exist must be rejected"
+    );
+    // Once the job is done, the document can be queued again.
+    sqlx::query("UPDATE ocr_queue SET status = 'completed' WHERE document_id = $1")
+        .bind(doc.id)
+        .execute(&ctx.state().db.pool)
+        .await
+        .unwrap();
+    queue
+        .enqueue_document(doc.id, 5, doc.file_size)
+        .await
+        .expect("re-queue after completion");
+}

@@ -206,11 +206,40 @@ describe('ApiKeysSection', () => {
       );
     });
 
-    it('offers an mcpServers JSON snippet and copies it', async () => {
+    it('offers a Claude Desktop config that goes through the mcp-remote bridge', async () => {
+      // claude_desktop_config.json only launches local (stdio) servers; a url/headers entry is
+      // ignored, so Desktop must get a command that bridges to the HTTP endpoint.
       const user = userEvent.setup();
       render({ mcpEnabled: true });
       const panel = await screen.findByRole('region', { name: 'Connect an AI assistant' });
-      await user.click(within(panel).getByRole('tab', { name: 'JSON config' }));
+      await user.click(within(panel).getByRole('tab', { name: 'Claude Desktop' }));
+      const json = JSON.parse(
+        within(panel).getByLabelText('Claude Desktop configuration').textContent ?? '',
+      );
+      expect(json).toEqual({
+        mcpServers: {
+          readur: {
+            command: 'npx',
+            args: ['-y', 'mcp-remote', ENDPOINT, '--header', 'Authorization:${READUR_AUTH}'],
+            env: { READUR_AUTH: 'Bearer <your-api-key>' },
+          },
+        },
+      });
+      expect(json.mcpServers.readur).not.toHaveProperty('url');
+      // No spaces inside args: some platforms split them apart.
+      for (const arg of json.mcpServers.readur.args) expect(arg).not.toContain(' ');
+      await user.click(
+        within(panel).getByRole('button', { name: 'Copy Claude Desktop configuration' }),
+      );
+      expect(JSON.parse(await navigator.clipboard.readText())).toEqual(json);
+    });
+
+    it('offers an HTTP mcpServers snippet for other clients and copies it', async () => {
+      const user = userEvent.setup();
+      render({ mcpEnabled: true });
+      const panel = await screen.findByRole('region', { name: 'Connect an AI assistant' });
+      await user.click(within(panel).getByRole('tab', { name: 'Other clients' }));
+      expect(within(panel).queryByText(/Claude Desktop and other/)).not.toBeInTheDocument();
       const json = JSON.parse(within(panel).getByLabelText('MCP configuration').textContent ?? '');
       expect(json).toEqual({
         mcpServers: {
@@ -235,6 +264,12 @@ describe('ApiKeysSection', () => {
       );
       await user.click(within(reveal).getByRole('button', { name: 'Copy Claude Code command' }));
       expect(await navigator.clipboard.readText()).toContain(`Bearer ${PLAINTEXT}`);
+
+      await user.click(within(reveal).getByRole('tab', { name: 'Claude Desktop' }));
+      const desktop = JSON.parse(
+        within(reveal).getByLabelText('Claude Desktop configuration').textContent ?? '',
+      );
+      expect(desktop.mcpServers.readur.env.READUR_AUTH).toBe(`Bearer ${PLAINTEXT}`);
     });
 
     it('leaves MCP out of the new-key dialog when disabled', async () => {

@@ -1088,12 +1088,15 @@
         "endpoint": "MCP endpoint",
         "clients": "Client configuration",
         "claudeCode": "Claude Code",
-        "json": "JSON config",
+        "json": "Other clients",
         "command": "Claude Code command",
         "config": "MCP configuration",
-        "jsonHelp": "For Claude Desktop and other clients that read an mcpServers configuration file.",
+        "jsonHelp": "For clients that connect to remote servers over HTTP and read an mcpServers configuration file.",
         "copyNamed": "Copy {{name}}",
-        "revealHelp": "Add Readur to an MCP client with this key:"
+        "revealHelp": "Add Readur to an MCP client with this key:",
+        "claudeDesktop": "Claude Desktop",
+        "desktopConfig": "Claude Desktop configuration",
+        "desktopHelp": "Add to claude_desktop_config.json, then restart Claude Desktop. It connects through the mcp-remote bridge, which needs Node.js."
       }
     },
     "appearance": {

@@ -2,6 +2,7 @@
 //! `get_search_facets`.
 
 use serde_json::{json, Value};
+use tower::ServiceExt;
 use uuid::Uuid;
 
 use readur::models::Document;
@@ -347,4 +348,173 @@ async fn get_search_facets_separates_unused_labels() {
     assert!(unused.contains("Never used"), "{text}");
     assert!(!unused.contains("Invoices"), "{text}");
     assert!(!text.contains("Never used (0"), "{text}");
+}
+
+/// Boolean-mode ids for `query` via MCP `enhanced_search`; asserts success.
+async fn boolean_hits(ctx: &TestContext, token: &str, query: &str) -> Vec<String> {
+    let result = ctx
+        .mcp_call_tool(
+            token,
+            "enhanced_search",
+            json!({ "query": query, "search_mode": "boolean" }),
+        )
+        .await;
+    assert_eq!(
+        result["isError"],
+        json!(false),
+        "boolean query {query:?} failed: {result}"
+    );
+    hit_ids(&result)
+}
+
+#[tokio::test]
+async fn boolean_search_understands_documented_operators() {
+    // The tool documents AND/OR/NOT and the web UI documents &, |, !. Raw
+    // input used to go to to_tsquery, where "invoice AND 2024" is a syntax
+    // error surfaced as an opaque server fault.
+    let ctx = TestContext::new().await;
+    let (user_id, token) = user_with_token(&ctx).await;
+    let paid = seed_document(
+        &ctx,
+        user_id,
+        "paid.txt",
+        "text/plain",
+        "invoice paid march",
+    )
+    .await
+    .id
+    .to_string();
+    let draft = seed_document(
+        &ctx,
+        user_id,
+        "draft.txt",
+        "text/plain",
+        "invoice draft march",
+    )
+    .await
+    .id
+    .to_string();
+    let receipt = seed_document(
+        &ctx,
+        user_id,
+        "receipt.txt",
+        "text/plain",
+        "receipt paid april",
+    )
+    .await
+    .id
+    .to_string();
+
+    let both = boolean_hits(&ctx, &token, "invoice AND march").await;
+    assert!(
+        both.contains(&paid) && both.contains(&draft) && !both.contains(&receipt),
+        "{both:?}"
+    );
+
+    let either = boolean_hits(&ctx, &token, "invoice OR receipt").await;
+    assert!(
+        either.contains(&paid) && either.contains(&draft) && either.contains(&receipt),
+        "{either:?}"
+    );
+
+    for query in ["invoice NOT draft", "invoice & !draft", "invoice -draft"] {
+        let hits = boolean_hits(&ctx, &token, query).await;
+        assert!(
+            hits.contains(&paid) && !hits.contains(&draft),
+            "{query}: {hits:?}"
+        );
+    }
+
+    let phrase = boolean_hits(&ctx, &token, "\"invoice paid\"").await;
+    assert_eq!(phrase, vec![paid.clone()]);
+}
+
+#[tokio::test]
+async fn malformed_boolean_queries_never_fail() {
+    let ctx = TestContext::new().await;
+    let (user_id, token) = user_with_token(&ctx).await;
+    seed_document(&ctx, user_id, "a.txt", "text/plain", "invoice paid").await;
+    for query in [
+        "((invoice",
+        "invoice &",
+        "| | invoice",
+        "!!",
+        "invoice & | paid",
+        "\"unterminated",
+        "NOT",
+    ] {
+        boolean_hits(&ctx, &token, query).await;
+    }
+}
+
+#[tokio::test]
+async fn rest_boolean_search_accepts_web_ui_syntax() {
+    let ctx = TestContext::new().await;
+    let (user_id, token) = user_with_token(&ctx).await;
+    let paid = seed_document(&ctx, user_id, "paid.txt", "text/plain", "invoice paid")
+        .await
+        .id
+        .to_string();
+    let auth = ctx.auth_helper();
+    for query in ["invoice%20%26%20paid", "invoice%20AND%20paid", "((invoice"] {
+        let body: Value = serde_json::from_slice(
+            &auth
+                .make_authenticated_request(
+                    "GET",
+                    &format!("/api/search/enhanced?query={query}&search_mode=boolean"),
+                    None,
+                    &token,
+                )
+                .await,
+        )
+        .unwrap_or_else(|e| panic!("{query}: not JSON ({e}), the search failed"));
+        if query != "((invoice" {
+            let ids: Vec<&str> = body["documents"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|d| d["id"].as_str().unwrap())
+                .collect();
+            assert!(ids.contains(&paid.as_str()), "{query}: {body}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn enhanced_search_rejects_unbounded_requests() {
+    // enhanced search used to skip the length and pagination checks basic
+    // search applies, sending them straight to Postgres.
+    let ctx = TestContext::new().await;
+    let (_, token) = user_with_token(&ctx).await;
+    let long = "x".repeat(1001);
+    let result = ctx
+        .mcp_call_tool(&token, "enhanced_search", json!({ "query": long }))
+        .await;
+    assert_eq!(result["isError"], json!(true), "{result}");
+    assert!(text(&result).contains("1000 characters"), "{result}");
+
+    for params in [
+        format!("query={}", "x".repeat(1001)),
+        "query=invoice&limit=-1".into(),
+        "query=invoice&limit=100000".into(),
+        "query=invoice&snippet_length=-1".into(),
+    ] {
+        let response = ctx
+            .app()
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(format!("/api/search/enhanced?{params}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::BAD_REQUEST,
+            "{params}"
+        );
+    }
 }

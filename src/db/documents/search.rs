@@ -7,8 +7,8 @@ use super::helpers::{
     find_word_boundary, map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS,
     OCR_PROGRESS_FIELDS, OCR_PROGRESS_JOIN,
 };
-use crate::db::Database;
 use crate::db::sanitize::strip_nul;
+use crate::db::Database;
 use crate::models::{
     Document, EnhancedDocumentResponse, HighlightRange, MonthCount, SearchMode, SearchRequest,
     SearchSnippet, UserRole,
@@ -19,9 +19,91 @@ fn tsquery_function(mode: &SearchMode) -> &'static str {
     match mode {
         SearchMode::Simple => "plainto_tsquery",
         SearchMode::Phrase => "phraseto_tsquery",
-        SearchMode::Boolean => "to_tsquery",
+        // Boolean input is translated by `boolean_to_websearch`; websearch
+        // syntax cannot fail to parse, unlike raw `to_tsquery` input.
+        SearchMode::Boolean => "websearch_to_tsquery",
         // Fuzzy search does not use a tsquery
         SearchMode::Fuzzy => "",
+    }
+}
+
+/// The text bound as the tsquery function's argument.
+fn tsquery_input(search_query: &str, mode: &SearchMode) -> String {
+    let query = strip_nul(search_query);
+    match mode {
+        SearchMode::Boolean => boolean_to_websearch(&query),
+        _ => query.into_owned(),
+    }
+}
+
+/// Translates a boolean query into `websearch_to_tsquery` syntax, which
+/// Postgres parses without ever raising an error. Accepts both operator
+/// styles users and AI clients write: `&`/`AND` (or nothing) for and,
+/// `|`/`OR` for or, `!`/`NOT`/a leading `-` for not. Quoted phrases pass
+/// through; parentheses are dropped (websearch syntax has no grouping).
+pub(crate) fn boolean_to_websearch(query: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut negate = false;
+    for token in boolean_tokens(query) {
+        match token {
+            BooleanToken::Or => out.push("or".to_string()),
+            BooleanToken::Not => negate = true,
+            BooleanToken::Term(term) => {
+                out.push(if negate { format!("-{term}") } else { term });
+                negate = false;
+            }
+        }
+    }
+    out.join(" ")
+}
+
+#[derive(Debug, PartialEq)]
+enum BooleanToken {
+    Term(String),
+    Or,
+    Not,
+}
+
+/// Splits a boolean query into terms (words or quoted phrases) and the
+/// operators that change meaning; `&`, `AND` and parentheses are dropped.
+fn boolean_tokens(query: &str) -> Vec<BooleanToken> {
+    let mut tokens = Vec::new();
+    let mut chars = query.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '|' => tokens.push(BooleanToken::Or),
+            '!' => tokens.push(BooleanToken::Not),
+            '"' => {
+                let phrase: String = chars.by_ref().take_while(|&c| c != '"').collect();
+                if !phrase.trim().is_empty() {
+                    tokens.push(BooleanToken::Term(format!("\"{}\"", phrase.trim())));
+                }
+            }
+            c if c.is_whitespace() || "()&".contains(c) => {}
+            c => {
+                let mut word = c.to_string();
+                while let Some(next) =
+                    chars.next_if(|&n| !n.is_whitespace() && !"()&|!\"".contains(n))
+                {
+                    word.push(next);
+                }
+                tokens.extend(word_tokens(word));
+            }
+        }
+    }
+    tokens
+}
+
+/// One bare word: an operator keyword, a `-negated` term or a plain term.
+fn word_tokens(word: String) -> Vec<BooleanToken> {
+    match word.as_str() {
+        "AND" | "-" => vec![],
+        "OR" => vec![BooleanToken::Or],
+        "NOT" => vec![BooleanToken::Not],
+        _ => match word.strip_prefix('-') {
+            Some(rest) => vec![BooleanToken::Not, BooleanToken::Term(rest.to_string())],
+            None => vec![BooleanToken::Term(word)],
+        },
     }
 }
 
@@ -37,7 +119,7 @@ fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode
             query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), ");
             query.push(tsquery_function(mode));
             query.push("('english', ");
-            query.push_bind(strip_nul(search_query).into_owned());
+            query.push_bind(tsquery_input(search_query, mode));
             query.push(")) as search_rank");
         }
     }
@@ -60,11 +142,11 @@ fn push_search_condition(
             query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ ");
             query.push(func);
             query.push("('english', ");
-            query.push_bind(strip_nul(search_query).into_owned());
+            query.push_bind(tsquery_input(search_query, mode));
             query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ ");
             query.push(func);
             query.push("('english', ");
-            query.push_bind(strip_nul(search_query).into_owned());
+            query.push_bind(tsquery_input(search_query, mode));
             query.push("))");
         }
     }
@@ -386,5 +468,59 @@ impl Database {
             .into_iter()
             .map(|(month, count)| MonthCount { month, count })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod boolean_query_tests {
+    use super::boolean_to_websearch as translate;
+
+    #[test]
+    fn symbol_operators_from_the_search_help() {
+        assert_eq!(translate("invoice & paid"), "invoice paid");
+        assert_eq!(translate("invoice | receipt"), "invoice or receipt");
+        assert_eq!(translate("invoice & !draft"), "invoice -draft");
+        assert_eq!(translate("invoice&!draft"), "invoice -draft");
+        assert_eq!(
+            translate("(invoice | receipt) & 2024"),
+            "invoice or receipt 2024"
+        );
+    }
+
+    #[test]
+    fn word_operators_as_ai_clients_write_them() {
+        assert_eq!(translate("invoice AND 2024"), "invoice 2024");
+        assert_eq!(translate("invoice OR receipt"), "invoice or receipt");
+        assert_eq!(translate("invoice NOT draft"), "invoice -draft");
+        assert_eq!(translate("invoice -draft"), "invoice -draft");
+    }
+
+    #[test]
+    fn quoted_phrases_pass_through_and_can_be_negated() {
+        assert_eq!(
+            translate("\"total due\" & invoice"),
+            "\"total due\" invoice"
+        );
+        assert_eq!(translate("!\"draft copy\""), "-\"draft copy\"");
+        assert_eq!(
+            translate("\"unterminated phrase"),
+            "\"unterminated phrase\""
+        );
+    }
+
+    #[test]
+    fn malformed_input_degrades_instead_of_failing() {
+        // These are syntax errors for to_tsquery; websearch syntax has none.
+        for input in [
+            "", "&", "((", "| | |", "!!", "- -", "\"\"", "a & | b", "NOT", "a (b",
+        ] {
+            let translated = translate(input);
+            assert!(
+                !translated.contains(['&', '(', ')', '!']),
+                "{input:?} -> {translated:?}"
+            );
+        }
+        assert_eq!(translate("a & | b"), "a or b");
+        assert_eq!(translate("NOT"), "");
     }
 }

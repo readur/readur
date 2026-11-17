@@ -53,7 +53,8 @@ pub enum McpSearchMode {
     Phrase,
     /// Similarity matching, tolerant of typos and partial words.
     Fuzzy,
-    /// AND, OR and NOT operators.
+    /// Operators: `OR` (or `|`), `NOT` (or `!`, or a leading `-`); terms
+    /// are ANDed by default (`AND`/`&` accepted); "quoted phrases".
     Boolean,
 }
 
@@ -185,7 +186,7 @@ fn format_results(heading: &str, request: &SearchRequest, response: &SearchRespo
         line.push_str(&format!(
             " | {} | OCR {}",
             doc.mime_type,
-            doc.ocr_status.as_deref().unwrap_or("pending")
+            format::ocr_status(doc.ocr_status.as_deref())
         ));
         lines.push(line);
         for snippet in &doc.snippets {
@@ -234,7 +235,7 @@ ranking, match snippets and phrase/fuzzy/boolean matching.",
     #[tool(
         description = "Search documents ranked by relevance, with text snippets showing where the query \
 matched and suggestions for refining the query. search_mode selects simple word matching (default), \
-exact phrase, fuzzy (typo-tolerant) or boolean (AND/OR/NOT) matching. Supports the same filters as \
+exact phrase, fuzzy (typo-tolerant) or boolean matching (e.g. `invoice OR receipt NOT draft`, `\"total due\" 2024`). Supports the same filters as \
 search_documents.",
         annotations(
             title = "Enhanced Search",

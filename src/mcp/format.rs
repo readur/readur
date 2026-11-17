@@ -33,6 +33,13 @@ pub fn internal(action: &str, error: impl std::fmt::Display) -> McpError {
     McpError::internal_error(format!("failed to {action}"), None)
 }
 
+/// A document's OCR status for display. A missing status is "unknown",
+/// never "pending": a document reported as pending is assumed to be queued,
+/// and the model would wait on it instead of calling retry_document_ocr.
+pub fn ocr_status(status: Option<&str>) -> &str {
+    status.unwrap_or("unknown")
+}
+
 /// Binary-unit file size, e.g. `1.5 MiB`.
 pub fn file_size(bytes: i64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -64,6 +71,12 @@ mod tests {
             "password authentication failed for user \"readur\"",
         );
         assert_eq!(err.message, "failed to load settings");
+    }
+
+    #[test]
+    fn missing_ocr_status_is_unknown_not_pending() {
+        assert_eq!(ocr_status(None), "unknown");
+        assert_eq!(ocr_status(Some("pending")), "pending");
     }
 
     #[test]

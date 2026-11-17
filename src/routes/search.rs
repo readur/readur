@@ -61,36 +61,13 @@ pub(crate) async fn run_basic_search(
     user: &User,
     search_request: &SearchRequest,
 ) -> Result<SearchResponse, SearchError> {
-    // Validate filters, then query length (allow empty query if filters are present)
-    let filters = search_request.filters();
-    filters.validate().map_err(SearchError::invalid_syntax)?;
-    if search_request.query.len() < 2 && !filters.is_active() {
-        return Err(SearchError::query_too_short(search_request.query.len(), 2));
-    }
-    if search_request.query.len() > 1000 {
-        return Err(SearchError::query_too_long(
-            search_request.query.len(),
-            1000,
-        ));
-    }
-
-    // Validate pagination
-    let limit = search_request.limit.unwrap_or(25);
-    let offset = search_request.offset.unwrap_or(0);
-    if limit > 1000 || offset < 0 || limit <= 0 {
-        return Err(SearchError::invalid_pagination(offset, limit));
-    }
+    validate_search_request(search_request)?;
 
     // Get total count (without pagination) for proper pagination support. The
     // list below always matches in simple mode, so the count does too.
     let total = state
         .db
-        .count_search_documents_in_mode(
-            user.id,
-            user.role.clone(),
-            search_request,
-            &SearchMode::Simple,
-        )
+        .count_search_documents_in_mode(user.id, user.role, search_request, &SearchMode::Simple)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
@@ -101,7 +78,7 @@ pub(crate) async fn run_basic_search(
 
     let documents = state
         .db
-        .search_documents_with_role(user.id, user.role.clone(), search_request)
+        .search_documents_with_role(user.id, user.role, search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
@@ -168,6 +145,42 @@ async fn enhanced_search_documents(
         })
 }
 
+/// Longest accepted query, in bytes.
+const MAX_QUERY_LEN: usize = 1000;
+/// Largest page and snippet window a search may ask for.
+const MAX_LIMIT: i64 = 1000;
+const MAX_SNIPPET_LENGTH: i32 = 2000;
+
+/// Request checks shared by basic and enhanced search, so neither can send
+/// an unbounded query, page or snippet window to the database. An empty
+/// query is allowed when a filter narrows the search.
+pub(crate) fn validate_search_request(request: &SearchRequest) -> Result<(), SearchError> {
+    let filters = request.filters();
+    filters.validate().map_err(SearchError::invalid_syntax)?;
+    if request.query.len() < 2 && !filters.is_active() {
+        return Err(SearchError::query_too_short(request.query.len(), 2));
+    }
+    if request.query.len() > MAX_QUERY_LEN {
+        return Err(SearchError::query_too_long(
+            request.query.len(),
+            MAX_QUERY_LEN,
+        ));
+    }
+    let limit = request.limit.unwrap_or(25);
+    let offset = request.offset.unwrap_or(0);
+    if !(1..=MAX_LIMIT).contains(&limit) || offset < 0 {
+        return Err(SearchError::invalid_pagination(offset, limit));
+    }
+    if let Some(length) = request.snippet_length {
+        if !(1..=MAX_SNIPPET_LENGTH).contains(&length) {
+            return Err(SearchError::invalid_syntax(format!(
+                "snippet_length must be between 1 and {MAX_SNIPPET_LENGTH}, got {length}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Enhanced search for `user` (ranking, snippets, suggestions). Shared by
 /// `GET /api/search/enhanced` and the MCP `enhanced_search` tool.
 pub(crate) async fn run_enhanced_search(
@@ -175,12 +188,7 @@ pub(crate) async fn run_enhanced_search(
     user: &User,
     search_request: &SearchRequest,
 ) -> Result<SearchResponse, SearchError> {
-    // Validate filters, then query length (allow empty query if filters are present)
-    let filters = search_request.filters();
-    filters.validate().map_err(SearchError::invalid_syntax)?;
-    if search_request.query.len() < 2 && !filters.is_active() {
-        return Err(SearchError::query_too_short(search_request.query.len(), 2));
-    }
+    validate_search_request(search_request)?;
 
     let suggestions = generate_search_suggestions(&search_request.query);
 
@@ -189,13 +197,13 @@ pub(crate) async fn run_enhanced_search(
     // Get total count (without pagination) for proper pagination support
     let total = state
         .db
-        .count_search_documents(user.id, user.role.clone(), search_request)
+        .count_search_documents(user.id, user.role, search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Count failed: {}", e)))?;
 
     let documents = state
         .db
-        .enhanced_search_documents_with_role(user.id, user.role.clone(), search_request)
+        .enhanced_search_documents_with_role(user.id, user.role, search_request)
         .await
         .map_err(|e| SearchError::index_unavailable(format!("Search failed: {}", e)))?;
 
@@ -311,10 +319,75 @@ pub(crate) async fn load_search_facets(
     state: &AppState,
     user: &User,
 ) -> anyhow::Result<SearchFacetsResponse> {
-    let mime_types = state
-        .db
-        .get_mime_type_facets(user.id, user.role.clone())
-        .await?;
-    let tags = state.db.get_tag_facets(user.id, user.role.clone()).await?;
+    let mime_types = state.db.get_mime_type_facets(user.id, user.role).await?;
+    let tags = state.db.get_tag_facets(user.id, user.role).await?;
     Ok(SearchFacetsResponse { mime_types, tags })
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    fn request(query: &str) -> SearchRequest {
+        SearchRequest {
+            query: query.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn query_length_is_bounded() {
+        assert!(validate_search_request(&request("invoice")).is_ok());
+        assert!(
+            validate_search_request(&request("a")).is_err(),
+            "too short without filters"
+        );
+        assert!(validate_search_request(&request(&"x".repeat(MAX_QUERY_LEN))).is_ok());
+        assert!(validate_search_request(&request(&"x".repeat(MAX_QUERY_LEN + 1))).is_err());
+    }
+
+    #[test]
+    fn pagination_is_bounded() {
+        for (limit, offset, ok) in [
+            (25, 0, true),
+            (MAX_LIMIT, 10, true),
+            (0, 0, false),
+            (-5, 0, false),
+            (MAX_LIMIT + 1, 0, false),
+            (25, -1, false),
+        ] {
+            let req = SearchRequest {
+                limit: Some(limit),
+                offset: Some(offset),
+                ..request("invoice")
+            };
+            assert_eq!(
+                validate_search_request(&req).is_ok(),
+                ok,
+                "limit {limit} offset {offset}"
+            );
+        }
+    }
+
+    #[test]
+    fn snippet_length_is_bounded() {
+        for (length, ok) in [
+            (1, true),
+            (200, true),
+            (MAX_SNIPPET_LENGTH, true),
+            (0, false),
+            (-1, false),
+            (MAX_SNIPPET_LENGTH + 1, false),
+        ] {
+            let req = SearchRequest {
+                snippet_length: Some(length),
+                ..request("invoice")
+            };
+            assert_eq!(
+                validate_search_request(&req).is_ok(),
+                ok,
+                "snippet_length {length}"
+            );
+        }
+    }
 }

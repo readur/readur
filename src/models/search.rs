@@ -276,7 +276,8 @@ pub enum SearchMode {
     /// Fuzzy search using similarity matching (good for typos and partial matches)
     #[serde(rename = "fuzzy")]
     Fuzzy,
-    /// Boolean search with AND, OR, NOT operators
+    /// Boolean search: OR / `|`, NOT / `!` / leading `-`, implicit AND
+    /// (`AND` / `&` accepted), "quoted phrases"
     #[serde(rename = "boolean")]
     Boolean,
 }

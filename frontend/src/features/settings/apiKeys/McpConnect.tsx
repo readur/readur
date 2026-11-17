@@ -15,6 +15,28 @@ export function claudeCodeCommand(endpoint: string, apiKey: string): string {
   return `claude mcp add --transport http readur ${endpoint} --header "Authorization: Bearer ${apiKey}"`;
 }
 
+/**
+ * Claude Desktop's config file only launches local (stdio) servers, so it reaches a remote server
+ * through the `mcp-remote` bridge. The header value goes in `env` because a space inside an `args`
+ * entry is split apart on some platforms.
+ */
+export function claudeDesktopJson(endpoint: string, apiKey: string): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        readur: {
+          command: 'npx',
+          args: ['-y', 'mcp-remote', endpoint, '--header', 'Authorization:${READUR_AUTH}'],
+          env: { READUR_AUTH: `Bearer ${apiKey}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/** For clients that speak Streamable HTTP natively and read an `mcpServers` file. */
 export function mcpServersJson(endpoint: string, apiKey: string): string {
   return JSON.stringify(
     {
@@ -37,7 +59,8 @@ export function McpSnippets({ apiKey = API_KEY_PLACEHOLDER }: { apiKey?: string 
       <Tabs defaultSelectedKey="claude-code">
         <TabList aria-label={t('settings.apiKeys.mcp.clients', 'Client configuration')}>
           <Tab id="claude-code">{t('settings.apiKeys.mcp.claudeCode', 'Claude Code')}</Tab>
-          <Tab id="json">{t('settings.apiKeys.mcp.json', 'JSON config')}</Tab>
+          <Tab id="claude-desktop">{t('settings.apiKeys.mcp.claudeDesktop', 'Claude Desktop')}</Tab>
+          <Tab id="json">{t('settings.apiKeys.mcp.json', 'Other clients')}</Tab>
         </TabList>
         <TabPanel id="claude-code" className={styles.snippetPanel}>
           <CopyBlock
@@ -45,11 +68,24 @@ export function McpSnippets({ apiKey = API_KEY_PLACEHOLDER }: { apiKey?: string 
             value={claudeCodeCommand(endpoint, apiKey)}
           />
         </TabPanel>
+        <TabPanel id="claude-desktop" className={styles.snippetPanel}>
+          <p className={styles.snippetHelp}>
+            {t(
+              'settings.apiKeys.mcp.desktopHelp',
+              'Add to claude_desktop_config.json, then restart Claude Desktop. It connects through the mcp-remote bridge, which needs Node.js.',
+            )}
+          </p>
+          <CopyBlock
+            label={t('settings.apiKeys.mcp.desktopConfig', 'Claude Desktop configuration')}
+            value={claudeDesktopJson(endpoint, apiKey)}
+            multiline
+          />
+        </TabPanel>
         <TabPanel id="json" className={styles.snippetPanel}>
           <p className={styles.snippetHelp}>
             {t(
               'settings.apiKeys.mcp.jsonHelp',
-              'For Claude Desktop and other clients that read an mcpServers configuration file.',
+              'For clients that connect to remote servers over HTTP and read an mcpServers configuration file.',
             )}
           </p>
           <CopyBlock

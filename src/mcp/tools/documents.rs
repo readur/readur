@@ -137,7 +137,7 @@ impl ReadurMcp {
                 doc.id,
                 doc.original_filename,
                 doc.mime_type,
-                doc.ocr_status.as_deref().unwrap_or("unknown"),
+                format::ocr_status(doc.ocr_status.as_deref()),
                 format::file_size(doc.file_size),
                 format::date(doc.created_at),
             ));
@@ -191,7 +191,7 @@ impl ReadurMcp {
             return Ok(not_found(p.id));
         };
 
-        let status = ocr.ocr_status.clone().unwrap_or_else(|| "unknown".into());
+        let status = format::ocr_status(ocr.ocr_status.as_deref()).to_string();
         let full = ocr.ocr_text.as_deref().unwrap_or_default();
         let total_chars = full.chars().count();
         let offset = p.offset.unwrap_or(0) as usize;
@@ -297,42 +297,35 @@ impl ReadurMcp {
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
         let user = Self::caller(&parts)?;
-        let filename = p.filename.trim().to_string();
+        let UploadDocumentParams {
+            filename,
+            content_base64,
+            mime_type,
+            label_ids,
+        } = p;
+        let filename = filename.trim().to_string();
         if filename.is_empty() {
             return Ok(format::tool_error("filename must not be empty"));
         }
 
-        // Reject oversized payloads before decoding them.
-        // Base64 is often line-wrapped; only copy the payload when it is.
-        let encoded: std::borrow::Cow<str> =
-            if p.content_base64.bytes().any(|b| b.is_ascii_whitespace()) {
-                p.content_base64
-                    .chars()
-                    .filter(|c| !c.is_ascii_whitespace())
-                    .collect::<String>()
-                    .into()
-            } else {
-                p.content_base64.as_str().into()
-            };
-        let padding = encoded.bytes().rev().take_while(|&b| b == b'=').count();
-        let decoded_len = (encoded.len() / 4 * 3).saturating_sub(padding);
-        if let Err(e) = service::check_upload_size(&self.state, &filename, decoded_len) {
+        // Reject oversized payloads before decoding them, and decode in
+        // place so the request never holds the file more than once.
+        let encoded = strip_base64_whitespace(content_base64);
+        if let Err(e) =
+            service::check_upload_size(&self.state, &filename, base64_decoded_len(&encoded))
+        {
             return upload_error(e);
         }
-        let data = match Base64::decode_vec(&encoded) {
-            Ok(data) => data,
-            Err(_) => {
-                return Ok(format::tool_error(
-                    "content_base64 is not valid base64 (standard alphabet with padding)",
-                ))
-            }
+        let Some(data) = decode_base64_in_place(encoded) else {
+            return Ok(format::tool_error(
+                "content_base64 is not valid base64 (standard alphabet with padding)",
+            ));
         };
         if data.is_empty() {
             return Ok(format::tool_error("the file is empty"));
         }
 
-        let mime_type = p
-            .mime_type
+        let mime_type = mime_type
             .map(|m| m.trim().to_string())
             .filter(|m| !m.is_empty())
             .unwrap_or_else(|| {
@@ -346,7 +339,7 @@ impl ReadurMcp {
             filename,
             mime_type,
             data,
-            label_ids: p.label_ids.unwrap_or_default(),
+            label_ids: label_ids.unwrap_or_default(),
             ..Default::default()
         };
         let uploaded = match service::upload_document(&self.state, user, request).await {
@@ -398,7 +391,9 @@ impl ReadurMcp {
             title = "Delete Document",
             read_only_hint = false,
             destructive_hint = true,
-            idempotent_hint = true,
+            // A repeat call reports "not found": it cannot tell an already
+            // deleted document from one the caller never had.
+            idempotent_hint = false,
             open_world_hint = false
         )
     )]
@@ -456,7 +451,7 @@ fn describe_document(doc: &DocumentResponse) -> String {
         format!("  Size:       {}", format::file_size(doc.file_size)),
         format!(
             "  OCR status: {}",
-            doc.ocr_status.as_deref().unwrap_or("unknown")
+            format::ocr_status(doc.ocr_status.as_deref())
         ),
     ];
     if let Some(confidence) = doc.ocr_confidence {
@@ -496,6 +491,28 @@ fn not_found(id: Uuid) -> CallToolResult {
     format::tool_error(format!(
         "Document {id} was not found or you do not have access to it."
     ))
+}
+
+/// Base64 is often line-wrapped; drop the whitespace without copying.
+fn strip_base64_whitespace(mut encoded: String) -> String {
+    encoded.retain(|c| !c.is_ascii_whitespace());
+    encoded
+}
+
+/// Decoded size of whitespace-free base64, for the size check before
+/// decoding.
+fn base64_decoded_len(encoded: &str) -> usize {
+    let padding = encoded.bytes().rev().take_while(|&b| b == b'=').count();
+    (encoded.len() / 4 * 3).saturating_sub(padding)
+}
+
+/// Decodes whitespace-free base64 into the buffer that held it, so the
+/// encoded text is gone once the bytes exist; `None` if it is not valid.
+fn decode_base64_in_place(encoded: String) -> Option<Vec<u8>> {
+    let mut buffer = encoded.into_bytes();
+    let len = Base64::decode_in_place(&mut buffer).ok()?.len();
+    buffer.truncate(len);
+    Some(buffer)
 }
 
 /// An `offset` into OCR text of `total_chars` characters must point at a
@@ -538,6 +555,43 @@ fn upload_error(error: DocumentError) -> Result<CallToolResult, McpError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrapped_base64_is_decoded_in_place() {
+        let original: Vec<u8> = (0..=255u8).cycle().take(1000).collect();
+        let encoded = Base64::encode_string(&original);
+        let wrapped = encoded
+            .as_bytes()
+            .chunks(76)
+            .map(|line| std::str::from_utf8(line).unwrap())
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        let stripped = strip_base64_whitespace(format!("  {wrapped}\n"));
+        assert_eq!(stripped, encoded);
+        assert_eq!(base64_decoded_len(&stripped), original.len());
+        assert_eq!(decode_base64_in_place(stripped).unwrap(), original);
+    }
+
+    #[test]
+    fn decoded_length_accounts_for_padding() {
+        for size in 0..10 {
+            let encoded = Base64::encode_string(&vec![7u8; size]);
+            assert_eq!(base64_decoded_len(&encoded), size, "{encoded}");
+        }
+    }
+
+    #[test]
+    fn invalid_base64_is_rejected() {
+        assert!(decode_base64_in_place("not base64!".to_string()).is_none());
+        assert!(
+            decode_base64_in_place("abc".to_string()).is_none(),
+            "missing padding"
+        );
+        assert_eq!(
+            decode_base64_in_place(String::new()).unwrap(),
+            Vec::<u8>::new()
+        );
+    }
 
     #[test]
     fn ocr_offset_must_point_inside_the_text() {

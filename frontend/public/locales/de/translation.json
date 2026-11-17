@@ -1088,12 +1088,15 @@
         "endpoint": "MCP-Endpunkt",
         "clients": "Client-Konfiguration",
         "claudeCode": "Claude Code",
-        "json": "JSON-Konfiguration",
+        "json": "Andere Clients",
         "command": "Claude-Code-Befehl",
         "config": "MCP-Konfiguration",
-        "jsonHelp": "Für Claude Desktop und andere Clients, die eine mcpServers-Konfigurationsdatei lesen.",
+        "jsonHelp": "Für Clients, die sich per HTTP mit entfernten Servern verbinden und eine mcpServers-Konfigurationsdatei lesen.",
         "copyNamed": "{{name}} kopieren",
-        "revealHelp": "Fügen Sie Readur mit diesem Schlüssel einem MCP-Client hinzu:"
+        "revealHelp": "Fügen Sie Readur mit diesem Schlüssel einem MCP-Client hinzu:",
+        "claudeDesktop": "Claude Desktop",
+        "desktopConfig": "Claude-Desktop-Konfiguration",
+        "desktopHelp": "In claude_desktop_config.json einfügen und Claude Desktop neu starten. Die Verbindung läuft über die mcp-remote-Brücke, die Node.js benötigt."
       }
     },
     "appearance": {

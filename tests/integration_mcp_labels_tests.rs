@@ -307,11 +307,14 @@ async fn add_and_remove_label_on_own_document() {
         .await;
     assert_eq!(after["structuredContent"]["labels"], json!([]));
 
-    // Removing a label that is not assigned is reported.
-    let missing = ctx
+    // remove_document_label is annotated idempotent: repeating it after the
+    // label is gone succeeds (a client retrying after a timeout must not be
+    // told the removal failed).
+    let again = ctx
         .mcp_call_tool(&token, "remove_document_label", ids)
         .await;
-    assert_tool_error(&missing);
+    assert_ok(&again);
+    assert_eq!(again["structuredContent"]["status"], json!("not_assigned"));
 }
 
 #[tokio::test]

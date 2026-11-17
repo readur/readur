@@ -46,14 +46,19 @@ pub async fn list_documents(
     limit: i64,
     offset: i64,
 ) -> Result<PaginatedDocumentsResponse> {
-    let (total, documents) = tokio::try_join!(
-        state
-            .db
-            .count_documents_filtered(user.id, user.role, filters),
-        state.db.list_documents_filtered(
-            user.id, user.role, filters, sort_by, sort_order, limit, offset
-        ),
-    )?;
+    // Sequential on purpose: running these concurrently would hold two
+    // pool connections per list call, doubling pool pressure under load for
+    // one round trip of latency.
+    let total = state
+        .db
+        .count_documents_filtered(user.id, user.role, filters)
+        .await?;
+    let documents = state
+        .db
+        .list_documents_filtered(
+            user.id, user.role, filters, sort_by, sort_order, limit, offset,
+        )
+        .await?;
 
     let document_ids: Vec<Uuid> = documents.iter().map(|d| d.document.id).collect();
     let mut labels: HashMap<_, _> = state
@@ -102,10 +107,9 @@ pub async fn get_document(
         return Ok(None);
     };
 
-    let (labels, owner) = tokio::try_join!(
-        state.db.get_document_labels(document_id),
-        state.db.get_user_by_id(document.user_id),
-    )?;
+    // Sequential for the same reason as `list_documents`.
+    let labels = state.db.get_document_labels(document_id).await?;
+    let owner = state.db.get_user_by_id(document.user_id).await?;
     let username = owner.map(|owner| owner.username);
 
     let mut response = DocumentResponse::from(document);
@@ -553,6 +557,29 @@ pub async fn has_active_ocr_job(state: &AppState, document_id: Uuid) -> Result<b
     Ok(active)
 }
 
+/// Queues the document for OCR unless it already has a pending or
+/// processing job, in one statement: the queue's partial unique index
+/// (`idx_ocr_queue_unique_pending_document`) arbitrates concurrent retries,
+/// so there is no check-then-insert race. Returns whether a job was added.
+/// A retried 'failed' document keeps that status until the worker starts,
+/// so the document's own status cannot answer this.
+async fn enqueue_unless_queued(
+    state: &AppState,
+    document: &crate::models::Document,
+) -> Result<bool> {
+    let inserted = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO ocr_queue (document_id, priority, file_size) VALUES ($1, $2, $3) \
+         ON CONFLICT (document_id) WHERE status IN ('pending', 'processing') DO NOTHING \
+         RETURNING id",
+    )
+    .bind(document.id)
+    .bind(USER_OCR_PRIORITY)
+    .bind(document.file_size)
+    .fetch_optional(state.db.get_pool())
+    .await?;
+    Ok(inserted.is_some())
+}
+
 /// Outcome of a manual OCR retry.
 #[derive(Debug, serde::Serialize)]
 pub struct OcrRetryOutcome {
@@ -587,22 +614,6 @@ pub async fn retry_document_ocr(
             message: "OCR is already in progress for this document".to_string(),
         });
     }
-    // The queue allows one pending/processing job per document, and the
-    // document's own status can lag behind it (a retried 'failed' document
-    // stays 'failed' until the worker picks the job up).
-    let in_flight = has_active_ocr_job(state, document_id).await.map_err(|e| {
-        error!(
-            "Failed to check OCR queue for document {}: {}",
-            document_id, e
-        );
-        DocumentError::InternalServerError("Failed to check the OCR queue".to_string())
-    })?;
-    if in_flight {
-        return Ok(OcrRetryOutcome {
-            queued: false,
-            message: "The document is already queued for OCR".to_string(),
-        });
-    }
 
     let health_checker = crate::ocr::health::OcrHealthChecker::new();
     if let Some(languages) = languages {
@@ -629,14 +640,16 @@ pub async fn retry_document_ocr(
         store_language_preference(state, user, &[], Some(lang)).await;
     }
 
-    state
-        .queue_service
-        .enqueue_document(document.id, USER_OCR_PRIORITY, document.file_size)
-        .await
-        .map_err(|e| {
-            error!("Failed to queue document {} for OCR: {}", document_id, e);
-            DocumentError::InternalServerError("Failed to queue document for OCR".to_string())
-        })?;
+    let queued = enqueue_unless_queued(state, &document).await.map_err(|e| {
+        error!("Failed to queue document {} for OCR: {}", document_id, e);
+        DocumentError::InternalServerError("Failed to queue document for OCR".to_string())
+    })?;
+    if !queued {
+        return Ok(OcrRetryOutcome {
+            queued: false,
+            message: "The document is already queued for OCR".to_string(),
+        });
+    }
     info!("Document {} queued for OCR retry", document_id);
     Ok(OcrRetryOutcome {
         queued: true,

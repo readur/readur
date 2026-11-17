@@ -34,9 +34,29 @@ claude mcp add --transport http readur https://readur.example.com/api/mcp \
 
 Run `claude mcp list` to check the connection, then ask Claude something like *"Find my invoices from March in Readur"*.
 
-#### Claude Desktop and other clients
+#### Claude Desktop
 
-Clients that read an `mcpServers` configuration file (Claude Desktop, and most other MCP clients) take a block like this:
+Claude Desktop's `claude_desktop_config.json` only launches local (stdio) servers — a `url` entry is ignored — so it reaches Readur through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which needs Node.js. Add this, then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "readur": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://readur.example.com/api/mcp", "--header", "Authorization:${READUR_AUTH}"],
+      "env": {
+        "READUR_AUTH": "Bearer readur_pat_XXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+The header value lives in `env` because a space inside an `args` entry is split apart on some platforms. (Desktop's *Custom Connector* setting expects OAuth, which Readur's API keys are not.)
+
+#### Clients with native HTTP support
+
+Clients that connect to remote servers themselves and read an `mcpServers` file (for example Claude Code's `.mcp.json`) take a block like this:
 
 ```json
 {
@@ -52,7 +72,7 @@ Clients that read an `mcpServers` configuration file (Claude Desktop, and most o
 }
 ```
 
-Some clients name the transport `streamable-http` instead of `http`, or only support local (stdio) servers; for the latter, use a bridge such as `mcp-remote` pointing at the URL above with the same header.
+Some clients name the transport `streamable-http` instead of `http`.
 
 #### Any other client
 
@@ -87,7 +107,7 @@ Every tool acts as the user who owns the key and sees exactly what that user see
 | Tool | What it does |
 |------|--------------|
 | `search_documents` | Full-text search over document names and OCR text |
-| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match |
+| `enhanced_search` | Search with a mode (simple, phrase, fuzzy, boolean) and text snippets around each match. Boolean mode understands `OR` / `\|`, `NOT` / `!` / a leading `-`, implicit AND (`AND` / `&` accepted) and `"quoted phrases"` |
 | `get_search_facets` | Document counts per MIME type and tag, for narrowing a search |
 
 ### Labels
