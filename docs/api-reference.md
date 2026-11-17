@@ -656,11 +656,12 @@ Authorization: Bearer <token>
   "success": true,
   "cancelled": true,
   "was_running": false,
-  "message": "Queued OCR was cancelled"
+  "document_status": "failed",
+  "message": "Queued OCR was cancelled; the document is now 'failed' (reason 'cancelled') and can be retried"
 }
 ```
 
-A queued job is removed before any worker starts it. A running job is removed too (`was_running` is `true`): the worker finishes the page it is on, but its result is discarded, never written over the document. A cancelled document is left with `ocr_status` `failed` and `ocr_failure_reason` `cancelled`; text from an earlier completed OCR is kept, and [Retry OCR](#retry-ocr) queues it again. With nothing to cancel the request still succeeds, with `cancelled` `false`. `404 Not Found` when the document does not exist or belongs to another user.
+A queued job is removed before any worker starts it. A running job is removed too (`was_running` is `true`) and its worker is stopped at once, freeing its OCR slot; nothing it produced is written over the document. `document_status` is the document's OCR status afterwards: a document without OCR text is left `failed` with `ocr_failure_reason` `cancelled`, and [Retry OCR](#retry-ocr) queues it again; a document whose earlier OCR had completed (a re-OCR was cancelled) stays `completed` and keeps its text, and `message` says which. With nothing to cancel the request still succeeds, with `cancelled` `false` and the document's current `document_status`. `404 Not Found` when the document does not exist or belongs to another user.
 
 #### Delete a Document
 

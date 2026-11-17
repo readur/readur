@@ -5,12 +5,18 @@
  *
  * `success` is true whenever the request was handled; `cancelled` says
  * whether a queued or running OCR job was cancelled (true) or the document
- * had none (false). A cancelled document is left with `ocr_status`
- * 'failed' and `ocr_failure_reason` 'cancelled', and can be retried.
+ * had none (false). `document_status` is the document's `ocr_status`
+ * afterwards: a cancelled document without OCR text is 'failed' (reason
+ * 'cancelled') and can be retried; one whose earlier OCR had completed (a
+ * re-OCR was cancelled) stays 'completed' and keeps its text.
  */
 export type CancelOcrResponse = { success: boolean, cancelled: boolean, 
 /**
- * True when a worker was already running the job; its result is
- * discarded when it finishes.
+ * True when a worker was already running the job; it is stopped and
+ * its result discarded.
  */
-was_running: boolean, message: string, };
+was_running: boolean, 
+/**
+ * The document's `ocr_status` after the request.
+ */
+document_status: string | null, message: string, };
