@@ -2111,34 +2111,22 @@ mod deletion_error_handling_tests {
         }
 
         #[test]
-        fn test_performance_considerations_for_large_datasets() {
+        fn test_low_confidence_filter_over_a_large_dataset() {
             let user_id = Uuid::new_v4();
-            
-            // Create a large number of test documents
-            let mut documents = Vec::new();
-            for i in 0..1000 {
-                let confidence = (i as f32) / 10.0; // 0.0 to 99.9
-                documents.push(create_test_document_with_confidence(user_id, confidence));
-            }
 
-            let threshold = 50.0;
-            let start_time = std::time::Instant::now();
-            
-            let low_confidence_docs: Vec<_> = documents.iter()
-                .filter(|doc| {
-                    doc.ocr_confidence.is_some() && 
-                    doc.ocr_confidence.unwrap() < threshold
-                })
+            let documents: Vec<_> = (0..1000)
+                .map(|i| create_test_document_with_confidence(user_id, (i as f32) / 10.0)) // 0.0 to 99.9
                 .collect();
 
-            let elapsed = start_time.elapsed();
-            
-            // Verify the filtering works correctly for large datasets
-            assert_eq!(low_confidence_docs.len(), 500); // 0.0 to 49.9
-            
-            // Performance should be reasonable (under 10ms for 1000 documents in memory)
-            assert!(elapsed.as_millis() < 10, 
-                "Filtering 1000 documents took too long: {:?}", elapsed);
+            let threshold = 50.0;
+            let low_confidence_docs: Vec<_> = documents
+                .iter()
+                .filter(|doc| doc.ocr_confidence.is_some_and(|c| c < threshold))
+                .collect();
+
+            // 0.0 to 49.9. (No wall-clock assertion: timing an in-memory filter measures the
+            // machine, not this code, and failed under parallel test load.)
+            assert_eq!(low_confidence_docs.len(), 500);
         }
 
         #[test]
