@@ -1,15 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use anyhow::Result;
     use axum::http::StatusCode;
-    use chrono::Utc;
-    use readur::models::UserRole;
-    use readur::routes::labels::{CreateLabel, Label, LabelAssignment, UpdateLabel};
+    use readur::db::labels::{is_label_name_taken, LABEL_NAME_UNIQUE_CONSTRAINT};
+    use readur::routes::labels::{CreateLabel, Label, UpdateLabel};
     use readur::test_utils::{TestAuthHelper, TestContext};
     use serde_json::json;
     use sqlx::Row;
-    use std::collections::HashMap;
+    use tower::util::ServiceExt;
     use uuid::Uuid;
 
     #[tokio::test]
@@ -109,8 +107,40 @@ mod tests {
             .execute(&ctx.state.db.pool)
             .await;
 
-            assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("duplicate key"));
+            // Classified by SQLSTATE 23505 and the constraint name, not by the message text.
+            let err = result.expect_err("a second label with the same name must be rejected");
+            let db_err = err.as_database_error().expect("a database error");
+            assert_eq!(db_err.code().as_deref(), Some("23505"));
+            assert_eq!(db_err.constraint(), Some(LABEL_NAME_UNIQUE_CONSTRAINT));
+            assert!(is_label_name_taken(&err));
+
+            // The REST API turns the same clash into its structured conflict response.
+            let token = auth_helper.login_user(&user.username, &user.password).await;
+            let response = ctx
+                .app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("POST")
+                        .uri("/api/labels")
+                        .header("Authorization", format!("Bearer {}", token))
+                        .header("Content-Type", "application/json")
+                        .body(axum::body::Body::from(
+                            json!({ "name": "Duplicate Name", "color": "#0000ff" }).to_string(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            let body: serde_json::Value = serde_json::from_slice(
+                &axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(body["code"], "LABEL_DUPLICATE_NAME");
+            assert_eq!(body["status"], 409);
 
             Ok(())
         }
@@ -474,7 +504,7 @@ mod tests {
 
             // Create multiple labels
             let mut label_ids = Vec::new();
-            for (i, name) in vec!["Label 1", "Label 2", "Label 3"].iter().enumerate() {
+            for (i, name) in ["Label 1", "Label 2", "Label 3"].iter().enumerate() {
                 let label_id = sqlx::query_scalar::<_, uuid::Uuid>(
                     r#"
                     INSERT INTO labels (user_id, name, color)

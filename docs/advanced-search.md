@@ -109,31 +109,55 @@ The system provides **OCR optimization** with higher tolerance settings specific
 
 **Best for**: Complex queries with multiple conditions and precise control
 
-**Operators**:
+Choose the **Operators** mode in the library search (or pass `search_mode=boolean` to `GET /api/search/enhanced`, or `search_mode: "boolean"` to the MCP `enhanced_search` tool). Readur parses the query and turns it into a PostgreSQL `to_tsquery`, so the operators below are the only syntax with a special meaning; everything else is a search word.
 
-Boolean search provides precise control through logical operators. The **AND** operator requires both terms to be present in matching documents, perfect for narrowing results to specific criteria. Conversely, the **OR** operator broadens your search by accepting documents containing either term.
+| Syntax | Meaning |
+|--------|---------|
+| `budget 2024`, `budget & 2024`, `budget AND 2024` | Both words. Words written next to each other are joined with AND |
+| `invoice \| receipt`, `invoice OR receipt` | Either word |
+| `contract !draft`, `contract NOT draft`, `contract -draft` | Leave a word out. A minus only negates when it is attached to what follows: `e-mail` is one word, and the lone minus in `contract - draft` is ignored |
+| `(budget \| financial) & 2024` | Parentheses group. AND binds tighter than OR, so `invoice \| receipt paid` means `invoice \| (receipt & paid)` |
+| `"total due"` | Exact phrase: the words in this order, next to each other. `-"draft copy"` and `NOT (draft \| copy)` leave out a phrase or a group |
+| `inv*`, `inv:*` | Prefix: every word starting with `inv` (invoice, inventory) |
+| `total <-> due`, `invoice <2> 17` | Followed by: `due` right after `total`, or `17` two words after `invoice` |
 
-For exclusion logic, the **NOT** operator removes documents containing unwanted terms from your results. To handle complex queries, **Parentheses** allow you to group conditions and control the order of operations. The system also supports **NEAR** operators for proximity searches and **XOR** for exclusive or logic, giving you complete control over your search logic.
+`AND`, `OR` and `NOT` work in any case (`and`, `Or`); as search words they are stop words that could never match anyway. Words are stemmed, so `invoices` also finds `invoice`. There is no `NEAR`, `XOR`, leading wildcard (`*report`) or single-character wildcard (`doc?ment`): those characters are treated as part of the word or dropped.
 
 **Examples**:
 ```
-budget AND 2024                    # Both "budget" and "2024"
-invoice OR receipt                  # Either "invoice" or "receipt"
-contract NOT draft                  # "contract" but not "draft"
-(budget OR financial) AND 2024      # Complex grouping
-marketing AND (campaign OR strategy) # Marketing documents about campaigns or strategy
+budget 2024                          # Both "budget" and "2024"
+budget AND 2024                      # The same, with the keyword
+invoice | receipt                    # Either "invoice" or "receipt"
+invoice OR receipt                   # The same, with the keyword
+contract !draft                      # "contract" but not "draft"
+contract NOT draft                   # The same, with the keyword
+contract -draft                      # The same, with a leading minus
+(budget | financial) & 2024          # Either word, and "2024"
+marketing (campaign OR strategy)     # "marketing" and either "campaign" or "strategy"
+invoice | receipt paid               # "invoice", or both "receipt" and "paid"
+"total due"                          # The exact phrase "total due"
+inv*                                 # Words starting with "inv"
+total <-> due                        # "due" directly after "total"
+invoice <2> 17                       # "17" two words after "invoice"
 ```
 
 **Advanced Boolean Examples**:
 ```
-# Find completed project documents
-project AND (final OR completed OR approved) NOT draft
+# Completed project documents that are not drafts
+project (final | completed | approved) !draft
 
-# Financial documents excluding personal items
+# Financial documents, leaving out anything personal
 (invoice OR receipt OR budget) NOT personal
 
-# Recent important documents
-(urgent OR priority OR critical) AND label:"this month"
+# Signed or approved purchase orders, leaving out cancelled ones
+"purchase order" (approved | signed) -cancel*
+```
+
+**Malformed queries**: a boolean search never fails because of its syntax. Operators with nothing to act on are ignored, empty groups are dropped, and an unclosed parenthesis or quote is closed at the end of the query:
+```
+invoice &                            # Same as: invoice
+(invoice | receipt                   # Same as: (invoice | receipt)
+"total due                           # Same as: "total due"
 ```
 
 ## Query Syntax
@@ -181,23 +205,25 @@ size:<1KB                      # Smaller than 1KB
 
 ### Wildcard Search
 
-Use wildcards for partial matching:
+In boolean mode, a trailing `*` (or `:*`) matches every word starting with what comes before it:
 
 ```
 proj*           # Matches "project", "projects", "projection"
-*report         # Matches "annual report", "status report"
-doc?ment        # Matches "document", "documents" (? = single character)
 ```
+
+Leading wildcards (`*report`) and single-character wildcards (`doc?ment`) are not supported. For approximate matches, use fuzzy search.
 
 ### Exclusion Operators
 
-Exclude unwanted results:
+In boolean mode, `!`, `NOT` or an attached `-` leave a word, phrase or group out:
 
 ```
 invoice -draft                 # Invoices but not drafts
-budget NOT personal           # Budget documents excluding personal
--label:archive proposal       # Proposals not in archive
+budget NOT personal            # Budget documents excluding personal
+proposal !(archive | old)      # Proposals mentioning neither "archive" nor "old"
 ```
+
+Simple mode searches for all the words you type and ignores these operators.
 
 ## Advanced Filtering
 
@@ -692,7 +718,7 @@ Improving result relevance requires refining your search strategy to be more tar
 
 **Phrase Search** with quotation marks ensures multi-word concepts stay together, preventing matches where terms appear separately in unrelated contexts. This is essential for finding specific titles, names, or technical phrases.
 
-**Boolean Logic** provides surgical precision in defining what should and shouldn't appear in results. Combine AND to require multiple concepts, OR for alternatives, and NOT to exclude irrelevant documents. Beyond these techniques, consider **Field-specific searches** to target just filenames or content, **Relevance tuning** in search settings, and **Proximity operators** to require terms appear near each other.
+**Boolean Logic** provides surgical precision in defining what should and shouldn't appear in results. Combine AND to require multiple concepts, OR for alternatives, and NOT to exclude irrelevant documents. Beyond these techniques, consider **Field-specific searches** to target just filenames or content, **Relevance tuning** in search settings, and the **followed-by operators** (`total <-> due`, `invoice <2> 17`) to require terms in a given order and distance.
 
 #### Slow Search Performance
 

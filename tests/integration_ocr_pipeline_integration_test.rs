@@ -28,10 +28,7 @@ async fn create_test_file_service(temp_path: &str) -> FileService {
 }
 
 struct OCRPipelineTestHarness {
-    db: Database,
     pool: PgPool,
-    file_service: Arc<FileService>,
-    ocr_service: EnhancedOcrService,
     queue_service: OcrQueueService,
     transaction_manager: DocumentTransactionManager,
 }
@@ -59,8 +56,6 @@ impl OCRPipelineTestHarness {
         };
         let storage_backend = create_storage_backend(storage_config).await?;
         let file_service = Arc::new(FileService::with_storage(upload_path, storage_backend));
-        let ocr_service =
-            EnhancedOcrService::new("/tmp".to_string(), (*file_service).clone(), 100, 100, 300);
         let queue_service = OcrQueueService::new(
             db.clone(),
             pool.clone(),
@@ -76,10 +71,7 @@ impl OCRPipelineTestHarness {
         std::fs::create_dir_all("./test_uploads").unwrap_or_default();
 
         Ok(Self {
-            db,
             pool,
-            file_service,
-            ocr_service,
             queue_service,
             transaction_manager,
         })
@@ -170,8 +162,7 @@ impl OCRPipelineTestHarness {
     async fn get_document_details(&self, doc_id: Uuid) -> Result<DocumentDetails> {
         let row = sqlx::query(
             r#"
-            SELECT id, filename, file_path, ocr_status, ocr_text, ocr_confidence, 
-                   ocr_word_count, ocr_processing_time_ms, ocr_error, content
+            SELECT ocr_status, ocr_text
             FROM documents 
             WHERE id = $1
             "#,
@@ -181,189 +172,9 @@ impl OCRPipelineTestHarness {
         .await?;
 
         Ok(DocumentDetails {
-            id: row.get("id"),
-            filename: row.get("filename"),
-            file_path: row.get("file_path"),
             ocr_status: row.get("ocr_status"),
             ocr_text: row.get("ocr_text"),
-            ocr_confidence: row.get("ocr_confidence"),
-            ocr_word_count: row.get("ocr_word_count"),
-            ocr_processing_time_ms: row.get("ocr_processing_time_ms"),
-            ocr_error: row.get("ocr_error"),
-            original_content: row.get("content"),
         })
-    }
-
-    async fn get_queue_item(&self, doc_id: Uuid) -> Result<Option<QueueItemDetails>> {
-        let row = sqlx::query(
-            r#"
-            SELECT id, document_id, status, priority, attempts, max_attempts,
-                   worker_id, created_at, started_at, completed_at, error_message
-            FROM ocr_queue 
-            WHERE document_id = $1
-            "#,
-        )
-        .bind(doc_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        match row {
-            Some(r) => Ok(Some(QueueItemDetails {
-                id: r.get("id"),
-                document_id: r.get("document_id"),
-                status: r.get("status"),
-                priority: r.get("priority"),
-                attempts: r.get("attempts"),
-                max_attempts: r.get("max_attempts"),
-                worker_id: r.get("worker_id"),
-                error_message: r.get("error_message"),
-            })),
-            None => Ok(None),
-        }
-    }
-
-    async fn process_single_ocr_job(&self, worker_id: &str) -> Result<Option<ProcessingResult>> {
-        info!("🔄 Worker {} attempting to dequeue job", worker_id);
-
-        // Step 1: Dequeue a job
-        let item = match self.queue_service.dequeue().await? {
-            Some(item) => {
-                info!(
-                    "✅ Worker {} claimed job {} for document {}",
-                    worker_id, item.id, item.document_id
-                );
-                item
-            }
-            None => {
-                info!("📭 No jobs available for worker {}", worker_id);
-                return Ok(None);
-            }
-        };
-
-        let doc_id = item.document_id;
-        let job_id = item.id;
-
-        // Step 2: Get document details
-        let doc_details = self.get_document_details(doc_id).await?;
-        info!(
-            "📄 Processing document: {} ({})",
-            doc_details.filename, doc_details.file_path
-        );
-
-        // Step 3: Read file content to verify it matches expected
-        let file_content = match tokio::fs::read_to_string(&doc_details.file_path).await {
-            Ok(content) => {
-                info!("📖 Read file content: {} chars", content.len());
-                content
-            }
-            Err(e) => {
-                error!("❌ Failed to read file {}: {}", doc_details.file_path, e);
-                return Ok(Some(ProcessingResult {
-                    doc_id,
-                    job_id,
-                    success: false,
-                    error: Some(format!("File read error: {}", e)),
-                    ocr_text: None,
-                    original_content: doc_details.original_content,
-                    file_content: None,
-                }));
-            }
-        };
-
-        // Step 4: Verify file content matches database content
-        if let Some(ref original) = doc_details.original_content {
-            if file_content != *original {
-                warn!("⚠️  File content mismatch for document {}!", doc_id);
-                warn!("   Expected: {}", original);
-                warn!("   File contains: {}", file_content);
-            } else {
-                info!("✅ File content matches database content");
-            }
-        }
-
-        // Step 5: Run OCR processing
-        info!("🔍 Starting OCR processing for document {}", doc_id);
-        let settings = readur::models::Settings::default();
-
-        let ocr_result = match self
-            .ocr_service
-            .extract_text(&doc_details.file_path, "text/plain", &settings, None)
-            .await
-        {
-            Ok(result) => {
-                info!(
-                    "✅ OCR extraction successful: {:.1}% confidence, {} words",
-                    result.confidence, result.word_count
-                );
-                info!("📝 OCR Text: {}", result.text);
-                result
-            }
-            Err(e) => {
-                error!("❌ OCR extraction failed: {}", e);
-                return Ok(Some(ProcessingResult {
-                    doc_id,
-                    job_id,
-                    success: false,
-                    error: Some(format!("OCR error: {}", e)),
-                    ocr_text: None,
-                    original_content: doc_details.original_content,
-                    file_content: Some(file_content),
-                }));
-            }
-        };
-
-        // Step 6: Update document with OCR results using transaction manager
-        info!("💾 Saving OCR results to database");
-        let update_result = self
-            .transaction_manager
-            .update_ocr_with_validation(
-                doc_id,
-                &doc_details.filename,
-                &ocr_result.text,
-                ocr_result.confidence as f64,
-                ocr_result.word_count as i32,
-                ocr_result.processing_time_ms as i64,
-            )
-            .await;
-
-        match update_result {
-            Ok(true) => {
-                info!("✅ OCR results saved successfully for document {}", doc_id);
-                Ok(Some(ProcessingResult {
-                    doc_id,
-                    job_id,
-                    success: true,
-                    error: None,
-                    ocr_text: Some(ocr_result.text),
-                    original_content: doc_details.original_content,
-                    file_content: Some(file_content),
-                }))
-            }
-            Ok(false) => {
-                warn!("⚠️  OCR update validation failed for document {}", doc_id);
-                Ok(Some(ProcessingResult {
-                    doc_id,
-                    job_id,
-                    success: false,
-                    error: Some("OCR update validation failed".to_string()),
-                    ocr_text: Some(ocr_result.text),
-                    original_content: doc_details.original_content,
-                    file_content: Some(file_content),
-                }))
-            }
-            Err(e) => {
-                error!("❌ Failed to save OCR results: {}", e);
-                Ok(Some(ProcessingResult {
-                    doc_id,
-                    job_id,
-                    success: false,
-                    error: Some(format!("Database error: {}", e)),
-                    ocr_text: Some(ocr_result.text),
-                    original_content: doc_details.original_content,
-                    file_content: Some(file_content),
-                }))
-            }
-        }
     }
 
     async fn simulate_concurrent_workers(
@@ -412,7 +223,6 @@ impl OCRPipelineTestHarness {
                     };
 
                     let doc_id = item.document_id;
-                    let job_id = item.id;
 
                     // Get document details
                     let doc_details = match sqlx::query(
@@ -448,11 +258,9 @@ impl OCRPipelineTestHarness {
                             error!("❌ Failed to read file {}: {}", file_path, e);
                             results.push(ProcessingResult {
                                 doc_id,
-                                job_id,
                                 success: false,
                                 error: Some(format!("File read error: {}", e)),
                                 ocr_text: None,
-                                original_content,
                                 file_content: None,
                             });
                             continue;
@@ -490,11 +298,9 @@ impl OCRPipelineTestHarness {
                             error!("❌ OCR extraction failed: {}", e);
                             results.push(ProcessingResult {
                                 doc_id,
-                                job_id,
                                 success: false,
                                 error: Some(format!("OCR error: {}", e)),
                                 ocr_text: None,
-                                original_content,
                                 file_content: Some(file_content),
                             });
                             continue;
@@ -519,11 +325,9 @@ impl OCRPipelineTestHarness {
                             info!("✅ OCR results saved successfully for document {}", doc_id);
                             results.push(ProcessingResult {
                                 doc_id,
-                                job_id,
                                 success: true,
                                 error: None,
                                 ocr_text: Some(ocr_result.text),
-                                original_content,
                                 file_content: Some(file_content),
                             });
                         }
@@ -531,11 +335,9 @@ impl OCRPipelineTestHarness {
                             warn!("⚠️  OCR update validation failed for document {}", doc_id);
                             results.push(ProcessingResult {
                                 doc_id,
-                                job_id,
                                 success: false,
                                 error: Some("OCR update validation failed".to_string()),
                                 ocr_text: Some(ocr_result.text),
-                                original_content,
                                 file_content: Some(file_content),
                             });
                         }
@@ -543,11 +345,9 @@ impl OCRPipelineTestHarness {
                             error!("❌ Failed to save OCR results: {}", e);
                             results.push(ProcessingResult {
                                 doc_id,
-                                job_id,
                                 success: false,
                                 error: Some(format!("Database error: {}", e)),
                                 ocr_text: Some(ocr_result.text),
-                                original_content,
                                 file_content: Some(file_content),
                             });
                         }
@@ -586,38 +386,16 @@ impl OCRPipelineTestHarness {
 
 #[derive(Debug)]
 struct DocumentDetails {
-    id: Uuid,
-    filename: String,
-    file_path: String,
     ocr_status: Option<String>,
     ocr_text: Option<String>,
-    ocr_confidence: Option<f32>,
-    ocr_word_count: Option<i32>,
-    ocr_processing_time_ms: Option<i32>,
-    ocr_error: Option<String>,
-    original_content: Option<String>,
-}
-
-#[derive(Debug)]
-struct QueueItemDetails {
-    id: Uuid,
-    document_id: Uuid,
-    status: String,
-    priority: i32,
-    attempts: i32,
-    max_attempts: i32,
-    worker_id: Option<String>,
-    error_message: Option<String>,
 }
 
 #[derive(Debug)]
 struct ProcessingResult {
     doc_id: Uuid,
-    job_id: Uuid,
     success: bool,
     error: Option<String>,
     ocr_text: Option<String>,
-    original_content: Option<String>,
     file_content: Option<String>,
 }
 
@@ -637,7 +415,7 @@ async fn test_high_concurrency_ocr_pipeline_internal() {
         .expect("Failed to create test user");
 
     // Create 5 test documents with unique content
-    let test_documents = vec![
+    let test_documents = [
         ("DOC-ALPHA-SIGNATURE-001", "test_alpha.txt"),
         ("DOC-BRAVO-SIGNATURE-002", "test_bravo.txt"),
         ("DOC-CHARLIE-SIGNATURE-003", "test_charlie.txt"),

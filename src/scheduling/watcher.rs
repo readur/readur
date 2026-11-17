@@ -80,9 +80,6 @@ pub async fn start_folder_watcher(
     info!("Using watch strategy: {:?}", watch_strategy);
 
     match watch_strategy {
-        WatchStrategy::NotifyBased => {
-            start_notify_watcher(config, db, file_service, queue_service, user_watch_manager).await
-        }
         WatchStrategy::PollingBased => {
             start_polling_watcher(config, db, file_service, queue_service, user_watch_manager).await
         }
@@ -122,9 +119,8 @@ pub async fn start_folder_watcher(
 
 #[derive(Debug, Clone)]
 enum WatchStrategy {
-    NotifyBased,  // For local filesystems
     PollingBased, // For network filesystems (NFS, SMB, S3, etc.)
-    Hybrid,       // Try notify first, fall back to polling
+    Hybrid,       // Local filesystems: notify, with polling as a backup
 }
 
 async fn determine_watch_strategy(path: &Path) -> Result<WatchStrategy> {
@@ -488,7 +484,6 @@ async fn process_file(
     }
 
     // CRITICAL: Skip files that are in the upload directory - these are managed by WebDAV/manual uploads
-    let path_str = path.to_string_lossy();
     let upload_path_normalized = std::path::Path::new(&config.upload_path)
         .canonicalize()
         .unwrap_or_else(|_| std::path::PathBuf::from(&config.upload_path));
@@ -638,27 +633,23 @@ async fn process_file(
     };
 
     // Validate PDF files before processing
-    if mime_type == "application/pdf" {
-        if !is_valid_pdf(&file_data) {
-            warn!(
-                "Skipping invalid PDF file: {} (size: {} bytes, header: {:?})",
-                filename,
-                file_data.len(),
-                file_data
-                    .get(0..50)
-                    .unwrap_or(&[])
-                    .iter()
-                    .map(|&b| {
-                        if b >= 32 && b <= 126 {
-                            b as char
-                        } else {
-                            '.'
-                        }
-                    })
-                    .collect::<String>()
-            );
-            return Ok(());
-        }
+    if mime_type == "application/pdf" && !is_valid_pdf(&file_data) {
+        warn!(
+            "Skipping invalid PDF file: {} (size: {} bytes, header: {:?})",
+            filename,
+            file_data.len(),
+            file_data
+                .get(0..50)
+                .unwrap_or(&[])
+                .iter()
+                .map(|&b| if (32..=126).contains(&b) {
+                    b as char
+                } else {
+                    '.'
+                })
+                .collect::<String>()
+        );
+        return Ok(());
     }
 
     // Extract basic file info first
@@ -805,20 +796,6 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
     })
 }
 
-fn is_ocr_able_file(mime_type: &str) -> bool {
-    // Check mime types that are suitable for OCR processing (images and PDFs)
-    matches!(
-        mime_type,
-        "application/pdf"
-            | "image/png"
-            | "image/jpeg"
-            | "image/jpg"
-            | "image/tiff"
-            | "image/bmp"
-            | "image/gif"
-    )
-}
-
 fn is_text_extractable_file(mime_type: &str) -> bool {
     // Check mime types that support text extraction (OCR + Office documents + plain text)
     matches!(
@@ -845,12 +822,16 @@ fn calculate_priority(file_size: i64, mime_type: &str) -> i32 {
     const MB10: i64 = 10 * 1024 * 1024;
     const MB50: i64 = 50 * 1024 * 1024;
 
-    let base_priority = match file_size {
-        0..=MB => 10, // <= 1MB: highest priority
-        ..=MB5 => 8,  // 1-5MB: high priority
-        ..=MB10 => 6, // 5-10MB: medium priority
-        ..=MB50 => 4, // 10-50MB: low priority
-        _ => 2,       // > 50MB: lowest priority
+    let base_priority = if file_size <= MB {
+        10 // <= 1MB: highest priority
+    } else if file_size <= MB5 {
+        8 // 1-5MB: high priority
+    } else if file_size <= MB10 {
+        6 // 5-10MB: medium priority
+    } else if file_size <= MB50 {
+        4 // 10-50MB: low priority
+    } else {
+        2 // > 50MB: lowest priority
     };
 
     // Boost priority for images (usually faster to OCR)
@@ -884,26 +865,6 @@ fn is_valid_pdf(data: &[u8]) -> bool {
     }
 
     false
-}
-
-/// Remove leading null bytes and return clean PDF data
-/// Returns the original data if no PDF header is found
-fn clean_pdf_data(data: &[u8]) -> &[u8] {
-    if data.len() < 5 {
-        return data;
-    }
-
-    // Find the first occurrence of "%PDF-" in the first 1KB
-    let search_limit = data.len().min(1024);
-
-    for i in 0..=search_limit.saturating_sub(5) {
-        if &data[i..i + 5] == b"%PDF-" {
-            return &data[i..];
-        }
-    }
-
-    // If no PDF header found, return original data
-    data
 }
 
 #[cfg(test)]
@@ -970,5 +931,41 @@ mod tests {
     #[test]
     fn relevant_event_rejects_other() {
         assert!(!is_relevant_event(&EventKind::Other));
+    }
+
+    #[test]
+    fn priority_bands_are_inclusive_at_their_upper_bound() {
+        const MB: i64 = 1024 * 1024;
+        let pdf = "application/pdf";
+        assert_eq!(calculate_priority(0, pdf), 10);
+        assert_eq!(calculate_priority(MB, pdf), 10);
+        assert_eq!(calculate_priority(MB + 1, pdf), 8);
+        assert_eq!(calculate_priority(5 * MB, pdf), 8);
+        assert_eq!(calculate_priority(5 * MB + 1, pdf), 6);
+        assert_eq!(calculate_priority(10 * MB, pdf), 6);
+        assert_eq!(calculate_priority(10 * MB + 1, pdf), 4);
+        assert_eq!(calculate_priority(50 * MB, pdf), 4);
+        assert_eq!(calculate_priority(50 * MB + 1, pdf), 2);
+    }
+
+    #[test]
+    fn priority_boosts_images_and_text_capped_at_ten() {
+        const MB: i64 = 1024 * 1024;
+        assert_eq!(calculate_priority(100 * MB, "image/png"), 4);
+        assert_eq!(calculate_priority(100 * MB, "text/plain"), 3);
+        assert_eq!(calculate_priority(1, "image/png"), 10);
+    }
+
+    #[test]
+    fn valid_pdf_header_may_follow_leading_bytes_within_1kb() {
+        assert!(is_valid_pdf(b"%PDF-1.7\n"));
+        let mut padded = vec![0u8; 1000];
+        padded.extend_from_slice(b"%PDF-1.4");
+        assert!(is_valid_pdf(&padded));
+        let mut too_late = vec![0u8; 1024];
+        too_late.extend_from_slice(b"%PDF-1.4");
+        assert!(!is_valid_pdf(&too_late));
+        assert!(!is_valid_pdf(b"%PDF"));
+        assert!(!is_valid_pdf(b"not a pdf at all"));
     }
 }

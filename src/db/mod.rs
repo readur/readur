@@ -21,6 +21,7 @@ pub mod settings;
 pub mod shared_links;
 pub mod source_errors;
 pub mod sources;
+pub mod unique_violation;
 pub mod users;
 pub mod webdav;
 

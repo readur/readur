@@ -127,7 +127,23 @@ Readur's search system gives you multiple ways to find documents, from simple ke
 
 ### Different Ways to Search
 
-Simple search works for most situations - just type what you're looking for and Readur automatically handles word variations and minor typos. When you need to find an exact phrase, put it in quotes like `"quarterly report"`. For documents that might have OCR errors or typos, use fuzzy search by adding a tilde: `invoice~` will find "invoice" even if it was read as "invioce." When you need precise control, boolean search lets you combine terms with AND, OR, and NOT operators.
+Simple search works for most situations - just type what you're looking for and Readur automatically handles word variations and minor typos. When you need to find an exact phrase, put it in quotes like `"quarterly report"`. For documents that might have OCR errors or typos, use fuzzy search by adding a tilde: `invoice~` will find "invoice" even if it was read as "invioce." When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT.
+
+### Boolean (Operators) Search
+
+In Operators mode these symbols and keywords have a meaning; everything else is a search word:
+
+| Write | To find |
+|-------|---------|
+| `invoice paid`, `invoice & paid`, `invoice AND paid` | Documents with both words |
+| `invoice \| receipt`, `invoice OR receipt` | Documents with either word |
+| `contract !draft`, `contract NOT draft`, `contract -draft` | Documents with "contract" but not "draft" |
+| `(budget \| financial) & 2024` | Groups: either word, and also "2024" |
+| `"project status"` | The exact phrase |
+| `proj*` | Words starting with "proj" (project, projects, projection) |
+| `total <-> due` | "due" directly after "total" |
+
+AND binds tighter than OR: `invoice | receipt paid` finds "invoice", or "receipt" together with "paid". `AND`, `OR` and `NOT` work in any case, and a minus only excludes when attached to the next word (`e-mail` is one word). A mistyped query never fails: a dangling operator is ignored and an unclosed parenthesis or quote is closed for you. The [Advanced Search Guide](advanced-search.md#boolean-search-logical-operators) lists every operator.
 
 ### Using the Search Interface
 
@@ -139,7 +155,7 @@ When your search returns too many results, filters help narrow things down. Filt
 
 ### Search Techniques That Work
 
-For exact phrases, always use quotes: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. Use wildcards when you're not sure of exact word endings: `proj*` matches project, projects, and projection. Search specific fields with syntax like `filename:report` or `label:urgent`. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
+For exact phrases, always use quotes: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. In Operators mode, use a trailing `*` when you're not sure of a word's ending: `proj*` matches project, projects, and projection. Search specific fields with syntax like `filename:report` or `label:urgent`. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
 
 > 🔍 **For detailed search techniques**, see the [Advanced Search Guide](advanced-search.md)
 
