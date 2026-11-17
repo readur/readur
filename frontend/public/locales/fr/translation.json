@@ -1043,6 +1043,7 @@
       "copied": "Copiée",
       "copiedStatus": "Copiée dans le presse-papiers",
       "copy": "Copier la clé API",
+      "keyLabel": "Clé API",
       "copyFailed": "Échec de la copie. Sélectionnez et copiez la clé manuellement.",
       "create": "Créer une clé API",
       "createFailed": "Impossible de créer la clé API.",

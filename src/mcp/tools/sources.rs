@@ -64,10 +64,7 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let sources = source_responses_for_user(&self.state.db, user.id)
             .await
-            .map_err(|e| {
-                tracing::error!("MCP list_sources failed for user {}: {}", user.id, e);
-                McpError::internal_error("failed to load sources", None)
-            })?;
+            .map_err(|e| format::internal("load sources", e))?;
 
         let text = if sources.is_empty() {
             "No sources configured.".to_string()
@@ -116,14 +113,7 @@ impl ReadurMcp {
             .db
             .get_source(user.id, p.source_id)
             .await
-            .map_err(|e| {
-                tracing::error!(
-                    "MCP get_source_sync_status failed for source {}: {}",
-                    p.source_id,
-                    e
-                );
-                McpError::internal_error("failed to load source", None)
-            })?;
+            .map_err(|e| format::internal(&format!("load source {}", p.source_id), e))?;
         let Some(source) = source else {
             return Ok(format::tool_error(format!(
                 "Source {} not found.",

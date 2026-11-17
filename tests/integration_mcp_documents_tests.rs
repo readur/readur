@@ -486,3 +486,191 @@ async fn retry_ocr_queues_own_document() {
     assert_eq!(result["structuredContent"]["queued"], json!(true));
     assert!(queued(&ctx, doc.id).await);
 }
+
+#[tokio::test]
+async fn retry_ocr_twice_reports_already_queued_instead_of_failing() {
+    // The queue allows one pending/processing job per document, and a
+    // retried 'failed' document keeps that status until the worker starts.
+    // The second retry must be a no-op, not a unique-index violation.
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+
+    let first = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&first);
+    assert_eq!(first["structuredContent"]["queued"], json!(true));
+
+    let second = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&second);
+    assert_eq!(
+        second["structuredContent"]["queued"],
+        json!(false),
+        "{second}"
+    );
+    assert!(text(&second).contains("already queued"), "{second}");
+}
+
+#[tokio::test]
+async fn retry_ocr_on_a_freshly_uploaded_document_is_a_no_op() {
+    let ctx = TestContext::new().await;
+    let (_, token) = login(&ctx).await;
+    let upload = ctx
+        .mcp_call_tool(
+            &token,
+            "upload_document",
+            json!({ "filename": "fresh.txt", "content_base64": Base64::encode_string(b"fresh upload") }),
+        )
+        .await;
+    assert_ok(&upload);
+    let id = upload["structuredContent"]["id"].clone();
+
+    let retry = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": id }))
+        .await;
+    assert_ok(&retry);
+    assert_eq!(
+        retry["structuredContent"]["queued"],
+        json!(false),
+        "{retry}"
+    );
+}
+
+#[tokio::test]
+async fn rest_retry_ocr_twice_returns_200_not_500() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    let auth = ctx.auth_helper();
+    let uri = format!("/api/documents/{}/ocr/retry", doc.id);
+
+    let first: Value = serde_json::from_slice(
+        &auth
+            .make_authenticated_request("POST", &uri, Some(json!({})), &token)
+            .await,
+    )
+    .unwrap();
+    assert_eq!(first["success"], json!(true), "{first}");
+    let second: Value = serde_json::from_slice(
+        &auth
+            .make_authenticated_request("POST", &uri, Some(json!({})), &token)
+            .await,
+    )
+    .expect("second retry must return JSON, not a 500");
+    assert_eq!(second["success"], json!(false), "{second}");
+}
+
+#[tokio::test]
+async fn ocr_text_offset_at_the_end_is_rejected() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let mut doc = document_helpers::create_test_document(alice);
+    doc.ocr_text = Some("0123456789".to_string());
+    doc.ocr_status = Some("completed".to_string());
+    let doc = insert(&ctx, doc).await;
+
+    let last = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "offset": 9 }),
+        )
+        .await;
+    assert_ok(&last);
+    assert_eq!(last["structuredContent"]["text"], json!("9"));
+
+    let past = ctx
+        .mcp_call_tool(
+            &token,
+            "get_document_ocr_text",
+            json!({ "id": doc.id, "offset": 10 }),
+        )
+        .await;
+    assert_tool_error(&past);
+    assert!(text(&past).contains("past the end"), "{past}");
+}
+
+#[tokio::test]
+async fn ocr_text_flags_stale_text_while_a_new_run_is_queued() {
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let mut doc = document_helpers::create_test_document(alice);
+    doc.ocr_text = Some("old blurry text".to_string());
+    doc.ocr_status = Some("completed".to_string());
+    let doc = insert(&ctx, doc).await;
+
+    let before = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert_eq!(
+        before["structuredContent"]["reprocessing"],
+        json!(false),
+        "{before}"
+    );
+    assert!(!text(&before).contains("previous OCR run"), "{before}");
+
+    let retry = ctx
+        .mcp_call_tool(&token, "retry_document_ocr", json!({ "id": doc.id }))
+        .await;
+    assert_eq!(retry["structuredContent"]["queued"], json!(true), "{retry}");
+
+    let during = ctx
+        .mcp_call_tool(&token, "get_document_ocr_text", json!({ "id": doc.id }))
+        .await;
+    assert_ok(&during);
+    assert_eq!(
+        during["structuredContent"]["reprocessing"],
+        json!(true),
+        "{during}"
+    );
+    assert!(text(&during).contains("previous OCR run"), "{during}");
+    assert!(text(&during).contains("old blurry text"), "{during}");
+}
+
+#[tokio::test]
+async fn retry_ocr_with_languages_stores_them_as_the_users_preference() {
+    // The retry validates the languages once and then saves them; saving
+    // must not be skipped or depend on a second validation pass.
+    let ctx = TestContext::new().await;
+    let (alice, token) = login(&ctx).await;
+    let doc = insert(
+        &ctx,
+        document_helpers::create_document_with_ocr_error(alice),
+    )
+    .await;
+    let auth = ctx.auth_helper();
+
+    let body: Value = serde_json::from_slice(
+        &auth
+            .make_authenticated_request(
+                "POST",
+                &format!("/api/documents/{}/ocr/retry", doc.id),
+                Some(json!({ "languages": ["eng"] })),
+                &token,
+            )
+            .await,
+    )
+    .unwrap();
+    assert_eq!(body["success"], json!(true), "{body}");
+
+    let settings = ctx
+        .state()
+        .db
+        .get_user_settings(alice)
+        .await
+        .unwrap()
+        .expect("settings saved");
+    assert_eq!(settings.preferred_languages, vec!["eng".to_string()]);
+    assert_eq!(settings.primary_language, "eng");
+}

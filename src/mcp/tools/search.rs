@@ -14,7 +14,9 @@ use uuid::Uuid;
 use crate::{
     errors::{search::SearchError, AppError},
     mcp::{format, ReadurMcp},
-    models::{SearchMode, SearchRequest, SearchResponse},
+    models::{
+        FacetItem, SearchFacetsResponse, SearchMode, SearchRequest, SearchResponse, UserRole,
+    },
     routes::search::{load_search_facets, run_basic_search, run_enhanced_search},
 };
 
@@ -154,8 +156,7 @@ fn search_failure(tool: &str, error: SearchError) -> Result<CallToolResult, McpE
         };
         Ok(format::tool_error(message))
     } else {
-        tracing::error!("MCP {} failed: {}", tool, error);
-        Err(McpError::internal_error("search failed", None))
+        Err(format::internal(tool, error))
     }
 }
 
@@ -258,8 +259,9 @@ search_documents.",
     }
 
     #[tool(
-        description = "List the MIME types and labels (tags) present in your documents, with document \
-counts. Useful for discovering filter values before searching.",
+        description = "List filter values for searching: the MIME types of the documents you can \
+search (with counts), and every label you own with how many of those documents carry it. \
+Labels with no documents are listed separately; filtering on them finds nothing.",
         annotations(
             title = "Get Search Facets",
             read_only_hint = true,
@@ -271,36 +273,90 @@ counts. Useful for discovering filter values before searching.",
         Extension(parts): Extension<Parts>,
     ) -> Result<CallToolResult, McpError> {
         let user = Self::caller(&parts)?;
-        let facets = load_search_facets(&self.state, user).await.map_err(|e| {
-            tracing::error!("MCP get_search_facets failed: {}", e);
-            McpError::internal_error("loading search facets failed", None)
-        })?;
+        let facets = load_search_facets(&self.state, user)
+            .await
+            .map_err(|e| format::internal("load search facets", e))?;
+        format::text_and_json(facets_text(&facets, user.role == UserRole::Admin), &facets)
+    }
+}
 
-        let plural = |count: i64| if count == 1 { "document" } else { "documents" };
-        let mut lines = vec!["MIME types:".to_string()];
-        if facets.mime_types.is_empty() {
-            lines.push("  (none)".to_string());
+/// Readable facets. MIME types follow the search's role scoping (an admin
+/// searches every user's documents) while labels are always the caller's
+/// own, so the text says which is which; unused labels are split out.
+fn facets_text(facets: &SearchFacetsResponse, is_admin: bool) -> String {
+    let line = |facet: &FacetItem| {
+        let noun = if facet.count == 1 {
+            "document"
+        } else {
+            "documents"
+        };
+        format!("  - {} ({} {})", facet.value, facet.count, noun)
+    };
+    let scope = if is_admin {
+        "all users' documents"
+    } else {
+        "your documents"
+    };
+    let mut lines = vec![format!("MIME types ({scope}):")];
+    if facets.mime_types.is_empty() {
+        lines.push("  (none)".to_string());
+    }
+    lines.extend(facets.mime_types.iter().map(line));
+
+    let (used, unused): (Vec<_>, Vec<_>) = facets.tags.iter().partition(|tag| tag.count > 0);
+    lines.push("Your labels:".to_string());
+    if used.is_empty() {
+        lines.push("  (none on any document)".to_string());
+    }
+    lines.extend(used.into_iter().map(line));
+    if !unused.is_empty() {
+        let names: Vec<&str> = unused.iter().map(|tag| tag.value.as_str()).collect();
+        lines.push(format!(
+            "Labels not on any document yet: {}",
+            names.join(", ")
+        ));
+    }
+    lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(value: &str, count: i64) -> FacetItem {
+        FacetItem {
+            value: value.to_string(),
+            count,
         }
-        for facet in &facets.mime_types {
-            lines.push(format!(
-                "  - {} ({} {})",
-                facet.value,
-                facet.count,
-                plural(facet.count)
-            ));
-        }
-        lines.push("Tags:".to_string());
-        if facets.tags.is_empty() {
-            lines.push("  (none)".to_string());
-        }
-        for facet in &facets.tags {
-            lines.push(format!(
-                "  - {} ({} {})",
-                facet.value,
-                facet.count,
-                plural(facet.count)
-            ));
-        }
-        format::text_and_json(lines.join("\n"), &facets)
+    }
+
+    #[test]
+    fn unused_labels_are_listed_separately() {
+        let facets = SearchFacetsResponse {
+            mime_types: vec![item("application/pdf", 3)],
+            tags: vec![item("Invoices", 2), item("Empty", 0)],
+        };
+        let text = facets_text(&facets, false);
+        assert!(text.contains("  - Invoices (2 documents)"), "{text}");
+        assert!(
+            !text.contains("Empty (0"),
+            "unused labels must not look like filter values: {text}"
+        );
+        assert!(
+            text.contains("Labels not on any document yet: Empty"),
+            "{text}"
+        );
+        assert!(text.contains("MIME types (your documents)"), "{text}");
+    }
+
+    #[test]
+    fn admins_are_told_mime_types_cover_all_users() {
+        let facets = SearchFacetsResponse {
+            mime_types: vec![],
+            tags: vec![item("Old", 0)],
+        };
+        let text = facets_text(&facets, true);
+        assert!(text.contains("MIME types (all users' documents)"), "{text}");
+        assert!(text.contains("(none on any document)"), "{text}");
     }
 }

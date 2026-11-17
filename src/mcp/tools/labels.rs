@@ -86,11 +86,6 @@ struct LabelChange {
     status: &'static str,
 }
 
-fn internal(context: &str, error: impl std::fmt::Display) -> McpError {
-    tracing::error!("MCP {context} failed: {error}");
-    McpError::internal_error(format!("{context} failed"), None)
-}
-
 /// Maps a failed label insert/update: a duplicate name is the caller's to fix.
 fn write_error(
     context: &str,
@@ -103,7 +98,7 @@ fn write_error(
             LabelError::duplicate_name(name).user_message(),
         ));
     }
-    Err(internal(context, error))
+    Err(format::internal(context, error))
 }
 
 /// `- Name (ID: ...)` plus colour, description and, when known, usage.
@@ -141,7 +136,7 @@ impl ReadurMcp {
             .db
             .list_labels(user.id, p.include_counts)
             .await
-            .map_err(|e| internal("list_labels", e))?;
+            .map_err(|e| format::internal("list labels", e))?;
 
         let text = if labels.is_empty() {
             "No labels found.".to_string()
@@ -247,7 +242,7 @@ impl ReadurMcp {
             .db
             .get_document_labels_for_user(p.document_id, user.id)
             .await
-            .map_err(|e| internal("get_document_labels", e))?
+            .map_err(|e| format::internal("get document labels", e))?
         {
             Some(labels) => labels,
             None => {
@@ -299,7 +294,7 @@ impl ReadurMcp {
             .db
             .add_document_label_for_user(p.document_id, p.label_id, user.id)
             .await
-            .map_err(|e| internal("add_document_label", e))?;
+            .map_err(|e| format::internal("add document label", e))?;
 
         let (status, text) = match outcome {
             LabelAssignOutcome::Added => (
@@ -357,7 +352,7 @@ impl ReadurMcp {
             .db
             .remove_document_label_for_user(p.document_id, p.label_id, user.id)
             .await
-            .map_err(|e| internal("remove_document_label", e))?;
+            .map_err(|e| format::internal("remove document label", e))?;
 
         match outcome {
             LabelRemoveOutcome::Removed => format::text_and_json(

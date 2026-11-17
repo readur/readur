@@ -944,6 +944,7 @@
       "copied": "Copiada",
       "copiedStatus": "Copiada al portapapeles",
       "copy": "Copiar clave de API",
+      "keyLabel": "Clave de API",
       "copyFailed": "No se pudo copiar al portapapeles. Selecciónala y cópiala manualmente.",
       "create": "Crear clave de API",
       "createFailed": "No se pudo crear la clave de API.",

@@ -77,6 +77,8 @@ struct OcrTextPage {
     has_ocr_text: bool,
     ocr_confidence: Option<f32>,
     pages_processed: Option<i32>,
+    /// The text is from an earlier run; a new OCR run is queued or running.
+    reprocessing: bool,
     total_chars: usize,
     offset: usize,
     text: String,
@@ -113,7 +115,7 @@ impl ReadurMcp {
 
         let page = service::list_documents(&self.state, user, &filters, None, None, limit, offset)
             .await
-            .map_err(|e| internal("list documents", e))?;
+            .map_err(|e| format::internal("list documents", e))?;
 
         let info = &page.pagination;
         let mut text = format!(
@@ -161,7 +163,7 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let Some(doc) = service::get_document(&self.state, user, p.id)
             .await
-            .map_err(|e| internal("get document", e))?
+            .map_err(|e| format::internal("get document", e))?
         else {
             return Ok(not_found(p.id));
         };
@@ -184,7 +186,7 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let Some(ocr) = service::get_document_ocr(&self.state, user, p.id)
             .await
-            .map_err(|e| internal("get document OCR text", e))?
+            .map_err(|e| format::internal("get document OCR text", e))?
         else {
             return Ok(not_found(p.id));
         };
@@ -193,11 +195,17 @@ impl ReadurMcp {
         let full = ocr.ocr_text.as_deref().unwrap_or_default();
         let total_chars = full.chars().count();
         let offset = p.offset.unwrap_or(0) as usize;
-        if ocr.has_ocr_text && offset > total_chars {
-            return Ok(format::tool_error(format!(
-                "offset {offset} is past the end of the OCR text ({total_chars} characters)"
-            )));
+        if ocr.has_ocr_text {
+            if let Err(message) = check_ocr_offset(offset, total_chars) {
+                return Ok(format::tool_error(message));
+            }
         }
+        // A retry keeps the previous run's text until the new run finishes;
+        // say so rather than present stale text as the result.
+        let reprocessing = ocr.has_ocr_text
+            && service::has_active_ocr_job(&self.state, ocr.id)
+                .await
+                .map_err(|e| format::internal("check the OCR queue", e))?;
         let max_chars = p
             .max_chars
             .unwrap_or(DEFAULT_OCR_CHARS)
@@ -243,6 +251,11 @@ impl ReadurMcp {
             if let Some(confidence) = ocr.ocr_confidence {
                 header.push_str(&format!(", confidence {confidence:.1}%"));
             }
+            if reprocessing {
+                header.push_str(
+                    ". This is the text from the previous OCR run; the document is queued for OCR again, so call back later for the new text",
+                );
+            }
             match next_offset {
                 Some(next) => header.push_str(&format!(
                     ". More text remains: call again with offset {next}."
@@ -259,6 +272,7 @@ impl ReadurMcp {
             has_ocr_text: ocr.has_ocr_text,
             ocr_confidence: ocr.ocr_confidence,
             pages_processed: ocr.pages_processed,
+            reprocessing,
             total_chars,
             offset,
             text,
@@ -396,7 +410,7 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let deleted = service::delete_document(&self.state, user, p.id)
             .await
-            .map_err(|e| internal("delete document", e))?;
+            .map_err(|e| format::internal("delete document", e))?;
         if !deleted {
             return Ok(not_found(p.id));
         }
@@ -429,7 +443,7 @@ impl ReadurMcp {
             }
             Err(DocumentError::NotFound) => Ok(not_found(p.id)),
             Err(DocumentError::BadRequest(msg)) => Ok(format::tool_error(msg)),
-            Err(e) => Err(internal("retry OCR", format!("{e:?}"))),
+            Err(e) => Err(format::internal("retry OCR", format!("{e:?}"))),
         }
     }
 }
@@ -484,25 +498,97 @@ fn not_found(id: Uuid) -> CallToolResult {
     ))
 }
 
-/// Upload failures the caller can fix become tool errors; the rest are
-/// server faults, already logged by the service with their details.
+/// An `offset` into OCR text of `total_chars` characters must point at a
+/// character, except that 0 is always allowed (an empty text has one empty
+/// page).
+fn check_ocr_offset(offset: usize, total_chars: usize) -> Result<(), String> {
+    if offset == 0 || offset < total_chars {
+        Ok(())
+    } else {
+        Err(format!(
+            "offset {offset} is past the end of the OCR text ({total_chars} characters); the last valid offset is {}",
+            total_chars.saturating_sub(1)
+        ))
+    }
+}
+
+/// Upload failures the caller can fix (bad input, too large, a duplicate,
+/// a concurrent upload of the same file) become tool errors. Everything
+/// else is a server fault: the service already logged the details, and its
+/// messages can carry raw database or storage errors, so the model only
+/// gets a generic error.
 fn upload_error(error: DocumentError) -> Result<CallToolResult, McpError> {
     match error {
         DocumentError::BadRequest(msg)
         | DocumentError::InvalidQuery(msg)
         | DocumentError::Conflict(msg)
         | DocumentError::PayloadTooLarge(msg)
-        | DocumentError::UploadTimeout(msg)
-        | DocumentError::DatabaseConstraintViolation(msg)
-        | DocumentError::OcrProcessingError(msg)
-        | DocumentError::FileProcessingError(msg)
         | DocumentError::ConcurrentUploadError(msg) => Ok(format::tool_error(msg)),
         DocumentError::NotFound => Ok(format::tool_error("Document not found")),
-        _ => Err(McpError::internal_error("failed to upload document", None)),
+        DocumentError::InternalServerError(_)
+        | DocumentError::UploadTimeout(_)
+        | DocumentError::DatabaseConstraintViolation(_)
+        | DocumentError::OcrProcessingError(_)
+        | DocumentError::FileProcessingError(_) => {
+            Err(McpError::internal_error("failed to upload document", None))
+        }
     }
 }
 
-fn internal(action: &str, error: impl std::fmt::Display) -> McpError {
-    tracing::error!("MCP failed to {}: {}", action, error);
-    McpError::internal_error(format!("failed to {action}"), None)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ocr_offset_must_point_inside_the_text() {
+        assert!(
+            check_ocr_offset(0, 0).is_ok(),
+            "empty text has one empty page"
+        );
+        assert!(check_ocr_offset(0, 100).is_ok());
+        assert!(check_ocr_offset(99, 100).is_ok());
+        assert!(
+            check_ocr_offset(100, 100).is_err(),
+            "offset == length is past the end"
+        );
+        assert!(check_ocr_offset(101, 100).is_err());
+        assert!(check_ocr_offset(1, 0).is_err());
+    }
+
+    fn is_tool_error(result: Result<CallToolResult, McpError>) -> bool {
+        matches!(result, Ok(r) if r.is_error == Some(true))
+    }
+
+    #[test]
+    fn upload_errors_the_caller_can_fix_become_tool_errors() {
+        for error in [
+            DocumentError::BadRequest("bad".into()),
+            DocumentError::InvalidQuery("bad".into()),
+            DocumentError::Conflict("duplicate".into()),
+            DocumentError::PayloadTooLarge("big".into()),
+            DocumentError::ConcurrentUploadError("busy".into()),
+            DocumentError::NotFound,
+        ] {
+            assert!(is_tool_error(upload_error(error)));
+        }
+    }
+
+    #[test]
+    fn upload_server_faults_never_reach_the_model() {
+        // These carry raw database/storage error text (see
+        // services::documents::categorize_ingestion_error).
+        let secret =
+            "duplicate key value violates unique constraint \"documents_pkey\" at /var/lib/readur";
+        for error in [
+            DocumentError::InternalServerError(secret.into()),
+            DocumentError::UploadTimeout(secret.into()),
+            DocumentError::DatabaseConstraintViolation(secret.into()),
+            DocumentError::OcrProcessingError(secret.into()),
+            DocumentError::FileProcessingError(secret.into()),
+        ] {
+            let err = upload_error(error).expect_err("server faults must be protocol errors");
+            assert!(!err.message.contains("constraint"), "{}", err.message);
+            assert!(!err.message.contains("/var/lib"), "{}", err.message);
+        }
+    }
 }

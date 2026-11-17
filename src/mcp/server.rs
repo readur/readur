@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use http::request::Parts;
 use rmcp::{
@@ -24,20 +24,40 @@ authenticated user can access.";
 #[derive(Clone)]
 pub struct ReadurMcp {
     pub(crate) state: Arc<AppState>,
-    tool_router: ToolRouter<Self>,
+    tool_router: Arc<ToolRouter<Self>>,
 }
+
+/// The tool set depends only on `MCP_ALLOW_DELETE`, so each variant (tool
+/// metadata and input schemas included) is built once per process rather
+/// than once per request.
+static TOOLS_WITHOUT_DELETE: OnceLock<Arc<ToolRouter<ReadurMcp>>> = OnceLock::new();
+static TOOLS_WITH_DELETE: OnceLock<Arc<ToolRouter<ReadurMcp>>> = OnceLock::new();
 
 impl ReadurMcp {
     pub fn new(state: Arc<AppState>) -> Self {
-        let mut tool_router = Self::status_router()
-            + Self::documents_router()
-            + Self::search_router()
-            + Self::labels_router()
-            + Self::sources_router();
-        if !state.config.mcp.allow_delete {
-            tool_router.remove_route("delete_document");
-        }
+        let tool_router = Self::tools(state.config.mcp.allow_delete);
         Self { state, tool_router }
+    }
+
+    fn tools(allow_delete: bool) -> Arc<ToolRouter<Self>> {
+        let cache = if allow_delete {
+            &TOOLS_WITH_DELETE
+        } else {
+            &TOOLS_WITHOUT_DELETE
+        };
+        cache
+            .get_or_init(|| {
+                let mut router = Self::status_router()
+                    + Self::documents_router()
+                    + Self::search_router()
+                    + Self::labels_router()
+                    + Self::sources_router();
+                if !allow_delete {
+                    router.remove_route("delete_document");
+                }
+                Arc::new(router)
+            })
+            .clone()
     }
 
     /// The user the request authenticated as. The HTTP layer rejects
@@ -92,5 +112,43 @@ impl ServerHandler for ReadurMcp {
     ) -> Result<ReadResourceResponse, McpError> {
         let user = Self::caller_from_context(&context)?;
         tools::resources::read_resource(self, user, request).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(router: &ToolRouter<ReadurMcp>) -> Vec<String> {
+        router
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn tool_routers_are_built_once_per_variant() {
+        assert!(Arc::ptr_eq(
+            &ReadurMcp::tools(false),
+            &ReadurMcp::tools(false)
+        ));
+        assert!(Arc::ptr_eq(
+            &ReadurMcp::tools(true),
+            &ReadurMcp::tools(true)
+        ));
+        assert!(!Arc::ptr_eq(
+            &ReadurMcp::tools(false),
+            &ReadurMcp::tools(true)
+        ));
+    }
+
+    #[test]
+    fn delete_tool_only_exists_when_allowed() {
+        let without = names(&ReadurMcp::tools(false));
+        let with = names(&ReadurMcp::tools(true));
+        assert!(!without.contains(&"delete_document".to_string()));
+        assert!(with.contains(&"delete_document".to_string()));
+        assert_eq!(with.len(), without.len() + 1);
     }
 }

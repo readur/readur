@@ -308,3 +308,43 @@ async fn search_tools_are_listed() {
         assert!(names.iter().any(|n| n == tool), "{tool} missing: {names:?}");
     }
 }
+
+#[tokio::test]
+async fn get_search_facets_separates_unused_labels() {
+    let ctx = TestContext::new().await;
+    let (user_id, token) = user_with_token(&ctx).await;
+    let doc = seed_document(&ctx, user_id, "a.pdf", "application/pdf", "one").await;
+    let pool = &ctx.state().db.pool;
+    for name in ["Invoices", "Never used"] {
+        sqlx::query("INSERT INTO labels (user_id, name, color) VALUES ($1, $2, '#123456')")
+            .bind(user_id)
+            .bind(name)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO document_labels (document_id, label_id, assigned_by) \
+         SELECT $1, id, $2 FROM labels WHERE user_id = $2 AND name = 'Invoices'",
+    )
+    .bind(doc.id)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let result = ctx
+        .mcp_call_tool(&token, "get_search_facets", json!({}))
+        .await;
+    assert_eq!(result["isError"], json!(false), "{result}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("  - Invoices (1 document)"), "{text}");
+    // New accounts also start with unused default labels.
+    let unused = text
+        .lines()
+        .find(|line| line.starts_with("Labels not on any document yet:"))
+        .expect("unused labels line");
+    assert!(unused.contains("Never used"), "{text}");
+    assert!(!unused.contains("Invoices"), "{text}");
+    assert!(!text.contains("Never used (0"), "{text}");
+}

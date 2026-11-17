@@ -41,14 +41,10 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let settings = settings_response_for_user(&self.state.db, user.id)
             .await
-            .map_err(|e| {
-                tracing::error!("MCP get_settings failed for user {}: {}", user.id, e);
-                McpError::internal_error("failed to load settings", None)
-            })?;
+            .map_err(|e| format::internal("load settings", e))?;
 
-        let value = serde_json::to_value(&settings).map_err(|e| {
-            McpError::internal_error(format!("failed to serialize settings: {e}"), None)
-        })?;
+        let value = serde_json::to_value(&settings)
+            .map_err(|e| format::internal("serialize settings", e))?;
         let mut lines = vec!["Settings:".to_string()];
         if let Some(fields) = value.as_object() {
             for (key, value) in fields {
@@ -83,10 +79,12 @@ impl ReadurMcp {
                 "Queue statistics are only available to administrators.",
             ));
         }
-        let stats = self.state.queue_service.get_stats().await.map_err(|e| {
-            tracing::error!("MCP get_queue_stats failed: {}", e);
-            McpError::internal_error("failed to load queue statistics", None)
-        })?;
+        let stats = self
+            .state
+            .queue_service
+            .get_stats()
+            .await
+            .map_err(|e| format::internal("load queue statistics", e))?;
         let stats = QueueStatsResponse::from(stats);
 
         let minutes = |m: Option<f64>| m.map_or("n/a".to_string(), |m| format!("{m:.1} min"));
@@ -119,10 +117,7 @@ impl ReadurMcp {
         let user = Self::caller(&parts)?;
         let languages = available_languages_for_user(&self.state.db, user.id)
             .await
-            .map_err(|e| {
-                tracing::error!("MCP get_ocr_languages failed for user {}: {}", user.id, e);
-                McpError::internal_error("failed to load OCR languages", None)
-            })?;
+            .map_err(|e| format::internal("load OCR languages", e))?;
 
         let mut lines = vec![format!(
             "Current OCR language: {}\nInstalled languages ({}):",

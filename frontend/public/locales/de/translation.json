@@ -1043,6 +1043,7 @@
       "copied": "Kopiert",
       "copiedStatus": "In die Zwischenablage kopiert",
       "copy": "API-Schlüssel kopieren",
+      "keyLabel": "API-Schlüssel",
       "copyFailed": "Kopieren in die Zwischenablage fehlgeschlagen. Bitte markieren und manuell kopieren.",
       "create": "API-Schlüssel erstellen",
       "createFailed": "API-Schlüssel konnte nicht erstellt werden.",

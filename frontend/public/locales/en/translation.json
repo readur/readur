@@ -1043,6 +1043,7 @@
       "copied": "Copied",
       "copiedStatus": "Copied to clipboard",
       "copy": "Copy API key",
+      "keyLabel": "API key",
       "copyFailed": "Failed to copy to clipboard. Please select and copy manually.",
       "create": "Create API key",
       "createFailed": "Failed to create API key.",

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Key } from 'react-aria-components';
-import { Button, Dialog, IconButton, Select, SelectItem, TextField } from '../../../ui';
-import { Check, ContentCopy } from '../../../ui/icons';
+import { Button, Dialog, Select, SelectItem, TextField } from '../../../ui';
 import type { ApiKey } from '../../../services/api';
 import { Notice } from '../shared/Notice';
 import formStyles from '../form/form.module.css';
 import styles from './ApiKeys.module.css';
+import { CopyBlock } from './CopyBlock';
 import { McpSnippets } from './McpConnect';
 import type { ExpirationOption } from './useApiKeys';
 
@@ -132,24 +132,6 @@ export function RevealKeyDialog({
   onDone: () => void;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
-
-  useEffect(() => {
-    setCopied(false);
-    setCopyError(false);
-  }, [revealed]);
-
-  const copy = async () => {
-    if (!revealed) return;
-    try {
-      await navigator.clipboard.writeText(revealed.plaintext);
-      setCopied(true);
-      setCopyError(false);
-    } catch {
-      setCopyError(true);
-    }
-  };
 
   return (
     <Dialog
@@ -175,29 +157,11 @@ export function RevealKeyDialog({
             <p className={formStyles.help}>
               {t('settings.apiKeys.keyName', 'Key name:')} <strong>{revealed.name}</strong>
             </p>
-            <div className={styles.secret}>
-              <code className={styles.secretValue}>{revealed.plaintext}</code>
-              <IconButton
-                label={
-                  copied
-                    ? t('settings.apiKeys.copied', 'Copied')
-                    : t('settings.apiKeys.copy', 'Copy API key')
-                }
-                icon={copied ? <Check fontSize="inherit" /> : <ContentCopy fontSize="inherit" />}
-                onPress={() => void copy()}
-              />
-            </div>
-            <p className={styles.srStatus} role="status">
-              {copied ? t('settings.apiKeys.copiedStatus', 'Copied to clipboard') : ''}
-            </p>
-            {copyError ? (
-              <Notice tone="danger">
-                {t(
-                  'settings.apiKeys.copyFailed',
-                  'Failed to copy to clipboard. Please select and copy manually.',
-                )}
-              </Notice>
-            ) : null}
+            <CopyBlock
+              label={t('settings.apiKeys.keyLabel', 'API key')}
+              copyLabel={t('settings.apiKeys.copy', 'Copy API key')}
+              value={revealed.plaintext}
+            />
             <p className={formStyles.help}>
               {t('settings.apiKeys.usage', 'Use it like:')}{' '}
               <code className={styles.inlineCode}>

@@ -57,14 +57,7 @@ pub async fn read_resource(
         .db
         .get_document_by_id(document_id, user.id, user.role)
         .await
-        .map_err(|e| {
-            tracing::error!(
-                "MCP resource read failed for document {}: {}",
-                document_id,
-                e
-            );
-            McpError::internal_error("failed to load document", None)
-        })?
+        .map_err(|e| format::internal(&format!("load document {document_id}"), e))?
         .ok_or_else(|| McpError::resource_not_found(format!("document not found: {uri}"), None))?;
 
     let too_large = |size: i64| {
@@ -88,14 +81,7 @@ pub async fn read_resource(
         .file_service
         .read_file(&document.file_path)
         .await
-        .map_err(|e| {
-            tracing::error!(
-                "MCP resource read failed for document file {}: {}",
-                document_id,
-                e
-            );
-            McpError::internal_error("failed to read document file", None)
-        })?;
+        .map_err(|e| format::internal(&format!("read file of document {document_id}"), e))?;
     // The stored size can be stale; check what was actually read.
     if data.len() as i64 > MAX_RESOURCE_BYTES {
         return Err(too_large(data.len() as i64));

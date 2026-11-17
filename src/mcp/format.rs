@@ -26,6 +26,13 @@ pub fn tool_error(message: impl Into<String>) -> CallToolResult {
     CallToolResult::error(vec![ContentBlock::text(message.into())])
 }
 
+/// A server fault: log `error` in full, give the client only `failed to
+/// {action}` so internal details never reach the model.
+pub fn internal(action: &str, error: impl std::fmt::Display) -> McpError {
+    tracing::error!("MCP failed to {action}: {error}");
+    McpError::internal_error(format!("failed to {action}"), None)
+}
+
 /// Binary-unit file size, e.g. `1.5 MiB`.
 pub fn file_size(bytes: i64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -49,6 +56,15 @@ pub fn date(timestamp: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn internal_errors_hide_the_underlying_error() {
+        let err = internal(
+            "load settings",
+            "password authentication failed for user \"readur\"",
+        );
+        assert_eq!(err.message, "failed to load settings");
+    }
 
     #[test]
     fn file_size_uses_binary_units() {
