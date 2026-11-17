@@ -22,8 +22,7 @@ use crate::services::webdav::WebDAVConfig;
 use crate::services::webdav::WebDAVService;
 use crate::utils::outbound::{categorize_connection_error, validate_outbound_url};
 
-pub mod webdav_sync;
-use webdav_sync::perform_webdav_sync_with_tracking;
+use crate::services::webdav_sync::perform_webdav_sync_with_tracking;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -222,19 +221,16 @@ async fn get_webdav_sync_status(
     info!("Getting WebDAV sync status for user: {}", auth_user.user.username);
 
     // Check if WebDAV is configured
-    let webdav_config = match get_user_webdav_config(&state, auth_user.user.id).await {
-        Ok(config) => config,
-        Err(_) => {
-            return Ok(Json(WebDAVSyncStatus {
-                is_running: false,
-                last_sync: None,
-                files_processed: 0,
-                files_remaining: 0,
-                current_folder: None,
-                errors: vec!["WebDAV not configured".to_string()],
-            }));
-        }
-    };
+    if get_user_webdav_config(&state, auth_user.user.id).await.is_err() {
+        return Ok(Json(WebDAVSyncStatus {
+            is_running: false,
+            last_sync: None,
+            files_processed: 0,
+            files_remaining: 0,
+            current_folder: None,
+            errors: vec!["WebDAV not configured".to_string()],
+        }));
+    }
 
     // Get sync state from database
     match state.db.get_webdav_sync_state(auth_user.user.id).await {

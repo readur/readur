@@ -9,7 +9,7 @@ use crate::{
     models::source::UpdateWebDAVSyncState,
 };
 use crate::services::webdav::{WebDAVConfig, WebDAVService};
-use crate::routes::webdav::webdav_sync::perform_webdav_sync_with_tracking;
+use crate::services::webdav_sync::perform_webdav_sync_with_tracking;
 
 pub struct WebDAVScheduler {
     db: Database,
