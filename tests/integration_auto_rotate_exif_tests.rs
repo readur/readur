@@ -13,10 +13,12 @@ use uuid::Uuid;
 use image::GenericImageView;
 
 use readur::{
+    ingestion::document_ingestion::{
+        DeduplicationPolicy, DocumentIngestionRequest, DocumentIngestionService, IngestionResult,
+    },
+    models::{CreateUser, UpdateSettings, UserRole},
+    test_utils::{TestConfigBuilder, TestContext},
     AppState,
-    models::{CreateUser, UserRole, UpdateSettings},
-    test_utils::TestContext,
-    ingestion::document_ingestion::{DocumentIngestionService, DocumentIngestionRequest, DeduplicationPolicy, IngestionResult},
 };
 
 /// Helper function to create test user with unique identifier
@@ -32,12 +34,20 @@ fn create_test_user_with_suffix(suffix: &str) -> CreateUser {
 /// Test context wrapper that provides access to AppState via a per-test database (readur::test_db)
 struct AutoRotateTestContext {
     ctx: TestContext,
+    /// Stored files go here (not ./test-uploads) and are removed with the context.
+    _upload_dir: tempfile::TempDir,
 }
 
 impl AutoRotateTestContext {
     async fn new() -> Self {
-        let ctx = TestContext::new().await;
-        Self { ctx }
+        let upload_dir = tempfile::tempdir().expect("temp upload dir");
+        let config =
+            TestConfigBuilder::default().with_upload_path(upload_dir.path().to_str().unwrap());
+        let ctx = TestContext::with_config(config).await;
+        Self {
+            ctx,
+            _upload_dir: upload_dir,
+        }
     }
 
     fn state(&self) -> &Arc<AppState> {
@@ -115,17 +125,18 @@ async fn test_auto_rotate_enabled_rotates_image_with_exif_orientation_6() -> Res
 
     // Enable auto-rotate in user settings
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Load test image with EXIF orientation 6 (90 CW rotation needed)
     // Original image is 40x20, after rotation should be 20x40
-    let image_data = std::fs::read("test_files/exif_orientation_6_rotate_90_cw.jpg")
-        .expect("read test image");
+    let image_data =
+        std::fs::read("test_files/exif_orientation_6_rotate_90_cw.jpg").expect("read test image");
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_rotate_90.jpg".to_string(),
@@ -133,7 +144,7 @@ async fn test_auto_rotate_enabled_rotates_image_with_exif_orientation_6() -> Res
         file_data: image_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -145,25 +156,23 @@ async fn test_auto_rotate_enabled_rotates_image_with_exif_orientation_6() -> Res
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
             // Read the stored file and verify dimensions changed
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 #[cfg(feature = "ocr")]
                 {
-                    let stored_img = image::load_from_memory(&stored_data)
-                        .expect("load stored image");
+                    let stored_img =
+                        image::load_from_memory(&stored_data).expect("load stored image");
                     let (width, height) = stored_img.dimensions();
 
                     // Original was 40x20, after 90 CW rotation should be 20x40
@@ -194,16 +203,17 @@ async fn test_auto_rotate_disabled_preserves_original_orientation() -> Result<()
 
     // Disable auto-rotate in user settings
     let settings = create_settings_with_auto_rotate(false);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Load test image with EXIF orientation 6 (would need rotation)
-    let image_data = std::fs::read("test_files/exif_orientation_6_rotate_90_cw.jpg")
-        .expect("read test image");
+    let image_data =
+        std::fs::read("test_files/exif_orientation_6_rotate_90_cw.jpg").expect("read test image");
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_no_rotate.jpg".to_string(),
@@ -211,7 +221,7 @@ async fn test_auto_rotate_disabled_preserves_original_orientation() -> Result<()
         file_data: image_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -223,25 +233,23 @@ async fn test_auto_rotate_disabled_preserves_original_orientation() -> Result<()
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
             // Read the stored file and verify dimensions are unchanged
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 #[cfg(feature = "ocr")]
                 {
-                    let stored_img = image::load_from_memory(&stored_data)
-                        .expect("load stored image");
+                    let stored_img =
+                        image::load_from_memory(&stored_data).expect("load stored image");
                     let (width, height) = stored_img.dimensions();
 
                     // Original was 40x20, should remain 40x20 when rotation disabled
@@ -272,16 +280,17 @@ async fn test_auto_rotate_with_orientation_8_rotate_270() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Orientation 8 = Rotate 270 CW (or 90 CCW)
-    let image_data = std::fs::read("test_files/exif_orientation_8_rotate_270_cw.jpg")
-        .expect("read test image");
+    let image_data =
+        std::fs::read("test_files/exif_orientation_8_rotate_270_cw.jpg").expect("read test image");
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_rotate_270.jpg".to_string(),
@@ -289,7 +298,7 @@ async fn test_auto_rotate_with_orientation_8_rotate_270() -> Result<()> {
         file_data: image_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -301,24 +310,22 @@ async fn test_auto_rotate_with_orientation_8_rotate_270() -> Result<()> {
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 #[cfg(feature = "ocr")]
                 {
-                    let stored_img = image::load_from_memory(&stored_data)
-                        .expect("load stored image");
+                    let stored_img =
+                        image::load_from_memory(&stored_data).expect("load stored image");
                     let (width, height) = stored_img.dimensions();
 
                     // Original was 40x20, after 270 CW rotation should be 20x40
@@ -343,16 +350,17 @@ async fn test_auto_rotate_with_orientation_3_rotate_180() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Orientation 3 = Rotate 180 degrees (dimensions stay same, but content rotated)
-    let image_data = std::fs::read("test_files/exif_orientation_3_rotate_180.jpg")
-        .expect("read test image");
+    let image_data =
+        std::fs::read("test_files/exif_orientation_3_rotate_180.jpg").expect("read test image");
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_rotate_180.jpg".to_string(),
@@ -360,7 +368,7 @@ async fn test_auto_rotate_with_orientation_3_rotate_180() -> Result<()> {
         file_data: image_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -372,24 +380,22 @@ async fn test_auto_rotate_with_orientation_3_rotate_180() -> Result<()> {
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 #[cfg(feature = "ocr")]
                 {
-                    let stored_img = image::load_from_memory(&stored_data)
-                        .expect("load stored image");
+                    let stored_img =
+                        image::load_from_memory(&stored_data).expect("load stored image");
                     let (width, height) = stored_img.dimensions();
 
                     // 180 rotation preserves dimensions
@@ -420,16 +426,17 @@ async fn test_auto_rotate_no_exif_preserves_image() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Load image without EXIF data
-    let image_data = std::fs::read("test_files/exif_orientation_none.jpg")
-        .expect("read test image");
+    let image_data =
+        std::fs::read("test_files/exif_orientation_none.jpg").expect("read test image");
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_no_exif.jpg".to_string(),
@@ -437,7 +444,7 @@ async fn test_auto_rotate_no_exif_preserves_image() -> Result<()> {
         file_data: image_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -449,24 +456,22 @@ async fn test_auto_rotate_no_exif_preserves_image() -> Result<()> {
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 #[cfg(feature = "ocr")]
                 {
-                    let stored_img = image::load_from_memory(&stored_data)
-                        .expect("load stored image");
+                    let stored_img =
+                        image::load_from_memory(&stored_data).expect("load stored image");
                     let (width, height) = stored_img.dimensions();
 
                     // No EXIF, dimensions should be preserved
@@ -491,15 +496,16 @@ async fn test_auto_rotate_non_image_file_not_affected() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Use a text file (non-image)
     let file_data = b"This is a text file, not an image.".to_vec();
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "test_document.txt".to_string(),
@@ -507,7 +513,7 @@ async fn test_auto_rotate_non_image_file_not_affected() -> Result<()> {
         file_data: file_data.clone(),
         mime_type: "text/plain".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -519,20 +525,18 @@ async fn test_auto_rotate_non_image_file_not_affected() -> Result<()> {
         source_metadata: None,
     };
 
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 // Text file content should be unchanged
                 assert_eq!(
                     stored_data, file_data,
@@ -556,15 +560,16 @@ async fn test_auto_rotate_fallback_on_corrupted_image() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
     // Create corrupted "image" data (valid JPEG header but invalid content)
     let corrupted_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46];
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     let request = DocumentIngestionRequest {
         filename: "corrupted.jpg".to_string(),
@@ -572,7 +577,7 @@ async fn test_auto_rotate_fallback_on_corrupted_image() -> Result<()> {
         file_data: corrupted_data.clone(),
         mime_type: "image/jpeg".to_string(),
         user_id,
-        deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+        deduplication_policy: DeduplicationPolicy::ReturnExisting,
         source_type: Some("test".to_string()),
         source_id: None,
         original_created_at: None,
@@ -585,20 +590,18 @@ async fn test_auto_rotate_fallback_on_corrupted_image() -> Result<()> {
     };
 
     // Should not fail - should fall back to using original data
-    let result = ingestion_service.ingest_document(request).await
+    let result = ingestion_service
+        .ingest_document(request)
+        .await
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     match result {
         IngestionResult::Created(doc) => {
-            let stored_path = format!(
-                "{}/{}/{}/{}",
-                state.config.upload_path,
-                user_id,
-                doc.id,
-                doc.filename
-            );
+            let stored_path = doc.file_path.clone();
 
-            if let Ok(stored_data) = std::fs::read(&stored_path) {
+            {
+                let stored_data = std::fs::read(&stored_path)
+                    .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                 // Original corrupted data should be stored as-is (fallback)
                 assert_eq!(
                     stored_data, corrupted_data,
@@ -622,29 +625,30 @@ async fn test_auto_rotate_with_all_orientations() -> Result<()> {
 
     // Enable auto-rotate
     let settings = create_settings_with_auto_rotate(true);
-    state.db.create_or_update_settings(user_id, &settings).await?;
+    state
+        .db
+        .create_or_update_settings(user_id, &settings)
+        .await?;
 
-    let ingestion_service = DocumentIngestionService::new(
-        state.db.clone(),
-        (*state.file_service).clone(),
-    );
+    let ingestion_service =
+        DocumentIngestionService::new(state.db.clone(), (*state.file_service).clone());
 
     // Test all 8 EXIF orientations plus no-EXIF case
     let test_cases = [
-        ("exif_orientation_1_normal.jpg", (40, 20)),        // No change
+        ("exif_orientation_1_normal.jpg", (40, 20)), // No change
         ("exif_orientation_2_flip_horizontal.jpg", (40, 20)), // Flip H
-        ("exif_orientation_3_rotate_180.jpg", (40, 20)),    // 180 rotation
+        ("exif_orientation_3_rotate_180.jpg", (40, 20)), // 180 rotation
         ("exif_orientation_4_flip_vertical.jpg", (40, 20)), // Flip V
-        ("exif_orientation_5_transpose.jpg", (20, 40)),     // Transpose
-        ("exif_orientation_6_rotate_90_cw.jpg", (20, 40)),  // 90 CW
-        ("exif_orientation_7_transverse.jpg", (20, 40)),    // Transverse
+        ("exif_orientation_5_transpose.jpg", (20, 40)), // Transpose
+        ("exif_orientation_6_rotate_90_cw.jpg", (20, 40)), // 90 CW
+        ("exif_orientation_7_transverse.jpg", (20, 40)), // Transverse
         ("exif_orientation_8_rotate_270_cw.jpg", (20, 40)), // 270 CW
-        ("exif_orientation_none.jpg", (40, 20)),            // No EXIF
+        ("exif_orientation_none.jpg", (40, 20)),     // No EXIF
     ];
 
     for (filename, expected_dims) in test_cases {
         let image_data = std::fs::read(format!("test_files/{}", filename))
-            .expect(&format!("read {}", filename));
+            .unwrap_or_else(|_| panic!("read {}", filename));
 
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
@@ -652,7 +656,7 @@ async fn test_auto_rotate_with_all_orientations() -> Result<()> {
             file_data: image_data,
             mime_type: "image/jpeg".to_string(),
             user_id,
-            deduplication_policy: DeduplicationPolicy::AllowDuplicateContent,
+            deduplication_policy: DeduplicationPolicy::ReturnExisting,
             source_type: Some("test".to_string()),
             source_id: None,
             original_created_at: None,
@@ -664,24 +668,22 @@ async fn test_auto_rotate_with_all_orientations() -> Result<()> {
             source_metadata: None,
         };
 
-        let result = ingestion_service.ingest_document(request).await
+        let result = ingestion_service
+            .ingest_document(request)
+            .await
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
         match result {
             IngestionResult::Created(doc) => {
-                let stored_path = format!(
-                    "{}/{}/{}/{}",
-                    state.config.upload_path,
-                    user_id,
-                    doc.id,
-                    doc.filename
-                );
+                let stored_path = doc.file_path.clone();
 
-                if let Ok(stored_data) = std::fs::read(&stored_path) {
+                {
+                    let stored_data = std::fs::read(&stored_path)
+                        .unwrap_or_else(|e| panic!("read stored file {stored_path}: {e}"));
                     #[cfg(feature = "ocr")]
                     {
                         let stored_img = image::load_from_memory(&stored_data)
-                            .expect(&format!("load stored image for {}", filename));
+                            .unwrap_or_else(|_| panic!("load stored image for {}", filename));
                         let (width, height) = stored_img.dimensions();
 
                         assert_eq!(

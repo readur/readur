@@ -21,16 +21,41 @@ use exif::{In, Reader as ExifReader, Tag};
 #[cfg(feature = "ocr")]
 use image::ImageFormat;
 
+/// What ingestion reports when the user already has a document with the same
+/// content (same SHA-256 of the source bytes).
+///
+/// Every policy ends in exactly one stored document per user and content:
+/// the per-user unique index `idx_documents_user_file_hash` makes a second
+/// copy impossible, so there is deliberately no "store it again" policy (an
+/// `AllowDuplicateContent` variant used to exist; it could only ever end in
+/// the same outcome as `ReturnExisting`, after writing and deleting a file).
+/// The policy only chooses how the duplicate is reported, and that choice is
+/// the same whether the duplicate was found up front or by losing a race to a
+/// concurrent ingestion of the same content (see [`duplicate_outcome`]).
 #[derive(Debug, Clone)]
 pub enum DeduplicationPolicy {
-    /// Skip ingestion if content already exists (for batch operations)
+    /// Report `Skipped` (batch operations; REST uploads, which answer 409)
     Skip,
-    /// Return existing document if content already exists (for direct uploads)
+    /// Report `ExistingDocument` with the stored document
     ReturnExisting,
-    /// Create new document record even if content exists (allows multiple filenames for same content)
-    AllowDuplicateContent,
-    /// Track as duplicate but link to existing document (for WebDAV)
+    /// Report `TrackedAsDuplicate` linking to the stored document (WebDAV)
     TrackAsDuplicate,
+}
+
+/// The result reported for content the user already has as `existing`.
+/// Used by both the up-front duplicate check and the concurrent-insert race
+/// path, so a caller sees the same outcome whichever one caught it.
+pub fn duplicate_outcome(policy: &DeduplicationPolicy, existing: Document) -> IngestionResult {
+    match policy {
+        DeduplicationPolicy::Skip => IngestionResult::Skipped {
+            existing_document_id: existing.id,
+            reason: format!("Content already exists as '{}'", existing.original_filename),
+        },
+        DeduplicationPolicy::ReturnExisting => IngestionResult::ExistingDocument(existing),
+        DeduplicationPolicy::TrackAsDuplicate => IngestionResult::TrackedAsDuplicate {
+            existing_document_id: existing.id,
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -180,29 +205,10 @@ impl DocumentIngestionService {
                     existing_doc.original_filename, existing_doc.id, request.filename
                 );
 
-                match request.deduplication_policy {
-                    DeduplicationPolicy::Skip => {
-                        return Ok(IngestionResult::Skipped {
-                            existing_document_id: existing_doc.id,
-                            reason: format!(
-                                "Content already exists as '{}'",
-                                existing_doc.original_filename
-                            ),
-                        });
-                    }
-                    DeduplicationPolicy::ReturnExisting => {
-                        return Ok(IngestionResult::ExistingDocument(existing_doc));
-                    }
-                    DeduplicationPolicy::TrackAsDuplicate => {
-                        return Ok(IngestionResult::TrackedAsDuplicate {
-                            existing_document_id: existing_doc.id,
-                        });
-                    }
-                    DeduplicationPolicy::AllowDuplicateContent => {
-                        // Continue with creating new document record
-                        debug!("Creating new document record despite duplicate content (policy: AllowDuplicateContent)");
-                    }
-                }
+                return Ok(duplicate_outcome(
+                    &request.deduplication_policy,
+                    existing_doc,
+                ));
             }
             Ok(None) => {
                 debug!("No duplicate content found, proceeding with new document creation");
@@ -343,7 +349,11 @@ impl DocumentIngestionService {
                                 "Found existing document after collision for {}: {} (ID: {})",
                                 request.filename, existing_doc.original_filename, existing_doc.id
                             );
-                            return Ok(IngestionResult::ExistingDocument(existing_doc));
+                            // Report it exactly as the up-front check would have.
+                            return Ok(duplicate_outcome(
+                                &request.deduplication_policy,
+                                existing_doc,
+                            ));
                         }
                         Ok(None) => {
                             warn!("Unexpected: constraint violation but no document found for hash {}", &file_hash[..8]);
@@ -415,7 +425,6 @@ impl DocumentIngestionService {
         Ok(IngestionResult::Created(saved_document))
     }
 
-    /// Calculate SHA256 hash of file content
     /// Remove the stored file of a document whose database row was not
     /// created. A failure here leaves an orphan file but no data loss, so it
     /// is logged rather than propagated.
@@ -428,6 +437,7 @@ impl DocumentIngestionService {
         }
     }
 
+    /// Calculate SHA256 hash of file content
     fn calculate_file_hash(&self, data: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
@@ -536,35 +546,6 @@ impl DocumentIngestionService {
             file_owner: file_info.owner.clone(),
             file_group: file_info.group.clone(),
             source_metadata,
-        };
-
-        self.ingest_document(request).await
-    }
-
-    /// Convenience method for direct uploads (maintains backward compatibility)
-    pub async fn ingest_upload(
-        &self,
-        filename: &str,
-        file_data: Vec<u8>,
-        mime_type: &str,
-        user_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
-        let request = DocumentIngestionRequest {
-            filename: filename.to_string(),
-            original_filename: filename.to_string(),
-            file_data,
-            mime_type: mime_type.to_string(),
-            user_id,
-            deduplication_policy: DeduplicationPolicy::AllowDuplicateContent, // Fixed behavior for uploads
-            source_type: Some("direct_upload".to_string()),
-            source_id: None,
-            original_created_at: None,
-            original_modified_at: None,
-            source_path: None,      // Direct uploads don't have a source path
-            file_permissions: None, // Direct uploads don't preserve permissions
-            file_owner: None,       // Direct uploads don't preserve owner
-            file_group: None,       // Direct uploads don't preserve group
-            source_metadata: None,
         };
 
         self.ingest_document(request).await

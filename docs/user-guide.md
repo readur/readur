@@ -71,9 +71,9 @@ Readur's search capabilities are designed to help you find documents quickly, ev
 
 #### How Search Works
 
-The full-text search looks through all the text extracted from your documents, not just file names. It automatically handles word variations (stemming) and can find matches even when there are minor typos or OCR errors (fuzzy matching). When you search for "running," it will also find documents containing "run" or "runs."
+The full-text search looks through all the text extracted from your documents (including OCR text); it does not search file names or labels, which you narrow down with filters instead. It automatically handles word variations (stemming): when you search for "running," it will also find documents containing "run" or "runs."
 
-For exact phrase searches, put your terms in quotes like `"quarterly report"` to find that specific phrase. To exclude certain terms, use a minus sign: `invoice -draft` will find invoices but exclude any documents containing the word "draft."
+For exact phrase searches, use Exact phrase mode, or put your terms in quotes like `"quarterly report"` in Operators mode. To exclude certain terms, use a minus sign in Operators mode: `invoice -draft` will find invoices but exclude any documents containing the word "draft."
 
 #### Refining Your Search
 
@@ -127,7 +127,7 @@ Readur's search system gives you multiple ways to find documents, from simple ke
 
 ### Different Ways to Search
 
-Simple search works for most situations - just type what you're looking for and Readur automatically handles word variations and minor typos. When you need to find an exact phrase, put it in quotes like `"quarterly report"`. For documents that might have OCR errors or typos, use fuzzy search by adding a tilde: `invoice~` will find "invoice" even if it was read as "invioce." When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT.
+Simple search (**All words**) works for most situations: type what you're looking for and Readur finds documents containing every word, handling word variations such as plurals. To find an exact phrase, switch the search to **Exact phrase** mode (or use quotes in **Operators** mode, like `"quarterly report"`). **Similar spelling** (fuzzy) mode tolerates typos, but compares the query with a document's whole text, so it only helps for short documents. When you need precise control, switch the search to **Operators** (boolean) mode and combine terms with AND, OR and NOT. Search looks at a document's extracted and OCR text, not its file name or labels; use filters for those.
 
 ### Boolean (Operators) Search
 
@@ -155,7 +155,7 @@ When your search returns too many results, filters help narrow things down. Filt
 
 ### Search Techniques That Work
 
-For exact phrases, always use quotes: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. In Operators mode, use a trailing `*` when you're not sure of a word's ending: `proj*` matches project, projects, and projection. Search specific fields with syntax like `filename:report` or `label:urgent`. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
+For exact phrases, use Exact phrase mode, or quotes in Operators mode: `"project status"` finds that specific phrase rather than documents containing both words separately. Combine text searches with filters for more precise results - search for "budget" and filter by file type "PDF" to find budget PDFs specifically. In Operators mode, use a trailing `*` when you're not sure of a word's ending: `proj*` matches project, projects, and projection. There is no field syntax such as `filename:report` or `label:urgent`: filter by label, type, status, source or date instead. For complex needs, use boolean logic: `(budget OR financial) AND 2024` finds documents containing either "budget" or "financial" that also contain "2024."
 
 > 🔍 **For detailed search techniques**, see the [Advanced Search Guide](advanced-search.md)
 
@@ -293,7 +293,7 @@ Image preprocessing options help with documents that aren't perfectly scanned. E
 
 Search settings affect how results appear and behave. Adjust the number of results per page based on your screen size and browsing preferences. The default sort order determines how search results are organized - by relevance, date, or other criteria that match how you typically look for documents.
 
-Snippet length controls how much text appears in search previews, while the fuzzy search threshold determines how tolerant the system is of typos and OCR errors. Higher thresholds find more matches but might include less relevant results, while lower thresholds are more precise but might miss documents with text recognition issues.
+Snippet length controls how much text appears in search previews. The fuzzy search threshold setting is stored but not yet applied: Similar spelling mode always uses a fixed similarity threshold of 0.3 (see the [Advanced Search Guide](advanced-search.md#fuzzy-search-similar-spelling)).
 
 ## API Keys
 

@@ -1,14 +1,18 @@
-//! Every boolean-search example in docs/advanced-search.md and docs/user-guide.md, checked
-//! against the parser and a seeded search.
+//! Every search example in docs/advanced-search.md (and the boolean examples of
+//! docs/user-guide.md), checked against the parser and a seeded search.
 //!
-//! `EXAMPLES` records, for each documented query, the `to_tsquery` input the parser must produce
-//! and exactly which documents of `CORPUS` it must find. The docs are read at test time: an
-//! example added to them without an entry here fails `every_documented_example_is_covered`, and
-//! the "The same" / "Same as:" notes in their code blocks are checked as written.
+//! `EXAMPLES` records, for each documented boolean query, the `to_tsquery` input the parser must
+//! produce and exactly which documents of `CORPUS` it must find. `MODE_EXAMPLES` does the same for
+//! the simple, phrase and fuzzy examples, and `API_EXAMPLES` for the example requests, which run
+//! over HTTP against `API_CORPUS`. The docs are read at test time: an example added to them
+//! without an entry here fails a `every_documented_*_is_covered` test, and the "The same" /
+//! "Same as:" notes in the boolean code blocks are checked as written.
 
 use std::collections::BTreeSet;
 
+use axum::{body::Body, http::Request, http::StatusCode};
 use serde_json::{json, Value};
+use tower::util::ServiceExt;
 use uuid::Uuid;
 
 use readur::db::documents::boolean_to_tsquery;
@@ -60,6 +64,7 @@ const CORPUS: &[(&str, &str)] = &[
     ("proposal", "proposal for a client"),
     ("proposal_old", "old proposal"),
     ("email", "please send an e-mail"),
+    ("warranty", "warranty card"),
 ];
 
 const INVOICE_OR_RECEIPT: Hits = Only(&[
@@ -246,6 +251,44 @@ const EXAMPLES: &[Example] = &[
     ex("\"total due", "('total' <-> 'due')", Only(&["invoice"])),
 ];
 
+/// A documented section of examples in one search mode: its heading, the `search_mode`, and each
+/// query with the documents of `CORPUS` it finds.
+type ModeSection = (&'static str, &'static str, &'static [(&'static str, Hits)]);
+
+/// The documented examples of the other search modes.
+const MODE_EXAMPLES: &[ModeSection] = &[
+    (
+        "### Simple Search (All Words)",
+        "simple",
+        &[
+            ("budget 2024", Only(&["budget2024"])),
+            ("budgets approved", Only(&["budget2024"])),
+            ("the invoice", INVOICES),
+            ("inv", Only(&[])),
+            ("contract -draft", Only(&["contract_draft"])),
+        ],
+    ),
+    (
+        "### Phrase Search (Exact Phrase)",
+        "phrase",
+        &[
+            ("total due", Only(&["invoice"])),
+            ("due total", Only(&["due_total"])),
+            ("\"total due\"", Only(&["invoice"])),
+            ("annual budget", Only(&["budget2024", "budget2023"])),
+        ],
+    ),
+    (
+        "### Fuzzy Search (Similar Spelling)",
+        "fuzzy",
+        &[
+            ("waranty card", Only(&["warranty"])),
+            ("warranty", Only(&["warranty"])),
+            ("invoce", Only(&[])),
+        ],
+    ),
+];
+
 fn example(query: &str) -> Option<&'static Example> {
     EXAMPLES.iter().find(|e| e.query == query)
 }
@@ -347,6 +390,28 @@ fn all_documented() -> Vec<Documented> {
     all
 }
 
+fn advanced_search_doc() -> String {
+    std::fs::read_to_string("docs/advanced-search.md").expect("read advanced-search.md")
+}
+
+/// The fenced code blocks of a section, without the fence lines.
+fn code_blocks(text: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut current: Option<String> = None;
+    for line in text.lines() {
+        if line.starts_with("```") {
+            match current.take() {
+                Some(block) => blocks.push(block),
+                None => current = Some(String::new()),
+            }
+        } else if let Some(block) = current.as_mut() {
+            block.push_str(line);
+            block.push('\n');
+        }
+    }
+    blocks
+}
+
 // ----------------------------------------------------------------- tests
 
 #[test]
@@ -410,6 +475,23 @@ fn documented_equivalences_hold() {
     );
 }
 
+/// The simple, phrase and fuzzy sections document exactly the queries `MODE_EXAMPLES` checks.
+#[test]
+fn every_documented_mode_example_is_covered() {
+    let doc = advanced_search_doc();
+    for (heading, mode, examples) in MODE_EXAMPLES {
+        let documented: Vec<String> = documented_queries(heading, section(&doc, heading))
+            .into_iter()
+            .map(|d| d.query)
+            .collect();
+        let recorded: Vec<String> = examples.iter().map(|(q, _)| q.to_string()).collect();
+        assert_eq!(
+            documented, recorded,
+            "{heading} ({mode}): the documented queries and MODE_EXAMPLES differ"
+        );
+    }
+}
+
 /// Postgres accepts every rendered example.
 #[tokio::test]
 async fn every_example_is_valid_tsquery() {
@@ -423,8 +505,19 @@ async fn every_example_is_valid_tsquery() {
     }
 }
 
+fn expected_keys(hits: &Hits) -> BTreeSet<&'static str> {
+    match hits {
+        Only(keys) => keys.iter().copied().collect(),
+        AllBut(keys) => CORPUS
+            .iter()
+            .map(|(k, _)| *k)
+            .filter(|k| !keys.contains(k))
+            .collect(),
+    }
+}
+
 /// Each example finds exactly the documents recorded for it, through MCP `enhanced_search` in
-/// boolean mode (the same query builder as the REST endpoint and the web UI's Operators mode).
+/// its mode (the same query builder as the REST endpoint and the web UI's search modes).
 #[tokio::test]
 async fn every_example_finds_exactly_the_recorded_documents() {
     let ctx = TestContext::new().await;
@@ -451,29 +544,278 @@ async fn every_example_finds_exactly_the_recorded_documents() {
         key_by_id.insert(id, *key);
     }
 
-    for e in EXAMPLES {
+    let boolean = EXAMPLES.iter().map(|e| ("boolean", e.query, &e.hits));
+    let others = MODE_EXAMPLES
+        .iter()
+        .flat_map(|(_, mode, examples)| examples.iter().map(move |(q, hits)| (*mode, *q, hits)));
+    for (mode, query, hits) in boolean.chain(others) {
         let result = ctx
             .mcp_call_tool(
                 &token,
                 "enhanced_search",
-                json!({ "query": e.query, "search_mode": "boolean", "limit": 100 }),
+                json!({ "query": query, "search_mode": mode, "limit": 100 }),
             )
             .await;
-        assert_eq!(result["isError"], json!(false), "{:?}: {result}", e.query);
+        assert_eq!(
+            result["isError"],
+            json!(false),
+            "{mode} {query:?}: {result}"
+        );
         let found: BTreeSet<&str> = result["structuredContent"]["documents"]
             .as_array()
-            .unwrap_or_else(|| panic!("{:?}: no documents array: {result}", e.query))
+            .unwrap_or_else(|| panic!("{mode} {query:?}: no documents array: {result}"))
             .iter()
             .map(|doc: &Value| key_by_id[doc["id"].as_str().unwrap()])
             .collect();
-        let expected: BTreeSet<&str> = match &e.hits {
-            Only(keys) => keys.iter().copied().collect(),
-            AllBut(keys) => CORPUS
-                .iter()
-                .map(|(k, _)| *k)
-                .filter(|k| !keys.contains(k))
-                .collect(),
-        };
-        assert_eq!(found, expected, "query {:?}", e.query);
+        assert_eq!(found, expected_keys(hits), "{mode} query {query:?}");
     }
+}
+
+// ------------------------------------------------------------ API examples
+
+/// One document of `API_CORPUS`: key, MIME type, text, OCR status, creation date, source type
+/// and whether it carries the "Finance" label.
+type ApiDocument = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    Option<&'static str>,
+    bool,
+);
+
+/// The library the example requests run against.
+const API_CORPUS: &[ApiDocument] = &[
+    (
+        "pdf_invoice",
+        "application/pdf",
+        "invoice for march",
+        "completed",
+        "2024-03-10T09:00:00Z",
+        None,
+        true,
+    ),
+    (
+        "png_invoice",
+        "image/png",
+        "scanned invoice",
+        "pending",
+        "2024-06-01T09:00:00Z",
+        Some("webdav"),
+        false,
+    ),
+    (
+        "txt_contract",
+        "text/plain",
+        "contract signed",
+        "failed",
+        "2025-01-05T09:00:00Z",
+        Some("local_folder"),
+        true,
+    ),
+    (
+        "pdf_contract",
+        "application/pdf",
+        "contract draft",
+        "processing",
+        "2023-11-20T09:00:00Z",
+        Some("webdav"),
+        false,
+    ),
+];
+
+/// Each documented request and the documents it returns. `ordered` results are compared in
+/// order (the request sorts, or pages a newest-first list); the others as a set.
+const API_EXAMPLES: &[(&str, &[&str], bool)] = &[
+    (
+        "/api/search/enhanced?query=invoice",
+        &["pdf_invoice", "png_invoice"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=invoice&mime_types=application/pdf",
+        &["pdf_invoice"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=contract&ocr_status=failed",
+        &["txt_contract"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?label_ids=<label-id>",
+        &["pdf_invoice", "txt_contract"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=contract&tags=Finance",
+        &["txt_contract"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=contract&source_types=webdav",
+        &["pdf_contract"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=invoice&created_from=2024-05-01T00:00:00Z",
+        &["png_invoice"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=contract%20!draft&search_mode=boolean",
+        &["txt_contract"],
+        false,
+    ),
+    (
+        "/api/search/enhanced?query=contract&sort_by=created_at&sort_order=asc",
+        &["pdf_contract", "txt_contract"],
+        true,
+    ),
+    ("/api/search?query=invoice&limit=1", &["png_invoice"], true),
+];
+
+/// The request paths in the "Example Requests" code blocks.
+fn documented_requests(doc: &str) -> Vec<String> {
+    code_blocks(section(doc, "### Example Requests"))
+        .iter()
+        .flat_map(|block| block.lines().map(str::to_string).collect::<Vec<_>>())
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let request = line
+                .strip_prefix("GET ")
+                .unwrap_or_else(|| panic!("example request is not a GET: {line:?}"));
+            request.split_whitespace().next().unwrap().to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn every_documented_request_is_covered() {
+    let documented = documented_requests(&advanced_search_doc());
+    let recorded: Vec<String> = API_EXAMPLES.iter().map(|(r, _, _)| r.to_string()).collect();
+    assert_eq!(
+        documented, recorded,
+        "the documented requests and API_EXAMPLES differ"
+    );
+}
+
+async fn get_json(ctx: &TestContext, uri: &str, token: &str) -> (StatusCode, Value) {
+    let response = ctx
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+fn object_keys(value: &Value) -> BTreeSet<String> {
+    value
+        .as_object()
+        .unwrap_or_else(|| panic!("not an object: {value}"))
+        .keys()
+        .cloned()
+        .collect()
+}
+
+/// Each documented request returns exactly the recorded documents, and the documented response
+/// shape matches a real response field for field.
+#[tokio::test]
+async fn every_documented_request_returns_the_recorded_documents() {
+    let ctx = TestContext::new().await;
+    let auth = ctx.auth_helper();
+    let user = auth.create_test_user().await;
+    let token = auth.login_user(&user.username, &user.password).await;
+    let user_id: Uuid = user.user_response.id;
+    let pool = &ctx.state().db.pool;
+
+    let (label_id,): (Uuid,) =
+        sqlx::query_as("INSERT INTO labels (user_id, name) VALUES ($1, 'Finance') RETURNING id")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let mut key_by_id = std::collections::HashMap::new();
+    for (key, mime, text, status, created, source_type, finance) in API_CORPUS {
+        let mut doc = create_test_document(user_id);
+        doc.mime_type = mime.to_string();
+        doc.content = None;
+        doc.ocr_text = Some(text.to_string());
+        doc.ocr_status = Some(status.to_string());
+        doc.created_at = created.parse().unwrap();
+        doc.source_type = source_type.map(str::to_string);
+        doc.tags = Vec::new();
+        doc.file_hash = Some(format!("{:x}", Uuid::new_v4().as_u128()));
+        let id = ctx.state().db.create_document(doc).await.unwrap().id;
+        if *finance {
+            sqlx::query("INSERT INTO document_labels (document_id, label_id) VALUES ($1, $2)")
+                .bind(id)
+                .bind(label_id)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        key_by_id.insert(id.to_string(), *key);
+    }
+
+    for (request, expected, ordered) in API_EXAMPLES {
+        let uri = request.replace("<label-id>", &label_id.to_string());
+        let (status, body) = get_json(&ctx, &uri, &token).await;
+        assert_eq!(status, StatusCode::OK, "{request}: {body}");
+        let found: Vec<&str> = body["documents"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{request}: no documents array: {body}"))
+            .iter()
+            .map(|doc| key_by_id[doc["id"].as_str().unwrap()])
+            .collect();
+        if *ordered {
+            assert_eq!(found, *expected, "{request}");
+        } else {
+            let found: BTreeSet<&str> = found.into_iter().collect();
+            let expected: BTreeSet<&str> = expected.iter().copied().collect();
+            assert_eq!(found, expected, "{request}");
+        }
+    }
+
+    // The documented response: same top-level fields, and the same document fields (the OCR
+    // progress fields only appear while a document is being processed).
+    let doc = advanced_search_doc();
+    let documented: Value = code_blocks(section(&doc, "### Response"))
+        .iter()
+        .find_map(|block| serde_json::from_str(block).ok())
+        .expect("a JSON response example under ### Response");
+    let (status, real) = get_json(
+        &ctx,
+        "/api/search/enhanced?query=invoice&mime_types=application/pdf",
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(object_keys(&documented), object_keys(&real));
+    let real_doc = &real["documents"][0];
+    assert_eq!(
+        object_keys(&documented["documents"][0]),
+        object_keys(real_doc)
+    );
+    assert_eq!(
+        object_keys(&documented["documents"][0]["snippets"][0]),
+        object_keys(&real_doc["snippets"][0])
+    );
+    assert_eq!(real["total"], 1);
+    assert!(real["suggestions"].as_array().is_some());
 }

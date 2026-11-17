@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use readur::ocr::enhanced::{EnhancedOcrService, OcrResult, ImageQualityStats};
     use readur::models::Settings;
+    use readur::ocr::enhanced::{EnhancedOcrService, ImageQualityStats, OcrResult};
     use readur::services::file_service::FileService;
-    use readur::storage::{StorageConfig, factory::create_storage_backend};
+    use readur::storage::{factory::create_storage_backend, StorageConfig};
     use std::fs;
     use tempfile::{NamedTempFile, TempDir};
 
@@ -16,7 +16,9 @@ mod tests {
     }
 
     async fn create_test_file_service(temp_path: &str) -> FileService {
-        let storage_config = StorageConfig::Local { upload_path: temp_path.to_string() };
+        let storage_config = StorageConfig::Local {
+            upload_path: temp_path.to_string(),
+        };
         let storage_backend = create_storage_backend(storage_config).await.unwrap();
         FileService::with_storage(temp_path.to_string(), storage_backend)
     }
@@ -27,7 +29,7 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
-        
+
         // Service should be created successfully
         assert!(!service.temp_dir.is_empty());
     }
@@ -40,7 +42,7 @@ mod tests {
             noise_level: 0.1,
             sharpness: 0.8,
         };
-        
+
         assert_eq!(stats.average_brightness, 128.0);
         assert_eq!(stats.contrast_ratio, 0.5);
         assert_eq!(stats.noise_level, 0.1);
@@ -53,15 +55,15 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
-        
+
         // Test normal whitespace-separated text
         let text = "Hello world this is a test";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert_eq!(count, 6);
-        
+
         // Test with extra whitespace
         let text = "  Hello   world  \n  test  ";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert_eq!(count, 3);
     }
 
@@ -71,15 +73,15 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
-        
+
         // Test continuous text without spaces (like some PDF extractions)
         let text = "HelloWorldThisIsAContinuousText";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect words even without whitespace");
-        
+
         // Test mixed alphanumeric without spaces
         let text = "ABC123DEF456GHI789";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect alphanumeric patterns as words");
     }
 
@@ -89,28 +91,32 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
-        
+
         // Test empty text
         let count = service.count_words_safely("");
         assert_eq!(count, 0);
-        
+
         // Test only whitespace
         let count = service.count_words_safely("   \n\t  ");
         assert_eq!(count, 0);
-        
+
         // Test only punctuation
         let text = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         // Since there are no alphabetic or alphanumeric chars, should be 0
-        assert_eq!(count, 0, "Pure punctuation should not count as words, got {}", count);
-        
+        assert_eq!(
+            count, 0,
+            "Pure punctuation should not count as words, got {}",
+            count
+        );
+
         // Test single character
         let count = service.count_words_safely("A");
         assert_eq!(count, 1);
-        
+
         // Test mixed content with low alphanumeric ratio
         let text = "A!!!B@@@C###D$$$E%%%";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect words in mixed content");
     }
 
@@ -120,15 +126,23 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path.clone(), file_service, 100, 100, 300);
-        
+
         // Test with large text (over 1MB) to trigger sampling
         let word = "test ";
         let large_text = word.repeat(250_000); // Creates ~1.25MB of text
         let count = service.count_words_safely(&large_text);
-        
+
         // Should estimate around 250,000 words (may vary due to sampling)
-        assert!(count > 200_000, "Should estimate large word count: got {}", count);
-        assert!(count <= 10_000_000, "Should cap at max limit: got {}", count);
+        assert!(
+            count > 200_000,
+            "Should estimate large word count: got {}",
+            count
+        );
+        assert!(
+            count <= 10_000_000,
+            "Should cap at max limit: got {}",
+            count
+        );
     }
 
     #[tokio::test]
@@ -137,21 +151,33 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
-        
+
         // Test letter transition detection
         let text = "OneWordAnotherWordFinalWord";
-        let count = service.count_words_safely(&text);
-        assert!(count >= 3, "Should detect at least 3 words from transitions: got {}", count);
-        
+        let count = service.count_words_safely(text);
+        assert!(
+            count >= 3,
+            "Should detect at least 3 words from transitions: got {}",
+            count
+        );
+
         // Test alphanumeric estimation fallback
         let text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 26 chars, should estimate ~5-6 words
-        let count = service.count_words_safely(&text);
-        assert!(count >= 1 && count <= 10, "Should estimate reasonable word count: got {}", count);
-        
+        let count = service.count_words_safely(text);
+        assert!(
+            (1..=10).contains(&count),
+            "Should estimate reasonable word count: got {}",
+            count
+        );
+
         // Test mixed case with numbers
         let text = "ABC123def456GHI789jkl";
-        let count = service.count_words_safely(&text);
-        assert!(count >= 1, "Should detect words in mixed alphanumeric: got {}", count);
+        let count = service.count_words_safely(text);
+        assert!(
+            count >= 1,
+            "Should detect words in mixed alphanumeric: got {}",
+            count
+        );
     }
 
     #[tokio::test]
@@ -164,7 +190,7 @@ mod tests {
             preprocessing_applied: vec!["noise_reduction".to_string()],
             processed_image_path: Some("/tmp/processed.png".to_string()),
         };
-        
+
         assert_eq!(result.text, "Test text");
         assert_eq!(result.confidence, 85.5);
         assert_eq!(result.processing_time_ms, 1500);
@@ -180,22 +206,35 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
         let test_content = "This is a test text file with multiple words.";
         fs::write(temp_file.path(), test_content).unwrap();
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "text/plain",
+                &settings,
+                None,
+            )
             .await;
-        
+
         assert!(result.is_ok());
         let ocr_result = result.unwrap();
         assert_eq!(ocr_result.text.trim(), test_content);
         assert_eq!(ocr_result.confidence, 100.0); // Plain text should be 100% confident
         assert_eq!(ocr_result.word_count, 9); // "This is a test text file with multiple words"
-        assert!(ocr_result.processing_time_ms >= 0);
-        assert!(ocr_result.preprocessing_applied.contains(&"Plain text read".to_string()));
+                                              // A plain-text read is a file read: a duration in the seconds would mean the
+                                              // timer measured something else (or wrapped).
+        assert!(
+            ocr_result.processing_time_ms < 5_000,
+            "plain-text read took {} ms",
+            ocr_result.processing_time_ms
+        );
+        assert!(ocr_result
+            .preprocessing_applied
+            .contains(&"Plain text read".to_string()));
     }
 
     #[tokio::test]
@@ -205,11 +244,11 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
         let test_content = "Context test content";
         fs::write(temp_file.path(), test_content).unwrap();
-        
+
         let result = service
             .extract_text_with_context(
                 temp_file.path().to_str().unwrap(),
@@ -220,7 +259,7 @@ mod tests {
                 None,
             )
             .await;
-        
+
         assert!(result.is_ok());
         let ocr_result = result.unwrap();
         assert_eq!(ocr_result.text.trim(), test_content);
@@ -234,14 +273,19 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::new().unwrap();
         fs::write(temp_file.path(), "some content").unwrap();
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/unknown", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "application/unknown",
+                &settings,
+                None,
+            )
             .await;
-        
+
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("Unsupported file type"));
@@ -254,11 +298,11 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let result = service
             .extract_text("/nonexistent/file.txt", "text/plain", &settings, None)
             .await;
-        
+
         assert!(result.is_err());
     }
 
@@ -269,19 +313,24 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
-        
+
         // Create a file larger than the limit (50MB for text files)
         // Using smaller size and explicit drop for CI environments
         let large_content = "A".repeat(50 * 1024 * 1024 + 1024); // 50MB + 1KB (just over the limit)
         fs::write(temp_file.path(), &large_content).unwrap();
         drop(large_content); // Explicitly free memory
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "text/plain",
+                &settings,
+                None,
+            )
             .await;
-        
+
         // Should fail due to size limit
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
@@ -297,7 +346,7 @@ mod tests {
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let mut settings = create_test_settings();
         settings.ocr_min_confidence = 30.0;
-        
+
         let result = OcrResult {
             text: "This is high quality OCR text with good words.".to_string(),
             confidence: 95.0,
@@ -306,7 +355,7 @@ mod tests {
             preprocessing_applied: vec![],
             processed_image_path: None,
         };
-        
+
         let result_validation = service.validate_ocr_quality(&result, &settings);
         assert!(result_validation.is_ok());
     }
@@ -343,7 +392,7 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let result = OcrResult {
             text: "".to_string(),
             confidence: 95.0,
@@ -352,7 +401,7 @@ mod tests {
             preprocessing_applied: vec![],
             processed_image_path: None,
         };
-        
+
         let result_validation = service.validate_ocr_quality(&result, &settings);
         assert!(result_validation.is_err());
     }
@@ -365,7 +414,7 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let result = OcrResult {
             text: "!!!@@@###$$$%%%^^^&&&***".to_string(), // Mostly symbols, < 10% content
             confidence: 85.0,
@@ -374,7 +423,7 @@ mod tests {
             preprocessing_applied: vec![],
             processed_image_path: None,
         };
-        
+
         let result_validation = service.validate_ocr_quality(&result, &settings);
         assert!(result_validation.is_err());
     }
@@ -387,7 +436,7 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let result = OcrResult {
             text: "The quick brown fox jumps over the lazy dog. 123".to_string(), // Good alphanumeric ratio
             confidence: 85.0,
@@ -396,7 +445,7 @@ mod tests {
             preprocessing_applied: vec![],
             processed_image_path: None,
         };
-        
+
         let result_validation = service.validate_ocr_quality(&result, &settings);
         assert!(result_validation.is_ok());
     }
@@ -408,7 +457,7 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let test_cases = vec![
             ("", 0),
             ("word", 1),
@@ -417,18 +466,27 @@ mod tests {
             ("Multiple\nlines\nof\ntext", 4),
             ("punctuation, words! work? correctly.", 4),
         ];
-        
+
         for (content, expected_count) in test_cases {
             let temp_file = NamedTempFile::with_suffix(".txt").unwrap();
             fs::write(temp_file.path(), content).unwrap();
-            
+
             let result = service
-                .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
+                .extract_text(
+                    temp_file.path().to_str().unwrap(),
+                    "text/plain",
+                    &settings,
+                    None,
+                )
                 .await;
-            
+
             assert!(result.is_ok());
             let ocr_result = result.unwrap();
-            assert_eq!(ocr_result.word_count, expected_count, "Failed for content: '{}'", content);
+            assert_eq!(
+                ocr_result.word_count, expected_count,
+                "Failed for content: '{}'",
+                content
+            );
         }
     }
 
@@ -439,17 +497,26 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
         fs::write(temp_file.path(), "Not a valid PDF").unwrap();
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "application/pdf",
+                &settings,
+                None,
+            )
             .await;
-        
+
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("Invalid PDF") || error_msg.contains("Missing") || error_msg.contains("corrupted"));
+        assert!(
+            error_msg.contains("Invalid PDF")
+                || error_msg.contains("Missing")
+                || error_msg.contains("corrupted")
+        );
     }
 
     #[tokio::test]
@@ -459,7 +526,7 @@ mod tests {
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         // Minimal PDF with "Hello" text
         let pdf_content = b"%PDF-1.4
 1 0 obj
@@ -497,19 +564,27 @@ trailer
 startxref
 435
 %%EOF";
-        
+
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
         fs::write(temp_file.path(), pdf_content).unwrap();
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "application/pdf",
+                &settings,
+                None,
+            )
             .await;
-        
+
         match result {
             Ok(ocr_result) => {
                 // PDF extraction succeeded
-                assert!(ocr_result.confidence >= 85.0 && ocr_result.confidence <= 100.0,
-                    "PDF confidence should be in valid range, got {}", ocr_result.confidence);
+                assert!(
+                    ocr_result.confidence >= 85.0 && ocr_result.confidence <= 100.0,
+                    "PDF confidence should be in valid range, got {}",
+                    ocr_result.confidence
+                );
                 // Skip processing time check for minimal PDFs as they might process too fast
                 // assert!(ocr_result.processing_time_ms > 0);
                 assert!(
@@ -533,19 +608,24 @@ startxref
         let file_service = create_test_file_service(&temp_path).await;
         let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
-        
+
         let temp_file = NamedTempFile::with_suffix(".pdf").unwrap();
-        
+
         // Create a file larger than the 100MB PDF limit
         // Using smaller size and explicit drop for CI environments
         let large_pdf_content = format!("%PDF-1.4\n{}", "A".repeat(100 * 1024 * 1024 + 1024)); // 100MB + 1KB (just over the limit)
         fs::write(temp_file.path(), &large_pdf_content).unwrap();
         drop(large_pdf_content); // Explicitly free memory
-        
+
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "application/pdf", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "application/pdf",
+                &settings,
+                None,
+            )
             .await;
-        
+
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("too large"));
@@ -554,7 +634,7 @@ startxref
     #[tokio::test]
     async fn test_settings_default_values() {
         let settings = Settings::default();
-        
+
         // Test that OCR-related settings have reasonable defaults
         assert_eq!(settings.ocr_min_confidence, 30.0);
         assert_eq!(settings.ocr_dpi, 300);
@@ -569,9 +649,6 @@ startxref
     #[tokio::test]
     async fn test_concurrent_ocr_processing() {
         let temp_dir = create_temp_dir();
-        let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         let mut handles = vec![];
@@ -584,7 +661,8 @@ startxref
 
             let temp_path_clone = temp_dir.path().to_str().unwrap().to_string();
             let file_service_clone = create_test_file_service(&temp_path_clone).await;
-            let service_clone = EnhancedOcrService::new(temp_path_clone, file_service_clone, 100, 100, 300);
+            let service_clone =
+                EnhancedOcrService::new(temp_path_clone, file_service_clone, 100, 100, 300);
             let settings_clone = settings.clone();
             let file_path = temp_file.path().to_str().unwrap().to_string();
 
@@ -608,7 +686,9 @@ startxref
         for (i, result) in results.into_iter().enumerate() {
             assert!(result.is_ok(), "Task {} failed", i);
             let ocr_result = result.unwrap().unwrap();
-            assert!(ocr_result.text.contains(&format!("Concurrent test content {}", i)));
+            assert!(ocr_result
+                .text
+                .contains(&format!("Concurrent test content {}", i)));
             assert_eq!(ocr_result.confidence, 100.0);
         }
     }
@@ -636,11 +716,17 @@ startxref
         };
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_err(), "Expected validation to fail for confidence below hard minimum");
+        assert!(
+            validation_result.is_err(),
+            "Expected validation to fail for confidence below hard minimum"
+        );
 
         let error_msg = validation_result.unwrap_err();
-        assert!(error_msg.contains("critically low"),
-                "Expected 'critically low' in error message, got: {}", error_msg);
+        assert!(
+            error_msg.contains("critically low"),
+            "Expected 'critically low' in error message, got: {}",
+            error_msg
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -664,8 +750,10 @@ startxref
         };
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_ok(),
-                "Expected validation to pass at hard minimum boundary (5%)");
+        assert!(
+            validation_result.is_ok(),
+            "Expected validation to pass at hard minimum boundary (5%)"
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -692,11 +780,18 @@ startxref
         let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
         let content_ratio = content_count as f32 / total_chars as f32;
-        assert!(content_ratio >= 0.10, "Test data should have >=10% content, got {:.1}%", content_ratio * 100.0);
+        assert!(
+            content_ratio >= 0.10,
+            "Test data should have >=10% content, got {:.1}%",
+            content_ratio * 100.0
+        );
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_ok(),
-                "Expected validation to pass for numeric document with {:.1}% content", content_ratio * 100.0);
+        assert!(
+            validation_result.is_ok(),
+            "Expected validation to pass for numeric document with {:.1}% content",
+            content_ratio * 100.0
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -725,12 +820,18 @@ startxref
         let content_ratio = content_count as f32 / total_chars as f32;
         assert_eq!(content_count, 100, "Test data should have 100% content");
         assert_eq!(total_chars, 100, "Test data should have exactly 100 chars");
-        assert!((content_ratio - 1.0).abs() < 0.01, "Should have 100% content, got {:.1}%", content_ratio * 100.0);
+        assert!(
+            (content_ratio - 1.0).abs() < 0.01,
+            "Should have 100% content, got {:.1}%",
+            content_ratio * 100.0
+        );
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
         // Should pass easily with 100% content (letters + digits)
-        assert!(validation_result.is_ok(),
-                "Expected validation to pass with 100% content");
+        assert!(
+            validation_result.is_ok(),
+            "Expected validation to pass with 100% content"
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -757,13 +858,22 @@ startxref
         let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
         let content_ratio = content_count as f32 / total_chars as f32;
-        assert_eq!(content_count, 1, "Test data should have exactly 1 content char");
+        assert_eq!(
+            content_count, 1,
+            "Test data should have exactly 1 content char"
+        );
         assert_eq!(total_chars, 10, "Test data should have exactly 10 chars");
-        assert!((content_ratio - 0.1).abs() < 0.01, "Should have exactly 10% content, got {:.1}%", content_ratio * 100.0);
+        assert!(
+            (content_ratio - 0.1).abs() < 0.01,
+            "Should have exactly 10% content, got {:.1}%",
+            content_ratio * 100.0
+        );
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_ok(),
-                "Expected validation to pass at 10% content boundary");
+        assert!(
+            validation_result.is_ok(),
+            "Expected validation to pass at 10% content boundary"
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -790,15 +900,24 @@ startxref
         let content_count = result.text.chars().filter(|c| c.is_alphanumeric()).count();
         let total_chars = result.text.len();
         let content_ratio = content_count as f32 / total_chars as f32;
-        assert!(content_ratio < 0.10, "Test data should have <10% content, got {:.1}%", content_ratio * 100.0);
+        assert!(
+            content_ratio < 0.10,
+            "Test data should have <10% content, got {:.1}%",
+            content_ratio * 100.0
+        );
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_err(),
-                "Expected validation to fail for <10% content");
+        assert!(
+            validation_result.is_err(),
+            "Expected validation to fail for <10% content"
+        );
 
         let error_msg = validation_result.unwrap_err();
-        assert!(error_msg.contains("meaningful content"),
-                "Expected error about meaningful content, got: {}", error_msg);
+        assert!(
+            error_msg.contains("meaningful content"),
+            "Expected error about meaningful content, got: {}",
+            error_msg
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -822,12 +941,17 @@ startxref
         };
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_err(),
-                "Expected validation to fail for empty text");
+        assert!(
+            validation_result.is_err(),
+            "Expected validation to fail for empty text"
+        );
 
         let error_msg = validation_result.unwrap_err();
-        assert!(error_msg.contains("no characters"),
-                "Expected error about 'no characters' (not 'no words'), got: {}", error_msg);
+        assert!(
+            error_msg.contains("no characters"),
+            "Expected error about 'no characters' (not 'no words'), got: {}",
+            error_msg
+        );
     }
 
     #[cfg(feature = "ocr")]
@@ -851,12 +975,17 @@ startxref
         };
 
         let validation_result = service.validate_ocr_quality(&result, &settings);
-        assert!(validation_result.is_err(),
-                "Expected validation to fail for whitespace-only text");
+        assert!(
+            validation_result.is_err(),
+            "Expected validation to fail for whitespace-only text"
+        );
 
         let error_msg = validation_result.unwrap_err();
-        assert!(error_msg.contains("No words"),
-                "Expected error about 'No words' (not 'no characters'), got: {}", error_msg);
+        assert!(
+            error_msg.contains("No words"),
+            "Expected error about 'No words' (not 'no characters'), got: {}",
+            error_msg
+        );
     }
 
     // --- Progress callback tests (Issue #598) ---
@@ -874,18 +1003,26 @@ startxref
         fs::write(temp_file.path(), "Progress callback test content").unwrap();
 
         let result = service
-            .extract_text(temp_file.path().to_str().unwrap(), "text/plain", &settings, None)
+            .extract_text(
+                temp_file.path().to_str().unwrap(),
+                "text/plain",
+                &settings,
+                None,
+            )
             .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().text.trim(), "Progress callback test content");
+        assert_eq!(
+            result.unwrap().text.trim(),
+            "Progress callback test content"
+        );
     }
 
     #[tokio::test]
     async fn test_extract_text_with_context_accepts_progress_callback() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicI32, Ordering};
         use readur::ocr::enhanced::ProgressCallback;
+        use std::sync::atomic::{AtomicI32, Ordering};
+        use std::sync::Arc;
 
         let temp_dir = create_temp_dir();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
@@ -922,9 +1059,9 @@ startxref
 
     #[tokio::test]
     async fn test_progress_callback_type_is_send_sync() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicI32, Ordering};
         use readur::ocr::enhanced::ProgressCallback;
+        use std::sync::atomic::{AtomicI32, Ordering};
+        use std::sync::Arc;
 
         // Verify the ProgressCallback type can be shared across threads
         let current_page = Arc::new(AtomicI32::new(0));
@@ -982,7 +1119,8 @@ startxref
                 // Expected errors for minimal PDF without real content
                 assert!(
                     msg.contains("ocrmypdf") || msg.contains("PDF") || msg.contains("extract"),
-                    "Unexpected error: {}", msg
+                    "Unexpected error: {}",
+                    msg
                 );
             }
         }
