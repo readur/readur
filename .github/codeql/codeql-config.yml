@@ -1,0 +1,8 @@
+# Scope code scanning to code that ships. Test suites hold deliberate fixtures
+# (literal passwords for throwaway accounts, usernames in assertion messages)
+# that the "hard-coded credential" and "cleartext logging" queries flag as
+# vulnerabilities in production code.
+paths-ignore:
+  - tests
+  - frontend/e2e
+  - "**/__tests__"
