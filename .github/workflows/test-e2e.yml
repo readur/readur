@@ -113,10 +113,12 @@ jobs:
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           ADMIN_USERNAME: ${{ env.E2E_ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
-          PORT: 8000
-          FRONTEND_PATH: ./frontend/dist
+          # The port the readiness check and PLAYWRIGHT_BASE_URL below use (also the default).
+          # The built frontend is served from ./frontend/dist, found relative to the working
+          # directory (determine_static_files_path in src/main.rs).
+          SERVER_PORT: 8000
           UPLOAD_PATH: ./uploads
-          WATCH_PATH: ./watch
+          WATCH_FOLDER: ./watch
           RUST_BACKTRACE: 1
           DEBUG: 1
 
@@ -142,7 +144,7 @@ jobs:
         working-directory: ./frontend
         run: npm run test:e2e -- --project=chromium --project=chromium-websocket
         env:
-          VITE_API_URL: http://localhost:8000
+          # The backend serves the built frontend and the API on one origin.
           PLAYWRIGHT_BASE_URL: http://localhost:8000
 
       - name: Upload Playwright Test Results
@@ -166,6 +168,6 @@ jobs:
         if: always()
         run: |
           if [ -f backend.pid ]; then
-            kill $(cat backend.pid) || true
+            kill "$(cat backend.pid)" || true
             rm backend.pid
           fi
