@@ -1,0 +1,3 @@
+# Fetched by `helm dependency build`
+/charts/
+/Chart.lock

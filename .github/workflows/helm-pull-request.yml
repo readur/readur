@@ -14,7 +14,10 @@ concurrency:
 jobs:
   build_lint_validate_diff:
     name: lint, validate and diff from main
-    permissions: write-all
+    # Read the repo; write only the manifest-diff comment on the PR.
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     container:
       image: alpine/helm:4.3.1
@@ -27,13 +30,40 @@ jobs:
       - name: install chart dependencies
         run: helm dependency build charts/readur
 
-      - name: lint helm chart
-        run: helm lint charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false
+      # Pinned by checksum; the plugin is unpacked into the plugins directory
+      # because `helm plugin install` would run its download hook.
+      - name: install chart test tools
+        env:
+          HELM_UNITTEST_VERSION: "1.2.1"
+          HELM_UNITTEST_SHA256: 48e86ecc1467b009630e5954375e5d8494139f73b466df5fe8c04fa45b634939
+          KUBECONFORM_VERSION: "0.7.0"
+          KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+        run: |
+          set -eu
+          cd "$(mktemp -d)"
+          wget -q -O unittest.tgz "https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}/helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          echo "${HELM_UNITTEST_SHA256}  unittest.tgz" | sha256sum -c -
+          plugin_dir="$(helm env HELM_PLUGINS)/helm-unittest"
+          mkdir -p "$plugin_dir"
+          tar -xzf unittest.tgz -C "$plugin_dir"
+          wget -q -O kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tgz" | sha256sum -c -
+          tar -xzf kubeconform.tgz -C /usr/local/bin kubeconform
+          helm unittest --help >/dev/null
+          kubeconform -v
+
+      # Lints and renders every charts/readur/ci/*-values.yaml (defaults
+      # included), validates the manifests with kubeconform, checks the env
+      # vars against src/, and runs the helm-unittest suites in tests/.
+      - name: lint, validate and unit test helm chart
+        run: charts/readur/ci/validate.sh
 
       - name: prepare
         run: mkdir -p charts/readur/build
+      # Both sides use an existing uploads claim: charts before 0.3.0 refuse to
+      # render without one, and the same values keep the diff meaningful.
       - name: create full manifest from pr head
-        run: helm template readur charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false > charts/readur/build/manifest.yaml
+        run: helm template readur charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc > charts/readur/build/manifest.yaml
 
       - name: checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +78,7 @@ jobs:
       - name: prepare
         run: mkdir -p main/charts/readur/build
       - name: create full manifest from main
-        run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc --set persistence.watch.existingClaim=watch-test-pvc --set persistence.data.existingClaim=data-test-pvc --set externalDatabase.enabled=true --set postgresql.enabled=false > main/charts/readur/build/manifest.yaml
+        run: helm template readur main/charts/readur --set persistence.uploads.existingClaim=uploads-test-pvc > main/charts/readur/build/manifest.yaml
 
       - name: create diff comment
         uses: int128/diff-action@7d157ee0e4e33a930be4a424f41e805390f0ff19 # v2.43.0

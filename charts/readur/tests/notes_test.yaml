@@ -1,0 +1,43 @@
+# helm-unittest suite for templates/NOTES.txt.
+suite: notes
+templates:
+  - templates/NOTES.txt
+release:
+  name: readur
+  namespace: docs
+tests:
+  - it: warns that no database is configured by default
+    asserts:
+      - matchRegexRaw:
+          pattern: "WARNING: no database is configured"
+      - matchRegexRaw:
+          pattern: kubectl -n docs get secret readur-auth
+      - matchRegexRaw:
+          pattern: port-forward svc/readur 8000:8000
+
+  - it: drops the database warning once DATABASE_URL is set
+    set:
+      controllers.main.containers.readur.env.DATABASE_URL:
+        valueFrom:
+          secretKeyRef:
+            name: readur-db
+            key: DATABASE_URL
+    asserts:
+      - notMatchRegexRaw:
+          pattern: no database is configured
+
+  - it: drops the database warning when an envFrom source is given
+    set:
+      controllers.main.containers.readur.envFrom:
+        - secretRef:
+            name: readur-db
+    asserts:
+      - notMatchRegexRaw:
+          pattern: no database is configured
+
+  - it: warns about an emptyDir uploads volume
+    set:
+      persistence.uploads.type: emptyDir
+    asserts:
+      - matchRegexRaw:
+          pattern: "documents: emptyDir -- WARNING"
