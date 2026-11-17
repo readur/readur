@@ -292,20 +292,14 @@ docker-compose exec readur redis-cli monitor | grep session
 Test authentication before production:
 
 ```bash
-# Test OIDC flow via health endpoint
-curl http://localhost:8000/api/health/auth/oidc
+# Which sign-in methods the server offers (oidc_enabled is true once OIDC is configured)
+curl http://localhost:8000/api/auth/config
 
-# Test LDAP connection
-curl -X POST http://localhost:8000/api/auth/test \
-  -H "Content-Type: application/json" \
-  -d '{
-    "method": "ldap",
-    "username": "testuser",
-    "password": "testpass"
-  }'
+# Start an OIDC login: answers 302 to the provider when OIDC is configured
+curl -i http://localhost:8000/api/auth/oidc/login
 
-# Verify user groups via API
-curl http://localhost:8000/api/users/testuser@company.com/groups \
+# List accounts, including OIDC-provisioned ones (administrator token)
+curl http://localhost:8000/api/users \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
@@ -330,23 +324,16 @@ curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics | g
 ### Migrating Users
 
 ```bash
-# Export users from old system
-old_system_export_users > users.json
-
-# Import to Readur via bulk API
-curl -X POST http://localhost:8000/api/users/import \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d @users.json
-
-# Or create users one by one via API
-while IFS=, read -r username email role; do
+# users.csv: username,email,role,password (role is "user" or "admin")
+# Create the users one by one via the API (there is no bulk import endpoint)
+while IFS=, read -r username email role password; do
   curl -X POST http://localhost:8000/api/users \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{
       \"username\": \"$username\",
       \"email\": \"$email\",
+      \"password\": \"$password\",
       \"role\": \"$role\"
     }"
 done < users.csv

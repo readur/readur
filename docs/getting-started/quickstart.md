@@ -72,7 +72,7 @@ TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -d '{"username":"admin","password":"YOUR_GENERATED_PASSWORD"}' | jq -r .token)
 
 # Upload a document using the API
-curl -X POST http://localhost:8000/api/documents/upload \
+curl -X POST http://localhost:8000/api/documents \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@your-document.pdf"
 ```
@@ -226,8 +226,8 @@ S3 storage eliminates local disk space constraints, while increased memory limit
 
 ### OCR Not Starting
 ```bash
-# Check the queue
-curl http://localhost:8000/api/admin/queue/status
+# Check the queue (administrator token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/queue/stats
 
 # Restart OCR workers
 docker-compose restart readur

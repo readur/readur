@@ -153,11 +153,11 @@ Is this a user account/authentication operation?
 |----------------|----------------------|-------------------|
 | User registration/login | UserError | `/api/auth/register`, `/api/auth/login` |
 | File source sync | SourceError | `/api/sources/{id}/sync`, `/api/sources/{id}/test` |
-| Document search | SearchError | `/api/search`, `/api/documents/search` |
+| Document search | SearchError | `/api/search`, `/api/search/enhanced` |
 | OCR processing | OcrError | `/api/documents/{id}/ocr`, `/api/ocr/languages` |
 | Document management | DocumentError | `/api/documents`, `/api/documents/{id}` |
-| Label operations | LabelError | `/api/labels`, `/api/documents/{id}/labels` |
-| Settings management | SettingsError | `/api/settings`, `/api/users/{id}/settings` |
+| Label operations | LabelError | `/api/labels`, `/api/labels/documents/{document_id}` |
+| Settings management | SettingsError | `/api/settings`, `/api/settings/config` |
 | Generic API operations | ApiError | Rate limiting, payload validation, CORS |
 
 ## Error Types

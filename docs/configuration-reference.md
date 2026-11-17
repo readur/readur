@@ -50,9 +50,9 @@ Related API behavior:
 
 - `POST /api/auth/logout` revokes all sessions of the current user.
 - `POST /api/auth/password` lets a signed-in user change their own password.
-- `/api/ocr/health` requires authentication; `POST /api/ocr/perform` has been removed.
+- `/api/ocr/health` requires authentication, and the endpoint that ran OCR on an arbitrary server path has been removed.
 - Source API responses do not include stored WebDAV passwords or S3 secret keys. The source config instead carries `has_password` / `has_secret_access_key` flags; omit the field or send an empty value on update to keep the stored secret. The settings response likewise has `has_webdav_password` instead of `webdav_password`.
-- Document cleanup endpoints (`DELETE /api/documents/cleanup/low/confidence`, `DELETE /api/documents/cleanup/failed/ocr` and the cleanup preview) act on the caller's own documents, including for admins. An admin can pass `?all_users=true` to act on all users' documents.
+- Document cleanup endpoints (`DELETE /api/documents/cleanup/low/confidence`, including its `preview_only` mode, and `DELETE /api/documents/cleanup/failed/ocr`) act on the caller's own documents, including for admins. An admin can pass `?all_users=true` to act on all users' documents.
 - OIDC login completes at `/auth/callback#code=...`; the frontend exchanges the one-time code at `POST /api/auth/oidc/exchange`. The token is not placed in the URL query.
 
 ### OIDC/SSO Configuration

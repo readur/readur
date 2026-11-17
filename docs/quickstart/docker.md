@@ -89,10 +89,9 @@ If you prefer to test via the API, you can also upload documents programmaticall
 
 ```bash
 # Upload a document via the REST API
-curl -X POST http://localhost:8000/api/upload \
+curl -X POST http://localhost:8000/api/documents \
   -H "Authorization: Bearer your-token" \
-  -F "file=@test.pdf" \
-  -F "ocr=true"
+  -F "file=@test.pdf"
 ```
 
 You'll need to get an API token first through the web interface if you want to use the API approach.

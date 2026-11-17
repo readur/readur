@@ -547,11 +547,11 @@ export default function() {
     sleep(1);
     
     // Upload test
-    let uploadRes = http.post('http://localhost:8080/api/upload', {
-        file: open('./test.pdf', 'b'),
-    });
+    let uploadRes = http.post('http://localhost:8080/api/documents', {
+        file: http.file(open('./test.pdf', 'b'), 'test.pdf'),
+    }, { headers: { Authorization: `Bearer ${__ENV.TOKEN}` } });
     check(uploadRes, {
-        'upload status is 201': (r) => r.status === 201,
+        'upload status is 200': (r) => r.status === 200,
     });
     
     sleep(2);

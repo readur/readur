@@ -618,7 +618,7 @@ cd frontend && npm test -- --run
        let token = client.register_and_login(/* ... */).await.unwrap();
        
        let response = client.client
-           .post(&format!("{}/api/new-endpoint", BASE_URL))
+           .post(&format!("{}/api/labels", BASE_URL))
            .header("Authorization", format!("Bearer {}", token))
            .json(&request_data)
            .send()

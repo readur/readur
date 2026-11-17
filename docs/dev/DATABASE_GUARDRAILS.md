@@ -198,13 +198,7 @@ tokio::spawn(async move {
 ```
 
 #### Health Check Endpoint
-```rust
-#[get("/api/health/database")]
-async fn database_health(monitor: Extension<Arc<DatabaseMonitor>>) -> Json<DatabaseHealth> {
-    let health = monitor.get_current_health().await.unwrap_or_default();
-    Json(health)
-}
-```
+The database figures (pool connections and response time) are served by the admin-only `GET /api/metrics` endpoint under `database`, and in Prometheus format by `GET /metrics`.
 
 ## 🧪 Testing Strategy
 

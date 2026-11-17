@@ -209,16 +209,18 @@ PowerShell script for batch conversion available in `/scripts/convert-doc-to-doc
 
 ### Upload Office Document
 ```bash
-curl -X POST http://localhost:8000/api/documents/upload \
+curl -X POST http://localhost:8000/api/documents \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@document.docx"
 ```
 
 ### Check Processing Status
 ```bash
-curl http://localhost:8000/api/documents/{id}/status \
+curl http://localhost:8000/api/documents/{id}/ocr \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
+
+The response's `ocr_status` is `pending`, `processing`, `completed` or `failed`, and `ocr_text` holds the extracted text once processing completes.
 
 ## Future Enhancements
 

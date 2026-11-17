@@ -126,7 +126,7 @@ docker exec readur-app psql -d readur -c "SELECT COUNT(*) FROM documents;"
 
 # Test document access through API
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-     "https://your-readur-instance.com/api/documents/sample-uuid/download"
+     "https://your-readur-instance.com/api/documents/$DOCUMENT_ID/download"
 ```
 
 ### Step 6: Update Configuration
