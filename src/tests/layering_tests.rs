@@ -1,11 +1,33 @@
 //! Guards the dependency direction `routes -> services -> db`, with shared types in `models`:
 //! nothing below the HTTP layer may reach back into `routes`. Business logic that both the REST
-//! routes and the MCP tools need lives in `services` (or `db`/`models`), never in a route module.
+//! routes and the MCP tools (or the background schedulers) need lives in `services` (or
+//! `db`/`models`), never in a route module.
+//!
+//! The guard is an allowlist, not a blocklist: every `.rs` file under `src/` is scanned except the
+//! few that exist to wire routes up. A new top-level module is covered the day it is added.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// Source trees that must not depend on `crate::routes`.
-const LOWER_LAYERS: [&str; 4] = ["services", "db", "models", "mcp"];
+/// Paths under `src/` (a file, or a directory and everything in it) that may name `routes`:
+/// the route modules themselves, the binary that mounts the router, the OpenAPI document that
+/// lists the handlers, the test harness that builds the router, and the in-crate tests of it.
+const ROUTE_CONSUMERS: [&str; 5] = ["routes", "main.rs", "swagger.rs", "test_utils.rs", "tests"];
+
+/// Layers that must be scanned. The walk covers everything outside [`ROUTE_CONSUMERS`] anyway;
+/// this list pins that the important ones really were reached, so a broken walk cannot pass by
+/// scanning nothing.
+const REQUIRED_LAYERS: [&str; 9] = [
+    "scheduling",
+    "ingestion",
+    "ocr",
+    "storage",
+    "services",
+    "db",
+    "models",
+    "mcp",
+    "monitoring",
+];
 
 /// `source` with comments, string literals and char literals blanked out, so only code is left.
 /// Line structure is kept, so reported line numbers match the file.
@@ -107,24 +129,57 @@ fn raw_string_len(rest: &[char]) -> Option<usize> {
     Some(close + 1 + hashes)
 }
 
-/// `(line number, line)` for every line of code in `source` that names the `routes` module.
+/// `(line number, line)` for every line of code in `source` that names the `routes` module:
+/// as a path segment (`crate::routes`, `routes::x`, `super::routes`), or anywhere inside a `use`
+/// declaration (`use crate::{db, routes};`, which a later `routes::x` or an alias would hide).
 fn route_references(source: &str) -> Vec<(usize, String)> {
-    code_only(source)
-        .lines()
-        .enumerate()
-        .filter(|(_, line)| names_routes_module(line))
-        .map(|(n, line)| (n + 1, line.trim().to_string()))
+    let code = code_only(source);
+    let use_spans = use_declarations(&code);
+    let lines: BTreeSet<usize> = identifier_positions(&code, "routes")
+        .filter(|&at| {
+            let in_path = code[..at].trim_end().ends_with("::")
+                || code[at + "routes".len()..].trim_start().starts_with("::");
+            in_path || use_spans.iter().any(|span| span.contains(&at))
+        })
+        .map(|at| code[..at].matches('\n').count())
+        .collect();
+    let code_lines: Vec<&str> = code.lines().collect();
+    lines
+        .into_iter()
+        .map(|n| (n + 1, code_lines[n].trim().to_string()))
         .collect()
 }
 
-/// Whether `line` contains `routes::` as a path segment (not as the tail of another
-/// identifier such as `my_routes::`).
-fn names_routes_module(line: &str) -> bool {
-    line.match_indices("routes::").any(|(at, _)| {
-        !line[..at]
-            .chars()
-            .next_back()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+/// Byte offsets where `word` occurs as a whole identifier (not as part of `my_routes` or
+/// `routes_table`).
+fn identifier_positions<'a>(code: &'a str, word: &'a str) -> impl Iterator<Item = usize> + 'a {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+    code.match_indices(word)
+        .map(|(at, _)| at)
+        .filter(move |&at| {
+            !code[..at].chars().next_back().is_some_and(is_ident)
+                && !code[at + word.len()..].chars().next().is_some_and(is_ident)
+        })
+}
+
+/// Byte ranges of every `use ...;` declaration in comment- and literal-free `code`.
+fn use_declarations(code: &str) -> Vec<std::ops::Range<usize>> {
+    identifier_positions(code, "use")
+        .map(|start| {
+            let end = code[start..]
+                .find(';')
+                .map_or(code.len(), |p| start + p + 1);
+            start..end
+        })
+        .collect()
+}
+
+/// Whether `relative` (a path under `src/`, `/`-separated) is, or is inside, a route consumer.
+fn is_route_consumer(relative: &str) -> bool {
+    ROUTE_CONSUMERS.iter().any(|allowed| {
+        relative == *allowed
+            || relative.starts_with(&format!("{allowed}/"))
+            || relative == format!("{allowed}.rs")
     })
 }
 
@@ -143,28 +198,41 @@ fn rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
 #[test]
 fn lower_layers_never_depend_on_routes() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut files = Vec::new();
-    for layer in LOWER_LAYERS {
-        let layer_dir = src.join(layer);
-        let single_file = src.join(format!("{layer}.rs"));
-        if layer_dir.is_dir() {
-            rust_files(&layer_dir, &mut files);
-        }
-        if single_file.is_file() {
-            files.push(single_file);
-        }
+    let mut all = Vec::new();
+    rust_files(&src, &mut all);
+    let relative = |path: &Path| {
+        path.strip_prefix(&src)
+            .unwrap()
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    let scanned: Vec<(String, &PathBuf)> = all
+        .iter()
+        .map(|path| (relative(path), path))
+        .filter(|(shown, _)| !is_route_consumer(shown))
+        .collect();
+
+    for layer in REQUIRED_LAYERS {
+        assert!(
+            scanned
+                .iter()
+                .any(|(shown, _)| shown.starts_with(&format!("{layer}/"))
+                    || *shown == format!("{layer}.rs")),
+            "expected to scan src/{layer}, but no file of it was reached"
+        );
     }
     assert!(
-        files.len() > 50,
-        "expected to scan the services/db/models/mcp trees, found only {} files",
-        files.len()
+        scanned.len() > 150,
+        "expected to scan most of src/, found only {} files",
+        scanned.len()
     );
 
-    let violations: Vec<String> = files
+    let violations: Vec<String> = scanned
         .iter()
-        .flat_map(|path| {
+        .flat_map(|(shown, path)| {
             let source = std::fs::read_to_string(path).unwrap();
-            let shown = path.strip_prefix(&src).unwrap().display().to_string();
             route_references(&source)
                 .into_iter()
                 .map(move |(line, code)| format!("src/{shown}:{line}: {code}"))
@@ -172,10 +240,37 @@ fn lower_layers_never_depend_on_routes() {
         .collect();
     assert!(
         violations.is_empty(),
-        "services, db, models and mcp must not depend on routes (move the shared code down a \
-         layer instead):\n{}",
+        "only {ROUTE_CONSUMERS:?} may depend on routes (move the shared code down a layer \
+         instead):\n{}",
         violations.join("\n")
     );
+}
+
+#[test]
+fn only_the_router_wiring_is_allowed_to_name_routes() {
+    for consumer in [
+        "routes/labels.rs",
+        "routes/sources/crud.rs",
+        "routes.rs",
+        "main.rs",
+        "swagger.rs",
+        "test_utils.rs",
+        "tests/layering_tests.rs",
+    ] {
+        assert!(is_route_consumer(consumer), "{consumer}");
+    }
+    for lower in [
+        "scheduling/webdav_scheduler.rs",
+        "services/webdav_sync.rs",
+        "lib.rs",
+        "test_utils_mcp.rs",
+        "routes_helpers.rs",
+        "my_tests/x.rs",
+        "testsuite.rs",
+        "db/routes.rs",
+    ] {
+        assert!(!is_route_consumer(lower), "{lower}");
+    }
 }
 
 #[test]
@@ -194,4 +289,27 @@ crate::routes::api_router()
     let found = route_references(source);
     let lines: Vec<usize> = found.iter().map(|(n, _)| *n).collect();
     assert_eq!(lines, vec![2, 10], "{found:?}");
+}
+
+#[test]
+fn every_way_of_naming_the_routes_module_is_caught() {
+    let source = r##"
+use crate::routes;
+use crate::routes as r;
+use crate::{
+    db,
+    routes,
+};
+use super::super :: routes::x;
+let a = readur::routes ::api_router();
+let routes = vec![1];
+fn routes() {}
+let b = routes_table::x;
+let c = config.routes;
+pub mod routes;
+use crate::db; let d = routes;
+"##;
+    let found = route_references(source);
+    let lines: Vec<usize> = found.iter().map(|(n, _)| *n).collect();
+    assert_eq!(lines, vec![2, 3, 6, 8, 9], "{found:?}");
 }

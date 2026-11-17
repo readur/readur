@@ -1,3 +1,12 @@
+//! The WebDAV sync of a user's settings-level WebDAV account (and the deep-scan file processing
+//! WebDAV sources reuse). Shared by the REST trigger (`routes::webdav`) and the background
+//! `scheduling::webdav_scheduler`, so it lives below both.
+//!
+//! WebDAV files are still tracked by the legacy `FileIngestionInfo::path` (the WebDAV service
+//! sets it equal to `relative_path`); moving the tracking key is a data migration of its own, so
+//! the deprecated field is allowed here rather than half-switched.
+#![allow(deprecated)]
+
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, error, info, warn};
@@ -131,7 +140,6 @@ async fn perform_sync_internal(
     let mut total_directories_scanned = 0;
     let mut total_directories_skipped = 0;
     let mut sync_errors = Vec::new();
-    let mut sync_warnings: Vec<String> = Vec::new();
     let folder_start_time = Instant::now();
     
     // Create progress tracker for this sync session
@@ -366,6 +374,7 @@ async fn perform_sync_internal(
 }
 
 // Helper function to process a single file asynchronously
+#[allow(clippy::too_many_arguments)]
 async fn process_single_file(
     state: Arc<AppState>,
     user_id: uuid::Uuid,
@@ -458,7 +467,7 @@ async fn process_single_file(
     let result = if let Some(source_id) = webdav_source_id {
         ingestion_service
             .ingest_from_file_info(
-                &file_info,
+                file_info,
                 file_data,
                 user_id,
                 crate::ingestion::document_ingestion::DeduplicationPolicy::TrackAsDuplicate,
@@ -470,7 +479,7 @@ async fn process_single_file(
         // Fallback for backward compatibility - treat as generic WebDAV sync
         ingestion_service
             .ingest_from_file_info(
-                &file_info,
+                file_info,
                 file_data,
                 user_id,
                 crate::ingestion::document_ingestion::DeduplicationPolicy::Skip,

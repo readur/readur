@@ -202,6 +202,7 @@ pub async fn get_source(
         (status = 400, description = "Bad request - invalid update data, or a stored credential would be reused for a different server or account"),
         (status = 401, description = "Unauthorized"),
         (status = 404, description = "Source not found"),
+        (status = 409, description = "The user already has a source with this name (code SOURCE_DUPLICATE_NAME)"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -264,14 +265,27 @@ pub async fn update_source(
         }
     }
 
-    let source = state
+    let source = match state
         .db
         .update_source(auth_user.user.id, source_id, &update_data)
         .await
-        .map_err(|e| {
+    {
+        Ok(Some(source)) => source,
+        // Deleted since the lookup above.
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(e) if is_source_name_taken(&e) => {
+            info!(
+                "Not renaming source {}: the name is already in use",
+                source_id
+            );
+            let name = update_data.name.as_deref().unwrap_or_default();
+            return Ok(SourceError::duplicate_name(name).into_response());
+        }
+        Err(e) => {
             error!("Failed to update source {} in database: {}", source_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     // Get document counts
     let (total_documents, total_documents_ocr) = state

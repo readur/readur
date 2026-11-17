@@ -15,3 +15,4 @@ pub mod user_watch_service;
 pub mod webdav;
 pub mod webdav_metrics_integration;
 pub mod webdav_metrics_simple;
+pub mod webdav_sync;

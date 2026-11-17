@@ -132,7 +132,7 @@ pub async fn stop_sync(
     Path(source_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<StatusCode, StatusCode> {
-    let source = state
+    state
         .db
         .get_source(auth_user.user.id, source_id)
         .await
@@ -336,7 +336,7 @@ impl DeepScan {
         }
 
         info!("Deep scan will process {} files from {} directories for source {}", files.len(), directories_tracked, this.source_id);
-        match crate::routes::webdav::webdav_sync::process_files_for_deep_scan(
+        match crate::services::webdav_sync::process_files_for_deep_scan(
             this.state.clone(),
             this.user_id,
             &this.webdav_service,
@@ -421,7 +421,7 @@ impl DeepScan {
     /// pending.
     async fn finish_processed(
         &self,
-        processed: &crate::routes::webdav::webdav_sync::ProcessedFiles,
+        processed: &crate::services::webdav_sync::ProcessedFiles,
         files_total: usize,
         directories_tracked: usize,
         duration: chrono::Duration,
@@ -742,13 +742,8 @@ fn url_origin(url: &str) -> Option<String> {
     Some(format!("{}://{}", scheme, authority))
 }
 
-/// Extract JWT token from WebSocket headers securely
-/// Uses Sec-WebSocket-Protocol header to avoid token exposure in logs/URLs
-fn extract_websocket_token(headers: &HeaderMap) -> Option<String> {
-    extract_websocket_token_and_protocol(headers).map(|(token, _)| token)
-}
-
-/// Extract JWT token and protocol string from WebSocket headers
+/// Extract JWT token and protocol string from WebSocket headers. The token travels in the
+/// Sec-WebSocket-Protocol header to avoid exposing it in logs/URLs.
 /// Returns both the token and the original protocol for handshake acknowledgment
 fn extract_websocket_token_and_protocol(headers: &HeaderMap) -> Option<(String, String)> {
     // Check for token in Sec-WebSocket-Protocol header (most secure)
