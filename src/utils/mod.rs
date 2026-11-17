@@ -6,4 +6,5 @@ pub mod outbound;
 pub mod pdftoppm;
 pub mod security;
 pub mod sync_cancelled;
+pub mod temp_files;
 pub mod xml_text;

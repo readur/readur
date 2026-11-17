@@ -4,7 +4,7 @@
 //! Every outcome write is claim-guarded (see `queue_claim.rs`), every failed
 //! attempt goes through [`OcrQueueService::record_failed_attempt`], and the
 //! preprocessed image extraction may leave behind is owned by a
-//! [`TempImage`] that removes it on every way out.
+//! [`TempPath`] that removes it on every way out.
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -23,27 +23,12 @@ use crate::{
         enhanced::{EnhancedOcrService, OcrResult, ProgressCallback},
         failure_reason::classify_ocr_error,
     },
+    utils::temp_files::TempPath,
 };
 
 /// The temporary preprocessed image of an OCR result; removed when dropped.
-struct TempImage(Option<String>);
-
-impl TempImage {
-    fn of(result: &OcrResult) -> Self {
-        Self(result.processed_image_path.clone())
-    }
-}
-
-impl Drop for TempImage {
-    fn drop(&mut self) {
-        if let Some(path) = self.0.take() {
-            if let Err(e) = std::fs::remove_file(&path) {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    warn!("Failed to remove temporary OCR image {}: {}", path, e);
-                }
-            }
-        }
-    }
+fn temp_image(result: &OcrResult) -> Option<TempPath> {
+    result.processed_image_path.clone().map(TempPath::new)
 }
 
 /// A claimed job with its document loaded.
@@ -127,7 +112,7 @@ impl OcrQueueService {
         ocr_service: &EnhancedOcrService,
         extracted: Result<OcrResult>,
     ) -> Result<()> {
-        let _temp = extracted.as_ref().ok().map(TempImage::of);
+        let _temp = extracted.as_ref().ok().and_then(temp_image);
         match self.load_job(item).await? {
             Some(job) => self.finish(&job, ocr_service, extracted).await,
             None => Ok(()),
@@ -189,7 +174,7 @@ impl OcrQueueService {
             Err(e) => return self.extraction_failed(job, &e).await,
         };
         // Removes the preprocessed image however this returns.
-        let _temp = TempImage::of(&result);
+        let _temp = temp_image(&result);
 
         if let Err(validation_error) = ocr_service.validate_ocr_quality(&result, &job.settings) {
             let error_msg = format!("OCR quality validation failed: {}", validation_error);
@@ -388,13 +373,21 @@ mod tests {
     }
 
     #[test]
-    fn a_temp_image_is_removed_when_dropped() {
+    fn a_results_preprocessed_image_is_removed_when_dropped() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("processed.png");
         std::fs::write(&path, b"x").unwrap();
-        drop(TempImage(Some(path.to_string_lossy().into_owned())));
+        let result = OcrResult {
+            text: String::new(),
+            confidence: 0.0,
+            processing_time_ms: 0,
+            word_count: 0,
+            preprocessing_applied: Vec::new(),
+            processed_image_path: Some(path.to_string_lossy().into_owned()),
+        };
+        drop(temp_image(&result));
         assert!(!path.exists());
         // Already gone is fine.
-        drop(TempImage(Some(path.to_string_lossy().into_owned())));
+        drop(temp_image(&result));
     }
 }

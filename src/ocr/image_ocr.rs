@@ -219,18 +219,15 @@ impl ImageOcrService {
         let resized = self.resize_for_ocr(image);
 
         // Save temporary resized image
-        let temp_path = format!("{}_resized.png", file_path);
+        let temp_path =
+            crate::utils::temp_files::TempPath::new(format!("{}_resized.png", file_path));
         resized
-            .save(&temp_path)
+            .save(temp_path.as_str())
             .map_err(|e| anyhow!("Failed to save resized image: {}", e))?;
 
-        // Try OCR on resized image
-        let result = self.perform_ocr_with_timeout(&temp_path, lang).await;
-
-        // Clean up
-        let _ = std::fs::remove_file(&temp_path);
-
-        result
+        // Try OCR on resized image; the guard removes it however this ends
+        self.perform_ocr_with_timeout(temp_path.as_str(), lang)
+            .await
     }
 
     fn resize_for_ocr(&self, image: DynamicImage) -> DynamicImage {
