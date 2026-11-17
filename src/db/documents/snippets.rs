@@ -11,6 +11,10 @@ use crate::models::{FuzzyThreshold, HighlightRange, SearchMode, SearchSnippet};
 const MAX_SNIPPETS_PER_TERM: usize = 3;
 /// Most snippets returned for one document.
 const MAX_SNIPPETS: usize = 5;
+/// Most bytes of a text read for fuzzy highlighting: scoring a word is far
+/// costlier than a substring search, so a multi-megabyte text would
+/// otherwise take seconds. Words past this point are not highlighted.
+pub(crate) const MAX_FUZZY_SCAN_BYTES: usize = 512 * 1024;
 
 /// How the highlighted stretches of a text are found.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,13 +84,20 @@ fn exact_matches(text: &str, terms: &[String]) -> Vec<Vec<(usize, usize)>> {
         .collect()
 }
 
+/// The start of `text` fuzzy highlighting reads: at most
+/// `MAX_FUZZY_SCAN_BYTES`, ending on a char boundary.
+fn fuzzy_scan_window(text: &str) -> &str {
+    &text[..text.floor_char_boundary(MAX_FUZZY_SCAN_BYTES)]
+}
+
 /// `(byte offset, byte length)` of the first words of `text` matching each
 /// query word of `matcher`. Stops reading once every query word has its
-/// fill, so a long text with early matches is not scanned to the end.
+/// fill, so a long text with early matches is not scanned to the end, and
+/// in any case after `MAX_FUZZY_SCAN_BYTES`.
 fn fuzzy_matches(text: &str, matcher: &mut FuzzyWordMatcher) -> Vec<Vec<(usize, usize)>> {
     let mut found = vec![Vec::new(); matcher.query_word_count()];
     let mut open = found.len();
-    for (start, word) in words(text) {
+    for (start, word) in words(fuzzy_scan_window(text)) {
         if open == 0 {
             break;
         }
@@ -130,24 +141,54 @@ impl<'a> FoldedText<'a> {
     }
 
     /// `(byte offset, byte length)` of each non-overlapping match of `term`.
+    /// A term of several words matches them in order with any run of
+    /// whitespace or punctuation between them, as the full-text matcher
+    /// reads "total due" in "Total:\n due".
     fn matches(&self, term: &str) -> impl Iterator<Item = (usize, usize)> + '_ {
-        let needle = if self.full_unicode {
-            term.to_lowercase()
-        } else {
-            term.to_ascii_lowercase()
-        };
-        let len = needle.len();
+        let needles: Vec<String> = term
+            .split_whitespace()
+            .map(|word| {
+                if self.full_unicode {
+                    word.to_lowercase()
+                } else {
+                    word.to_ascii_lowercase()
+                }
+            })
+            .collect();
         let haystack: &str = &self.folded;
         let mut from = 0;
         std::iter::from_fn(move || {
-            if len == 0 {
-                return None;
+            let (first, rest) = needles.split_first()?;
+            loop {
+                let start = from + haystack.get(from..)?.find(first.as_str())?;
+                if let Some(end) = phrase_end(haystack, start + first.len(), rest) {
+                    from = end;
+                    return Some((start, end - start));
+                }
+                // Retry from the next char: a later start may complete it.
+                from = start + haystack[start..].chars().next().map_or(1, char::len_utf8);
             }
-            let start = from + haystack.get(from..)?.find(&needle)?;
-            from = start + len;
-            Some((start, len))
         })
     }
+}
+
+/// Where the words `rest` end when they follow `pos` in `haystack`, each
+/// after at least one non-alphanumeric char; `None` if they do not.
+fn phrase_end(haystack: &str, mut pos: usize, rest: &[String]) -> Option<usize> {
+    for word in rest {
+        let mut gap = false;
+        loop {
+            let tail = &haystack[pos..];
+            if gap && tail.starts_with(word.as_str()) {
+                break;
+            }
+            let c = tail.chars().next().filter(|c| !c.is_alphanumeric())?;
+            pos += c.len_utf8();
+            gap = true;
+        }
+        pos += word.len();
+    }
+    Some(pos)
 }
 
 /// The snippet containing the match at `start..start + len`, widened to
@@ -247,6 +288,19 @@ mod tests {
     fn highlights_a_phrase_as_one_range() {
         let snippets = exact(&["Amount: total due now"], &terms(&["total due"]), 200);
         assert_eq!(highlighted(&snippets), ["total due"]);
+    }
+
+    #[test]
+    fn a_phrase_matches_across_any_whitespace_or_punctuation() {
+        let text = "Amount TOTAL:\n\t due now; total-due; totaldue; total d";
+        let snippets = exact(&[text], &terms(&["total  due"]), 200);
+        assert_eq!(highlighted(&snippets), ["TOTAL:\n\t due", "total-due"]);
+        // A later start can complete a phrase an earlier one could not.
+        let snippets = exact(&["total total due"], &terms(&["total due"]), 200);
+        assert_eq!(highlighted(&snippets), ["total due"]);
+        assert_eq!(snippets[0].highlight_ranges[0].start, 6);
+        assert!(exact(&["total"], &terms(&["total due"]), 200).is_empty());
+        assert!(exact(&["anything"], &terms(&["  "]), 200).is_empty());
     }
 
     #[test]
@@ -366,6 +420,45 @@ mod tests {
             );
         }
         assert_eq!(highlighted(&snippets), ["тесты", "ÜNÏCODE"]);
+    }
+
+    #[test]
+    fn fuzzy_scanning_stops_at_the_byte_cap() {
+        // Distinct words, so the matcher scores (and caches) every word it
+        // reads; well over the cap in total.
+        let text: String = (0..1_000_000).map(|i| format!("w{i} ")).collect();
+        assert!(text.len() > 4 * MAX_FUZZY_SCAN_BYTES);
+        let window = fuzzy_scan_window(&text);
+        assert!(window.len() <= MAX_FUZZY_SCAN_BYTES);
+        assert!(window.len() > MAX_FUZZY_SCAN_BYTES - 16);
+
+        let mut matcher = FuzzyWordMatcher::new(&terms(&["nomatch"]), 0.9);
+        let found = fuzzy_matches(&text, &mut matcher);
+        assert!(found.iter().all(Vec::is_empty));
+        // Every word read was scored once; none past the cap was read.
+        let scored = matcher.scored_words();
+        assert!(scored <= MAX_FUZZY_SCAN_BYTES / 3, "{scored} words scored");
+        assert!(scored > MAX_FUZZY_SCAN_BYTES / 16, "{scored} words scored");
+
+        // A match before the cap is found, one after it is not.
+        let early = format!("invoice {text}");
+        assert_eq!(fuzzy(&[&early], &terms(&["invoce"]), 0.5).len(), 1);
+        let late = format!("{text} invoice");
+        assert!(fuzzy(&[&late], &terms(&["invoce"]), 0.5).is_empty());
+    }
+
+    #[test]
+    fn multi_megabyte_texts_yield_snippets_quickly() {
+        let filler = "lorem ipsum dolor sit amet ".repeat(200_000);
+        assert!(filler.len() > 5_000_000);
+        let text = format!("{filler} invoice");
+        let started = std::time::Instant::now();
+        // Neither a fuzzy query word matching nothing nor an exact term
+        // near the end may take long.
+        assert!(fuzzy(&[&text, &text], &terms(&["zzzz"]), 0.9).is_empty());
+        assert_eq!(exact(&[&text], &terms(&["invoice"]), 50).len(), 1);
+        let elapsed = started.elapsed();
+        assert!(elapsed.as_secs() < 5, "took {elapsed:?}");
     }
 
     #[test]

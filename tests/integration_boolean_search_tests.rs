@@ -1,11 +1,12 @@
-//! Boolean-mode search: the parser's `to_tsquery` output against a real
-//! Postgres (fuzzed), its semantics through MCP `enhanced_search` and the
+//! Boolean-mode search: the parser's `to_tsquery` output and SQL condition
+//! against a real Postgres (fuzzed), its semantics through MCP `enhanced_search` and the
 //! REST `/api/search/enhanced` endpoint, and snippet highlighting.
 
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use readur::db::documents::boolean_to_tsquery;
+use readur::models::{FuzzyThreshold, SearchMode, SearchRequest, UserRole};
 use readur::test_utils::{document_helpers::create_test_document, TestContext};
 
 /// A user and a session token for them.
@@ -200,31 +201,61 @@ fn char_query(rng: &mut Rng) -> String {
 async fn fuzzed_boolean_queries_always_render_valid_tsquery() {
     let ctx = TestContext::new().await;
     let pool = &ctx.state().db.pool;
+    let (user_id, _) = user_with_token(&ctx).await;
+    // Content and OCR text both set, so every branch of the per-field
+    // condition is evaluated.
+    let mut doc = create_test_document(user_id);
+    doc.content = Some("the invoice receipt draft".to_string());
+    doc.ocr_text = Some("2024 e-mail o'brien тест 日本語".to_string());
+    doc.file_hash = Some(format!("{:x}", Uuid::new_v4().as_u128()));
+    ctx.state().db.create_document(doc).await.unwrap();
+
     let mut rng = Rng(0x5EED_CAFE_F00D_D00D);
     let mut non_empty = 0;
+    let mut matched = 0;
     for i in 0..6_000 {
         let input = if i % 3 == 2 {
             char_query(&mut rng)
         } else {
             fragment_query(&mut rng)
         };
+        // The tsquery ranking binds.
         let rendered = boolean_to_tsquery(&input);
         non_empty += usize::from(!rendered.is_empty());
-        // Parse, match and rank, as the search query does.
-        let result: Result<(bool, f32), _> = sqlx::query_as(
-            "SELECT to_tsvector('english', $2) @@ to_tsquery('english', $1), \
-             ts_rank(to_tsvector('english', $2), to_tsquery('english', $1))",
-        )
-        .bind(&rendered)
-        .bind("the invoice receipt draft 2024 e-mail o'brien тест 日本語")
-        .fetch_one(pool)
-        .await;
+        let result: Result<(f32,), _> =
+            sqlx::query_as("SELECT ts_rank(to_tsvector('english', $2), to_tsquery('english', $1))")
+                .bind(&rendered)
+                .bind("the invoice receipt draft 2024 e-mail o'brien тест 日本語")
+                .fetch_one(pool)
+                .await;
         if let Err(e) = result {
             panic!("input {input:?} rendered {rendered:?}: {e}");
         }
+        // The full search: per-leaf lexeme lookup, then the SQL condition
+        // and ranking, as the list and its count run them.
+        let request = SearchRequest {
+            query: input.clone(),
+            search_mode: Some(SearchMode::Boolean),
+            limit: Some(10),
+            ..Default::default()
+        };
+        let db = &ctx.state().db;
+        let fuzzy = FuzzyThreshold::default();
+        let hits = db
+            .enhanced_search_documents_with_role(user_id, UserRole::User, &request, fuzzy)
+            .await
+            .unwrap_or_else(|e| panic!("input {input:?}: {e:#}"));
+        let total = db
+            .count_search_documents(user_id, UserRole::User, &request, fuzzy)
+            .await
+            .unwrap_or_else(|e| panic!("input {input:?}: {e:#}"));
+        assert_eq!(total, hits.len() as i64, "input {input:?}");
+        matched += hits.len();
     }
-    // Guard against a generator that only ever produces empty queries.
+    // Guard against a generator that only ever produces empty queries, or
+    // queries that never match.
     assert!(non_empty > 3_000, "only {non_empty} non-empty renderings");
+    assert!(matched > 600, "only {matched} matches");
 }
 
 #[tokio::test]
@@ -519,14 +550,8 @@ async fn quoted_phrases_produce_snippets() {
     let structured = mcp_search(&ctx, &token, "\"total due\"", "boolean").await;
     assert_eq!(highlights(&structured), ["total due"], "{structured}");
 
-    // Phrase mode used to search for `"total` and `due"`, quotes included.
+    // Phrase mode used to search for `"total` and `due"`, quotes included,
+    // and then highlighted each word on its own; now the phrase is one range.
     let structured = mcp_search(&ctx, &token, "\"total due\"", "phrase").await;
-    let found = highlights(&structured);
-    assert!(!found.is_empty(), "no snippets: {structured}");
-    for hit in &found {
-        assert!(
-            hit == "total" || hit == "due",
-            "highlighted {hit:?}: {found:?}"
-        );
-    }
+    assert_eq!(highlights(&structured), ["total due"], "{structured}");
 }

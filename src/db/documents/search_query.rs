@@ -20,6 +20,12 @@
 //!
 //! `AND`, `OR` and `NOT` are recognised in any case: as search terms they are
 //! English stop words that could never match anyway.
+//!
+//! Matching renders the AST as a SQL condition rather than one tsquery (see
+//! [`BooleanQuery::to_sql`]): words are matched against the whole document
+//! (content and OCR text together), so `NOT draft` excludes a document whose
+//! draft is in either field, while phrases and followed-by chains must match
+//! within a single field, so they never span the join of the two.
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -423,6 +429,206 @@ fn push_highlight(terms: &mut Vec<String>, text: &str) {
     let text = text.trim_matches(|c: char| !c.is_alphanumeric());
     if !text.is_empty() && !terms.iter().any(|t| t == text) {
         terms.push(text.to_string());
+    }
+}
+
+// -------------------------------------------------------------------- SQL
+
+/// A document's searchable text (content and OCR text) as one tsvector. It
+/// matches the expression of the `idx_documents_content_search` GIN index, so
+/// the planner can use it.
+pub(crate) const DOCUMENT_TSVECTOR: &str =
+    "to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''))";
+/// Each field's own tsvector. No index serves these, so single-field
+/// matches are prefiltered on `DOCUMENT_TSVECTOR` (see `single_field_match`).
+const CONTENT_TSVECTOR: &str = "to_tsvector('english', COALESCE(content, ''))";
+const OCR_TSVECTOR: &str = "to_tsvector('english', COALESCE(ocr_text, ''))";
+
+/// The SQL opening a tsquery function call; the bound input and `)` follow.
+pub(crate) const TO_TSQUERY: &str = "to_tsquery('english', ";
+pub(crate) const PLAINTO_TSQUERY: &str = "plainto_tsquery('english', ";
+pub(crate) const PHRASETO_TSQUERY: &str = "phraseto_tsquery('english', ";
+
+/// Counts the lexemes of each leaf's tsquery (see `BooleanQuery::leaves`),
+/// in order. `numnode` counts operands and operators, so 0 means the leaf
+/// is only stop words and 1 a single lexeme.
+pub(crate) const LEAF_LEXEMES_SQL: &str = "SELECT numnode(to_tsquery('english', leaf)) \
+     FROM unnest($1::text[]) WITH ORDINALITY AS leaves(leaf, n) ORDER BY n";
+
+/// One piece of a SQL condition. SQL text is a `&'static str`, so it can
+/// only ever be a literal written in this crate; user input reaches Postgres
+/// solely as a bound parameter.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum SqlPart {
+    Sql(&'static str),
+    Bind(String),
+}
+
+/// `(<vector> @@ <function>$n))`.
+fn vector_match(vector: &'static str, function: &'static str, input: &str) -> Vec<SqlPart> {
+    vec![
+        SqlPart::Sql("("),
+        SqlPart::Sql(vector),
+        SqlPart::Sql(" @@ "),
+        SqlPart::Sql(function),
+        SqlPart::Bind(input.to_string()),
+        SqlPart::Sql("))"),
+    ]
+}
+
+/// The document as a whole matches `function(input)`: right for single
+/// words and their boolean combinations.
+pub(crate) fn document_match(function: &'static str, input: &str) -> Vec<SqlPart> {
+    vector_match(DOCUMENT_TSVECTOR, function, input)
+}
+
+/// The content or the OCR text on its own matches `function(input)`: right
+/// for phrases, which must not match across the join of the two fields.
+///
+/// `prefilter`, when given, is a tsquery the whole document must also match,
+/// which the GIN index answers, so only its candidates have their fields'
+/// tsvectors computed. It must hold whenever a field matches: the same
+/// words joined by AND (no positions, so the 16383-position cap of long
+/// documents cannot make it reject a field's match).
+pub(crate) fn single_field_match(
+    function: &'static str,
+    input: &str,
+    prefilter: Option<(&'static str, &str)>,
+) -> Vec<SqlPart> {
+    let mut parts = vec![SqlPart::Sql("(")];
+    if let Some((prefilter_function, prefilter_input)) = prefilter {
+        parts.extend(document_match(prefilter_function, prefilter_input));
+        parts.push(SqlPart::Sql(" AND "));
+    }
+    parts.push(SqlPart::Sql("("));
+    parts.extend(vector_match(CONTENT_TSVECTOR, function, input));
+    parts.push(SqlPart::Sql(" OR "));
+    parts.extend(vector_match(OCR_TSVECTOR, function, input));
+    parts.push(SqlPart::Sql("))"));
+    parts
+}
+
+impl BooleanQuery {
+    /// The tsquery of each leaf of the query (each word, phrase and
+    /// followed-by chain, which `to_sql` matches as a unit), in the order
+    /// `to_sql` expects their lexeme counts.
+    pub(crate) fn leaves(&self) -> Vec<String> {
+        let mut leaves = Vec::new();
+        if let Some(root) = &self.root {
+            collect_leaves(root, &mut leaves);
+        }
+        leaves
+    }
+
+    /// The query as a SQL condition on a `documents` row, or `None` when it
+    /// can match nothing (no leaf has a lexeme). `lexemes[i]` is
+    /// `numnode(to_tsquery('english', leaves()[i]))` (`LEAF_LEXEMES_SQL`).
+    ///
+    /// `AND`, `OR` and `NOT` become SQL operators over the leaves. A leaf of
+    /// one lexeme is matched against the whole document; a longer one (a
+    /// phrase, a followed-by chain, or a word Postgres splits like
+    /// `e-mail`) within a single field. A leaf of only stop words is
+    /// dropped the way `to_tsquery` drops it, so `report of sales` still
+    /// means `report & sales`.
+    pub(crate) fn to_sql(&self, lexemes: &[i32]) -> Option<Vec<SqlPart>> {
+        let mut lexemes = lexemes.iter().copied();
+        self.root
+            .as_ref()
+            .and_then(|root| node_sql(root, &mut lexemes))
+    }
+}
+
+fn collect_leaves(node: &Node, leaves: &mut Vec<String>) {
+    match node {
+        Node::Not(inner) => collect_leaves(inner, leaves),
+        Node::And(nodes) | Node::Or(nodes) => {
+            for node in nodes {
+                collect_leaves(node, leaves);
+            }
+        }
+        leaf => leaves.push(render(leaf)),
+    }
+}
+
+fn node_sql(node: &Node, lexemes: &mut impl Iterator<Item = i32>) -> Option<Vec<SqlPart>> {
+    match node {
+        Node::Not(inner) => node_sql(inner, lexemes).map(|inner| {
+            let mut parts = vec![SqlPart::Sql("(NOT ")];
+            parts.extend(inner);
+            parts.push(SqlPart::Sql(")"));
+            parts
+        }),
+        Node::And(nodes) => join_sql(nodes, " AND ", lexemes),
+        Node::Or(nodes) => join_sql(nodes, " OR ", lexemes),
+        leaf => leaf_sql(leaf, lexemes.next().unwrap_or(0)),
+    }
+}
+
+/// `nodes` joined by `separator`, without the ones that are only stop words.
+fn join_sql(
+    nodes: &[Node],
+    separator: &'static str,
+    lexemes: &mut impl Iterator<Item = i32>,
+) -> Option<Vec<SqlPart>> {
+    // Every node is visited, so every leaf consumes its count.
+    let mut operands: Vec<Vec<SqlPart>> = nodes
+        .iter()
+        .filter_map(|node| node_sql(node, lexemes))
+        .collect();
+    if operands.len() <= 1 {
+        return operands.pop();
+    }
+    let mut parts = vec![SqlPart::Sql("(")];
+    for (i, operand) in operands.into_iter().enumerate() {
+        if i > 0 {
+            parts.push(SqlPart::Sql(separator));
+        }
+        parts.extend(operand);
+    }
+    parts.push(SqlPart::Sql(")"));
+    Some(parts)
+}
+
+fn leaf_sql(leaf: &Node, lexemes: i32) -> Option<Vec<SqlPart>> {
+    let tsquery = render(leaf);
+    match lexemes {
+        ..=0 => None,
+        1 => Some(document_match(TO_TSQUERY, &tsquery)),
+        // A negation's words need not occur, so no AND of words is implied.
+        _ if contains_negation(leaf) => Some(single_field_match(TO_TSQUERY, &tsquery, None)),
+        _ => Some(single_field_match(
+            TO_TSQUERY,
+            &tsquery,
+            Some((TO_TSQUERY, &render_unordered(leaf))),
+        )),
+    }
+}
+
+/// `render`, with every phrase and followed-by operator replaced by AND:
+/// the words a match of the leaf contains, wherever they are.
+fn render_unordered(node: &Node) -> String {
+    match node {
+        Node::Phrase(words) => group(words.iter().map(|w| quote_lexeme(w)), " & "),
+        Node::Sequence { first, rest } => group(
+            std::iter::once(first.as_ref())
+                .chain(rest.iter().map(|(_, node)| node))
+                .map(render_unordered),
+            " & ",
+        ),
+        Node::And(nodes) => group(nodes.iter().map(render_unordered), " & "),
+        Node::Or(nodes) => group(nodes.iter().map(render_unordered), " | "),
+        Node::Term { .. } | Node::Not(_) => render(node),
+    }
+}
+
+fn contains_negation(node: &Node) -> bool {
+    match node {
+        Node::Term { .. } | Node::Phrase(_) => false,
+        Node::Not(_) => true,
+        Node::And(nodes) | Node::Or(nodes) => nodes.iter().any(contains_negation),
+        Node::Sequence { first, rest } => {
+            contains_negation(first) || rest.iter().any(|(_, node)| contains_negation(node))
+        }
     }
 }
 

@@ -518,3 +518,50 @@ async fn enhanced_search_rejects_unbounded_requests() {
         );
     }
 }
+
+#[tokio::test]
+async fn snippet_length_limits_match_rest() {
+    use readur::services::search::MAX_SNIPPET_LENGTH;
+    let ctx = TestContext::new().await;
+    let (user_id, token) = user_with_token(&ctx).await;
+    seed_document(
+        &ctx,
+        user_id,
+        "invoice.pdf",
+        "application/pdf",
+        &format!("{} invoice {}", "lorem ".repeat(500), "ipsum ".repeat(500)),
+    )
+    .await;
+
+    let max = MAX_SNIPPET_LENGTH as u32;
+    for (length, valid) in [(1, true), (max, true), (0, false), (max + 1, false)] {
+        // MCP: out of range is a tool error, not silently clamped.
+        let result = ctx
+            .mcp_call_tool(
+                &token,
+                "enhanced_search",
+                json!({ "query": "invoice", "snippet_length": length }),
+            )
+            .await;
+        assert_eq!(result["isError"], json!(!valid), "{length}: {result}");
+        if valid {
+            let snippet = &result["structuredContent"]["documents"][0]["snippets"][0];
+            let window = snippet["text"].as_str().unwrap().len() as u32;
+            assert!(window >= length.min(1000), "{length}: {window}");
+        } else {
+            assert!(text(&result).contains("snippet_length"), "{result}");
+        }
+
+        // REST: the same lengths are accepted or rejected with 400.
+        let request = axum::http::Request::builder()
+            .uri(format!(
+                "/api/search/enhanced?query=invoice&snippet_length={length}"
+            ))
+            .header("Authorization", format!("Bearer {token}"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = ctx.app().clone().oneshot(request).await.unwrap();
+        let expected = if valid { 200 } else { 400 };
+        assert_eq!(response.status().as_u16(), expected, "REST {length}");
+    }
+}

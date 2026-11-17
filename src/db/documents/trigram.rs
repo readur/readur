@@ -179,6 +179,12 @@ impl FuzzyWordMatcher {
         }
     }
 
+    /// How many distinct text words have been scored.
+    #[cfg(test)]
+    pub(crate) fn scored_words(&self) -> usize {
+        self.cache.len()
+    }
+
     pub(crate) fn query_word_count(&self) -> usize {
         self.query_words.len()
     }
