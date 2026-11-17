@@ -59,7 +59,7 @@ env E2E_DB_HOST=127.0.0.1 E2E_DB_PORT=55432 \
     scripts/run-e2e-local.sh -- e2e/search.spec.ts --project=chromium
 ```
 
-On NixOS the backend binary also needs the OpenSSL, Leptonica and Tesseract libraries on `LD_LIBRARY_PATH`; running the wrapper inside `nix-shell -p pkg-config leptonica tesseract openssl postgresql` with that variable pointing at their `lib` directories is enough.
+On NixOS the backend binary also needs the OpenSSL, Leptonica and Tesseract libraries on the dynamic loader's search path: run the wrapper inside `nix-shell -p pkg-config leptonica tesseract openssl postgresql` with the loader path pointing at their `lib` directories.
 
 `./run-tests.sh e2e` is the Docker variant: it starts the containers of `docker-compose.test.yml` (Readur on port 8001 and a Vite dev server container on port 5174 that proxies to it) and runs Playwright on the host against the dev server. It seeds the Readur container and runs the suite with the same admin password, `ADMIN_PASSWORD` from your shell or `readur-test-admin-password`, the compose file's default.
 
