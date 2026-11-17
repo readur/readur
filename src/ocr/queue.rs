@@ -117,19 +117,7 @@ impl OcrQueueService {
             let mut tx = self.pool.begin().await?;
         
         // Step 1: Find and lock the next available job atomically
-        let job_row = sqlx::query(
-            r#"
-            SELECT id, document_id, priority, status, attempts, max_attempts, 
-                   created_at, started_at, completed_at, error_message, 
-                   worker_id, processing_time_ms, file_size
-            FROM ocr_queue
-            WHERE status = 'pending'
-              AND attempts < max_attempts
-            ORDER BY priority DESC, created_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-            "#
-        )
+        let job_row = sqlx::query(enqueue::NEXT_CLAIMABLE_JOB_SQL)
         .fetch_optional(&mut *tx)
         .await?;
 

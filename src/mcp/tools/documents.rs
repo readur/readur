@@ -551,25 +551,24 @@ fn check_ocr_offset(offset: usize, total_chars: usize) -> Result<(), String> {
 }
 
 /// Upload failures the caller can fix (bad input, too large, a duplicate,
-/// a concurrent upload of the same file) become tool errors. Everything
-/// else is a server fault: the service already logged the details, and its
-/// messages can carry raw database or storage errors, so the model only
-/// gets a generic error.
+/// a concurrent upload of the same file) become tool errors; server faults
+/// become protocol errors. Both carry the error's message, which is always
+/// safe to show: server faults only ever hold a fixed generic message (see
+/// `errors::document`), the raw cause having been logged by the service.
 fn upload_error(error: DocumentError) -> Result<CallToolResult, McpError> {
+    let message = error.message().to_string();
     match error {
-        DocumentError::BadRequest(msg)
-        | DocumentError::InvalidQuery(msg)
-        | DocumentError::Conflict(msg)
-        | DocumentError::PayloadTooLarge(msg)
-        | DocumentError::ConcurrentUploadError(msg) => Ok(format::tool_error(msg)),
-        DocumentError::NotFound => Ok(format::tool_error("Document not found")),
+        DocumentError::BadRequest(_)
+        | DocumentError::InvalidQuery(_)
+        | DocumentError::Conflict(_)
+        | DocumentError::PayloadTooLarge(_)
+        | DocumentError::ConcurrentUploadError(_)
+        | DocumentError::NotFound => Ok(format::tool_error(message)),
         DocumentError::InternalServerError(_)
         | DocumentError::UploadTimeout(_)
         | DocumentError::DatabaseConstraintViolation(_)
         | DocumentError::OcrProcessingError(_)
-        | DocumentError::FileProcessingError(_) => {
-            Err(McpError::internal_error("failed to upload document", None))
-        }
+        | DocumentError::FileProcessingError(_) => Err(McpError::internal_error(message, None)),
     }
 }
 
@@ -649,21 +648,17 @@ mod tests {
     }
 
     #[test]
-    fn upload_server_faults_never_reach_the_model() {
-        // These carry raw database/storage error text (see
-        // services::documents::categorize_ingestion_error).
-        let secret =
-            "duplicate key value violates unique constraint \"documents_pkey\" at /var/lib/readur";
+    fn upload_server_faults_are_protocol_errors_with_their_generic_message() {
+        let generic = "Failed to ingest document";
         for error in [
-            DocumentError::InternalServerError(secret.into()),
-            DocumentError::UploadTimeout(secret.into()),
-            DocumentError::DatabaseConstraintViolation(secret.into()),
-            DocumentError::OcrProcessingError(secret.into()),
-            DocumentError::FileProcessingError(secret.into()),
+            DocumentError::InternalServerError(generic),
+            DocumentError::UploadTimeout(generic),
+            DocumentError::DatabaseConstraintViolation(generic),
+            DocumentError::OcrProcessingError(generic),
+            DocumentError::FileProcessingError(generic),
         ] {
             let err = upload_error(error).expect_err("server faults must be protocol errors");
-            assert!(!err.message.contains("constraint"), "{}", err.message);
-            assert!(!err.message.contains("/var/lib"), "{}", err.message);
+            assert_eq!(err.message, generic);
         }
     }
 }

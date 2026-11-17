@@ -2,6 +2,11 @@
 //! `services::documents`; the REST document routes return them as-is through
 //! the `IntoResponse` impl below, and the MCP document tools map them to tool
 //! results.
+//!
+//! Every message is shown to the client. The variants for server-side
+//! failures therefore take a `&'static str`: a fixed, generic message, so a
+//! raw database or storage error (constraint names, SQL, file paths) cannot
+//! be formatted into one. Log the underlying error where it is caught.
 
 use axum::{
     http::StatusCode,
@@ -18,58 +23,64 @@ pub enum DocumentError {
     NotFound,
     Conflict(String),
     PayloadTooLarge(String),
-    InternalServerError(String),
-    UploadTimeout(String),
-    DatabaseConstraintViolation(String),
-    OcrProcessingError(String),
-    FileProcessingError(String),
+    InternalServerError(&'static str),
+    UploadTimeout(&'static str),
+    DatabaseConstraintViolation(&'static str),
+    OcrProcessingError(&'static str),
+    FileProcessingError(&'static str),
     ConcurrentUploadError(String),
+}
+
+impl DocumentError {
+    /// The message for the client.
+    pub fn message(&self) -> &str {
+        match self {
+            Self::BadRequest(msg)
+            | Self::InvalidQuery(msg)
+            | Self::Conflict(msg)
+            | Self::PayloadTooLarge(msg)
+            | Self::ConcurrentUploadError(msg) => msg,
+            Self::NotFound => "Document not found",
+            Self::InternalServerError(msg)
+            | Self::UploadTimeout(msg)
+            | Self::DatabaseConstraintViolation(msg)
+            | Self::OcrProcessingError(msg)
+            | Self::FileProcessingError(msg) => msg,
+        }
+    }
+
+    /// The HTTP status and the stable `error_code` clients can match on.
+    pub fn status_and_code(&self) -> (StatusCode, &'static str) {
+        match self {
+            Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "UPLOAD_BAD_REQUEST"),
+            Self::InvalidQuery(_) => (StatusCode::BAD_REQUEST, "INVALID_QUERY"),
+            Self::NotFound => (StatusCode::NOT_FOUND, "UPLOAD_NOT_FOUND"),
+            Self::Conflict(_) => (StatusCode::CONFLICT, "UPLOAD_CONFLICT"),
+            Self::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "UPLOAD_TOO_LARGE"),
+            Self::InternalServerError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "UPLOAD_INTERNAL_ERROR")
+            }
+            Self::UploadTimeout(_) => (StatusCode::REQUEST_TIMEOUT, "UPLOAD_TIMEOUT"),
+            Self::DatabaseConstraintViolation(_) => (StatusCode::CONFLICT, "UPLOAD_DB_CONSTRAINT"),
+            Self::OcrProcessingError(_) => (StatusCode::UNPROCESSABLE_ENTITY, "UPLOAD_OCR_ERROR"),
+            Self::FileProcessingError(_) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "UPLOAD_FILE_PROCESSING_ERROR",
+            ),
+            Self::ConcurrentUploadError(_) => {
+                (StatusCode::TOO_MANY_REQUESTS, "UPLOAD_CONCURRENT_ERROR")
+            }
+        }
+    }
 }
 
 impl IntoResponse for DocumentError {
     fn into_response(self) -> Response {
-        let (status, message, error_code) = match self {
-            DocumentError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "UPLOAD_BAD_REQUEST"),
-            DocumentError::InvalidQuery(msg) => (StatusCode::BAD_REQUEST, msg, "INVALID_QUERY"),
-            DocumentError::NotFound => (
-                StatusCode::NOT_FOUND,
-                "Document not found".to_string(),
-                "UPLOAD_NOT_FOUND",
-            ),
-            DocumentError::Conflict(msg) => (StatusCode::CONFLICT, msg, "UPLOAD_CONFLICT"),
-            DocumentError::PayloadTooLarge(msg) => {
-                (StatusCode::PAYLOAD_TOO_LARGE, msg, "UPLOAD_TOO_LARGE")
-            }
-            DocumentError::InternalServerError(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                msg,
-                "UPLOAD_INTERNAL_ERROR",
-            ),
-            DocumentError::UploadTimeout(msg) => {
-                (StatusCode::REQUEST_TIMEOUT, msg, "UPLOAD_TIMEOUT")
-            }
-            DocumentError::DatabaseConstraintViolation(msg) => {
-                (StatusCode::CONFLICT, msg, "UPLOAD_DB_CONSTRAINT")
-            }
-            DocumentError::OcrProcessingError(msg) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, msg, "UPLOAD_OCR_ERROR")
-            }
-            DocumentError::FileProcessingError(msg) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                msg,
-                "UPLOAD_FILE_PROCESSING_ERROR",
-            ),
-            DocumentError::ConcurrentUploadError(msg) => (
-                StatusCode::TOO_MANY_REQUESTS,
-                msg,
-                "UPLOAD_CONCURRENT_ERROR",
-            ),
-        };
-
+        let (status, error_code) = self.status_and_code();
         (
             status,
             Json(json!({
-                "error": message,
+                "error": self.message(),
                 "status": status.as_u16(),
                 "error_code": error_code,
                 "timestamp": chrono::Utc::now().to_rfc3339(),

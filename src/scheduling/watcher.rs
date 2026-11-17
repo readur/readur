@@ -817,22 +817,7 @@ fn is_text_extractable_file(mime_type: &str) -> bool {
 
 /// Calculate priority based on file size and type (smaller files and images get higher priority)
 fn calculate_priority(file_size: i64, mime_type: &str) -> i32 {
-    const MB: i64 = 1024 * 1024;
-    const MB5: i64 = 5 * 1024 * 1024;
-    const MB10: i64 = 10 * 1024 * 1024;
-    const MB50: i64 = 50 * 1024 * 1024;
-
-    let base_priority = if file_size <= MB {
-        10 // <= 1MB: highest priority
-    } else if file_size <= MB5 {
-        8 // 1-5MB: high priority
-    } else if file_size <= MB10 {
-        6 // 5-10MB: medium priority
-    } else if file_size <= MB50 {
-        4 // 10-50MB: low priority
-    } else {
-        2 // > 50MB: lowest priority
-    };
+    let base_priority = crate::ocr::priority::priority_for_file_size(file_size);
 
     // Boost priority for images (usually faster to OCR)
     let type_boost = if mime_type.starts_with("image/") {
@@ -931,21 +916,6 @@ mod tests {
     #[test]
     fn relevant_event_rejects_other() {
         assert!(!is_relevant_event(&EventKind::Other));
-    }
-
-    #[test]
-    fn priority_bands_are_inclusive_at_their_upper_bound() {
-        const MB: i64 = 1024 * 1024;
-        let pdf = "application/pdf";
-        assert_eq!(calculate_priority(0, pdf), 10);
-        assert_eq!(calculate_priority(MB, pdf), 10);
-        assert_eq!(calculate_priority(MB + 1, pdf), 8);
-        assert_eq!(calculate_priority(5 * MB, pdf), 8);
-        assert_eq!(calculate_priority(5 * MB + 1, pdf), 6);
-        assert_eq!(calculate_priority(10 * MB, pdf), 6);
-        assert_eq!(calculate_priority(10 * MB + 1, pdf), 4);
-        assert_eq!(calculate_priority(50 * MB, pdf), 4);
-        assert_eq!(calculate_priority(50 * MB + 1, pdf), 2);
     }
 
     #[test]

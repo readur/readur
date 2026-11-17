@@ -4,6 +4,7 @@ pub mod error;
 pub mod failure_reason;
 pub mod health;
 pub mod image_ocr;
+pub mod priority;
 pub mod queue;
 pub mod tests;
 pub mod xml_extractor;
