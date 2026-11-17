@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, warn, Level};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -18,7 +18,15 @@ use crate::{
     },
     models::FileIngestionInfo,
     ocr::queue::{EnqueueOutcome, OcrQueueService},
-    scheduling::{user_watch_manager::UserWatchManager, watch_owner::WatchFolderOwner},
+    scheduling::{
+        user_watch_manager::UserWatchManager,
+        watch_filter::{
+            age_since, calculate_priority, header_preview, is_system_or_temp_file,
+            is_text_extractable_file, is_too_old, is_unchanged, is_valid_pdf, size_skip,
+            FileLocation, SizeSkip, WatchRoots,
+        },
+        watch_owner::WatchFolderOwner,
+    },
     services::{file_service::FileService, user_watch_service::UserWatchService},
 };
 
@@ -356,23 +364,22 @@ async fn scan_directory(
 
 async fn is_file_stable(path: &Path, stability_check_ms: u64) -> bool {
     // Check if file size AND modification time are stable (not currently being written)
-    if let Ok(metadata1) = tokio::fs::metadata(path).await {
-        let size1 = metadata1.len();
-        let mtime1 = metadata1.modified().ok();
+    let Some(before) = size_and_mtime(path).await else {
+        // If we can't read metadata, assume it's not stable
+        return false;
+    };
 
-        // Wait for the configured stability check duration
-        sleep(Duration::from_millis(stability_check_ms)).await;
+    // Wait for the configured stability check duration
+    sleep(Duration::from_millis(stability_check_ms)).await;
 
-        if let Ok(metadata2) = tokio::fs::metadata(path).await {
-            let size2 = metadata2.len();
-            let mtime2 = metadata2.modified().ok();
-            // File is stable only if both size AND mtime are unchanged
-            return size1 == size2 && mtime1 == mtime2;
-        }
-    }
+    size_and_mtime(path)
+        .await
+        .is_some_and(|after| is_unchanged(before, after))
+}
 
-    // If we can't read metadata, assume it's not stable
-    false
+async fn size_and_mtime(path: &Path) -> Option<(u64, Option<SystemTime>)> {
+    let metadata = tokio::fs::metadata(path).await.ok()?;
+    Some((metadata.len(), metadata.modified().ok()))
 }
 
 /// Filter notify events to only process relevant filesystem changes.
@@ -395,7 +402,6 @@ fn is_relevant_event(kind: &EventKind) -> bool {
 /// should not be ingested (hidden, disallowed type, too large, no owner,
 /// ...) are skipped with `Ok(())`.
 pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<()> {
-    let (db, file_service, config) = (&ctx.db, ctx.file_service.as_ref(), &ctx.config);
     if !path.is_file() {
         return Ok(());
     }
@@ -406,121 +412,19 @@ pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<
         .unwrap_or("")
         .to_string();
 
-    // Skip hidden files, temporary files, and system files
-    if filename.starts_with('.')
-        || filename.starts_with('~')
-        || filename.ends_with(".tmp")
-        || filename.ends_with(".temp")
-        || filename.contains("$RECYCLE.BIN")
-        || filename.contains("System Volume Information")
-    {
-        debug!("Skipping system/temporary file: {}", filename);
+    if !is_eligible_before_read(path, &filename, ctx).await {
         return Ok(());
-    }
-
-    if !file_service.is_allowed_file_type(&filename, &config.allowed_file_types) {
-        debug!("Skipping file with disallowed type: {}", filename);
-        return Ok(());
-    }
-
-    // CRITICAL: Skip files that are in the upload directory - these are managed by WebDAV/manual uploads
-    let upload_path_normalized = std::path::Path::new(&config.upload_path)
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(&config.upload_path));
-
-    if let Ok(file_canonical) = path.canonicalize() {
-        if file_canonical.starts_with(&upload_path_normalized) {
-            debug!(
-                "Skipping file in upload directory (managed by WebDAV/manual upload): {}",
-                filename
-            );
-            return Ok(());
-        }
-    }
-
-    // Skip files that are not in either global watch directory or user watch directories
-    let global_watch_canonical = std::path::Path::new(&config.watch_folder)
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(&config.watch_folder));
-    let user_watch_canonical = if config.enable_per_user_watch {
-        Some(
-            std::path::Path::new(&config.user_watch_base_dir)
-                .canonicalize()
-                .unwrap_or_else(|_| std::path::PathBuf::from(&config.user_watch_base_dir)),
-        )
-    } else {
-        None
-    };
-
-    if let Ok(file_canonical) = path.canonicalize() {
-        let in_global_watch = file_canonical.starts_with(&global_watch_canonical);
-        let in_user_watch = user_watch_canonical
-            .as_ref()
-            .map(|user_watch| file_canonical.starts_with(user_watch))
-            .unwrap_or(false);
-
-        if !in_global_watch && !in_user_watch {
-            debug!("Skipping file outside of watch directories: {}", filename);
-            return Ok(());
-        }
-    }
-
-    // Check file age if configured
-    if let Some(max_age_hours) = config.max_file_age_hours {
-        if let Ok(metadata) = tokio::fs::metadata(path).await {
-            if let Ok(created) = metadata.created() {
-                let age = SystemTime::now()
-                    .duration_since(created)
-                    .unwrap_or_default();
-                if age.as_secs() > max_age_hours * 3600 {
-                    debug!(
-                        "Skipping old file: {} (age: {}h)",
-                        filename,
-                        age.as_secs() / 3600
-                    );
-                    return Ok(());
-                }
-            }
-        }
     }
 
     info!(
         "Processing file: {:?} (from watch directory: {})",
-        path, config.watch_folder
+        path, ctx.config.watch_folder
     );
 
     let file_data = tokio::fs::read(path).await?;
-    let file_size = file_data.len() as i64;
-
-    // Skip very large files (> 500MB by default)
-    const MAX_FILE_SIZE: i64 = 500 * 1024 * 1024;
-    if file_size > MAX_FILE_SIZE {
-        warn!(
-            "Skipping large file: {} ({} MB)",
-            filename,
-            file_size / 1024 / 1024
-        );
+    let Some(mime_type) = extractable_mime_type(&filename, &file_data) else {
         return Ok(());
-    }
-
-    // Skip empty files
-    if file_size == 0 {
-        debug!("Skipping empty file: {}", filename);
-        return Ok(());
-    }
-
-    let mime_type = mime_guess::from_path(&filename)
-        .first_or_octet_stream()
-        .to_string();
-
-    // Check if file can have text extracted (OCR or Office document text extraction)
-    if !is_text_extractable_file(&mime_type) {
-        debug!(
-            "Skipping non-text-extractable file: {} ({})",
-            filename, mime_type
-        );
-        return Ok(());
-    }
+    };
 
     let Some(target_user_id) = file_owner(path, &filename, ctx).await? else {
         warn!("Skipping watch folder file {} - it has no owner", filename);
@@ -533,20 +437,124 @@ pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<
             "Skipping invalid PDF file: {} (size: {} bytes, header: {:?})",
             filename,
             file_data.len(),
-            file_data
-                .get(0..50)
-                .unwrap_or(&[])
-                .iter()
-                .map(|&b| if (32..=126).contains(&b) {
-                    b as char
-                } else {
-                    '.'
-                })
-                .collect::<String>()
+            header_preview(&file_data)
         );
         return Ok(());
     }
 
+    ingest_and_queue(path, file_data, target_user_id, ctx).await
+}
+
+/// The checks that need no file contents: name, type, location and age.
+/// `false` (with the reason logged) when the file is to be skipped.
+async fn is_eligible_before_read(path: &Path, filename: &str, ctx: &WatchContext) -> bool {
+    let config = &ctx.config;
+
+    // Skip hidden files, temporary files, and system files
+    if is_system_or_temp_file(filename) {
+        debug!("Skipping system/temporary file: {}", filename);
+        return false;
+    }
+
+    if !ctx
+        .file_service
+        .is_allowed_file_type(filename, &config.allowed_file_types)
+    {
+        debug!("Skipping file with disallowed type: {}", filename);
+        return false;
+    }
+
+    is_in_watched_location(path, filename, config) && !is_past_max_age(path, filename, config).await
+}
+
+/// Files in the upload directory are managed by WebDAV/manual uploads, and
+/// files outside every watch directory are not ours. A file whose path
+/// cannot be canonicalised is given the benefit of the doubt.
+fn is_in_watched_location(path: &Path, filename: &str, config: &Config) -> bool {
+    let Ok(file_canonical) = path.canonicalize() else {
+        return true;
+    };
+    match WatchRoots::from_config(config).classify(&file_canonical) {
+        FileLocation::UploadDir => {
+            debug!(
+                "Skipping file in upload directory (managed by WebDAV/manual upload): {}",
+                filename
+            );
+            false
+        }
+        FileLocation::OutsideWatchDirs => {
+            debug!("Skipping file outside of watch directories: {}", filename);
+            false
+        }
+        FileLocation::WatchDir => true,
+    }
+}
+
+/// Whether the file is older than `max_file_age_hours`, when that is set and
+/// the file's creation time is readable.
+async fn is_past_max_age(path: &Path, filename: &str, config: &Config) -> bool {
+    let Some(max_age_hours) = config.max_file_age_hours else {
+        return false;
+    };
+    let Ok(created) = tokio::fs::metadata(path).await.and_then(|m| m.created()) else {
+        return false;
+    };
+    let age = age_since(created, SystemTime::now());
+    if !is_too_old(age, max_age_hours) {
+        return false;
+    }
+    debug!(
+        "Skipping old file: {} (age: {}h)",
+        filename,
+        age.as_secs() / 3600
+    );
+    true
+}
+
+/// The file's MIME type, when its size and type let it be ingested; `None`
+/// (with the reason logged) for empty, oversized or non-extractable files.
+fn extractable_mime_type(filename: &str, file_data: &[u8]) -> Option<String> {
+    let file_size = file_data.len() as i64;
+    match size_skip(file_size) {
+        // Skip very large files (> 500MB by default)
+        Some(SizeSkip::TooLarge) => {
+            warn!(
+                "Skipping large file: {} ({} MB)",
+                filename,
+                file_size / 1024 / 1024
+            );
+            return None;
+        }
+        Some(SizeSkip::Empty) => {
+            debug!("Skipping empty file: {}", filename);
+            return None;
+        }
+        None => {}
+    }
+
+    let mime_type = mime_guess::from_path(filename)
+        .first_or_octet_stream()
+        .to_string();
+
+    // Check if file can have text extracted (OCR or Office document text extraction)
+    if !is_text_extractable_file(&mime_type) {
+        debug!(
+            "Skipping non-text-extractable file: {} ({})",
+            filename, mime_type
+        );
+        return None;
+    }
+    Some(mime_type)
+}
+
+/// Ingest the file for `target_user_id` and queue a newly created document
+/// for OCR.
+async fn ingest_and_queue(
+    path: &Path,
+    file_data: Vec<u8>,
+    target_user_id: Uuid,
+    ctx: &WatchContext,
+) -> Result<()> {
     // Extract basic file info first
     let mut file_info = extract_file_info_from_path(path).await?;
 
@@ -562,7 +570,8 @@ pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<
     }
 
     // Use the unified ingestion service for consistent deduplication
-    let ingestion_service = DocumentIngestionService::new(db.clone(), file_service.clone());
+    let ingestion_service =
+        DocumentIngestionService::new(ctx.db.clone(), ctx.file_service.as_ref().clone());
 
     let result = ingestion_service
         .ingest_from_file_info(
@@ -576,58 +585,92 @@ pub async fn process_file(path: &std::path::Path, ctx: &WatchContext) -> Result<
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
 
-    match result {
-        IngestionResult::Created(doc) => {
-            info!(
-                "Created new document for watch folder file {}: {}",
-                file_info.name, doc.id
-            );
+    handle_ingestion_result(result, &file_info, ctx).await
+}
 
-            // Enqueue for OCR processing with priority based on file size and type
-            let priority = calculate_priority(file_info.size, &file_info.mime_type);
-            // A new document has no job yet; if one exists, OCR runs anyway.
-            let _queued: EnqueueOutcome = ctx
-                .queue_service
-                .enqueue_document(doc.id, priority, file_info.size)
-                .await?;
+/// Log what ingestion did with the file and queue a new document for OCR.
+async fn handle_ingestion_result(
+    result: IngestionResult,
+    file_info: &FileIngestionInfo,
+    ctx: &WatchContext,
+) -> Result<()> {
+    if let IngestionResult::Created(doc) = &result {
+        return queue_new_document(doc.id, file_info, ctx).await;
+    }
+    match not_created_log(&result, &file_info.name) {
+        Some((Level::DEBUG, message)) => debug!("{}", message),
+        Some((_, message)) => info!("{}", message),
+        None => {}
+    }
+    Ok(())
+}
 
-            info!(
-                "Successfully queued file for OCR: {} (size: {} bytes)",
-                file_info.name, file_info.size
-            );
-        }
+/// Queue a newly created document for OCR, prioritised by size and type.
+async fn queue_new_document(
+    document_id: Uuid,
+    file_info: &FileIngestionInfo,
+    ctx: &WatchContext,
+) -> Result<()> {
+    info!(
+        "Created new document for watch folder file {}: {}",
+        file_info.name, document_id
+    );
+
+    // Enqueue for OCR processing with priority based on file size and type
+    let priority = calculate_priority(file_info.size, &file_info.mime_type);
+    // A new document has no job yet; if one exists, OCR runs anyway.
+    let _queued: EnqueueOutcome = ctx
+        .queue_service
+        .enqueue_document(document_id, priority, file_info.size)
+        .await?;
+
+    info!(
+        "Successfully queued file for OCR: {} (size: {} bytes)",
+        file_info.name, file_info.size
+    );
+    Ok(())
+}
+
+/// What to log, and at which level, when ingestion created no new document
+/// for `filename` (nothing is queued for OCR). `None` for a created one.
+fn not_created_log(result: &IngestionResult, filename: &str) -> Option<(Level, String)> {
+    let line = match result {
+        IngestionResult::Created(_) => return None,
         IngestionResult::Skipped {
             existing_document_id,
             reason,
-        } => {
-            debug!(
+        } => (
+            Level::DEBUG,
+            format!(
                 "Skipped duplicate watch folder file {}: {} (existing: {})",
-                file_info.name, reason, existing_document_id
-            );
-        }
-        IngestionResult::ExistingDocument(doc) => {
-            info!(
+                filename, reason, existing_document_id
+            ),
+        ),
+        IngestionResult::ExistingDocument(doc) => (
+            Level::INFO,
+            format!(
                 "Found existing document for watch folder file {}: {} (not re-queuing for OCR)",
-                file_info.name, doc.id
-            );
-        }
+                filename, doc.id
+            ),
+        ),
         IngestionResult::TrackedAsDuplicate {
             existing_document_id,
-        } => {
-            info!(
+        } => (
+            Level::INFO,
+            format!(
                 "Tracked watch folder file {} as duplicate of existing document: {}",
-                file_info.name, existing_document_id
-            );
-        }
-        IngestionResult::Ignored { ignored_file_id } => {
-            info!(
+                filename, existing_document_id
+            ),
+        ),
+        IngestionResult::Ignored { ignored_file_id } => (
+            Level::INFO,
+            format!(
                 "Skipped watch folder file {}: on the ignored-files list ({})",
-                file_info.name, ignored_file_id
-            );
-        }
-    }
-
-    Ok(())
+                filename, ignored_file_id
+            ),
+        ),
+    };
+    Some(line)
 }
 
 /// The user a watched file belongs to: the user of the per-user watch
@@ -729,62 +772,6 @@ async fn extract_file_info_from_path(path: &Path) -> Result<FileIngestionInfo> {
     })
 }
 
-fn is_text_extractable_file(mime_type: &str) -> bool {
-    // Check mime types that support text extraction (OCR + Office documents + plain text)
-    matches!(
-        mime_type,
-        // OCR-able files
-        "application/pdf" | 
-        "image/png" | "image/jpeg" | "image/jpg" | 
-        "image/tiff" | "image/bmp" | "image/gif" |
-        // Plain text
-        "text/plain" |
-        // Office document formats
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | // DOCX
-        "application/msword" |                                                      // DOC
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" |      // XLSX
-        "application/vnd.ms-excel" |                                                // XLS  
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation" // PPTX (for future)
-    )
-}
-
-/// Calculate priority based on file size and type (smaller files and images get higher priority)
-fn calculate_priority(file_size: i64, mime_type: &str) -> i32 {
-    let base_priority = crate::ocr::priority::priority_for_file_size(file_size);
-
-    // Boost priority for images (usually faster to OCR)
-    let type_boost = if mime_type.starts_with("image/") {
-        2
-    } else if mime_type == "text/plain" {
-        1
-    } else {
-        0
-    };
-
-    (base_priority + type_boost).min(10)
-}
-
-/// Check if the given bytes represent a valid PDF file
-/// Handles PDFs with leading null bytes or whitespace
-fn is_valid_pdf(data: &[u8]) -> bool {
-    if data.len() < 5 {
-        return false;
-    }
-
-    // Find the first occurrence of "%PDF-" in the first 1KB of the file
-    // Some PDFs have leading null bytes or other metadata
-    let search_limit = data.len().min(1024);
-    let search_data = &data[0..search_limit];
-
-    for i in 0..=search_limit.saturating_sub(5) {
-        if &search_data[i..i + 5] == b"%PDF-" {
-            return true;
-        }
-    }
-
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -852,23 +839,58 @@ mod tests {
     }
 
     #[test]
-    fn priority_boosts_images_and_text_capped_at_ten() {
-        const MB: i64 = 1024 * 1024;
-        assert_eq!(calculate_priority(100 * MB, "image/png"), 4);
-        assert_eq!(calculate_priority(100 * MB, "text/plain"), 3);
-        assert_eq!(calculate_priority(1, "image/png"), 10);
+    fn created_documents_are_queued_not_logged_as_skipped() {
+        let doc = crate::test_utils::document_helpers::create_test_document(Uuid::new_v4());
+        assert_eq!(
+            not_created_log(&IngestionResult::Created(doc), "a.pdf"),
+            None
+        );
     }
 
     #[test]
-    fn valid_pdf_header_may_follow_leading_bytes_within_1kb() {
-        assert!(is_valid_pdf(b"%PDF-1.7\n"));
-        let mut padded = vec![0u8; 1000];
-        padded.extend_from_slice(b"%PDF-1.4");
-        assert!(is_valid_pdf(&padded));
-        let mut too_late = vec![0u8; 1024];
-        too_late.extend_from_slice(b"%PDF-1.4");
-        assert!(!is_valid_pdf(&too_late));
-        assert!(!is_valid_pdf(b"%PDF"));
-        assert!(!is_valid_pdf(b"not a pdf at all"));
+    fn duplicate_skips_log_at_debug() {
+        let id = Uuid::new_v4();
+        let result = IngestionResult::Skipped {
+            existing_document_id: id,
+            reason: "same hash".to_string(),
+        };
+        assert_eq!(
+            not_created_log(&result, "a.pdf"),
+            Some((
+                Level::DEBUG,
+                format!("Skipped duplicate watch folder file a.pdf: same hash (existing: {id})")
+            ))
+        );
+    }
+
+    #[test]
+    fn existing_tracked_and_ignored_files_log_at_info() {
+        let doc = crate::test_utils::document_helpers::create_test_document(Uuid::new_v4());
+        let doc_id = doc.id;
+        let id = Uuid::new_v4();
+        let cases = [
+            (
+                IngestionResult::ExistingDocument(doc),
+                format!("Found existing document for watch folder file a.pdf: {doc_id} (not re-queuing for OCR)"),
+            ),
+            (
+                IngestionResult::TrackedAsDuplicate {
+                    existing_document_id: id,
+                },
+                format!("Tracked watch folder file a.pdf as duplicate of existing document: {id}"),
+            ),
+            (
+                IngestionResult::Ignored {
+                    ignored_file_id: id,
+                },
+                format!("Skipped watch folder file a.pdf: on the ignored-files list ({id})"),
+            ),
+        ];
+        for (result, message) in cases {
+            assert_eq!(
+                not_created_log(&result, "a.pdf"),
+                Some((Level::INFO, message))
+            );
+        }
     }
 }
