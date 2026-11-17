@@ -4,24 +4,34 @@ use uuid::Uuid;
 
 use super::helpers::{
     apply_document_filters, apply_pagination, apply_role_based_filter, apply_sort,
-    find_word_boundary, map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS,
-    OCR_PROGRESS_FIELDS, OCR_PROGRESS_JOIN,
+    map_row_to_document_with_progress, DocumentWithProgress, DOCUMENT_FIELDS, OCR_PROGRESS_FIELDS,
+    OCR_PROGRESS_JOIN,
 };
+use super::search_query::BooleanQuery;
+use super::snippets::build_snippets;
 use crate::db::sanitize::strip_nul;
 use crate::db::Database;
 use crate::models::{
-    Document, EnhancedDocumentResponse, HighlightRange, MonthCount, SearchMode, SearchRequest,
-    SearchSnippet, UserRole,
+    Document, EnhancedDocumentResponse, MonthCount, SearchMode, SearchRequest, SearchSnippet,
+    UserRole,
 };
+
+/// A document's searchable text (content and OCR text) as one tsvector. It
+/// matches the expression of the `idx_documents_content_search` GIN index, so
+/// the planner can use it. Matching the whole document at once also keeps
+/// negation meaningful: matched per column, `!draft` would succeed on a
+/// document's empty content column even when its OCR text says "draft".
+const DOCUMENT_TSVECTOR: &str =
+    "to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, ''))";
 
 /// SQL expression building the tsquery (or similarity operand) for a search mode.
 fn tsquery_function(mode: &SearchMode) -> &'static str {
     match mode {
         SearchMode::Simple => "plainto_tsquery",
         SearchMode::Phrase => "phraseto_tsquery",
-        // Boolean input is translated by `boolean_to_websearch`; websearch
-        // syntax cannot fail to parse, unlike raw `to_tsquery` input.
-        SearchMode::Boolean => "websearch_to_tsquery",
+        // Boolean input is parsed and re-rendered by `BooleanQuery`, whose
+        // output is always valid `to_tsquery` syntax.
+        SearchMode::Boolean => "to_tsquery",
         // Fuzzy search does not use a tsquery
         SearchMode::Fuzzy => "",
     }
@@ -29,81 +39,24 @@ fn tsquery_function(mode: &SearchMode) -> &'static str {
 
 /// The text bound as the tsquery function's argument.
 fn tsquery_input(search_query: &str, mode: &SearchMode) -> String {
-    let query = strip_nul(search_query);
     match mode {
-        SearchMode::Boolean => boolean_to_websearch(&query),
-        _ => query.into_owned(),
+        SearchMode::Boolean => BooleanQuery::parse(search_query).to_tsquery(),
+        _ => strip_nul(search_query).into_owned(),
     }
 }
 
-/// Translates a boolean query into `websearch_to_tsquery` syntax, which
-/// Postgres parses without ever raising an error. Accepts both operator
-/// styles users and AI clients write: `&`/`AND` (or nothing) for and,
-/// `|`/`OR` for or, `!`/`NOT`/a leading `-` for not. Quoted phrases pass
-/// through; parentheses are dropped (websearch syntax has no grouping).
-pub(crate) fn boolean_to_websearch(query: &str) -> String {
-    let mut out: Vec<String> = Vec::new();
-    let mut negate = false;
-    for token in boolean_tokens(query) {
-        match token {
-            BooleanToken::Or => out.push("or".to_string()),
-            BooleanToken::Not => negate = true,
-            BooleanToken::Term(term) => {
-                out.push(if negate { format!("-{term}") } else { term });
-                negate = false;
-            }
-        }
-    }
-    out.join(" ")
-}
-
-#[derive(Debug, PartialEq)]
-enum BooleanToken {
-    Term(String),
-    Or,
-    Not,
-}
-
-/// Splits a boolean query into terms (words or quoted phrases) and the
-/// operators that change meaning; `&`, `AND` and parentheses are dropped.
-fn boolean_tokens(query: &str) -> Vec<BooleanToken> {
-    let mut tokens = Vec::new();
-    let mut chars = query.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '|' => tokens.push(BooleanToken::Or),
-            '!' => tokens.push(BooleanToken::Not),
-            '"' => {
-                let phrase: String = chars.by_ref().take_while(|&c| c != '"').collect();
-                if !phrase.trim().is_empty() {
-                    tokens.push(BooleanToken::Term(format!("\"{}\"", phrase.trim())));
-                }
-            }
-            c if c.is_whitespace() || "()&".contains(c) => {}
-            c => {
-                let mut word = c.to_string();
-                while let Some(next) =
-                    chars.next_if(|&n| !n.is_whitespace() && !"()&|!\"".contains(n))
-                {
-                    word.push(next);
-                }
-                tokens.extend(word_tokens(word));
-            }
-        }
-    }
-    tokens
-}
-
-/// One bare word: an operator keyword, a `-negated` term or a plain term.
-fn word_tokens(word: String) -> Vec<BooleanToken> {
-    match word.as_str() {
-        "AND" | "-" => vec![],
-        "OR" => vec![BooleanToken::Or],
-        "NOT" => vec![BooleanToken::Not],
-        _ => match word.strip_prefix('-') {
-            Some(rest) => vec![BooleanToken::Not, BooleanToken::Term(rest.to_string())],
-            None => vec![BooleanToken::Term(word)],
-        },
+/// The words and phrases to highlight in snippets for `search_query`. Boolean
+/// queries contribute only their non-negated terms, without operators;
+/// other modes split on whitespace and drop surrounding double quotes.
+pub(crate) fn highlight_terms(search_query: &str, mode: &SearchMode) -> Vec<String> {
+    match mode {
+        SearchMode::Boolean => BooleanQuery::parse(search_query).positive_terms(),
+        _ => search_query
+            .split_whitespace()
+            .map(|term| term.trim_matches('"'))
+            .filter(|term| !term.is_empty())
+            .map(String::from)
+            .collect(),
     }
 }
 
@@ -116,7 +69,9 @@ fn push_search_rank(query: &mut QueryBuilder<Postgres>, search_query: &str, mode
             query.push(") as search_rank");
         }
         _ => {
-            query.push(", ts_rank(to_tsvector('english', COALESCE(content, '') || ' ' || COALESCE(ocr_text, '')), ");
+            query.push(", ts_rank(");
+            query.push(DOCUMENT_TSVECTOR);
+            query.push(", ");
             query.push(tsquery_function(mode));
             query.push("('english', ");
             query.push_bind(tsquery_input(search_query, mode));
@@ -138,16 +93,13 @@ fn push_search_condition(
             query.push(") > 0.3");
         }
         _ => {
-            let func = tsquery_function(mode);
-            query.push(" AND (to_tsvector('english', COALESCE(content, '')) @@ ");
-            query.push(func);
+            query.push(" AND ");
+            query.push(DOCUMENT_TSVECTOR);
+            query.push(" @@ ");
+            query.push(tsquery_function(mode));
             query.push("('english', ");
             query.push_bind(tsquery_input(search_query, mode));
-            query.push(") OR to_tsvector('english', COALESCE(ocr_text, '')) @@ ");
-            query.push(func);
-            query.push("('english', ");
-            query.push_bind(tsquery_input(search_query, mode));
-            query.push("))");
+            query.push(")");
         }
     }
 }
@@ -284,14 +236,14 @@ impl Database {
 
         let rows = query.build().fetch_all(&self.pool).await?;
 
+        let terms = highlight_terms(search_query, mode);
         let mut results = Vec::new();
         for row in rows {
             let item = map_row_to_document_with_progress(&row);
             let search_rank: f32 = row.try_get("search_rank").unwrap_or(0.0);
 
             let snippets = if include_snippets && !search_query.is_empty() {
-                self.generate_snippets(&item.document, search_query, snippet_length)
-                    .await
+                self.generate_snippets(&item.document, &terms, snippet_length)
             } else {
                 Vec::new()
             };
@@ -332,82 +284,19 @@ impl Database {
         Ok(())
     }
 
-    /// Generates search snippets with highlighted matches
-    pub async fn generate_snippets(
+    /// Snippets of `document`'s content and OCR text around each
+    /// occurrence of a highlight term (see `highlight_terms`).
+    pub fn generate_snippets(
         &self,
         document: &Document,
-        search_query: &str,
+        terms: &[String],
         snippet_length: usize,
     ) -> Vec<SearchSnippet> {
-        let mut snippets = Vec::new();
-        let search_terms: Vec<&str> = search_query.split_whitespace().collect();
-
-        // Search in content and OCR text
-        let texts = vec![
-            ("content", document.content.as_deref().unwrap_or("")),
-            ("ocr_text", document.ocr_text.as_deref().unwrap_or("")),
+        let texts = [
+            document.content.as_deref().unwrap_or(""),
+            document.ocr_text.as_deref().unwrap_or(""),
         ];
-
-        for (_source, text) in texts {
-            if text.is_empty() {
-                continue;
-            }
-
-            let text_lower = text.to_lowercase();
-            for term in &search_terms {
-                let term_lower = term.to_lowercase();
-                let mut start_pos = 0;
-
-                while let Some(match_pos) = text_lower[start_pos..].find(&term_lower) {
-                    let absolute_match_pos = start_pos + match_pos;
-
-                    // Calculate snippet boundaries
-                    let snippet_start = if absolute_match_pos >= snippet_length / 2 {
-                        find_word_boundary(text, absolute_match_pos - snippet_length / 2, false)
-                    } else {
-                        0
-                    };
-
-                    let snippet_end = {
-                        let desired_end = snippet_start + snippet_length;
-                        if desired_end < text.len() {
-                            find_word_boundary(text, desired_end, true)
-                        } else {
-                            text.len()
-                        }
-                    };
-
-                    let snippet_text = &text[snippet_start..snippet_end];
-
-                    // Calculate highlight range relative to snippet
-                    let highlight_start = absolute_match_pos - snippet_start;
-                    let highlight_end = highlight_start + term.len();
-
-                    let highlight_ranges = vec![HighlightRange {
-                        start: highlight_start as i32,
-                        end: highlight_end as i32,
-                    }];
-
-                    snippets.push(SearchSnippet {
-                        text: snippet_text.to_string(),
-                        start_offset: snippet_start as i32,
-                        end_offset: snippet_end as i32,
-                        highlight_ranges,
-                    });
-
-                    start_pos = absolute_match_pos + term.len();
-
-                    // Limit snippets per term
-                    if snippets.len() >= 3 {
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Remove duplicates and limit total snippets
-        snippets.truncate(5);
-        snippets
+        build_snippets(&texts, terms, snippet_length)
     }
 
     /// Counts total matching documents for pagination (without applying LIMIT/OFFSET),
@@ -468,59 +357,5 @@ impl Database {
             .into_iter()
             .map(|(month, count)| MonthCount { month, count })
             .collect())
-    }
-}
-
-#[cfg(test)]
-mod boolean_query_tests {
-    use super::boolean_to_websearch as translate;
-
-    #[test]
-    fn symbol_operators_from_the_search_help() {
-        assert_eq!(translate("invoice & paid"), "invoice paid");
-        assert_eq!(translate("invoice | receipt"), "invoice or receipt");
-        assert_eq!(translate("invoice & !draft"), "invoice -draft");
-        assert_eq!(translate("invoice&!draft"), "invoice -draft");
-        assert_eq!(
-            translate("(invoice | receipt) & 2024"),
-            "invoice or receipt 2024"
-        );
-    }
-
-    #[test]
-    fn word_operators_as_ai_clients_write_them() {
-        assert_eq!(translate("invoice AND 2024"), "invoice 2024");
-        assert_eq!(translate("invoice OR receipt"), "invoice or receipt");
-        assert_eq!(translate("invoice NOT draft"), "invoice -draft");
-        assert_eq!(translate("invoice -draft"), "invoice -draft");
-    }
-
-    #[test]
-    fn quoted_phrases_pass_through_and_can_be_negated() {
-        assert_eq!(
-            translate("\"total due\" & invoice"),
-            "\"total due\" invoice"
-        );
-        assert_eq!(translate("!\"draft copy\""), "-\"draft copy\"");
-        assert_eq!(
-            translate("\"unterminated phrase"),
-            "\"unterminated phrase\""
-        );
-    }
-
-    #[test]
-    fn malformed_input_degrades_instead_of_failing() {
-        // These are syntax errors for to_tsquery; websearch syntax has none.
-        for input in [
-            "", "&", "((", "| | |", "!!", "- -", "\"\"", "a & | b", "NOT", "a (b",
-        ] {
-            let translated = translate(input);
-            assert!(
-                !translated.contains(['&', '(', ')', '!']),
-                "{input:?} -> {translated:?}"
-            );
-        }
-        assert_eq!(translate("a & | b"), "a or b");
-        assert_eq!(translate("NOT"), "");
     }
 }
