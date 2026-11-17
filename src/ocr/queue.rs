@@ -10,32 +10,30 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
-    db::Database,
-    db_guardrails_simple::{DocumentTransactionManager, OcrWrite, OcrWriteOutcome},
-    monitoring::request_throttler::RequestThrottler,
-    ocr::{enhanced::EnhancedOcrService, failure_reason::classify_ocr_error},
+    db::Database, db_guardrails_simple::DocumentTransactionManager,
+    monitoring::request_throttler::RequestThrottler, ocr::enhanced::EnhancedOcrService,
 };
 
 #[path = "queue_cancel.rs"]
 mod cancel;
+#[path = "queue_claim.rs"]
+mod claim;
 #[path = "queue_enqueue.rs"]
 mod enqueue;
 #[path = "queue_maintenance.rs"]
 mod maintenance;
+#[path = "queue_process.rs"]
+mod process;
 #[path = "queue_processed_image.rs"]
 mod processed_image;
 #[path = "queue_stats.rs"]
 mod stats;
-pub(crate) use cancel::lock_running_job;
-pub use cancel::{CancelOutcome, CANCELLED_ERROR_MESSAGE, CANCELLED_FAILURE_REASON};
+pub use cancel::{
+    CancelOutcome, CancelledDocument, CANCELLED_ERROR_MESSAGE, CANCELLED_FAILURE_REASON,
+};
+pub(crate) use claim::lock_claimed_job;
+pub use claim::{ClaimLoss, JobClaim, JobRun, HEARTBEAT_INTERVAL};
 pub use enqueue::EnqueueOutcome;
-
-/// Removes the temporary preprocessed image OCR left behind, if any.
-async fn discard_processed_image(ocr_result: &crate::ocr::enhanced::OcrResult) {
-    if let Some(ref temp_path) = ocr_result.processed_image_path {
-        let _ = tokio::fs::remove_file(temp_path).await;
-    }
-}
 
 /// Upper bound on concurrent OCR jobs, to avoid exhausting the background DB pool.
 const MAX_CONCURRENT_OCR_JOBS: usize = 15;
@@ -55,6 +53,16 @@ pub struct OcrQueueItem {
     pub worker_id: Option<String>,
     pub processing_time_ms: Option<i32>,
     pub file_size: Option<i64>,
+    /// The token the dequeue that claimed this job wrote; every write the
+    /// worker makes about the job is guarded by it. None on an item that was
+    /// never claimed.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub claim_id: Option<Uuid>,
+    /// When the claiming worker last showed it is alive.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub heartbeat_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +88,8 @@ pub struct OcrQueueService {
     max_pdf_size_mb: u64,
     max_office_document_size_mb: u64,
     ocr_timeout_seconds: u64,
+    running_jobs: claim::RunningJobs,
+    heartbeat_interval: Duration,
 }
 
 impl OcrQueueService {
@@ -121,6 +131,8 @@ impl OcrQueueService {
             max_pdf_size_mb,
             max_office_document_size_mb,
             ocr_timeout_seconds,
+            running_jobs: claim::RunningJobs::default(),
+            heartbeat_interval: claim::HEARTBEAT_INTERVAL,
         }
     }
 
@@ -177,6 +189,8 @@ impl OcrQueueService {
             UPDATE ocr_queue
             SET status = 'processing',
                 started_at = NOW(),
+                heartbeat_at = NOW(),
+                claim_id = $3,
                 worker_id = $1,
                 attempts = attempts + 1
             WHERE id = $2
@@ -185,6 +199,7 @@ impl OcrQueueService {
             )
             .bind(&self.worker_id)
             .bind(job_id)
+            .bind(Uuid::new_v4())
             .execute(&mut *tx)
             .await?;
 
@@ -230,7 +245,7 @@ impl OcrQueueService {
                 r#"
             SELECT id, document_id, priority, status, attempts, max_attempts,
                    created_at, started_at, completed_at, error_message,
-                   worker_id, processing_time_ms, file_size
+                   worker_id, processing_time_ms, file_size, claim_id, heartbeat_at
             FROM ocr_queue
             WHERE id = $1
             "#,
@@ -256,6 +271,8 @@ impl OcrQueueService {
                 worker_id: row.get("worker_id"),
                 processing_time_ms: row.get("processing_time_ms"),
                 file_size: row.get("file_size"),
+                claim_id: row.get("claim_id"),
+                heartbeat_at: row.get("heartbeat_at"),
             };
 
             info!(
@@ -268,391 +285,6 @@ impl OcrQueueService {
 
         // If all retry attempts failed, return None
         Ok(None)
-    }
-
-    /// Update OCR progress for a document (page X of Y)
-    pub async fn update_progress(&self, document_id: Uuid, current: i32, total: i32) -> Result<()> {
-        sqlx::query(
-            r#"
-            UPDATE ocr_queue
-            SET progress_current = $2,
-                progress_total = $3
-            WHERE document_id = $1
-              AND status = 'processing'
-            "#,
-        )
-        .bind(document_id)
-        .bind(current)
-        .bind(total)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Mark an item as completed
-    async fn mark_completed(&self, item_id: Uuid, processing_time_ms: i32) -> Result<()> {
-        sqlx::query(
-            r#"
-            UPDATE ocr_queue
-            SET status = 'completed',
-                completed_at = NOW(),
-                processing_time_ms = $2
-            WHERE id = $1
-            "#,
-        )
-        .bind(item_id)
-        .bind(processing_time_ms)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    /// Process a single queue item
-    pub async fn process_item(
-        &self,
-        item: OcrQueueItem,
-        ocr_service: &EnhancedOcrService,
-    ) -> Result<()> {
-        let start_time = std::time::Instant::now();
-
-        // Get document details including filename for validation
-        let document = sqlx::query(
-            r#"
-            SELECT file_path, mime_type, user_id, filename, file_size
-            FROM documents
-            WHERE id = $1
-            "#,
-        )
-        .bind(item.document_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        match document {
-            Some(row) => {
-                let file_path: String = row.get("file_path");
-                let mime_type: String = row.get("mime_type");
-                let user_id: Option<Uuid> = row.get("user_id");
-                let filename: String = row.get("filename");
-                let file_size: i64 = row.get("file_size");
-
-                // Format file size for better readability
-                let file_size_mb = file_size as f64 / (1024.0 * 1024.0);
-
-                info!(
-                    "Processing OCR job {} for document {} | File: '{}' | Type: {} | Size: {:.2} MB",
-                    item.id, item.document_id, filename, mime_type, file_size_mb
-                );
-                // The owner's OCR settings (timeout, language, engine options),
-                // or the defaults with the server's OCR timeout
-                let stored = match user_id {
-                    Some(user_id) => self.db.get_user_settings(user_id).await.ok().flatten(),
-                    None => None,
-                };
-                let settings = crate::ocr::user_settings::settings_for_processing(
-                    stored,
-                    self.ocr_timeout_seconds,
-                );
-
-                // Create progress callback to report page-level OCR progress
-                let progress_pool = self.pool.clone();
-                let progress_doc_id = item.document_id;
-                let progress_callback: Option<crate::ocr::enhanced::ProgressCallback> = Some(
-                    Arc::new(move |current: i32, total: i32| {
-                        let pool = progress_pool.clone();
-                        tokio::spawn(async move {
-                            let _ = sqlx::query(
-                            "UPDATE ocr_queue SET progress_current = $2, progress_total = $3 WHERE document_id = $1 AND status = 'processing'"
-                        )
-                        .bind(progress_doc_id)
-                        .bind(current)
-                        .bind(total)
-                        .execute(&pool)
-                        .await;
-                        });
-                    }),
-                );
-
-                // Perform enhanced OCR
-                match ocr_service
-                    .extract_text_with_context(
-                        &file_path,
-                        &mime_type,
-                        &filename,
-                        file_size,
-                        &settings,
-                        progress_callback,
-                    )
-                    .await
-                {
-                    Ok(ocr_result) => {
-                        // Validate OCR quality
-                        if let Err(validation_error) =
-                            ocr_service.validate_ocr_quality(&ocr_result, &settings)
-                        {
-                            let error_msg =
-                                format!("OCR quality validation failed: {}", validation_error);
-                            warn!("⚠️  OCR quality issues for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words",
-                                  filename, item.id, item.document_id, ocr_result.confidence, ocr_result.word_count);
-
-                            // A cancelled job writes nothing; otherwise record the
-                            // failed attempt, then the failed-document entry.
-                            if self
-                                .fail_running_job(
-                                    item.id,
-                                    item.document_id,
-                                    &error_msg,
-                                    Some("low_ocr_confidence"),
-                                )
-                                .await?
-                            {
-                                let _ = self
-                                    .create_failed_document_from_ocr_error(
-                                        item.document_id,
-                                        "low_ocr_confidence",
-                                        &error_msg,
-                                        item.attempts,
-                                        Some(ocr_result.text.clone()),
-                                        Some(ocr_result.confidence),
-                                        Some(ocr_result.word_count as i32),
-                                    )
-                                    .await;
-                            }
-                            return Ok(());
-                        }
-
-                        if !ocr_result.text.is_empty() {
-                            // Use transaction-safe OCR update to prevent corruption
-                            let processing_time_ms = start_time.elapsed().as_millis() as i64;
-
-                            match self
-                                .transaction_manager
-                                .update_ocr_for_job(
-                                    item.id,
-                                    &OcrWrite {
-                                        document_id: item.document_id,
-                                        expected_filename: &filename,
-                                        ocr_text: &ocr_result.text,
-                                        confidence: ocr_result.confidence as f64,
-                                        word_count: ocr_result.word_count as i32,
-                                        processing_time_ms,
-                                    },
-                                )
-                                .await
-                            {
-                                Ok(OcrWriteOutcome::Written) => {
-                                    info!(
-                                        "✅ Transaction-safe OCR update successful for document {}",
-                                        item.document_id
-                                    );
-                                }
-                                Ok(OcrWriteOutcome::JobCancelled) => {
-                                    // The user cancelled this job while it ran.
-                                    discard_processed_image(&ocr_result).await;
-                                    return Ok(());
-                                }
-                                Ok(OcrWriteOutcome::Rejected) => {
-                                    let error_msg = "OCR update failed validation (document may have been modified)";
-                                    warn!("{} for document {}", error_msg, item.document_id);
-
-                                    // Use classification function to determine proper failure reason
-                                    let (failure_reason, _should_suppress) =
-                                        classify_ocr_error(error_msg);
-
-                                    // A cancelled job writes nothing; otherwise record the
-                                    // failed attempt, then the failed-document entry.
-                                    if self
-                                        .fail_running_job(
-                                            item.id,
-                                            item.document_id,
-                                            error_msg,
-                                            None,
-                                        )
-                                        .await?
-                                    {
-                                        let _ = self
-                                            .create_failed_document_from_ocr_error(
-                                                item.document_id,
-                                                failure_reason,
-                                                error_msg,
-                                                item.attempts,
-                                                None,
-                                                None,
-                                                None,
-                                            )
-                                            .await;
-                                    }
-                                    return Ok(());
-                                }
-                                Err(e) => {
-                                    let error_msg =
-                                        format!("Transaction-safe OCR update failed: {}", e);
-                                    error!("{}", error_msg);
-
-                                    // Use classification function to determine proper failure reason
-                                    let (failure_reason, _should_suppress) =
-                                        classify_ocr_error(&error_msg);
-
-                                    // A cancelled job writes nothing; otherwise record the
-                                    // failed attempt, then the failed-document entry.
-                                    if self
-                                        .fail_running_job(
-                                            item.id,
-                                            item.document_id,
-                                            &error_msg,
-                                            None,
-                                        )
-                                        .await?
-                                    {
-                                        let _ = self
-                                            .create_failed_document_from_ocr_error(
-                                                item.document_id,
-                                                failure_reason,
-                                                &error_msg,
-                                                item.attempts,
-                                                None,
-                                                None,
-                                                None,
-                                            )
-                                            .await;
-                                    }
-                                    return Ok(());
-                                }
-                            }
-                        } else {
-                            // Handle empty text results - fail the document since no searchable content was extracted
-                            let error_msg =
-                                "No extractable text found in document (0 words)".to_string();
-                            warn!("⚠️  No searchable content extracted for '{}' | Job: {} | Document: {} | 0 words",
-                                  filename, item.id, item.document_id);
-
-                            // Use classification function to determine proper failure reason
-                            let (failure_reason, _should_suppress) = classify_ocr_error(&error_msg);
-
-                            // A cancelled job writes nothing; otherwise record the
-                            // failed attempt, then the failed-document entry.
-                            if self
-                                .fail_running_job(
-                                    item.id,
-                                    item.document_id,
-                                    &error_msg,
-                                    Some("no_extractable_text"),
-                                )
-                                .await?
-                            {
-                                let _ = self
-                                    .create_failed_document_from_ocr_error(
-                                        item.document_id,
-                                        failure_reason,
-                                        &error_msg,
-                                        item.attempts,
-                                        None,
-                                        None,
-                                        None,
-                                    )
-                                    .await;
-                            }
-                            return Ok(());
-                        }
-
-                        // Save processed image if setting is enabled and image was processed
-                        if settings.save_processed_images {
-                            if let Some(ref processed_image_path) = ocr_result.processed_image_path
-                            {
-                                match self
-                                    .save_processed_image_for_review(
-                                        item.document_id,
-                                        user_id.unwrap_or_default(),
-                                        &file_path,
-                                        processed_image_path,
-                                        &ocr_result.preprocessing_applied,
-                                    )
-                                    .await
-                                {
-                                    Ok(_) => {
-                                        info!(
-                                            "✅ Saved processed image for document {} for review",
-                                            item.document_id
-                                        );
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                            "Failed to save processed image for document {}: {}",
-                                            item.document_id, e
-                                        );
-                                    }
-                                }
-                            }
-                        }
-
-                        // Clean up temporary processed image file if it exists
-                        discard_processed_image(&ocr_result).await;
-
-                        let processing_time_ms = start_time.elapsed().as_millis() as i32;
-                        self.mark_completed(item.id, processing_time_ms).await?;
-
-                        info!(
-                            "✅ OCR completed for '{}' | Job: {} | Document: {} | {:.1}% confidence | {} words | {}ms | Preprocessing: {:?}",
-                            filename, item.id, item.document_id,
-                            ocr_result.confidence, ocr_result.word_count, processing_time_ms, ocr_result.preprocessing_applied
-                        );
-                    }
-                    Err(e) => {
-                        let error_msg = format!("OCR extraction failed: {}", e);
-                        let error_str = e.to_string();
-
-                        // Classify error type and determine failure reason
-                        let (failure_reason, should_suppress) = classify_ocr_error(&error_str);
-
-                        // Use intelligent logging based on error type
-                        if should_suppress {
-                            // These are expected errors for certain PDF types - log at debug level
-                            use tracing::debug;
-                            debug!(
-                                "Expected PDF processing issue for '{}' ({}): {}",
-                                filename, failure_reason, e
-                            );
-                        } else {
-                            // These are unexpected errors that may need attention
-                            warn!("❌ OCR failed for '{}' | Job: {} | Document: {} | Reason: {} | Error: {}",
-                                  filename, item.id, item.document_id, failure_reason, e);
-                        }
-
-                        // A cancelled job writes nothing; otherwise record the
-                        // failed attempt, then the failed-document entry.
-                        if self
-                            .fail_running_job(
-                                item.id,
-                                item.document_id,
-                                &error_msg,
-                                Some(failure_reason),
-                            )
-                            .await?
-                        {
-                            let _ = self
-                                .create_failed_document_from_ocr_error(
-                                    item.document_id,
-                                    failure_reason,
-                                    &error_msg,
-                                    item.attempts,
-                                    None,
-                                    None,
-                                    None,
-                                )
-                                .await;
-                        }
-                    }
-                }
-            }
-            None => {
-                let error_msg = "Document not found";
-                let _ = self
-                    .fail_running_job(item.id, item.document_id, error_msg, None)
-                    .await?;
-            }
-        }
-
-        Ok(())
     }
 
     /// Pause OCR processing
@@ -711,6 +343,10 @@ impl OcrQueueService {
                 "message" => "Worker loop iteration - checking for items to process"
             );
 
+            // Take a worker slot before claiming a job, so a claimed job
+            // never waits for a slot.
+            let permit = semaphore.clone().acquire_owned().await?;
+
             // Check for items to process
             match self.dequeue().await {
                 Ok(Some(item)) => {
@@ -721,46 +357,12 @@ impl OcrQueueService {
                         "priority" => item.priority,
                         "message" => "Dequeued job, spawning processing task"
                     );
-
-                    let permit = semaphore.clone().acquire_owned().await?;
                     let self_clone = self.clone();
                     let ocr_service_clone = ocr_service.clone();
-
-                    // Spawn task to process item with throttling
                     tokio::spawn(async move {
-                        // Acquire throttling permit to prevent overwhelming the database
-                        match self_clone.processing_throttler.acquire_permit().await {
-                            Ok(_throttle_permit) => {
-                                // Process the item with both semaphore and throttle permits held
-                                if let Err(e) =
-                                    self_clone.process_item(item, &ocr_service_clone).await
-                                {
-                                    error!("Error processing OCR item: {}", e);
-                                }
-                                // Permits are automatically released when dropped
-                            }
-                            Err(e) => {
-                                error!(
-                                    "Failed to acquire throttling permit for OCR processing: {}",
-                                    e
-                                );
-                                // Mark the item as failed due to throttling
-                                if let Err(mark_err) = self_clone
-                                    .fail_running_job(
-                                        item.id,
-                                        item.document_id,
-                                        &format!("Throttling error: {}", e),
-                                        None,
-                                    )
-                                    .await
-                                {
-                                    error!(
-                                        "Failed to mark item as failed after throttling error: {}",
-                                        mark_err
-                                    );
-                                }
-                            }
-                        }
+                        self_clone.run_job(item, &ocr_service_clone).await;
+                        // The slot is freed when the job ends -- including
+                        // when a cancel stops it early.
                         drop(permit);
                     });
                 }
@@ -781,18 +383,47 @@ impl OcrQueueService {
         }
     }
 
+    /// Runs a dequeued job with the processing throttle held.
+    async fn run_job(&self, item: OcrQueueItem, ocr_service: &EnhancedOcrService) {
+        let result = match self.processing_throttler.acquire_permit().await {
+            Ok(_throttle_permit) => self.process_item(item, ocr_service).await,
+            Err(e) => self.fail_throttled(&item, e.to_string()).await,
+        };
+        if let Err(e) = result {
+            error!("Error processing OCR item: {}", e);
+        }
+    }
+
+    /// Records a job that could not get a processing permit as a failed attempt.
+    async fn fail_throttled(&self, item: &OcrQueueItem, e: String) -> Result<()> {
+        error!(
+            "Failed to acquire throttling permit for OCR processing: {}",
+            e
+        );
+        let message = format!("Throttling error: {}", e);
+        let attempt = cancel::FailedAttempt {
+            error_message: &message,
+            ..Default::default()
+        };
+        let _ = self
+            .record_failed_attempt(&item.claim()?, item.attempts, attempt)
+            .await?;
+        Ok(())
+    }
+
     /// Helper function to create failed document record from OCR failure
-    #[allow(clippy::too_many_arguments)]
     async fn create_failed_document_from_ocr_error(
         &self,
         document_id: Uuid,
         failure_reason: &str,
         error_message: &str,
         retry_count: i32,
-        ocr_text: Option<String>,
-        ocr_confidence: Option<f32>,
-        ocr_word_count: Option<i32>,
+        partial: Option<cancel::PartialOcr>,
     ) -> Result<()> {
+        let (ocr_text, ocr_confidence, ocr_word_count) = match partial {
+            Some(p) => (Some(p.text), Some(p.confidence), Some(p.word_count)),
+            None => (None, None, None),
+        };
         // Query document directly from database without user restrictions (OCR service context)
         let document_row = sqlx::query(
             r#"

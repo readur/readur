@@ -267,7 +267,16 @@ pub async fn setup(heading: &str, fx: &Fixture) -> Setup {
                 .schema::<RetryOcrRequest>("")
         }
         "Cancel OCR" => {
-            let id = fx.document().await;
+            // A document whose OCR failed, being retried: cancelling leaves
+            // it 'failed' (a completed one would keep its text instead).
+            let mut doc = create_test_document(fx.alice);
+            doc.ocr_status = Some("failed".to_string());
+            doc.ocr_text = None;
+            doc.ocr_confidence = None;
+            doc.ocr_word_count = None;
+            doc.ocr_completed_at = None;
+            doc.file_hash = Some(format!("{:064x}", Uuid::new_v4().as_u128()));
+            let id = fx.ctx.state().db.create_document(doc).await.unwrap().id;
             let uri = format!("/api/documents/{id}/ocr/retry");
             fx.call(Alice, "POST", &uri, json!({})).await;
             Setup::new(Alice).subst("{id}", id)

@@ -720,14 +720,43 @@ pub async fn retry_document_ocr(
 pub struct OcrCancelOutcome {
     /// False when the document had no queued or running OCR job.
     pub cancelled: bool,
-    /// True when a worker was already running the cancelled job; its result
-    /// is discarded when it finishes.
+    /// True when a worker was already running the cancelled job; it is
+    /// stopped and its result is discarded.
     pub was_running: bool,
+    /// The document's `ocr_status` after the request: 'failed' (reason
+    /// 'cancelled') for a document with no OCR text, 'completed' for a
+    /// document whose earlier OCR text is kept, or, with nothing to cancel,
+    /// whatever it already was.
+    pub document_status: Option<String>,
     pub message: String,
 }
 
-/// Cancels a document's queued or running OCR. A cancelled document is left
-/// 'failed' (reason 'cancelled'), so it can be retried. A missing or foreign
+/// What a cancel tells the caller, for each state it can leave behind.
+fn cancel_message(
+    was_running: bool,
+    document: crate::ocr::queue::CancelledDocument,
+) -> &'static str {
+    use crate::ocr::queue::CancelledDocument::{Failed, KeptCompleted};
+    match (was_running, document) {
+        (false, Failed) => {
+            "Queued OCR was cancelled; the document is now 'failed' (reason 'cancelled') and can be retried"
+        }
+        (true, Failed) => {
+            "Running OCR was stopped and its result discarded; the document is now 'failed' (reason 'cancelled') and can be retried"
+        }
+        (false, KeptCompleted) => {
+            "Queued re-OCR was cancelled; the document keeps its existing OCR text (status 'completed')"
+        }
+        (true, KeptCompleted) => {
+            "Running re-OCR was stopped and its result discarded; the document keeps its existing OCR text (status 'completed')"
+        }
+    }
+}
+
+/// Cancels a document's queued or running OCR, stopping a running worker.
+/// A document without OCR text is left 'failed' (reason 'cancelled') so it
+/// can be retried; a document whose earlier OCR completed keeps its text and
+/// stays 'completed'. The outcome reports which. A missing or foreign
 /// document is `NotFound`.
 pub async fn cancel_document_ocr(
     state: &AppState,
@@ -753,19 +782,19 @@ pub async fn cancel_document_ocr(
             DocumentError::InternalServerError("Failed to cancel OCR")
         })?;
     Ok(match outcome {
-        crate::ocr::queue::CancelOutcome::Cancelled { was_running } => OcrCancelOutcome {
+        crate::ocr::queue::CancelOutcome::Cancelled {
+            was_running,
+            document: left,
+        } => OcrCancelOutcome {
             cancelled: true,
             was_running,
-            message: if was_running {
-                "OCR processing was cancelled; the running job's result will be discarded"
-            } else {
-                "Queued OCR was cancelled"
-            }
-            .to_string(),
+            document_status: Some(left.ocr_status().to_string()),
+            message: cancel_message(was_running, left).to_string(),
         },
         crate::ocr::queue::CancelOutcome::NothingToCancel => OcrCancelOutcome {
             cancelled: false,
             was_running: false,
+            document_status: document.ocr_status,
             message: "The document has no queued or running OCR to cancel".to_string(),
         },
     })
