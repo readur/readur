@@ -402,9 +402,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.160.0"
+version = "1.161.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061d5be27d146aaa2d27d2661f1fd2f76c33f788b82d6a6d0b2994a8e964c9fd"
+checksum = "d9c63e3ca6e56670513469e992759f4a51041603fde329471b29c5c1f5eaeefe"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -1763,7 +1763,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4470,7 +4470,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5306,7 +5306,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6246,7 +6246,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
