@@ -218,8 +218,10 @@ jobs:
             python3-pip \
             antiword \
             catdoc
-          # Pinned so upstream releases can't break unrelated PRs; Renovate bumps this pin.
-          pip3 install --no-cache-dir 'ocrmypdf==17.14.1'
+          # Install pinned ocrmypdf from PyPI instead of stale apt version.
+          # Pinned so upstream releases can't break unrelated PRs (e.g. 17.8.0
+          # moved --help/--version to stderr); Renovate bumps this pin.
+          pip3 install --no-cache-dir 'ocrmypdf==17.14.2'
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
@@ -339,7 +341,7 @@ jobs:
             antiword \
             catdoc
           # Pinned so upstream releases can't break unrelated PRs; Renovate bumps this pin.
-          pip3 install --no-cache-dir 'ocrmypdf==17.14.1'
+          pip3 install --no-cache-dir 'ocrmypdf==17.14.2'
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
