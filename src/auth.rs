@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::{
     extract::FromRequestParts,
     http::{request::Parts, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -50,6 +50,11 @@ pub struct AuthUser {
     pub user: User,
 }
 
+/// An authentication or authorization failure in the API's error shape.
+fn auth_error(status: StatusCode, message: &str) -> Response {
+    crate::errors::error_response(status, crate::errors::status_code_name(status), message)
+}
+
 impl FromRequestParts<Arc<AppState>> for AuthUser {
     type Rejection = Response;
 
@@ -58,7 +63,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
         let token = extract_token_from_headers(&parts.headers)
-            .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing authorization header").into_response())?;
+            .ok_or_else(|| auth_error(StatusCode::UNAUTHORIZED, "Missing authorization header"))?;
 
         let user = authenticate_token(&token, state).await?;
         Ok(AuthUser { user })
@@ -80,7 +85,7 @@ impl FromRequestParts<Arc<AppState>> for AdminUser {
     ) -> Result<Self, Self::Rejection> {
         let AuthUser { user } = AuthUser::from_request_parts(parts, state).await?;
         if user.role != UserRole::Admin {
-            return Err((StatusCode::FORBIDDEN, "Admin access required").into_response());
+            return Err(auth_error(StatusCode::FORBIDDEN, "Admin access required"));
         }
         Ok(AdminUser { user })
     }
@@ -100,7 +105,7 @@ pub async fn authenticate_token(token: &str, state: &Arc<AppState>) -> Result<Us
         return authenticate_api_key(token, state).await;
     }
 
-    let unauthorized = || (StatusCode::UNAUTHORIZED, "Invalid token").into_response();
+    let unauthorized = || auth_error(StatusCode::UNAUTHORIZED, "Invalid token");
 
     let claims = verify_jwt(token, &state.config.jwt_secret).map_err(|_| unauthorized())?;
 
@@ -108,7 +113,7 @@ pub async fn authenticate_token(token: &str, state: &Arc<AppState>) -> Result<Us
         .db
         .get_user_by_id(claims.sub)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response())?
+        .map_err(|_| auth_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?
         .ok_or_else(unauthorized)?;
 
     if !user.is_active || claims.ver != user.token_version {
@@ -122,14 +127,14 @@ pub async fn authenticate_token(token: &str, state: &Arc<AppState>) -> Result<Us
 /// every failure mode (invalid, revoked, expired, user gone or deactivated)
 /// so the caller cannot distinguish between them — prevents enumeration.
 async fn authenticate_api_key(token: &str, state: &Arc<AppState>) -> Result<User, Response> {
-    let unauthorized = || (StatusCode::UNAUTHORIZED, "Invalid API key").into_response();
+    let unauthorized = || auth_error(StatusCode::UNAUTHORIZED, "Invalid API key");
 
     let hash = sha256_hex(token);
     let api_key = state
         .db
         .get_api_key_by_hash(&hash)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response())?
+        .map_err(|_| auth_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?
         .ok_or_else(unauthorized)?;
 
     if api_key.is_expired() {
@@ -140,7 +145,7 @@ async fn authenticate_api_key(token: &str, state: &Arc<AppState>) -> Result<User
         .db
         .get_user_by_id(api_key.user_id)
         .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response())?
+        .map_err(|_| auth_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?
         .ok_or_else(unauthorized)?;
 
     if !user.is_active {

@@ -10,7 +10,8 @@ import { makeDocument, makeOcr, renderDrawer, stubObjectUrls } from './testUtils
 vi.mock('../../../services/api', async () => (await import('./mockApi')).createApiMock());
 vi.mock('../../board/litStore', () => ({ acknowledge: vi.fn() }));
 vi.mock('../../../components/RetryHistoryModal', () => ({
-  RetryHistoryModal: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Retry history" /> : null),
+  RetryHistoryModal: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Retry history" /> : null,
 }));
 vi.mock('../../labels/LabelSelector', () => ({ default: () => null }));
 
@@ -61,7 +62,9 @@ describe('document drawer: head', () => {
     m.documentService.getOcrText.mockResolvedValue({ data: makeOcr() });
     renderDrawer({ path: '/documents?document=doc-2', list: { ids: ['doc-1', 'doc-2', 'doc-3'] } });
     await screen.findByRole('dialog', { name: 'doc-2.pdf' });
-    await user.click(screen.getByRole('button', { name: 'Close' }).closest('header') as HTMLElement);
+    await user.click(
+      screen.getByRole('button', { name: 'Close' }).closest('header') as HTMLElement,
+    );
     await user.keyboard('{ArrowDown}');
     expect(await screen.findByRole('dialog', { name: 'doc-3.pdf' })).toBeInTheDocument();
     expect(url()).toBe('/documents?document=doc-3');
@@ -97,13 +100,30 @@ describe('document drawer: head', () => {
     const user = userEvent.setup();
     load();
     m.commentsService.list.mockResolvedValue({
-      data: [{ id: 'c1', document_id: 'doc-1', user_id: 'u', parent_id: null, content: 'Check page 4', is_edited: false, created_at: '', updated_at: '', username: 'ada', user_role: 'user', reply_count: 1, replies: [] }],
+      data: [
+        {
+          id: 'c1',
+          document_id: 'doc-1',
+          user_id: 'u',
+          parent_id: null,
+          content: 'Check page 4',
+          is_edited: false,
+          created_at: '',
+          updated_at: '',
+          username: 'ada',
+          user_role: 'user',
+          reply_count: 1,
+          replies: [],
+        },
+      ],
     });
     renderDrawer();
     await title();
     const tab = await screen.findByRole('tab', { name: 'Comments 2' });
     await user.click(tab);
-    expect(await within(screen.getByRole('tabpanel', { name: /Comments/ })).findByText('Check page 4')).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole('tabpanel', { name: /Comments/ })).findByText('Check page 4'),
+    ).toBeInTheDocument();
     expect(m.commentsService.list).toHaveBeenCalledWith('doc-1');
   });
 });
@@ -139,8 +159,37 @@ describe('document drawer: retry OCR', () => {
     await user.click(retry);
     expect(m.documentService.retryOcr).toHaveBeenCalledWith('doc-1');
     await waitFor(() => expect(retry).toHaveAttribute('aria-busy', 'true'));
-    finish({ data: {} });
+    finish({
+      data: { success: true, queued: true, message: 'Document queued for OCR processing' },
+    });
     expect(await screen.findByText('OCR queued again')).toBeInTheDocument();
+  });
+
+  it('says the document is already queued when the server found a pending job', async () => {
+    const user = userEvent.setup();
+    load(makeDocument({ ocr_status: 'failed', has_ocr_text: false }));
+    m.documentService.retryOcr.mockResolvedValue({
+      data: { success: true, queued: false, message: 'The document is already queued for OCR' },
+    });
+    renderDrawer();
+    await title();
+    await user.click(screen.getByRole('button', { name: 'Retry OCR' }));
+    expect(await screen.findByText('Already queued for OCR')).toBeInTheDocument();
+    expect(screen.getByText('The document is already queued for OCR')).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't queue OCR again")).not.toBeInTheDocument();
+    expect(screen.queryByText('OCR queued again')).not.toBeInTheDocument();
+  });
+
+  it('reports a retry the server refused', async () => {
+    const user = userEvent.setup();
+    load(makeDocument({ ocr_status: 'failed', has_ocr_text: false }));
+    m.documentService.retryOcr.mockResolvedValue({
+      data: { success: false, queued: false, message: 'Refused' },
+    });
+    renderDrawer();
+    await title();
+    await user.click(screen.getByRole('button', { name: 'Retry OCR' }));
+    expect(await screen.findByText("Couldn't queue OCR again")).toBeInTheDocument();
   });
 
   it('reports a failed retry', async () => {
@@ -176,7 +225,10 @@ describe('document drawer: delete', () => {
     window.addEventListener(DOCUMENTS_CHANGED_EVENT, changed);
     load();
     m.documentService.delete.mockResolvedValue({});
-    renderDrawer({ path: '/documents?labels=work&document=doc-1', list: { ids: ['doc-1'], onDeleted } });
+    renderDrawer({
+      path: '/documents?labels=work&document=doc-1',
+      list: { ids: ['doc-1'], onDeleted },
+    });
     await title();
     await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete document' }));
@@ -197,7 +249,9 @@ describe('document drawer: delete', () => {
     await title();
     await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete document' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
     expect(await screen.findByText("Couldn't delete the document")).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'invoice.pdf' })).toBeInTheDocument();
   });
@@ -211,7 +265,9 @@ describe('document drawer: delete', () => {
     await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(await screen.findByRole('menuitem', { name: 'View processed image' }));
     const dialog = await screen.findByRole('dialog', { name: 'Processed image' });
-    expect(await within(dialog).findByRole('img', { name: 'Image as prepared for OCR' })).toBeInTheDocument();
+    expect(
+      await within(dialog).findByRole('img', { name: 'Image as prepared for OCR' }),
+    ).toBeInTheDocument();
   });
 
   it('has no processed-image item for a PDF', async () => {
@@ -221,7 +277,9 @@ describe('document drawer: delete', () => {
     await title();
     await user.click(screen.getByRole('button', { name: 'More actions' }));
     await screen.findByRole('menuitem', { name: 'Delete document' });
-    expect(screen.queryByRole('menuitem', { name: 'View processed image' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: 'View processed image' }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -242,7 +300,9 @@ describe('document drawer: states', () => {
     expect(await screen.findByRole('heading', { name: 'Document not found' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
     const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1) as HTMLElement);
+    await user.click(
+      within(dialog).getAllByRole('button', { name: 'Close' }).at(-1) as HTMLElement,
+    );
     await waitFor(() => expect(url()).toBe('/home'));
   });
 
@@ -252,10 +312,11 @@ describe('document drawer: states', () => {
     m.documentService.getById.mockResolvedValue({ data: makeDocument() });
     m.documentService.getOcrText.mockResolvedValue({ data: makeOcr() });
     renderDrawer();
-    expect(await screen.findByRole('heading', { name: "Couldn't load this document" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: "Couldn't load this document" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await title()).toBeInTheDocument();
     expect(m.documentService.getById).toHaveBeenCalledTimes(2);
   });
 });
-

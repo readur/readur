@@ -761,11 +761,10 @@ spec:
 # Development environment
 docker-compose -f docker-compose.dev.yml up -d
 
-# Database migrations
-cargo run --bin migrate
+# Database migrations run automatically when the server starts
 
 # Run with hot reload
-cargo watch -x run
+cargo watch -x 'run --bin readur'
 
 # Frontend development
 cd frontend && npm run dev

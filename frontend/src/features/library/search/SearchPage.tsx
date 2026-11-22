@@ -13,7 +13,14 @@ import { SearchBox } from '../SearchBox';
 import { SearchHelp } from '../SearchHelp';
 import { Segmented } from '../Segmented';
 import { useFacets, useRows, useSourceName } from '../useLibraryData';
-import { MIN_QUERY, NO_FILTERS, PAGE_SIZES, hasFilters, isSearch, useLibraryQuery } from '../urlState';
+import {
+  MIN_QUERY,
+  NO_FILTERS,
+  PAGE_SIZES,
+  hasFilters,
+  isSearch,
+  useLibraryQuery,
+} from '../urlState';
 import { ResultList } from './ResultList';
 import { useLibraryDrawer } from '../useLibraryDrawer';
 import { SaveCollectionDialog } from './SaveCollectionDialog';
@@ -34,8 +41,17 @@ export function SearchPage() {
   const { query, update, clearFilters } = useLibraryQuery();
   const facets = useFacets();
   const searching = isSearch(query);
-  const { rows, total, status, reload, patchRow, mimes } = useRows(query, facets.mimeTypes, facets.mimeReady, searching);
-  const timeline = useTimeline(query, mimes, searching && (query.types.length === 0 || facets.mimeReady));
+  const { rows, total, status, reload, patchRow, mimes } = useRows(
+    query,
+    facets.mimeTypes,
+    facets.mimeReady,
+    searching,
+  );
+  const timeline = useTimeline(
+    query,
+    mimes,
+    searching && (query.types.length === 0 || facets.mimeReady),
+  );
   const sourceName = useSourceName(facets.sources);
 
   // Selection is per page of results; "every match" is a separate, explicit step.
@@ -66,7 +82,10 @@ export function SearchPage() {
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const saveCount = allMatches ? total : selectedRows.length;
   const resolveIds = useCallback(
-    () => (allMatches ? fetchAllMatchIds(query, mimes, total) : Promise.resolve(selectedRows.map((r) => r.id))),
+    () =>
+      allMatches
+        ? fetchAllMatchIds(query, mimes, total)
+        : Promise.resolve(selectedRows.map((r) => r.id)),
     [allMatches, query, mimes, total, selectedRows],
   );
 
@@ -82,7 +101,8 @@ export function SearchPage() {
   };
   const pickedLabel = pickedMonths(query.from, query.to, i18n.language);
 
-  const autoFocus = Boolean((location.state as { focusSearch?: boolean } | null)?.focusSearch) || !query.q;
+  const autoFocus =
+    Boolean((location.state as { focusSearch?: boolean } | null)?.focusSearch) || !query.q;
   const byMonth = !query.relevance && query.sort === 'created_at';
 
   return (
@@ -94,9 +114,16 @@ export function SearchPage() {
           onChange={(q) => update({ q })}
           autoFocus={autoFocus}
           size="lg"
-          placeholder={t('library.search.bigPlaceholder', 'Search every document by name or by the words inside it')}
+          placeholder={t(
+            'library.search.bigPlaceholder',
+            'Search every document by name or by the words inside it',
+          )}
         />
-        <SearchHelp mode={query.mode} onModeChange={(mode) => update({ mode })} onExample={(q, mode) => update({ q, mode })} />
+        <SearchHelp
+          mode={query.mode}
+          onModeChange={(mode) => update({ mode })}
+          onExample={(q, mode) => update({ q, mode })}
+        />
       </div>
       <FilterStrip
         query={query}
@@ -111,8 +138,16 @@ export function SearchPage() {
               value={query.relevance ? 'relevance' : 'date'}
               onChange={(v) => update({ relevance: v === 'relevance' })}
               items={[
-                { id: 'date', label: t('library.search.newest', 'Newest first'), icon: <Schedule fontSize="small" /> },
-                { id: 'relevance', label: t('library.search.bestMatch', 'Best match'), icon: <Sort fontSize="small" /> },
+                {
+                  id: 'date',
+                  label: t('library.search.newest', 'Newest first'),
+                  icon: <Schedule fontSize="small" />,
+                },
+                {
+                  id: 'relevance',
+                  label: t('library.search.bestMatch', 'Best match'),
+                  icon: <Sort fontSize="small" />,
+                },
               ]}
             />
           ) : null
@@ -140,7 +175,10 @@ export function SearchPage() {
                 {pickedLabel ? (
                   <span className={styles.summaryRange}>
                     {' '}
-                    {t('library.search.inRange', { range: pickedLabel, defaultValue: 'in {{range}}' })}
+                    {t('library.search.inRange', {
+                      range: pickedLabel,
+                      defaultValue: 'in {{range}}',
+                    })}
                   </span>
                 ) : null}
               </p>
@@ -150,7 +188,13 @@ export function SearchPage() {
                 </Button>
               ) : null}
             </div>
-            <Timeline bars={timeline.bars} from={query.from} to={query.to} onPick={pickMonths} isLoading={timeline.status === 'loading'} />
+            <Timeline
+              bars={timeline.bars}
+              from={query.from}
+              to={query.to}
+              onPick={pickMonths}
+              isLoading={timeline.status === 'loading'}
+            />
           </section>
 
           {rows.length > 0 ? (
@@ -166,12 +210,20 @@ export function SearchPage() {
               />
               {pageAllSelected && total > rows.length && !allMatches ? (
                 <Button size="sm" variant="ghost" onPress={() => setAllMatches(true)}>
-                  {t('library.search.selectAll', { count: total, formatted: formatCount(total, i18n.language), defaultValue: 'Select all {{formatted}} matches' })}
+                  {t('library.search.selectAll', {
+                    count: total,
+                    formatted: formatCount(total, i18n.language),
+                    defaultValue: 'Select all {{formatted}} matches',
+                  })}
                 </Button>
               ) : null}
               {allMatches ? (
                 <span className={styles.allNote}>
-                  {t('library.search.allSelected', { count: total, formatted: formatCount(total, i18n.language), defaultValue: 'All {{formatted}} matches are selected' })}
+                  {t('library.search.allSelected', {
+                    count: total,
+                    formatted: formatCount(total, i18n.language),
+                    defaultValue: 'All {{formatted}} matches are selected',
+                  })}
                 </span>
               ) : null}
             </div>
@@ -186,7 +238,14 @@ export function SearchPage() {
             linkState={drawer.linkState}
             sourceName={sourceName}
             isLoading={status === 'loading'}
-            emptyState={<SearchEmpty status={status} filtered={hasFilters(query)} onRetry={reload} onClear={() => update(NO_FILTERS)} />}
+            emptyState={
+              <SearchEmpty
+                status={status}
+                filtered={hasFilters(query)}
+                onRetry={reload}
+                onClear={() => update(NO_FILTERS)}
+              />
+            }
           />
           {total > 0 && status !== 'error' ? (
             <Pagination
@@ -204,7 +263,14 @@ export function SearchPage() {
         <BulkActionBar
           count={total}
           onClear={clearSelection}
-          actions={[{ id: 'collection', label: t('library.collection.action', 'Save as collection'), icon: <BookmarkBorder fontSize="small" />, onPress: () => setSaving(true) }]}
+          actions={[
+            {
+              id: 'collection',
+              label: t('library.collection.action', 'Save as collection'),
+              icon: <BookmarkBorder fontSize="small" />,
+              onPress: () => setSaving(true),
+            },
+          ]}
         />
       ) : (
         <BulkActions
@@ -240,7 +306,10 @@ function pickedMonths(from: string | null, to: string | null, lng: string): stri
     const start = from.slice(0, 7);
     const end = to.slice(0, 7);
     const whole = monthRange(start)?.from === from && monthRange(end)?.to === to;
-    if (whole) return start === end ? monthLabel(start, lng) : `${monthLabel(start, lng, 'short')} – ${monthLabel(end, lng, 'short')}`;
+    if (whole)
+      return start === end
+        ? monthLabel(start, lng)
+        : `${monthLabel(start, lng, 'short')} – ${monthLabel(end, lng, 'short')}`;
   }
   return `${from ?? '…'} – ${to ?? '…'}`;
 }
@@ -250,23 +319,40 @@ function SearchStart({ tooShort }: { tooShort: boolean }) {
   return (
     <div className={styles.start}>
       <EmptyState
-        title={tooShort ? t('library.search.keepTyping', 'Keep typing…') : t('library.search.startTitle', 'Find anything in your documents')}
+        title={
+          tooShort
+            ? t('library.search.keepTyping', 'Keep typing…')
+            : t('library.search.startTitle', 'Find anything in your documents')
+        }
         description={t(
           'library.search.startHint',
-          'Readur searches file names and every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.',
+          'Readur searches every word read from your scans and PDFs. Try a name, a place or a topic, like “shoulder” or “invoice 2024”.',
         )}
       />
     </div>
   );
 }
 
-function SearchEmpty({ status, filtered, onRetry, onClear }: { status: string; filtered: boolean; onRetry: () => void; onClear: () => void }) {
+function SearchEmpty({
+  status,
+  filtered,
+  onRetry,
+  onClear,
+}: {
+  status: string;
+  filtered: boolean;
+  onRetry: () => void;
+  onClear: () => void;
+}) {
   const { t } = useTranslation();
   if (status === 'tooMany') {
     return (
       <EmptyState
         title={t('library.empty.tooMany', 'Too many matches — refine your search')}
-        description={t('library.empty.tooManyHint', 'Add a word or a filter to narrow the results.')}
+        description={t(
+          'library.empty.tooManyHint',
+          'Add a word or a filter to narrow the results.',
+        )}
       />
     );
   }
@@ -284,9 +370,16 @@ function SearchEmpty({ status, filtered, onRetry, onClear }: { status: string; f
       description={
         filtered
           ? t('library.empty.noMatchesHint', 'Nothing fits the current search and filters.')
-          : t('library.search.noMatchesHint', 'Check the spelling, try fewer words, or switch on “Similar spelling” in search help.')
+          : t(
+              'library.search.noMatchesHint',
+              'Check the spelling, try fewer words, or switch on “Similar spelling” in search help.',
+            )
       }
-      action={filtered ? <Button onPress={onClear}>{t('library.empty.clearFilters', 'Clear filters')}</Button> : undefined}
+      action={
+        filtered ? (
+          <Button onPress={onClear}>{t('library.empty.clearFilters', 'Clear filters')}</Button>
+        ) : undefined
+      }
     />
   );
 }

@@ -75,7 +75,7 @@ pub fn get_test_images() -> Vec<TestImage> {
 
 /// Get a specific test image by number (1-9)
 pub fn get_test_image(number: u8) -> Option<TestImage> {
-    if number < 1 || number > 9 {
+    if !(1..=9).contains(&number) {
         return None;
     }
     
@@ -105,7 +105,7 @@ pub fn get_available_test_images() -> Vec<TestImage> {
 #[macro_export]
 macro_rules! skip_if_no_test_images {
     () => {
-        if !crate::test_utils::test_images_available() {
+        if !$crate::test_utils::test_images_available() {
             println!("Skipping test: test images directory not available");
             return;
         }
@@ -124,41 +124,20 @@ macro_rules! skip_if_test_image_missing {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "test_utils_tests.rs"]
+mod tests;
 
-    #[test]
-    fn test_image_paths_are_valid() {
-        let images = get_test_images();
-        assert_eq!(images.len(), 9);
-        
-        for (i, image) in images.iter().enumerate() {
-            assert_eq!(image.filename, format!("test{}.{}", i + 1, 
-                if image.mime_type == "image/png" { "png" } 
-                else if image.filename.ends_with(".jpg") { "jpg" }
-                else { "jpeg" }
-            ));
-            assert!(image.expected_content.starts_with(&format!("Test {}", i + 1)));
-        }
-    }
+#[cfg(any(test, feature = "test-utils"))]
+#[path = "test_utils_config.rs"]
+mod config_builder;
+#[cfg(any(test, feature = "test-utils"))]
+pub use config_builder::TestConfigBuilder;
 
-    #[test]
-    fn test_get_specific_image() {
-        let image1 = get_test_image(1).unwrap();
-        assert_eq!(image1.filename, "test1.png");
-        assert_eq!(image1.mime_type, "image/png");
-        assert!(image1.expected_content.contains("Test 1"));
-
-        let image5 = get_test_image(5).unwrap();
-        assert_eq!(image5.filename, "test5.jpg");
-        assert_eq!(image5.mime_type, "image/jpeg");
-        assert!(image5.expected_content.contains("Test 5"));
-
-        // Invalid numbers should return None
-        assert!(get_test_image(0).is_none());
-        assert!(get_test_image(10).is_none());
-    }
-}
+#[cfg(any(test, feature = "test-utils"))]
+#[path = "test_utils_mcp.rs"]
+mod mcp;
+#[cfg(any(test, feature = "test-utils"))]
+pub use mcp::MCP_TEST_PROTOCOL_VERSION;
 
 /// Simplified test context with individual database per test
 #[cfg(any(test, feature = "test-utils"))]
@@ -168,6 +147,8 @@ pub struct TestContext {
     pub state: Arc<AppState>,
     context_id: String,
     cleanup_called: Arc<std::sync::atomic::AtomicBool>,
+    /// Upload directory created for this context (see `TestConfigBuilder`), removed on drop.
+    owned_upload_dir: Option<std::path::PathBuf>,
 }
 
 
@@ -177,6 +158,9 @@ impl Drop for TestContext {
         // Simplified drop - no async operations to prevent runtime issues
         // The pool closes when dropped; the database is dropped at process exit
         // For proper cleanup, use cleanup_and_close() explicitly before dropping
+        if let Some(dir) = &self.owned_upload_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }
 
@@ -188,7 +172,7 @@ impl TestContext {
     }
     
     /// Create a test context with custom configuration using individual database
-    pub async fn with_config(config_builder: TestConfigBuilder) -> Self {
+    pub async fn with_config(mut config_builder: TestConfigBuilder) -> Self {
         // Generate unique context ID for this test instance
         let context_id = format!(
             "test_{}_{}_{}_{}",
@@ -214,6 +198,7 @@ impl TestContext {
             .await
             .expect("Failed to connect to test database");
         
+        let owned_upload_dir = config_builder.claim_upload_dir(&context_id);
         let config = config_builder.build(database_url);
         
         let user_watch_service = if config.enable_per_user_watch {
@@ -254,7 +239,6 @@ impl TestContext {
             oidc_client: None,
             sync_progress_tracker: Arc::new(crate::services::sync_progress_tracker::SyncProgressTracker::new()),
             user_watch_service,
-            webdav_metrics_collector: None,
             rate_limiters: crate::rate_limit::RateLimiters::new(),
         });
         
@@ -269,6 +253,7 @@ impl TestContext {
             state,
             context_id,
             cleanup_called: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            owned_upload_dir,
         }
     }
     
@@ -706,113 +691,6 @@ impl TestContext {
     }
 }
 
-/// Builder pattern for test configuration to eliminate config duplication
-#[cfg(any(test, feature = "test-utils"))]
-pub struct TestConfigBuilder {
-    upload_path: String,
-    watch_folder: String,
-    jwt_secret: String,
-    concurrent_ocr_jobs: usize,
-    ocr_timeout_seconds: u64,
-    max_file_size_mb: u64,
-    memory_limit_mb: u64,
-    oidc_enabled: bool,
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl Default for TestConfigBuilder {
-    fn default() -> Self {
-        Self {
-            upload_path: "./test-uploads".to_string(),
-            watch_folder: "./test-watch".to_string(),
-            jwt_secret: "test-secret".to_string(),
-            concurrent_ocr_jobs: 2,
-            ocr_timeout_seconds: 60,
-            max_file_size_mb: 10,
-            memory_limit_mb: 256,
-            oidc_enabled: false,
-        }
-    }
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl TestConfigBuilder {
-    pub fn with_upload_path(mut self, path: &str) -> Self {
-        self.upload_path = path.to_string();
-        self
-    }
-    
-    pub fn with_watch_folder(mut self, folder: &str) -> Self {
-        self.watch_folder = folder.to_string();
-        self
-    }
-    
-    pub fn with_concurrent_ocr_jobs(mut self, jobs: usize) -> Self {
-        self.concurrent_ocr_jobs = jobs;
-        self
-    }
-    
-    pub fn with_oidc_enabled(mut self, enabled: bool) -> Self {
-        self.oidc_enabled = enabled;
-        self
-    }
-
-    pub fn with_max_file_size_mb(mut self, size_mb: u64) -> Self {
-        self.max_file_size_mb = size_mb;
-        self
-    }
-    
-    pub(crate) fn build(self, database_url: String) -> crate::config::Config {
-        crate::config::Config {
-            database_url,
-            server_address: "127.0.0.1:0".to_string(),
-            jwt_secret: self.jwt_secret,
-            upload_path: self.upload_path,
-            watch_folder: self.watch_folder,
-            user_watch_base_dir: "./test-user-watch".to_string(),
-            enable_per_user_watch: false,
-            allowed_file_types: vec!["pdf".to_string(), "txt".to_string(), "png".to_string()],
-            watch_interval_seconds: Some(30),
-            file_stability_check_ms: Some(500),
-            max_file_age_hours: None,
-            
-            // OCR Configuration
-            ocr_language: "eng".to_string(),
-            concurrent_ocr_jobs: self.concurrent_ocr_jobs,
-            ocr_timeout_seconds: self.ocr_timeout_seconds,
-            max_file_size_mb: self.max_file_size_mb,
-            max_pdf_size_mb: 100,
-            max_office_document_size_mb: 100,
-
-            // Performance
-            memory_limit_mb: self.memory_limit_mb as usize,
-            cpu_priority: "normal".to_string(),
-            
-            // OIDC Configuration
-            oidc_enabled: self.oidc_enabled,
-            oidc_client_id: None,
-            oidc_client_secret: None,
-            oidc_issuer_url: None,
-            oidc_redirect_uri: None,
-            oidc_auto_register: None,
-            allow_local_auth: None,
-
-            // S3 Configuration
-            s3_enabled: false,
-            s3_config: None,
-
-            // Public URL
-            public_url: None,
-            // Tests create users through the public registration endpoint.
-            security: crate::config::SecurityConfig {
-                allow_registration: true,
-                registration_requires_approval: false,
-                ..Default::default()
-            },
-        }
-    }
-}
-
 /// Create test app with provided AppState
 #[cfg(any(test, feature = "test-utils"))]
 pub fn create_test_app(state: Arc<AppState>) -> Router {
@@ -877,10 +755,10 @@ impl TestAuthHelper {
                         // Retry with a UUID suffix for guaranteed uniqueness
                         let retry_username = format!("{}_{}",
                             username,
-                            uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+                            &uuid::Uuid::new_v4().to_string().replace('-', "")[..8]
                         );
                         let retry_email = format!("test_{}@example.com", 
-                            uuid::Uuid::new_v4().to_string().replace('-', "")[..16].to_string()
+                            &uuid::Uuid::new_v4().to_string().replace('-', "")[..16]
                         );
                         
                         let retry_user_data = json!({

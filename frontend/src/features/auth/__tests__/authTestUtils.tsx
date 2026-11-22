@@ -35,8 +35,23 @@ export interface RenderAuthOptions {
 }
 
 /** Renders a public auth page with mocked auth + feature flags and a location probe. */
-export function renderAuth({ flags, loading = false, login = async () => {}, auth, entry, element, path }: RenderAuthOptions) {
-  const allFlags = { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: false, ...flags };
+export function renderAuth({
+  flags,
+  loading = false,
+  login = async () => {},
+  auth,
+  entry,
+  element,
+  path,
+}: RenderAuthOptions) {
+  const allFlags = {
+    allowLocalAuth: true,
+    allowRegistration: false,
+    oidcEnabled: false,
+    enablePerUserWatch: false,
+    mcpEnabled: false,
+    ...flags,
+  };
   const value: AuthValue = {
     user: null,
     loading: false,

@@ -1,39 +1,61 @@
 /*!
  * Simple Source Scheduler Unit Tests
- * 
+ *
  * Basic tests for the source scheduler functionality without complex mocking
  */
 
-use std::sync::Arc;
-use uuid::Uuid;
 use chrono::Utc;
 use serde_json::json;
+use std::sync::Arc;
+use uuid::Uuid;
 
 use readur::{
-    AppState,
     config::Config,
     db::Database,
-    models::{Source, SourceType, SourceStatus, WebDAVSourceConfig, LocalFolderSourceConfig, S3SourceConfig},
+    models::{
+        LocalFolderSourceConfig, S3SourceConfig, Source, SourceStatus, SourceType,
+        WebDAVSourceConfig,
+    },
     scheduling::source_scheduler::SourceScheduler,
     test_helpers::create_test_config_with_db,
+    AppState,
 };
 
 /// Create a test app state
 async fn create_test_app_state() -> Arc<AppState> {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
 
     let mut config = create_test_config_with_db(&database_url);
     config.server_address = "127.0.0.1:8080".to_string();
     config.jwt_secret = "test_secret".to_string();
 
     let db = Database::new(&config.database_url).await.unwrap();
-    
+
     // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
-    let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await.unwrap();
-    let file_service = std::sync::Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-    
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 2, file_service.clone(), 100, 100, 300));
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: config.upload_path.clone(),
+    };
+    let storage_backend = readur::storage::factory::create_storage_backend(storage_config)
+        .await
+        .unwrap();
+    let file_service =
+        std::sync::Arc::new(readur::services::file_service::FileService::with_storage(
+            config.upload_path.clone(),
+            storage_backend,
+        ));
+
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.pool.clone(),
+        2,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
     Arc::new(AppState {
         db: db.clone(),
         config,
@@ -42,9 +64,10 @@ async fn create_test_app_state() -> Arc<AppState> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: std::sync::Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     })
 }
@@ -53,7 +76,7 @@ async fn create_test_app_state() -> Arc<AppState> {
 async fn test_source_scheduler_creation() {
     let state = create_test_app_state().await;
     let _scheduler = SourceScheduler::new(state.clone());
-    
+
     // Test that scheduler is created successfully
     assert!(true); // If we get here, creation succeeded
 }
@@ -70,10 +93,10 @@ fn test_webdav_config_parsing() {
         "sync_interval_minutes": 60,
         "server_type": "nextcloud"
     });
-    
+
     let config: Result<WebDAVSourceConfig, _> = serde_json::from_value(config_json);
     assert!(config.is_ok(), "WebDAV config should parse successfully");
-    
+
     let webdav_config = config.unwrap();
     assert_eq!(webdav_config.server_url, "https://cloud.example.com");
     assert_eq!(webdav_config.username, "testuser");
@@ -92,10 +115,13 @@ fn test_local_folder_config_parsing() {
         "recursive": true,
         "follow_symlinks": false
     });
-    
+
     let config: Result<LocalFolderSourceConfig, _> = serde_json::from_value(config_json);
-    assert!(config.is_ok(), "Local Folder config should parse successfully");
-    
+    assert!(
+        config.is_ok(),
+        "Local Folder config should parse successfully"
+    );
+
     let local_config = config.unwrap();
     assert_eq!(local_config.watch_folders.len(), 1);
     assert_eq!(local_config.watch_folders[0], "/home/user/documents");
@@ -118,10 +144,10 @@ fn test_s3_config_parsing() {
         "auto_sync": true,
         "sync_interval_minutes": 120
     });
-    
+
     let config: Result<S3SourceConfig, _> = serde_json::from_value(config_json);
     assert!(config.is_ok(), "S3 config should parse successfully");
-    
+
     let s3_config = config.unwrap();
     assert_eq!(s3_config.bucket_name, "test-documents");
     assert_eq!(s3_config.region, "us-east-1");
@@ -146,7 +172,7 @@ fn test_source_status_enum() {
 #[test]
 fn test_interrupted_sync_detection() {
     let user_id = Uuid::new_v4();
-    
+
     let interrupted_source = Source {
         id: Uuid::new_v4(),
         user_id,
@@ -177,10 +203,10 @@ fn test_interrupted_sync_detection() {
         validation_score: None,
         validation_issues: None,
     };
-    
+
     // Test that interrupted sync is detected
     assert_eq!(interrupted_source.status, SourceStatus::Syncing);
-    
+
     let completed_source = Source {
         id: Uuid::new_v4(),
         user_id,
@@ -211,7 +237,7 @@ fn test_interrupted_sync_detection() {
         validation_score: None,
         validation_issues: None,
     };
-    
+
     assert_eq!(completed_source.status, SourceStatus::Idle);
 }
 
@@ -228,10 +254,10 @@ fn test_auto_sync_configuration() {
         sync_interval_minutes: 60,
         server_type: Some("nextcloud".to_string()),
     };
-    
+
     assert!(webdav_config.auto_sync);
     assert_eq!(webdav_config.sync_interval_minutes, 60);
-    
+
     // Test auto sync disabled
     let webdav_disabled = WebDAVSourceConfig {
         server_url: "https://test.com".to_string(),
@@ -243,7 +269,7 @@ fn test_auto_sync_configuration() {
         sync_interval_minutes: 60,
         server_type: Some("nextcloud".to_string()),
     };
-    
+
     assert!(!webdav_disabled.auto_sync);
 }
 
@@ -251,13 +277,21 @@ fn test_auto_sync_configuration() {
 fn test_sync_interval_validation() {
     let valid_intervals = vec![1, 15, 30, 60, 120, 240];
     let invalid_intervals = vec![0, -1, -30];
-    
+
     for interval in valid_intervals {
-        assert!(interval > 0, "Valid interval should be positive: {}", interval);
+        assert!(
+            interval > 0,
+            "Valid interval should be positive: {}",
+            interval
+        );
     }
-    
+
     for interval in invalid_intervals {
-        assert!(interval <= 0, "Invalid interval should be non-positive: {}", interval);
+        assert!(
+            interval <= 0,
+            "Invalid interval should be non-positive: {}",
+            interval
+        );
     }
 }
 
@@ -265,15 +299,23 @@ fn test_sync_interval_validation() {
 fn test_file_extension_validation() {
     let valid_extensions = vec![".pdf", ".txt", ".jpg", ".png", ".docx"];
     let invalid_extensions = vec!["pdf", "txt", "", "no-dot"];
-    
+
     for ext in valid_extensions {
-        assert!(ext.starts_with('.'), "Valid extension should start with dot: {}", ext);
+        assert!(
+            ext.starts_with('.'),
+            "Valid extension should start with dot: {}",
+            ext
+        );
         assert!(!ext.is_empty(), "Valid extension should not be empty");
     }
-    
+
     for ext in invalid_extensions {
         if !ext.is_empty() {
-            assert!(!ext.starts_with('.') || ext.len() == 1, "Invalid extension: {}", ext);
+            assert!(
+                !ext.starts_with('.') || ext.len() == 1,
+                "Invalid extension: {}",
+                ext
+            );
         }
     }
 }
@@ -282,11 +324,11 @@ fn test_file_extension_validation() {
 async fn test_trigger_sync_basic() {
     let state = create_test_app_state().await;
     let scheduler = SourceScheduler::new(state.clone());
-    
+
     // Test triggering sync with non-existent source
     let non_existent_id = Uuid::new_v4();
     let result = scheduler.trigger_sync(non_existent_id).await;
-    
+
     // Should return error for non-existent source
     assert!(result.is_err());
 }
@@ -304,10 +346,10 @@ fn test_source_configuration_sizes() {
         sync_interval_minutes: 60,
         server_type: Some("nextcloud".to_string()),
     };
-    
+
     let serialized = serde_json::to_string(&webdav_config).unwrap();
     assert!(serialized.len() < 1024, "Config should not be too large");
-    
+
     // Test that required fields are present
     assert!(!webdav_config.server_url.is_empty());
     assert!(!webdav_config.username.is_empty());

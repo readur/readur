@@ -1,149 +1,76 @@
 # Readur Deployment Summary
 
-## ✅ What's Been Implemented
+A short overview of how Readur is packaged and deployed, with pointers to the full guides. For setup instructions see the [Installation Guide](../installation.md); for every setting see the [Configuration Reference](../configuration-reference.md).
 
-### 🐳 **Complete Docker Support**
-- Multi-stage Docker builds for production
-- Production-ready docker-compose.yml configurations
-- Support for environment-based configuration
-- Health checks and resource limits
-- SSL/HTTPS reverse proxy examples
+## Packaging
 
-### 📁 **Advanced Watch Folder System**
-- **Cross-filesystem compatibility**: NFS, SMB, S3, local storage
-- **Hybrid watching strategy**: Auto-detects filesystem type
-- **Smart file processing**: Duplicate detection, stability checks
-- **Configurable**: 5+ environment variables for fine-tuning
+- **Docker image**: `ghcr.io/readur/readur` (tags: `main`, `latest` for releases, and version tags such as `2.6.0`). The `Dockerfile` is a three-stage build: the React frontend is built with Node, the Rust backend with `cargo build --release`, and both are copied into a `debian:bookworm-slim` runtime image together with the database migrations. The image contains the `/app/readur` binary plus tesseract, ocrmypdf, poppler-utils, antiword, catdoc and curl, and listens on port 8000.
+- **Docker Compose**: `docker-compose.yml` runs PostgreSQL and Readur. The Readur service has a health check that calls `GET /api/health` with curl. `docker-compose.dev.yml` and `docker-compose.test.yml` are for development and tests.
+- **Helm**: `charts/readur` (based on the bjw-s common library chart); values in `charts/readur/values.yaml`.
 
-### ⚙️ **Comprehensive Configuration**
-- **25+ environment variables** for complete customization
-- **Production examples** for all major deployment scenarios
-- **Network filesystem optimization** settings
-- **OCR and performance tuning** options
+## Quick start
 
-## 🚀 Quick Deployment
-
-### Development
 ```bash
-git clone <repo>
+git clone https://github.com/perfectra1n/readur
 cd readur
-echo "JWT_SECRET=$(openssl rand -hex 32)" > .env   # optional, min 32 bytes when set
-docker compose up --build -d
-# Access: http://localhost:8000
+docker compose up -d
+# Open http://localhost:8000
 ```
 
-### Production
+On first start Readur creates the `admin` account. If `ADMIN_PASSWORD` is not set, a random password is generated and written to `<UPLOAD_PATH>/.readur/initial-admin-password`. If `JWT_SECRET` is not set, a signing key is generated and stored in the database; when set it must be at least 32 bytes.
+
+## Configuration
+
+All configuration is through environment variables (a `.env` file in the working directory is also loaded). There is no configuration file and there are no CLI flags for settings. Per-user preferences (OCR language, search options and so on) are stored in the database and edited on the Settings page.
+
+Commonly changed variables:
+
 ```bash
-# Generate secure secrets
-JWT_SECRET=$(openssl rand -hex 32)
-DB_PASSWORD=$(openssl rand -base64 32)
-
-# Create .env file
-cat > .env << EOF
-JWT_SECRET=${JWT_SECRET}
-DB_PASSWORD=${DB_PASSWORD}
-EOF
-
-# Deploy with production config
-docker compose -f docker-compose.prod.yml --env-file .env up -d
+DATABASE_URL=postgresql://readur:readur@postgres/readur
+JWT_SECRET=<output of: openssl rand -hex 32>
+CONCURRENT_OCR_JOBS=4
+OCR_TIMEOUT_SECONDS=300
+MAX_FILE_SIZE_MB=50
 ```
 
-## 🔧 Key Environment Variables
+Readur has no memory or CPU-priority setting of its own; use container limits.
 
-### Essential (Required for Production)
-```bash
-JWT_SECRET=<output of: openssl rand -hex 32>   # optional; min 32 bytes when set
-DATABASE_URL=postgresql://user:pass@host:port/db
-```
+## Watch folder
 
-### Watch Folder (Network Mounts)
-```bash
-WATCH_FOLDER=/mnt/nfs/documents
-WATCH_INTERVAL_SECONDS=60
-FORCE_POLLING_WATCH=1
-FILE_STABILITY_CHECK_MS=1000
-```
+The watch folder (`WATCH_FOLDER`, `/app/watch` in the image) is imported automatically. Readur picks a strategy per folder:
 
-### Performance Optimization
-```bash
-CONCURRENT_OCR_JOBS=8
-MAX_FILE_SIZE_MB=200
-MEMORY_LIMIT_MB=2048
-OCR_TIMEOUT_SECONDS=600
-```
+- **Polling** when the path cannot be resolved, when the resolved path starts with `//` or contains `nfs`, `smb` or `cifs`, or when `FORCE_POLLING_WATCH` is set (any value).
+- **Hybrid** otherwise: filesystem notifications, with polling as a backup.
 
-## 🌐 Network Filesystem Examples
+Polling uses `WATCH_INTERVAL_SECONDS` (default 30). A file is imported once its size has stayed the same for `FILE_STABILITY_CHECK_MS` (default 1000). Example for a network mount:
 
-### NFS Mount
 ```yaml
-volumes:
-  - /mnt/nfs/docs:/app/watch
-environment:
-  - WATCH_INTERVAL_SECONDS=60
-  - FORCE_POLLING_WATCH=1
+services:
+  readur:
+    volumes:
+      - /mnt/nfs/documents:/app/watch
+    environment:
+      FORCE_POLLING_WATCH: "1"
+      WATCH_INTERVAL_SECONDS: "60"
+      FILE_STABILITY_CHECK_MS: "2000"
 ```
 
-### SMB/CIFS Mount
-```yaml
-volumes:
-  - /mnt/smb/shared:/app/watch
-environment:
-  - WATCH_INTERVAL_SECONDS=30
-  - FILE_STABILITY_CHECK_MS=2000
-```
+See [Watch Folder](../WATCH_FOLDER.md) for details.
 
-### S3 Mount (s3fs)
-```yaml
-volumes:
-  - /mnt/s3/bucket:/app/watch
-environment:
-  - WATCH_INTERVAL_SECONDS=120
-  - FILE_STABILITY_CHECK_MS=5000
-  - FORCE_POLLING_WATCH=1
-```
+## Storage
 
-## 📊 Configuration Summary
+Documents are stored under `UPLOAD_PATH` (`/app/uploads` in the image) or, with `S3_ENABLED=true`, in an S3 bucket. See the [S3 Storage Guide](../s3-storage-guide.md).
 
-| Category | Variables | Purpose |
-|----------|-----------|---------|
-| **Core** | 3 vars | Database, auth, server binding |
-| **File Storage** | 2 vars | Upload paths and file types |
-| **Watch Folder** | 5 vars | Cross-filesystem monitoring |
-| **OCR Processing** | 4 vars | Language, jobs, timeouts, limits |
-| **Performance** | 2 vars | Memory and CPU optimization |
-| **Search & UI** | 10+ vars | Via web interface settings |
+## Security
 
-## 🔒 Security Features
+- Passwords are hashed with bcrypt. Login sessions use JWTs signed with `JWT_SECRET`; API keys are available for scripts and MCP clients.
+- Optional OIDC login (`OIDC_*` variables, see [OIDC Setup](../oidc-setup.md)).
+- Uploaded originals are kept unchanged; OCR results are stored separately.
+- Upload size is limited by `MAX_FILE_SIZE_MB`; watch-folder imports are limited to `ALLOWED_FILE_TYPES`.
 
-- JWT-based authentication with configurable secrets
-- Bcrypt password hashing
-- File type restrictions
-- Size limits and timeouts
-- Non-destructive file processing (originals preserved)
-- Configurable data retention policies
+## Operations
 
-## 📈 Scalability Features
-
-- Concurrent OCR processing (configurable)
-- Resource limits and priorities
-- Background job queues
-- Database optimization for full-text search
-- Efficient file storage with optional compression
-
-## 🛠️ Operations Support
-
-- **Health checks**: Built-in endpoint for monitoring
-- **Logging**: Structured logging with configurable levels
-- **Metrics**: Queue statistics and processing metrics
-- **Backup scripts**: Database and file backup examples
-- **Monitoring**: Docker stats and log analysis commands
-
-## 📚 Documentation
-
-- **README.md**: Complete deployment and usage guide
-- **WATCH_FOLDER.md**: Detailed watch folder documentation
-- **Docker examples**: Production-ready configurations
-- **API documentation**: Complete REST API reference
-- **Troubleshooting**: Common issues and solutions
-
-All components are production-ready with comprehensive configuration options for enterprise deployment scenarios! 🎉
+- **Health**: `GET /api/health`.
+- **Metrics**: `/metrics` (Prometheus text format; admin session, admin API key, or `METRICS_TOKEN` bearer token) and `/api/metrics` (JSON).
+- **Logs**: stdout only, filtered with `RUST_LOG`.
+- **Admin CLI**: the `reset-admin-password` and `rotate-jwt-secret` subcommands (`/app/readur reset-admin-password` inside the container); see [CLI Tools](../administration/cli-tools.md).

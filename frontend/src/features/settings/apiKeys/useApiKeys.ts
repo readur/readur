@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
 import { useTranslation } from 'react-i18next';
-import { apiKeysService, type ApiKey } from '../../../services/api';
+import { apiErrorMessage, apiKeysService, type ApiKey } from '../../../services/api';
 
 export type ExpirationOption = '7' | '30' | '90' | '180' | '365' | 'never';
 
 export function extractErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err) && err.response?.data?.error) return String(err.response.data.error);
-  return fallback;
+  return apiErrorMessage(err) ?? fallback;
 }
 
 /** API key list with create and revoke. Create resolves to the one-time plaintext. */
@@ -24,7 +22,9 @@ export function useApiKeys() {
       const response = await apiKeysService.list();
       setKeys(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
-      setError(extractErrorMessage(err, t('settings.apiKeys.loadFailed', 'Failed to load API keys.')));
+      setError(
+        extractErrorMessage(err, t('settings.apiKeys.loadFailed', 'Failed to load API keys.')),
+      );
     } finally {
       setLoading(false);
     }
@@ -43,7 +43,9 @@ export function useApiKeys() {
       void refresh();
       return { name: response.data.api_key.name, plaintext: response.data.plaintext };
     } catch (err) {
-      throw new Error(extractErrorMessage(err, t('settings.apiKeys.createFailed', 'Failed to create API key.')));
+      throw new Error(
+        extractErrorMessage(err, t('settings.apiKeys.createFailed', 'Failed to create API key.')),
+      );
     }
   };
 
@@ -51,7 +53,9 @@ export function useApiKeys() {
     try {
       await apiKeysService.revoke(key.id);
     } catch (err) {
-      throw new Error(extractErrorMessage(err, t('settings.apiKeys.revokeFailed', 'Failed to revoke API key.')));
+      throw new Error(
+        extractErrorMessage(err, t('settings.apiKeys.revokeFailed', 'Failed to revoke API key.')),
+      );
     }
     void refresh();
   };

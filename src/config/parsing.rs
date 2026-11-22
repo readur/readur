@@ -40,7 +40,11 @@ pub fn validate_jwt_secret(secret: &str) -> Result<()> {
         return Err(anyhow::anyhow!("JWT_SECRET must be set"));
     }
     let is_placeholder = trimmed.starts_with('<') && trimmed.ends_with('>');
-    if is_placeholder || KNOWN_WEAK_JWT_SECRETS.iter().any(|weak| trimmed.eq_ignore_ascii_case(weak)) {
+    if is_placeholder
+        || KNOWN_WEAK_JWT_SECRETS
+            .iter()
+            .any(|weak| trimmed.eq_ignore_ascii_case(weak))
+    {
         return Err(anyhow::anyhow!(
             "JWT_SECRET is set to a published example value; generate a random secret (e.g. `openssl rand -hex 32`)"
         ));

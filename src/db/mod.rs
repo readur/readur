@@ -21,6 +21,7 @@ pub mod settings;
 pub mod shared_links;
 pub mod source_errors;
 pub mod sources;
+pub mod unique_violation;
 pub mod users;
 pub mod webdav;
 
@@ -182,18 +183,17 @@ impl Database {
                         return Err(e);
                     }
                 }
-                Err(_) => {
+                Err(elapsed) => {
                     if attempt == MAX_RETRIES - 1 {
                         tracing::error!(
                             "Database operation '{}' timed out after {} attempts",
                             operation_name,
                             MAX_RETRIES
                         );
-                        return Err(anyhow::anyhow!(
+                        return Err(anyhow::Error::new(elapsed).context(format!(
                             "Database operation '{}' timed out after {} retries",
-                            operation_name,
-                            MAX_RETRIES
-                        ));
+                            operation_name, MAX_RETRIES
+                        )));
                     }
 
                     tracing::warn!(
@@ -230,11 +230,13 @@ impl Database {
                         e
                     );
                 }
-                Err(_) if attempt == MAX_RETRIES - 1 => {
-                    return Err(anyhow::anyhow!(
+                // Keep the `Elapsed` in the chain so callers can recognise a
+                // timeout by type rather than by this message.
+                Err(elapsed) if attempt == MAX_RETRIES - 1 => {
+                    return Err(anyhow::Error::new(elapsed).context(format!(
                         "Database operation timed out after {} retries",
                         MAX_RETRIES
-                    ));
+                    )));
                 }
                 Err(_) => {
                     tracing::warn!(
@@ -364,20 +366,11 @@ impl Database {
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
                 ocr_language VARCHAR(10) DEFAULT 'eng',
-                concurrent_ocr_jobs INT DEFAULT 4,
                 ocr_timeout_seconds INT DEFAULT 300,
-                max_file_size_mb INT DEFAULT 50,
-                allowed_file_types TEXT[] DEFAULT ARRAY['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'txt'],
+                max_file_size_mb INT,
                 auto_rotate_images BOOLEAN DEFAULT TRUE,
                 enable_image_preprocessing BOOLEAN DEFAULT TRUE,
-                search_results_per_page INT DEFAULT 25,
-                search_snippet_length INT DEFAULT 200,
-                fuzzy_search_threshold REAL DEFAULT 0.8,
-                retention_days INT,
-                enable_auto_cleanup BOOLEAN DEFAULT FALSE,
-                enable_compression BOOLEAN DEFAULT FALSE,
-                memory_limit_mb INT DEFAULT 512,
-                cpu_priority VARCHAR(10) DEFAULT 'normal',
+                fuzzy_search_threshold REAL DEFAULT 0.5,
                 enable_background_ocr BOOLEAN DEFAULT TRUE,
                 ocr_page_segmentation_mode INT DEFAULT 3,
                 ocr_engine_mode INT DEFAULT 3,

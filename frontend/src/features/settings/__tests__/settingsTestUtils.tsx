@@ -10,8 +10,18 @@ import { createResponsiveMatchMediaMock } from '../../../test/pwa-test-utils';
 
 export { apiMock } from './apiMock';
 
-export const adminUser = { id: 'u-admin', username: 'ada', email: 'ada@example.com', role: 'admin' as const };
-export const plainUser = { id: 'u-user', username: 'bob', email: 'bob@example.com', role: 'user' as const };
+export const adminUser = {
+  id: 'u-admin',
+  username: 'ada',
+  email: 'ada@example.com',
+  role: 'admin' as const,
+};
+export const plainUser = {
+  id: 'u-user',
+  username: 'bob',
+  email: 'bob@example.com',
+  role: 'user' as const,
+};
 
 export function LocationProbe() {
   const { pathname, search, hash } = useLocation();
@@ -28,6 +38,8 @@ export interface RenderOptions {
   path?: string;
   user?: { id: string; username: string; email: string; role: string } | null;
   perUserWatch?: boolean;
+  /** The server serves the MCP endpoint. */
+  mcpEnabled?: boolean;
   /** Route pattern; defaults to the settings route. */
   route?: string;
   /**
@@ -52,7 +64,15 @@ export function setMedia(queries: Record<string, boolean>) {
 /** Renders `ui` at `path` inside the providers a settings screen needs. */
 export function renderSettings(
   ui: ReactNode,
-  { path = '/settings', user = adminUser, perUserWatch = false, route = '/settings/:section?', media = REDUCED_MOTION, auth: authExtra }: RenderOptions = {},
+  {
+    path = '/settings',
+    user = adminUser,
+    perUserWatch = false,
+    mcpEnabled = false,
+    route = '/settings/:section?',
+    media = REDUCED_MOTION,
+    auth: authExtra,
+  }: RenderOptions = {},
 ) {
   if (media) setMedia(media);
   const auth = {
@@ -68,7 +88,13 @@ export function renderSettings(
     ...authExtra,
   };
   const flags = {
-    flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: perUserWatch },
+    flags: {
+      allowLocalAuth: true,
+      allowRegistration: false,
+      oidcEnabled: false,
+      enablePerUserWatch: perUserWatch,
+      mcpEnabled,
+    },
     loading: false,
     error: null,
   };
@@ -111,7 +137,11 @@ export function installStorage(): Storage {
     removeItem: (k) => void data.delete(k),
     setItem: (k, v) => void data.set(k, String(v)),
   };
-  Object.defineProperty(window, 'localStorage', { value: storage, configurable: true, writable: true });
+  Object.defineProperty(window, 'localStorage', {
+    value: storage,
+    configurable: true,
+    writable: true,
+  });
   return storage;
 }
 
@@ -119,6 +149,13 @@ export function installStorage(): Storage {
 export const ok = <T,>(data: T, status = 200) => ({ status, data });
 
 /** An axios-like error with a status and optional `{ error, code }` body. */
-export function httpError(status: number, body: Record<string, unknown> = {}, message = `Request failed with status code ${status}`) {
-  return Object.assign(new Error(message), { isAxiosError: true, response: { status, data: body } });
+export function httpError(
+  status: number,
+  body: Record<string, unknown> = {},
+  message = `Request failed with status code ${status}`,
+) {
+  return Object.assign(new Error(message), {
+    isAxiosError: true,
+    response: { status, data: body },
+  });
 }

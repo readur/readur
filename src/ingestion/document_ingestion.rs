@@ -1,35 +1,61 @@
 /*!
  * Unified Document Ingestion Service
- * 
+ *
  * This module provides a centralized abstraction for document ingestion with
- * consistent deduplication logic across all sources (direct upload, WebDAV, 
+ * consistent deduplication logic across all sources (direct upload, WebDAV,
  * source sync, batch ingest, folder watcher).
  */
 
-use uuid::Uuid;
+use chrono::Utc;
+use serde_json;
 use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
-use serde_json;
-use chrono::Utc;
+use uuid::Uuid;
 
-use crate::models::{Document, FileIngestionInfo};
+use crate::db::unique_violation::{violated_unique_constraint_in, DOCUMENTS_USER_FILE_HASH_UNIQUE};
 use crate::db::Database;
+use crate::models::{Document, FileIngestionInfo};
 use crate::services::file_service::FileService;
 #[cfg(feature = "ocr")]
-use image::ImageFormat;
+use exif::{In, Reader as ExifReader, Tag};
 #[cfg(feature = "ocr")]
-use exif::{In, Tag, Reader as ExifReader};
+use image::ImageFormat;
 
+/// What ingestion reports when the user already has a document with the same
+/// content (same SHA-256 of the source bytes).
+///
+/// Every policy ends in exactly one stored document per user and content:
+/// the per-user unique index `idx_documents_user_file_hash` makes a second
+/// copy impossible, so there is deliberately no "store it again" policy (an
+/// `AllowDuplicateContent` variant used to exist; it could only ever end in
+/// the same outcome as `ReturnExisting`, after writing and deleting a file).
+/// The policy only chooses how the duplicate is reported, and that choice is
+/// the same whether the duplicate was found up front or by losing a race to a
+/// concurrent ingestion of the same content (see [`duplicate_outcome`]).
 #[derive(Debug, Clone)]
 pub enum DeduplicationPolicy {
-    /// Skip ingestion if content already exists (for batch operations)
+    /// Report `Skipped` (batch operations; REST uploads, which answer 409)
     Skip,
-    /// Return existing document if content already exists (for direct uploads)
+    /// Report `ExistingDocument` with the stored document
     ReturnExisting,
-    /// Create new document record even if content exists (allows multiple filenames for same content)
-    AllowDuplicateContent,
-    /// Track as duplicate but link to existing document (for WebDAV)
+    /// Report `TrackedAsDuplicate` linking to the stored document (WebDAV)
     TrackAsDuplicate,
+}
+
+/// The result reported for content the user already has as `existing`.
+/// Used by both the up-front duplicate check and the concurrent-insert race
+/// path, so a caller sees the same outcome whichever one caught it.
+pub fn duplicate_outcome(policy: &DeduplicationPolicy, existing: Document) -> IngestionResult {
+    match policy {
+        DeduplicationPolicy::Skip => IngestionResult::Skipped {
+            existing_document_id: existing.id,
+            reason: format!("Content already exists as '{}'", existing.original_filename),
+        },
+        DeduplicationPolicy::ReturnExisting => IngestionResult::ExistingDocument(existing),
+        DeduplicationPolicy::TrackAsDuplicate => IngestionResult::TrackedAsDuplicate {
+            existing_document_id: existing.id,
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -39,10 +65,22 @@ pub enum IngestionResult {
     /// Existing document was returned (content duplicate)
     ExistingDocument(Document),
     /// Document was skipped due to duplication policy
-    Skipped { existing_document_id: Uuid, reason: String },
+    Skipped {
+        existing_document_id: Uuid,
+        reason: String,
+    },
     /// Document was tracked as duplicate (for WebDAV)
     TrackedAsDuplicate { existing_document_id: Uuid },
+    /// Nothing was stored: the user deleted a document with this content
+    /// that a source sync had imported, which put it on their ignored-files
+    /// list (`ignored_files`). Only automatic ingestion is checked; uploads
+    /// (`USER_UPLOAD_SOURCE_TYPE`) always go through.
+    Ignored { ignored_file_id: Uuid },
 }
+
+/// `source_type` of documents a user uploaded themselves. Every other source
+/// type is automatic ingestion, which skips content on the ignored-files list.
+pub const USER_UPLOAD_SOURCE_TYPE: &str = "web_upload";
 
 #[derive(Debug)]
 pub struct DocumentIngestionRequest {
@@ -70,6 +108,74 @@ pub struct DocumentIngestionRequest {
     pub source_metadata: Option<serde_json::Value>,
 }
 
+/// What a failed-document record needs to know about an ingestion, taken
+/// from the request before its fields are moved into the document row.
+#[derive(Debug, Clone)]
+pub(crate) struct IngestionFailureContext {
+    user_id: Uuid,
+    filename: String,
+    original_filename: String,
+    mime_type: String,
+    file_hash: String,
+    file_size: i64,
+    /// The request's source type, or "upload" when it has none.
+    ingestion_source: String,
+}
+
+impl IngestionFailureContext {
+    pub(crate) fn new(request: &DocumentIngestionRequest, file_hash: &str, file_size: i64) -> Self {
+        Self {
+            user_id: request.user_id,
+            filename: request.filename.clone(),
+            original_filename: request.original_filename.clone(),
+            mime_type: request.mime_type.clone(),
+            file_hash: file_hash.to_string(),
+            file_size,
+            ingestion_source: request
+                .source_type
+                .clone()
+                .unwrap_or_else(|| "upload".to_string()),
+        }
+    }
+
+    /// The failed-document record for a failure at `stage` ("storage" when
+    /// the file could not be saved, "ingestion" when its row could not be
+    /// inserted). `file_path` is where the file was stored, if it was.
+    pub(crate) fn failed_document(
+        &self,
+        stage: &str,
+        file_path: Option<String>,
+        error: &dyn std::fmt::Display,
+    ) -> crate::models::FailedDocument {
+        crate::models::FailedDocument {
+            id: Uuid::new_v4(),
+            user_id: self.user_id,
+            filename: self.filename.clone(),
+            original_filename: Some(self.original_filename.clone()),
+            original_path: None,
+            file_path,
+            file_size: Some(self.file_size),
+            file_hash: Some(self.file_hash.clone()),
+            mime_type: Some(self.mime_type.clone()),
+            content: None,
+            tags: Vec::new(),
+            ocr_text: None,
+            ocr_confidence: None,
+            ocr_word_count: None,
+            ocr_processing_time_ms: None,
+            failure_reason: crate::models::FailureReason::Other.to_string(),
+            failure_stage: stage.to_string(),
+            existing_document_id: None,
+            ingestion_source: self.ingestion_source.clone(),
+            error_message: Some(error.to_string()),
+            retry_count: Some(0),
+            last_retry_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+}
+
 pub struct DocumentIngestionService {
     db: Database,
     file_service: FileService,
@@ -81,43 +187,59 @@ impl DocumentIngestionService {
     }
 
     /// Extract metadata from FileIngestionInfo for storage in document
-    fn extract_metadata_from_file_info(file_info: &FileIngestionInfo) -> (Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, Option<serde_json::Value>) {
+    fn extract_metadata_from_file_info(
+        file_info: &FileIngestionInfo,
+    ) -> (
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<serde_json::Value>,
+    ) {
         let original_created_at = file_info.created_at;
         let original_modified_at = file_info.last_modified;
-        
+
         // Build comprehensive metadata object
         let mut metadata = serde_json::Map::new();
-        
+
         // Add permissions if available
         if let Some(perms) = file_info.permissions {
-            metadata.insert("permissions".to_string(), serde_json::Value::Number(perms.into()));
+            metadata.insert(
+                "permissions".to_string(),
+                serde_json::Value::Number(perms.into()),
+            );
         }
-        
+
         // Add owner/group info
         if let Some(ref owner) = file_info.owner {
-            metadata.insert("owner".to_string(), serde_json::Value::String(owner.clone()));
+            metadata.insert(
+                "owner".to_string(),
+                serde_json::Value::String(owner.clone()),
+            );
         }
-        
+
         if let Some(ref group) = file_info.group {
-            metadata.insert("group".to_string(), serde_json::Value::String(group.clone()));
+            metadata.insert(
+                "group".to_string(),
+                serde_json::Value::String(group.clone()),
+            );
         }
-        
+
         // Add source path
-        metadata.insert("source_path".to_string(), serde_json::Value::String(file_info.relative_path.clone()));
-        
+        metadata.insert(
+            "source_path".to_string(),
+            serde_json::Value::String(file_info.relative_path.clone()),
+        );
+
         // Merge any additional metadata from the source
-        if let Some(ref source_meta) = file_info.metadata {
-            if let serde_json::Value::Object(source_map) = source_meta {
-                metadata.extend(source_map.clone());
-            }
+        if let Some(serde_json::Value::Object(source_map)) = &file_info.metadata {
+            metadata.extend(source_map.clone());
         }
-        
-        let final_metadata = if metadata.is_empty() { 
-            None 
-        } else { 
-            Some(serde_json::Value::Object(metadata)) 
+
+        let final_metadata = if metadata.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(metadata))
         };
-        
+
         (original_created_at, original_modified_at, final_metadata)
     }
 
@@ -129,136 +251,197 @@ impl DocumentIngestionService {
     /// source listing reports, so the unchanged-file check of source sync can
     /// compare against it. Both hold even when the stored bytes differ
     /// (images may be re-encoded by EXIF auto-rotation).
-    pub async fn ingest_document(&self, request: DocumentIngestionRequest) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ///
+    /// Steps: report content on the user's ignored-files list (automatic
+    /// ingestion only) or content the user already has; otherwise prepare the
+    /// bytes (auto-rotation), store the file, and insert the row, resolving a
+    /// lost race with a concurrent ingestion of the same content. Storage and
+    /// insert failures are recorded as failed documents before returning.
+    pub async fn ingest_document(
+        &self,
+        mut request: DocumentIngestionRequest,
+    ) -> anyhow::Result<IngestionResult> {
         let file_hash = self.calculate_file_hash(&request.file_data);
         let file_size = request.file_data.len() as i64;
 
-        // Clone source_type early for error handling
-        let source_type_for_error = request.source_type.clone();
-
         debug!(
             "Ingesting document: {} for user {} (hash: {}, size: {} bytes, policy: {:?})",
-            request.filename, request.user_id, &file_hash[..8], file_size, request.deduplication_policy
+            request.filename,
+            request.user_id,
+            &file_hash[..8],
+            file_size,
+            request.deduplication_policy
         );
 
-        // Check for existing document with same content
-        match self.db.get_document_by_user_and_hash(request.user_id, &file_hash).await {
-            Ok(Some(existing_doc)) => {
-                debug!(
-                    "Found existing document with same content: {} (ID: {}) matches new file: {}",
-                    existing_doc.original_filename, existing_doc.id, request.filename
-                );
-
-                match request.deduplication_policy {
-                    DeduplicationPolicy::Skip => {
-                        return Ok(IngestionResult::Skipped {
-                            existing_document_id: existing_doc.id,
-                            reason: format!("Content already exists as '{}'", existing_doc.original_filename),
-                        });
-                    }
-                    DeduplicationPolicy::ReturnExisting => {
-                        return Ok(IngestionResult::ExistingDocument(existing_doc));
-                    }
-                    DeduplicationPolicy::TrackAsDuplicate => {
-                        return Ok(IngestionResult::TrackedAsDuplicate {
-                            existing_document_id: existing_doc.id,
-                        });
-                    }
-                    DeduplicationPolicy::AllowDuplicateContent => {
-                        // Continue with creating new document record
-                        debug!("Creating new document record despite duplicate content (policy: AllowDuplicateContent)");
-                    }
-                }
-            }
-            Ok(None) => {
-                debug!("No duplicate content found, proceeding with new document creation");
-            }
-            Err(e) => {
-                warn!("Error checking for duplicate content (hash: {}): {}", &file_hash[..8], e);
-                // Continue with ingestion even if duplicate check fails
-            }
+        if let Some(outcome) = self.outcome_without_storing(&request, &file_hash).await {
+            return Ok(outcome);
         }
+
+        let failure = IngestionFailureContext::new(&request, &file_hash, file_size);
 
         // Generate document ID upfront so we can use it for storage path
         let document_id = Uuid::new_v4();
-
-        // Rotate image if settings.auto_rotate_images based on EXIF data
-        let file_data = if request.mime_type.starts_with("image/") {
-            // Here is an image, get settings for user
-            match self.db.get_user_settings(request.user_id).await? {
-                Some(settings) if settings.auto_rotate_images => { 
-                    match self.auto_rotate_image(&request.file_data) {
-                        Ok(rotated_data) => rotated_data,
-                        Err(e) => {
-                            warn!("Failed to auto-rotate image {}: {}, proceeding with original data", request.filename, e);
-                            request.file_data
-                        }
-                    }
-                 }
-                _ => {
-                    // Auto-rotation disabled, use original data
-                    request.file_data
-                }
-            }
-        } else {
-            // Not an image, use original data
-            request.file_data
-        };
+        let source_bytes = std::mem::take(&mut request.file_data);
+        let file_data = self
+            .prepare_file_data(
+                request.user_id,
+                &request.mime_type,
+                &request.filename,
+                source_bytes,
+            )
+            .await?;
 
         // Save file to storage - use S3 if configured, otherwise local storage
-        let file_path = match self.file_service
+        let file_path = match self
+            .file_service
             .save_document_file(request.user_id, document_id, &request.filename, &file_data)
-            .await {
-                Ok(path) => path,
-                Err(e) => {
-                    warn!("Failed to save file {}: {}", request.filename, e);
-                    
-                    // Create failed document record for storage failure
-                    let failed_document = crate::models::FailedDocument {
-                        id: Uuid::new_v4(),
-                        user_id: request.user_id,
-                        filename: request.filename.clone(),
-                        original_filename: Some(request.original_filename.clone()),
-                        original_path: None,
-                        file_path: None, // couldn't save
-                        file_size: Some(file_size),
-                        file_hash: Some(file_hash.clone()),
-                        mime_type: Some(request.mime_type.clone()),
-                        content: None,
-                        tags: Vec::new(),
-                        ocr_text: None,
-                        ocr_confidence: None,
-                        ocr_word_count: None,
-                        ocr_processing_time_ms: None,
-                        failure_reason: crate::models::FailureReason::Other.to_string(),
-                        failure_stage: "storage".to_string(),
-                        existing_document_id: None,
-                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
-                        error_message: Some(e.to_string()),
-                        retry_count: Some(0),
-                        last_retry_at: None,
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    };
-                    
-                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
-                        warn!("Failed to create failed document record for storage error: {}", failed_err);
-                    }
-                    
-                    return Err(e.into());
-                }
-            };
+            .await
+        {
+            Ok(path) => path,
+            Err(e) => {
+                warn!("Failed to save file {}: {}", request.filename, e);
+                self.record_failure(
+                    failure.failed_document("storage", None, &e),
+                    "storage error",
+                )
+                .await;
+                return Err(e);
+            }
+        };
 
-        // Create document record with the same ID used for storage
-        let document = self.file_service.create_document_with_id(
+        let policy = request.deduplication_policy.clone();
+        let document = self.build_document(document_id, request, &file_path, file_size, &file_hash);
+        self.insert_document(document, &policy, &failure, &file_path)
+            .await
+    }
+
+    /// The outcome for content that is not stored: content on the user's
+    /// ignored-files list (automatic ingestion only), else content the user
+    /// already has. `None` when the content is new and must be stored.
+    async fn outcome_without_storing(
+        &self,
+        request: &DocumentIngestionRequest,
+        file_hash: &str,
+    ) -> Option<IngestionResult> {
+        if let Some(ignored_file_id) = self.find_ignored_content(request, file_hash).await {
+            debug!(
+                "Not ingesting {}: content is on the user's ignored-files list ({})",
+                request.filename, ignored_file_id
+            );
+            return Some(IngestionResult::Ignored { ignored_file_id });
+        }
+        let existing = self
+            .find_existing_content(request.user_id, file_hash, &request.filename)
+            .await?;
+        Some(duplicate_outcome(&request.deduplication_policy, existing))
+    }
+
+    /// The user's ignored-files entry for this content, for automatic
+    /// ingestion only. A failed lookup is logged and treated as "not
+    /// ignored": the file is imported, which the user can undo by deleting it
+    /// again.
+    async fn find_ignored_content(
+        &self,
+        request: &DocumentIngestionRequest,
+        file_hash: &str,
+    ) -> Option<Uuid> {
+        if request.source_type.as_deref() == Some(USER_UPLOAD_SOURCE_TYPE) {
+            return None;
+        }
+        crate::db::ignored_files::find_ignored_file(&self.db.pool, request.user_id, file_hash)
+            .await
+            .unwrap_or_else(|e| {
+                warn!("Could not check the ignored-files list for {}: {}", request.filename, e);
+                None
+            })
+    }
+
+    /// The user's stored document with this content, if any. A failed
+    /// lookup is logged and treated as "none": ingestion goes on, and the
+    /// per-user hash index still prevents a second copy at insert time.
+    async fn find_existing_content(
+        &self,
+        user_id: Uuid,
+        file_hash: &str,
+        filename: &str,
+    ) -> Option<Document> {
+        match self
+            .db
+            .get_document_by_user_and_hash(user_id, file_hash)
+            .await
+        {
+            Ok(Some(existing_doc)) => {
+                debug!(
+                    "Found existing document with same content: {} (ID: {}) matches new file: {}",
+                    existing_doc.original_filename, existing_doc.id, filename
+                );
+                Some(existing_doc)
+            }
+            Ok(None) => {
+                debug!("No duplicate content found, proceeding with new document creation");
+                None
+            }
+            Err(e) => {
+                warn!(
+                    "Error checking for duplicate content (hash: {}): {}",
+                    &file_hash[..8],
+                    e
+                );
+                None
+            }
+        }
+    }
+
+    /// The bytes to store: images are rotated upright from their EXIF
+    /// orientation when the user's `auto_rotate_images` setting is on; a
+    /// rotation failure keeps the original bytes. Anything else is unchanged.
+    async fn prepare_file_data(
+        &self,
+        user_id: Uuid,
+        mime_type: &str,
+        filename: &str,
+        data: Vec<u8>,
+    ) -> anyhow::Result<Vec<u8>> {
+        if !mime_type.starts_with("image/") {
+            return Ok(data);
+        }
+        let auto_rotate = matches!(
+            self.db.get_user_settings(user_id).await?,
+            Some(settings) if settings.auto_rotate_images
+        );
+        if !auto_rotate {
+            return Ok(data);
+        }
+        match self.auto_rotate_image(&data) {
+            Ok(rotated_data) => Ok(rotated_data),
+            Err(e) => {
+                warn!(
+                    "Failed to auto-rotate image {}: {}, proceeding with original data",
+                    filename, e
+                );
+                Ok(data)
+            }
+        }
+    }
+
+    /// The document row for a stored file, with the same ID used for storage.
+    fn build_document(
+        &self,
+        document_id: Uuid,
+        request: DocumentIngestionRequest,
+        file_path: &str,
+        file_size: i64,
+        file_hash: &str,
+    ) -> Document {
+        self.file_service.create_document_with_id(
             document_id,
             &request.filename,
             &request.original_filename,
-            &file_path,
+            file_path,
             file_size,
             &request.mime_type,
             request.user_id,
-            Some(file_hash.clone()),
+            Some(file_hash.to_string()),
             request.original_created_at,
             request.original_modified_at,
             request.source_path,
@@ -268,88 +451,120 @@ impl DocumentIngestionService {
             request.file_owner,
             request.file_group,
             request.source_metadata,
-        );
-
-        let stored_document = document.clone();
-        let saved_document = match self.db.create_document(document).await {
-            Ok(doc) => doc,
-            Err(e) => {
-                // Check if this is a unique constraint violation on the hash
-                let error_string = e.to_string();
-                if error_string.contains("duplicate key value violates unique constraint")
-                   && error_string.contains("idx_documents_user_file_hash") {
-                    warn!("Hash collision detected during concurrent upload for {} (hash: {}), fetching existing document",
-                          request.filename, &file_hash[..8]);
-
-                    // The row was never created, so the file written above has no owner.
-                    self.remove_orphaned_file(&stored_document).await;
-
-                    // Race condition: another request created the document, fetch it
-                    match self.db.get_document_by_user_and_hash(request.user_id, &file_hash).await {
-                        Ok(Some(existing_doc)) => {
-                            debug!("Found existing document after collision for {}: {} (ID: {})", 
-                                  request.filename, existing_doc.original_filename, existing_doc.id);
-                            return Ok(IngestionResult::ExistingDocument(existing_doc));
-                        }
-                        Ok(None) => {
-                            warn!("Unexpected: constraint violation but no document found for hash {}", &file_hash[..8]);
-                            return Err(e.into());
-                        }
-                        Err(fetch_err) => {
-                            warn!("Failed to fetch document after constraint violation: {}", fetch_err);
-                            return Err(e.into());
-                        }
-                    }
-                } else {
-                    warn!("Failed to create document record for {} (hash: {}): {}", 
-                          request.filename, &file_hash[..8], e);
-                    
-                    // Create failed document record for database creation failure
-                    let failed_document = crate::models::FailedDocument {
-                        id: Uuid::new_v4(),
-                        user_id: request.user_id,
-                        filename: request.filename.clone(),
-                        original_filename: Some(request.original_filename.clone()),
-                        original_path: None,
-                        file_path: Some(file_path.clone()), // file was saved successfully
-                        file_size: Some(file_size),
-                        file_hash: Some(file_hash.clone()),
-                        mime_type: Some(request.mime_type.clone()),
-                        content: None,
-                        tags: Vec::new(),
-                        ocr_text: None,
-                        ocr_confidence: None,
-                        ocr_word_count: None,
-                        ocr_processing_time_ms: None,
-                        failure_reason: crate::models::FailureReason::Other.to_string(),
-                        failure_stage: "ingestion".to_string(),
-                        existing_document_id: None,
-                        ingestion_source: source_type_for_error.clone().unwrap_or_else(|| "upload".to_string()),
-                        error_message: Some(e.to_string()),
-                        retry_count: Some(0),
-                        last_retry_at: None,
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    };
-                    
-                    if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
-                        warn!("Failed to create failed document record for database error: {}", failed_err);
-                    }
-                    
-                    return Err(e.into());
-                }
-            }
-        };
-
-        debug!(
-            "Successfully ingested document: {} (ID: {}) for user {}",
-            saved_document.original_filename, saved_document.id, request.user_id
-        );
-
-        Ok(IngestionResult::Created(saved_document))
+        )
     }
 
-    /// Calculate SHA256 hash of file content
+    /// Inserts the row for an already stored file. Losing the per-user hash
+    /// index to a concurrent ingestion is resolved by `resolve_insert_race`;
+    /// any other failure is recorded as a failed document and returned.
+    async fn insert_document(
+        &self,
+        document: Document,
+        policy: &DeduplicationPolicy,
+        failure: &IngestionFailureContext,
+        file_path: &str,
+    ) -> anyhow::Result<IngestionResult> {
+        let stored_document = document.clone();
+        match self.db.create_document(document).await {
+            Ok(saved_document) => {
+                debug!(
+                    "Successfully ingested document: {} (ID: {}) for user {}",
+                    saved_document.original_filename, saved_document.id, saved_document.user_id
+                );
+                Ok(IngestionResult::Created(saved_document))
+            }
+            // Recognised by SQLSTATE and index name, not by the (localised) error text.
+            Err(e)
+                if violated_unique_constraint_in(&e) == Some(DOCUMENTS_USER_FILE_HASH_UNIQUE) =>
+            {
+                self.resolve_insert_race(&stored_document, failure, policy, e)
+                    .await
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to create document record for {} (hash: {}): {}",
+                    failure.filename,
+                    &failure.file_hash[..8],
+                    e
+                );
+                let failed = failure.failed_document("ingestion", Some(file_path.to_string()), &e);
+                self.record_failure(failed, "database error").await;
+                Err(e)
+            }
+        }
+    }
+
+    /// A concurrent request stored the same content for this user between
+    /// the duplicate check and our insert, so the per-user hash index
+    /// rejected `uncommitted`. Its file has no owner and is removed; the
+    /// winner is reported exactly as the up-front check would have. If the
+    /// winner cannot be read back, the original insert error is returned.
+    async fn resolve_insert_race(
+        &self,
+        uncommitted: &Document,
+        failure: &IngestionFailureContext,
+        policy: &DeduplicationPolicy,
+        insert_error: anyhow::Error,
+    ) -> anyhow::Result<IngestionResult> {
+        warn!(
+            "Hash collision detected during concurrent upload for {} (hash: {}), fetching existing document",
+            failure.filename,
+            &failure.file_hash[..8]
+        );
+
+        // The row was never created, so the file written above has no owner.
+        self.remove_orphaned_file(uncommitted).await;
+
+        match self.find_race_winner(failure).await {
+            Some(existing_doc) => Ok(duplicate_outcome(policy, existing_doc)),
+            None => Err(insert_error),
+        }
+    }
+
+    /// The document that won an insert race for this content, re-read after
+    /// the unique violation. `None` (logged) if it cannot be read back.
+    async fn find_race_winner(&self, failure: &IngestionFailureContext) -> Option<Document> {
+        let short_hash = &failure.file_hash[..8];
+        match self
+            .db
+            .get_document_by_user_and_hash(failure.user_id, &failure.file_hash)
+            .await
+        {
+            Ok(Some(existing_doc)) => {
+                debug!(
+                    "Found existing document after collision for {}: {} (ID: {})",
+                    failure.filename, existing_doc.original_filename, existing_doc.id
+                );
+                Some(existing_doc)
+            }
+            Ok(None) => {
+                warn!(
+                    "Unexpected: constraint violation but no document found for hash {}",
+                    short_hash
+                );
+                None
+            }
+            Err(fetch_err) => {
+                warn!(
+                    "Failed to fetch document after constraint violation: {}",
+                    fetch_err
+                );
+                None
+            }
+        }
+    }
+
+    /// Stores a failed-document record. A failure to record it is logged,
+    /// never returned: the caller is already returning the original error.
+    async fn record_failure(&self, failed_document: crate::models::FailedDocument, what: &str) {
+        if let Err(failed_err) = self.db.create_failed_document(failed_document).await {
+            warn!(
+                "Failed to create failed document record for {}: {}",
+                what, failed_err
+            );
+        }
+    }
+
     /// Remove the stored file of a document whose database row was not
     /// created. A failure here leaves an orphan file but no data loss, so it
     /// is logged rather than propagated.
@@ -362,6 +577,7 @@ impl DocumentIngestionService {
         }
     }
 
+    /// Calculate SHA256 hash of file content
     fn calculate_file_hash(&self, data: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
@@ -372,12 +588,17 @@ impl DocumentIngestionService {
     /// Auto-rotate image bytes according to EXIF orientation tag (if present).
     ///
     /// Returns the possibly-rotated image bytes encoded back into the original format.
-    pub fn auto_rotate_image(&self, data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn auto_rotate_image(
+        &self,
+        data: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
         Self::auto_rotate_image_bytes(data)
     }
 
     /// Static helper to make testing easier.
-    pub fn auto_rotate_image_bytes(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn auto_rotate_image_bytes(
+        data: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
         // If compiled without image support, return an error so callers can fall back
         // to using the original bytes (ingest_document handles errors by falling back).
         #[cfg(not(feature = "ocr"))]
@@ -394,7 +615,7 @@ impl DocumentIngestionService {
             if let Ok(exif) = ExifReader::new().read_from_container(&mut cursor) {
                 if let Some(field) = exif.get_field(Tag::Orientation, In::PRIMARY) {
                     if let exif::Value::Short(ref vals) = field.value {
-                        if let Some(v) = vals.get(0) {
+                        if let Some(v) = vals.first() {
                             orientation = Some(*v);
                         }
                     }
@@ -411,13 +632,19 @@ impl DocumentIngestionService {
 
             match orientation.unwrap() {
                 1 => { /* normal */ }
-                2 => img = img.fliph(),              // Mirror horizontal
-                3 => img = img.rotate180(),         // Rotate 180
-                4 => img = img.flipv(),             // Mirror vertical
-                5 => { img = img.rotate90(); img = img.fliph(); } // Mirror horizontal and rotate 270
-                6 => img = img.rotate90(),          // Rotate 90
-                7 => { img = img.rotate270(); img = img.fliph(); } // Mirror horizontal and rotate 90
-                8 => img = img.rotate270(),         // Rotate 270
+                2 => img = img.fliph(),     // Mirror horizontal
+                3 => img = img.rotate180(), // Rotate 180
+                4 => img = img.flipv(),     // Mirror vertical
+                5 => {
+                    img = img.rotate90();
+                    img = img.fliph();
+                } // Mirror horizontal and rotate 270
+                6 => img = img.rotate90(),  // Rotate 90
+                7 => {
+                    img = img.rotate270();
+                    img = img.fliph();
+                } // Mirror horizontal and rotate 90
+                8 => img = img.rotate270(), // Rotate 270
                 _ => { /* Unknown orientation; do nothing */ }
             }
 
@@ -439,10 +666,10 @@ impl DocumentIngestionService {
         deduplication_policy: DeduplicationPolicy,
         source_type: &str,
         source_id: Option<Uuid>,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
-        let (original_created_at, original_modified_at, source_metadata) = 
+    ) -> anyhow::Result<IngestionResult> {
+        let (original_created_at, original_modified_at, source_metadata) =
             Self::extract_metadata_from_file_info(file_info);
-            
+
         let request = DocumentIngestionRequest {
             filename: file_info.name.clone(),
             original_filename: file_info.name.clone(),
@@ -464,35 +691,6 @@ impl DocumentIngestionService {
         self.ingest_document(request).await
     }
 
-    /// Convenience method for direct uploads (maintains backward compatibility)
-    pub async fn ingest_upload(
-        &self,
-        filename: &str,
-        file_data: Vec<u8>,
-        mime_type: &str,
-        user_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
-        let request = DocumentIngestionRequest {
-            filename: filename.to_string(),
-            original_filename: filename.to_string(),
-            file_data,
-            mime_type: mime_type.to_string(),
-            user_id,
-            deduplication_policy: DeduplicationPolicy::AllowDuplicateContent, // Fixed behavior for uploads
-            source_type: Some("direct_upload".to_string()),
-            source_id: None,
-            original_created_at: None,
-            original_modified_at: None,
-            source_path: None, // Direct uploads don't have a source path
-            file_permissions: None, // Direct uploads don't preserve permissions
-            file_owner: None, // Direct uploads don't preserve owner
-            file_group: None, // Direct uploads don't preserve group
-            source_metadata: None,
-        };
-
-        self.ingest_document(request).await
-    }
-
     /// Convenience method for source sync operations
     pub async fn ingest_from_source(
         &self,
@@ -502,7 +700,7 @@ impl DocumentIngestionService {
         user_id: Uuid,
         source_id: Uuid,
         source_type: &str,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),
@@ -514,10 +712,10 @@ impl DocumentIngestionService {
             source_id: Some(source_id),
             original_created_at: None,
             original_modified_at: None,
-            source_path: None, // Source sync files don't have a source path
+            source_path: None,      // Source sync files don't have a source path
             file_permissions: None, // Source sync files don't preserve permissions
-            file_owner: None, // Source sync files don't preserve owner
-            file_group: None, // Source sync files don't preserve group
+            file_owner: None,       // Source sync files don't preserve owner
+            file_group: None,       // Source sync files don't preserve group
             source_metadata: None,
         };
 
@@ -532,7 +730,7 @@ impl DocumentIngestionService {
         mime_type: &str,
         user_id: Uuid,
         webdav_source_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),
@@ -546,8 +744,8 @@ impl DocumentIngestionService {
             original_modified_at: None,
             source_path: None, // WebDAV files don't have a source path in this method
             file_permissions: None, // WebDAV files don't preserve permissions in this method
-            file_owner: None, // WebDAV files don't preserve owner in this method
-            file_group: None, // WebDAV files don't preserve group in this method
+            file_owner: None,  // WebDAV files don't preserve owner in this method
+            file_group: None,  // WebDAV files don't preserve group in this method
             source_metadata: None,
         };
 
@@ -561,7 +759,7 @@ impl DocumentIngestionService {
         file_data: Vec<u8>,
         mime_type: &str,
         user_id: Uuid,
-    ) -> Result<IngestionResult, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<IngestionResult> {
         let request = DocumentIngestionRequest {
             filename: filename.to_string(),
             original_filename: filename.to_string(),
@@ -573,10 +771,10 @@ impl DocumentIngestionService {
             source_id: None,
             original_created_at: None,
             original_modified_at: None,
-            source_path: None, // Batch files don't have a source path
+            source_path: None,      // Batch files don't have a source path
             file_permissions: None, // Batch files don't preserve permissions
-            file_owner: None, // Batch files don't preserve owner
-            file_group: None, // Batch files don't preserve group
+            file_owner: None,       // Batch files don't preserve owner
+            file_group: None,       // Batch files don't preserve group
             source_metadata: None,
         };
 
@@ -587,324 +785,5 @@ impl DocumentIngestionService {
 // TODO: Add comprehensive tests once test_helpers module is available
 
 #[cfg(test)]
-mod tests {
-    use super::DocumentIngestionService;
-    use std::fs;
-
-    /// Helper to get image dimensions from bytes
-    #[cfg(feature = "ocr")]
-    fn get_image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-        use image::GenericImageView;
-        image::load_from_memory(data).ok().map(|img| img.dimensions())
-    }
-
-    #[test]
-    fn auto_rotate_no_exif_returns_same_dimensions() {
-        // Uses a test PNG that doesn't have EXIF orientation data
-        let data = fs::read("test_files/portrait_100x200.png").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                // No EXIF orientation present, dimensions should be unchanged
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    assert_eq!(original_dims, result_dims, "Dimensions should be unchanged when no EXIF orientation");
-                }
-            }
-            Err(_) => {
-                // Image support not compiled in, skip test
-            }
-        }
-    }
-
-    #[test]
-    fn auto_rotate_jpeg_no_exif_returns_same_dimensions() {
-        // Uses a JPEG without EXIF data
-        let data = fs::read("test_files/exif_orientation_none.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    assert_eq!(original_dims, result_dims, "Dimensions should be unchanged when no EXIF");
-                }
-            }
-            Err(_) => {
-                // Image support not compiled in, skip
-            }
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_1_no_change() {
-        // Orientation 1 = Normal, no rotation needed
-        let data = fs::read("test_files/exif_orientation_1_normal.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    // Orientation 1 means normal - dimensions unchanged
-                    assert_eq!(original_dims, result_dims, "Orientation 1 should not change dimensions");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_3_rotate_180() {
-        // Orientation 3 = Rotate 180 degrees
-        // Test image is 40x20, rotation 180 keeps same dimensions
-        let data = fs::read("test_files/exif_orientation_3_rotate_180.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    // 180 rotation keeps same dimensions
-                    assert_eq!(original_dims, result_dims, "Rotation 180 should preserve dimensions");
-                    // But result should be different bytes (image is rotated)
-                    assert_ne!(data, result, "Rotated image should differ from original");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_6_rotate_90_cw() {
-        // Orientation 6 = Rotate 90 CW
-        // Test image is 40x20, after 90 CW rotation should be 20x40
-        let data = fs::read("test_files/exif_orientation_6_rotate_90_cw.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data).expect("get original dimensions");
-                    let result_dims = get_image_dimensions(&result).expect("get result dimensions");
-
-                    // 90 CW rotation swaps width and height
-                    assert_eq!(original_dims.0, result_dims.1, "Width should become height after 90 CW rotation");
-                    assert_eq!(original_dims.1, result_dims.0, "Height should become width after 90 CW rotation");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_8_rotate_270_cw() {
-        // Orientation 8 = Rotate 270 CW (90 CCW)
-        // Test image is 40x20, after 270 CW rotation should be 20x40
-        let data = fs::read("test_files/exif_orientation_8_rotate_270_cw.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data).expect("get original dimensions");
-                    let result_dims = get_image_dimensions(&result).expect("get result dimensions");
-
-                    // 270 CW rotation swaps width and height
-                    assert_eq!(original_dims.0, result_dims.1, "Width should become height after 270 CW rotation");
-                    assert_eq!(original_dims.1, result_dims.0, "Height should become width after 270 CW rotation");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_2_flip_horizontal() {
-        // Orientation 2 = Flip horizontal
-        // Dimensions stay the same, but pixels are flipped
-        let data = fs::read("test_files/exif_orientation_2_flip_horizontal.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    assert_eq!(original_dims, result_dims, "Horizontal flip should preserve dimensions");
-                    assert_ne!(data, result, "Flipped image should differ from original");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_4_flip_vertical() {
-        // Orientation 4 = Flip vertical
-        let data = fs::read("test_files/exif_orientation_4_flip_vertical.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data);
-                    let result_dims = get_image_dimensions(&result);
-                    assert_eq!(original_dims, result_dims, "Vertical flip should preserve dimensions");
-                    assert_ne!(data, result, "Flipped image should differ from original");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_5_transpose() {
-        // Orientation 5 = Transpose (rotate 90 CW + flip horizontal)
-        // Swaps dimensions
-        let data = fs::read("test_files/exif_orientation_5_transpose.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data).expect("get original dimensions");
-                    let result_dims = get_image_dimensions(&result).expect("get result dimensions");
-
-                    // Transpose swaps dimensions
-                    assert_eq!(original_dims.0, result_dims.1, "Width should become height after transpose");
-                    assert_eq!(original_dims.1, result_dims.0, "Height should become width after transpose");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_orientation_7_transverse() {
-        // Orientation 7 = Transverse (rotate 270 CW + flip horizontal)
-        // Swaps dimensions
-        let data = fs::read("test_files/exif_orientation_7_transverse.jpg").expect("read test image");
-
-        match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-            Ok(result) => {
-                #[cfg(feature = "ocr")]
-                {
-                    let original_dims = get_image_dimensions(&data).expect("get original dimensions");
-                    let result_dims = get_image_dimensions(&result).expect("get result dimensions");
-
-                    // Transverse swaps dimensions
-                    assert_eq!(original_dims.0, result_dims.1, "Width should become height after transverse");
-                    assert_eq!(original_dims.1, result_dims.0, "Height should become width after transverse");
-                }
-            }
-            Err(_) => {}
-        }
-    }
-
-    #[test]
-    fn auto_rotate_invalid_image_returns_original_data() {
-        // Test with invalid image data (no EXIF)
-        // When there's no EXIF orientation tag, the function returns the original data
-        // unchanged, even if it's not a valid image. This is the correct fallback behavior.
-        let data = b"not an image file at all";
-
-        let result = DocumentIngestionService::auto_rotate_image_bytes(data);
-
-        #[cfg(feature = "ocr")]
-        {
-            // With OCR feature, should return original data unchanged (no EXIF = no rotation)
-            assert!(result.is_ok(), "Should return Ok when no EXIF orientation found");
-            assert_eq!(result.unwrap(), data.to_vec(), "Should return original data unchanged");
-        }
-
-        #[cfg(not(feature = "ocr"))]
-        {
-            // Without OCR feature, should return error about missing support
-            assert!(result.is_err(), "Should return error when OCR feature disabled");
-        }
-    }
-
-    #[test]
-    fn auto_rotate_image_with_exif_but_invalid_image_data_returns_error() {
-        // Test with data that has EXIF orientation but invalid image content
-        // This simulates a file that has valid EXIF header but corrupted image data
-
-        // Create minimal EXIF data with orientation 6 (90 CW rotation)
-        // Structure: JPEG SOI + APP1 marker with minimal EXIF containing orientation tag
-        let mut fake_jpeg_with_exif: Vec<u8> = vec![
-            0xFF, 0xD8,                     // SOI marker
-            0xFF, 0xE1,                     // APP1 marker
-            0x00, 0x1E,                     // APP1 length (30 bytes)
-            b'E', b'x', b'i', b'f', 0x00, 0x00, // "Exif\0\0"
-            0x49, 0x49,                     // Little-endian (II)
-            0x2A, 0x00,                     // TIFF magic
-            0x08, 0x00, 0x00, 0x00,         // Offset to IFD0
-            0x01, 0x00,                     // 1 IFD entry
-            0x12, 0x01,                     // Orientation tag (0x0112)
-            0x03, 0x00,                     // Type: SHORT
-            0x01, 0x00, 0x00, 0x00,         // Count: 1
-            0x06, 0x00, 0x00, 0x00,         // Value: 6 (rotate 90 CW)
-        ];
-        // Add garbage to make it clearly not a valid image
-        fake_jpeg_with_exif.extend_from_slice(b"this is not valid image data");
-
-        let result = DocumentIngestionService::auto_rotate_image_bytes(&fake_jpeg_with_exif);
-
-        #[cfg(feature = "ocr")]
-        {
-            // This should fail because it has an EXIF orientation tag (6)
-            // but the image data is invalid and can't be loaded
-            // Note: The actual behavior depends on whether the EXIF parser can read
-            // the orientation from this constructed data. If it can't, it returns Ok.
-            // If it can, it will try to load the image and fail.
-            // Either outcome is acceptable for this edge case.
-            let _ = result; // Accept either Ok or Err
-        }
-
-        #[cfg(not(feature = "ocr"))]
-        {
-            assert!(result.is_err(), "Should return error when OCR feature disabled");
-        }
-    }
-
-    #[test]
-    fn auto_rotate_all_orientations_produce_valid_images() {
-        // Verify that all orientation transformations produce valid, loadable images
-        let orientations = [
-            ("test_files/exif_orientation_1_normal.jpg", 1),
-            ("test_files/exif_orientation_2_flip_horizontal.jpg", 2),
-            ("test_files/exif_orientation_3_rotate_180.jpg", 3),
-            ("test_files/exif_orientation_4_flip_vertical.jpg", 4),
-            ("test_files/exif_orientation_5_transpose.jpg", 5),
-            ("test_files/exif_orientation_6_rotate_90_cw.jpg", 6),
-            ("test_files/exif_orientation_7_transverse.jpg", 7),
-            ("test_files/exif_orientation_8_rotate_270_cw.jpg", 8),
-        ];
-
-        for (path, orientation) in orientations {
-            let data = fs::read(path).expect(&format!("read {}", path));
-
-            match DocumentIngestionService::auto_rotate_image_bytes(&data) {
-                Ok(result) => {
-                    #[cfg(feature = "ocr")]
-                    {
-                        // Verify the result is a valid image
-                        let img = image::load_from_memory(&result);
-                        assert!(img.is_ok(), "Orientation {} should produce valid image", orientation);
-                    }
-                }
-                Err(e) => {
-                    #[cfg(feature = "ocr")]
-                    panic!("Orientation {} failed: {}", orientation, e);
-                }
-            }
-        }
-    }
-}
-
+#[path = "document_ingestion_tests.rs"]
+mod tests;

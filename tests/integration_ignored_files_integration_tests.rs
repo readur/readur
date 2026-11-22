@@ -3,15 +3,17 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use readur::{
-    AppState,
     db::Database,
-    config::Config,
-    models::{CreateUser, UserRole, CreateIgnoredFile},
+    models::{CreateIgnoredFile, CreateUser, UserRole},
     test_helpers::create_test_config_with_db,
+    AppState,
 };
 
 async fn create_test_app_state() -> Result<Arc<AppState>> {
-    let database_url = readur::test_db::TestDatabase::from_template().await.url().to_string();
+    let database_url = readur::test_db::TestDatabase::from_template()
+        .await
+        .url()
+        .to_string();
 
     let mut config = create_test_config_with_db(&database_url);
     config.server_address = "127.0.0.1:0".to_string();
@@ -22,14 +24,27 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
     config.ocr_timeout_seconds = 30;
 
     let db = Database::new(&config.database_url).await?;
-    
+
     // Create file service
-    let storage_config = readur::storage::StorageConfig::Local { upload_path: config.upload_path.clone() };
+    let storage_config = readur::storage::StorageConfig::Local {
+        upload_path: config.upload_path.clone(),
+    };
     let storage_backend = readur::storage::factory::create_storage_backend(storage_config).await?;
-    let file_service = Arc::new(readur::services::file_service::FileService::with_storage(config.upload_path.clone(), storage_backend));
-    
-    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(db.clone(), db.pool.clone(), 1, file_service.clone(), 100, 100, 300));
-    
+    let file_service = Arc::new(readur::services::file_service::FileService::with_storage(
+        config.upload_path.clone(),
+        storage_backend,
+    ));
+
+    let queue_service = Arc::new(readur::ocr::queue::OcrQueueService::new(
+        db.clone(),
+        db.pool.clone(),
+        1,
+        file_service.clone(),
+        100,
+        100,
+        300,
+    ));
+
     Ok(Arc::new(AppState {
         db: db.clone(),
         config,
@@ -38,9 +53,10 @@ async fn create_test_app_state() -> Result<Arc<AppState>> {
         source_scheduler: None,
         queue_service,
         oidc_client: None,
-        sync_progress_tracker: std::sync::Arc::new(readur::services::sync_progress_tracker::SyncProgressTracker::new()),
+        sync_progress_tracker: std::sync::Arc::new(
+            readur::services::sync_progress_tracker::SyncProgressTracker::new(),
+        ),
         user_watch_service: None,
-        webdav_metrics_collector: None,
         rate_limiters: readur::rate_limit::RateLimiters::new(),
     }))
 }
@@ -58,11 +74,11 @@ fn create_test_user_with_suffix(suffix: &str) -> CreateUser {
 async fn test_ignored_files_crud_operations() -> Result<()> {
     let state = create_test_app_state().await?;
     let user = create_test_user_with_suffix(&format!("ignored_{}", Uuid::new_v4().simple()));
-    
+
     // Create user in database
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
-    
+
     // Test creating an ignored file
     let ignored_file = CreateIgnoredFile {
         file_hash: "test_hash_123".to_string(),
@@ -77,13 +93,14 @@ async fn test_ignored_files_crud_operations() -> Result<()> {
         ignored_by: user_id,
         reason: Some("test deletion".to_string()),
     };
-    
+
     // Test that we can create and retrieve ignored files
-    let created = readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
+    let created =
+        readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
     assert_eq!(created.file_hash, "test_hash_123");
     assert_eq!(created.filename, "test_file.pdf");
     assert_eq!(created.ignored_by, user_id);
-    
+
     // Test listing ignored files
     let query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -93,28 +110,28 @@ async fn test_ignored_files_crud_operations() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
-    let ignored_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
+
+    let ignored_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
     assert_eq!(ignored_files.len(), 1);
     assert_eq!(ignored_files[0].file_hash, "test_hash_123");
-    
-    // Test is_file_ignored function
-    let is_ignored = readur::db::ignored_files::is_file_ignored(
-        &state.db.pool,
-        "test_hash_123",
-        Some("webdav"),
-        Some("/webdav/test_file.pdf")
-    ).await?;
-    assert!(is_ignored);
-    
+
+    // The entry is found by its owner and content hash
+    let found =
+        readur::db::ignored_files::find_ignored_file(&state.db.pool, user_id, "test_hash_123")
+            .await?;
+    assert_eq!(found, Some(created.id));
+
     // Test deleting ignored file
-    let deleted = readur::db::ignored_files::delete_ignored_file(&state.db.pool, created.id, user_id).await?;
+    let deleted =
+        readur::db::ignored_files::delete_ignored_file(&state.db.pool, created.id, user_id).await?;
     assert!(deleted);
-    
+
     // Verify it's deleted
-    let ignored_files_after = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
+    let ignored_files_after =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
     assert_eq!(ignored_files_after.len(), 0);
-    
+
     Ok(())
 }
 
@@ -122,11 +139,11 @@ async fn test_ignored_files_crud_operations() -> Result<()> {
 async fn test_ignored_files_filtering() -> Result<()> {
     let state = create_test_app_state().await?;
     let user = create_test_user_with_suffix(&format!("filter_{}", Uuid::new_v4().simple()));
-    
+
     // Create user in database
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
-    
+
     // Create multiple ignored files with different properties
     let ignored_files = vec![
         CreateIgnoredFile {
@@ -154,14 +171,14 @@ async fn test_ignored_files_filtering() -> Result<()> {
             source_identifier: Some("s3-bucket".to_string()),
             ignored_by: user_id,
             reason: Some("deleted".to_string()),
-        }
+        },
     ];
-    
+
     // Create ignored files
     for ignored_file in ignored_files {
         readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
     }
-    
+
     // Test filtering by source type
     let webdav_query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -171,11 +188,13 @@ async fn test_ignored_files_filtering() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
-    let webdav_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &webdav_query).await?;
+
+    let webdav_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &webdav_query)
+            .await?;
     assert_eq!(webdav_files.len(), 1);
     assert_eq!(webdav_files[0].source_type, Some("webdav".to_string()));
-    
+
     // Test filtering by filename
     let filename_query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -185,28 +204,30 @@ async fn test_ignored_files_filtering() -> Result<()> {
         ignored_by: None,
         filename: Some("s3_file".to_string()),
     };
-    
-    let s3_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &filename_query).await?;
+
+    let s3_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &filename_query)
+            .await?;
     assert_eq!(s3_files.len(), 1);
     assert!(s3_files[0].filename.contains("s3_file"));
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_ignored_files_user_isolation() -> Result<()> {
     let state = create_test_app_state().await?;
-    
+
     // Create two different users
     let user1 = create_test_user_with_suffix(&format!("user1_{}", Uuid::new_v4().simple()));
     let user2 = create_test_user_with_suffix(&format!("user2_{}", Uuid::new_v4().simple()));
-    
+
     let created_user1 = state.db.create_user(user1).await?;
     let created_user2 = state.db.create_user(user2).await?;
-    
+
     let user1_id = created_user1.id;
     let user2_id = created_user2.id;
-    
+
     // Create ignored file for user1
     let ignored_file1 = CreateIgnoredFile {
         file_hash: "user1_hash".to_string(),
@@ -221,7 +242,7 @@ async fn test_ignored_files_user_isolation() -> Result<()> {
         ignored_by: user1_id,
         reason: Some("deleted by user1".to_string()),
     };
-    
+
     // Create ignored file for user2
     let ignored_file2 = CreateIgnoredFile {
         file_hash: "user2_hash".to_string(),
@@ -236,10 +257,10 @@ async fn test_ignored_files_user_isolation() -> Result<()> {
         ignored_by: user2_id,
         reason: Some("deleted by user2".to_string()),
     };
-    
+
     readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file1).await?;
     readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file2).await?;
-    
+
     let query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
         offset: Some(0),
@@ -248,19 +269,21 @@ async fn test_ignored_files_user_isolation() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
+
     // User1 should only see their own ignored files
-    let user1_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user1_id, &query).await?;
+    let user1_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user1_id, &query).await?;
     assert_eq!(user1_files.len(), 1);
     assert_eq!(user1_files[0].ignored_by, user1_id);
     assert_eq!(user1_files[0].filename, "user1_file.pdf");
-    
+
     // User2 should only see their own ignored files
-    let user2_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user2_id, &query).await?;
+    let user2_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user2_id, &query).await?;
     assert_eq!(user2_files.len(), 1);
     assert_eq!(user2_files[0].ignored_by, user2_id);
     assert_eq!(user2_files[0].filename, "user2_file.pdf");
-    
+
     Ok(())
 }
 
@@ -268,11 +291,11 @@ async fn test_ignored_files_user_isolation() -> Result<()> {
 async fn test_ignored_files_bulk_operations() -> Result<()> {
     let state = create_test_app_state().await?;
     let user = create_test_user_with_suffix(&format!("bulk_{}", Uuid::new_v4().simple()));
-    
+
     // Create user in database
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
-    
+
     // Create multiple ignored files
     let mut created_ids = Vec::new();
     for i in 0..3 {
@@ -289,20 +312,22 @@ async fn test_ignored_files_bulk_operations() -> Result<()> {
             ignored_by: user_id,
             reason: Some("bulk test".to_string()),
         };
-        
-        let created = readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
+
+        let created =
+            readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
         created_ids.push(created.id);
     }
-    
+
     // Test bulk delete
     let deleted_count = readur::db::ignored_files::bulk_delete_ignored_files(
         &state.db.pool,
         created_ids.clone(),
-        user_id
-    ).await?;
-    
+        user_id,
+    )
+    .await?;
+
     assert_eq!(deleted_count, 3);
-    
+
     // Verify all are deleted
     let query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -312,78 +337,11 @@ async fn test_ignored_files_bulk_operations() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
-    let remaining_files = readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
-    assert_eq!(remaining_files.len(), 0);
-    
-    Ok(())
-}
 
-#[tokio::test]
-async fn test_create_ignored_file_from_document() -> Result<()> {
-    let state = create_test_app_state().await?;
-    let user = create_test_user_with_suffix(&format!("doc_{}", Uuid::new_v4().simple()));
-    
-    // Create user in database
-    let created_user = state.db.create_user(user).await?;
-    let user_id = created_user.id;
-    
-    // Create a test document first
-    let document = readur::models::Document {
-        id: Uuid::new_v4(),
-        filename: "test_document.pdf".to_string(),
-        original_filename: "test_document.pdf".to_string(),
-        file_path: "/uploads/test_document.pdf".to_string(),
-        file_size: 1024000,
-        mime_type: "application/pdf".to_string(),
-        content: Some("Test document content".to_string()),
-        ocr_text: Some("OCR text".to_string()),
-        ocr_confidence: Some(95.5),
-        ocr_word_count: Some(150),
-        ocr_processing_time_ms: Some(1200),
-        ocr_status: Some("completed".to_string()),
-        ocr_error: None,
-        ocr_completed_at: Some(chrono::Utc::now()),
-        ocr_retry_count: None,
-        ocr_failure_reason: None,
-        tags: vec!["test".to_string()],
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-        user_id,
-        file_hash: Some("document_hash_123".to_string()),
-        original_created_at: None,
-        original_modified_at: None,
-        source_path: None,
-        source_type: None,
-        source_id: None,
-        file_permissions: None,
-        file_owner: None,
-        file_group: None,
-        source_metadata: None,
-    };
-    
-    // Insert document into database
-    let _document_id = state.db.create_document(document.clone()).await?;
-    
-    // Test creating ignored file from document
-    let ignored_file = readur::db::ignored_files::create_ignored_file_from_document(
-        &state.db.pool,
-        document.id,
-        user_id,
-        Some("deleted by user".to_string()),
-        Some("webdav".to_string()),
-        Some("/webdav/test_document.pdf".to_string()),
-        Some("webdav-server".to_string()),
-    ).await?;
-    
-    assert!(ignored_file.is_some());
-    let ignored_file = ignored_file.unwrap();
-    assert_eq!(ignored_file.filename, document.filename);
-    assert_eq!(ignored_file.file_size, document.file_size);
-    assert_eq!(ignored_file.mime_type, document.mime_type);
-    assert_eq!(ignored_file.ignored_by, user_id);
-    assert_eq!(ignored_file.source_type, Some("webdav".to_string()));
-    
+    let remaining_files =
+        readur::db::ignored_files::list_ignored_files(&state.db.pool, user_id, &query).await?;
+    assert_eq!(remaining_files.len(), 0);
+
     Ok(())
 }
 
@@ -391,11 +349,11 @@ async fn test_create_ignored_file_from_document() -> Result<()> {
 async fn test_ignored_files_count_functionality() -> Result<()> {
     let state = create_test_app_state().await?;
     let user = create_test_user_with_suffix(&format!("count_{}", Uuid::new_v4().simple()));
-    
+
     // Create user in database
     let created_user = state.db.create_user(user).await?;
     let user_id = created_user.id;
-    
+
     // Initially should have no ignored files
     let query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -405,10 +363,11 @@ async fn test_ignored_files_count_functionality() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
-    let count = readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &query).await?;
+
+    let count =
+        readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &query).await?;
     assert_eq!(count, 0);
-    
+
     // Create some ignored files
     for i in 0..5 {
         let ignored_file = CreateIgnoredFile {
@@ -424,14 +383,15 @@ async fn test_ignored_files_count_functionality() -> Result<()> {
             ignored_by: user_id,
             reason: Some("count test".to_string()),
         };
-        
+
         readur::db::ignored_files::create_ignored_file(&state.db.pool, ignored_file).await?;
     }
-    
+
     // Count should now be 5
-    let count = readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &query).await?;
+    let count =
+        readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &query).await?;
     assert_eq!(count, 5);
-    
+
     // Test filtered count (only webdav)
     let webdav_query = readur::models::IgnoredFilesQuery {
         limit: Some(10),
@@ -441,11 +401,11 @@ async fn test_ignored_files_count_functionality() -> Result<()> {
         ignored_by: None,
         filename: None,
     };
-    
-    let webdav_count = readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &webdav_query).await?;
+
+    let webdav_count =
+        readur::db::ignored_files::count_ignored_files(&state.db.pool, user_id, &webdav_query)
+            .await?;
     assert_eq!(webdav_count, 3); // Files 0, 2, 4 are webdav
-    
+
     Ok(())
 }
-
-

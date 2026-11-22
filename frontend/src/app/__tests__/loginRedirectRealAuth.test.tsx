@@ -24,14 +24,30 @@ vi.mock('../../services/api', async () => {
   };
 });
 
-vi.mock('../../features/board', async () => ({ default: (await import('./routeProbe')).probe('home') }));
-vi.mock('../../features/library', async () => ({ default: (await import('./routeProbe')).probe('library') }));
-vi.mock('../../features/library/SearchRoute', async () => ({ default: (await import('./routeProbe')).probe('search') }));
-vi.mock('../../features/document', async () => ({ default: (await import('./routeProbe')).probe('document') }));
-vi.mock('../../features/document/SharedRoute', async () => ({ default: (await import('./routeProbe')).probe('shared') }));
-vi.mock('../../features/intake', async () => ({ default: (await import('./routeProbe')).probe('intake') }));
-vi.mock('../../features/settings', async () => ({ default: (await import('./routeProbe')).probe('settings') }));
-vi.mock('../../features/auth/CallbackRoute', async () => ({ default: (await import('./routeProbe')).probe('callback') }));
+vi.mock('../../features/board', async () => ({
+  default: (await import('./routeProbe')).probe('home'),
+}));
+vi.mock('../../features/library', async () => ({
+  default: (await import('./routeProbe')).probe('library'),
+}));
+vi.mock('../../features/library/SearchRoute', async () => ({
+  default: (await import('./routeProbe')).probe('search'),
+}));
+vi.mock('../../features/document', async () => ({
+  default: (await import('./routeProbe')).probe('document'),
+}));
+vi.mock('../../features/document/SharedRoute', async () => ({
+  default: (await import('./routeProbe')).probe('shared'),
+}));
+vi.mock('../../features/intake', async () => ({
+  default: (await import('./routeProbe')).probe('intake'),
+}));
+vi.mock('../../features/settings', async () => ({
+  default: (await import('./routeProbe')).probe('settings'),
+}));
+vi.mock('../../features/auth/CallbackRoute', async () => ({
+  default: (await import('./routeProbe')).probe('callback'),
+}));
 
 const USER = { id: '1', username: 'ada', email: 'a@b.c', role: 'user' };
 const later = <T,>(value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), 0));
@@ -44,14 +60,26 @@ beforeEach(() => {
     value: createResponsiveMatchMediaMock({}),
   });
   vi.mocked(api.get).mockReturnValue(new Promise(() => {}) as never);
-  vi.mocked(api.post).mockImplementation(() => later({ data: { token: 't', user: USER } }) as never);
+  vi.mocked(api.post).mockImplementation(
+    () => later({ data: { token: 't', user: USER } }) as never,
+  );
 });
 
 const renderAt = (entry: InitialEntry) =>
   render(
     <ThemeModeProvider>
       <FeatureFlagsContext.Provider
-        value={{ flags: { allowLocalAuth: true, allowRegistration: false, oidcEnabled: false, enablePerUserWatch: false }, loading: false, error: null }}
+        value={{
+          flags: {
+            allowLocalAuth: true,
+            allowRegistration: false,
+            oidcEnabled: false,
+            enablePerUserWatch: false,
+            mcpEnabled: false,
+          },
+          loading: false,
+          error: null,
+        }}
       >
         <MemoryRouter initialEntries={[entry]}>
           <AuthProvider>
@@ -79,24 +107,37 @@ describe('sign-in with the real AuthProvider', () => {
     renderAt('/documents?q=x#top');
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign in' })).toBeInTheDocument();
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'library entry' })).toBeInTheDocument());
-    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/documents?q=x#top');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'library entry' })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent(
+      '/documents?q=x#top',
+    );
     // Nothing redirects afterwards.
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/documents?q=x#top');
+    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent(
+      '/documents?q=x#top',
+    );
   });
 
   it('goes to /home when /login is opened directly', async () => {
     renderAt('/login');
     await signIn();
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'home entry' })).toBeInTheDocument(),
+    );
   });
 
   it('sends a signed-in visitor on /login to the requested route', async () => {
     signedIn();
-    renderAt({ pathname: '/login', state: { from: { pathname: '/intake', search: '?section=watch' } } });
+    renderAt({
+      pathname: '/login',
+      state: { from: { pathname: '/intake', search: '?section=watch' } },
+    });
     expect(await screen.findByRole('heading', { name: 'intake entry' })).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent('/intake?section=watch');
+    expect(screen.getByRole('status', { name: 'location' })).toHaveTextContent(
+      '/intake?section=watch',
+    );
   });
 
   it('ignores an off-site requested route for a signed-in visitor', async () => {

@@ -1,291 +1,381 @@
-#[cfg(test)]
-mod tests {
-    use super::super::*;
-    use crate::ocr::error::{OcrError, OcrDiagnostics, CpuFeatures};
-    use crate::ocr::health::OcrHealthChecker;
-    use crate::ocr::image_ocr::ImageOcrService;
-    use std::env;
-    use tempfile::TempDir;
-    use std::fs;
-    use std::time::Duration;
+//! Unit tests for the OCR module (declared as `pub mod tests` in `ocr/mod.rs`).
+#![cfg(test)]
 
+use crate::ocr::error::{CpuFeatures, OcrError};
+use crate::ocr::health::OcrHealthChecker;
+use crate::ocr::image_ocr::ImageOcrService;
+use std::env;
 
-    #[test]
-    fn test_ocr_error_types() {
-        // Test error creation and properties
-        let err = OcrError::TesseractNotInstalled;
-        assert!(err.is_configuration_error());
-        assert!(!err.is_recoverable());
-        assert_eq!(err.error_code(), "OCR_NOT_INSTALLED");
+#[test]
+fn test_ocr_error_types() {
+    // Test error creation and properties
+    let err = OcrError::TesseractNotInstalled;
+    assert!(err.is_configuration_error());
+    assert!(!err.is_recoverable());
+    assert_eq!(err.error_code(), "OCR_NOT_INSTALLED");
 
-        let err = OcrError::InsufficientMemory { required: 1000, available: 500 };
-        assert!(!err.is_configuration_error());
-        assert!(err.is_recoverable());
-        assert_eq!(err.error_code(), "OCR_OUT_OF_MEMORY");
+    let err = OcrError::InsufficientMemory {
+        required: 1000,
+        available: 500,
+    };
+    assert!(!err.is_configuration_error());
+    assert!(err.is_recoverable());
+    assert_eq!(err.error_code(), "OCR_OUT_OF_MEMORY");
 
-        let err = OcrError::LanguageDataNotFound { lang: "test".to_string() };
-        assert!(err.is_configuration_error());
-        assert!(!err.is_recoverable());
-        assert_eq!(err.error_code(), "OCR_LANG_MISSING");
+    let err = OcrError::LanguageDataNotFound {
+        lang: "test".to_string(),
+    };
+    assert!(err.is_configuration_error());
+    assert!(!err.is_recoverable());
+    assert_eq!(err.error_code(), "OCR_LANG_MISSING");
+}
+
+#[test]
+fn test_cpu_features_display() {
+    let features = CpuFeatures {
+        sse2: true,
+        sse3: false,
+        sse4_1: true,
+        sse4_2: false,
+        avx: false,
+        avx2: true,
+    };
+
+    // Test that the structure can be created and accessed
+    assert!(features.sse2);
+    assert!(!features.sse3);
+    assert!(features.sse4_1);
+    assert!(!features.sse4_2);
+    assert!(!features.avx);
+    assert!(features.avx2);
+}
+
+#[test]
+fn test_health_checker_cpu_validation() {
+    let checker = OcrHealthChecker::new();
+    let _features = checker.check_cpu_features();
+    // Just test that the method runs without panicking
+    // Actual CPU features depend on the test environment
+}
+
+#[test]
+fn test_memory_estimation() {
+    let checker = OcrHealthChecker::new();
+
+    // Test memory estimation for different image sizes
+    let small_image_mem = checker.estimate_memory_requirement(800, 600);
+    let large_image_mem = checker.estimate_memory_requirement(4000, 3000);
+
+    // Larger images should require more memory
+    assert!(large_image_mem > small_image_mem);
+
+    // Should include base overhead
+    assert!(small_image_mem >= 100); // At least 100MB base
+}
+
+#[test]
+fn test_temp_space_check() {
+    let checker = OcrHealthChecker::new();
+    let space = checker.check_temp_space();
+
+    // Should return some positive value
+    assert!(space > 0);
+}
+
+// tessdata path detection test removed - no longer managing tessdata paths
+
+#[test]
+fn test_language_detection() {
+    let checker = OcrHealthChecker::new();
+
+    // Test that language detection methods exist and return proper types
+    // These may fail in CI environments without tesseract, but should not panic
+    let _available_languages_result = checker.get_available_languages();
+    let _validate_result = checker.validate_language("eng");
+}
+
+#[tokio::test]
+async fn test_enhanced_ocr_timeout() {
+    let _service = ImageOcrService::new().with_timeout(1); // Very short timeout (1 second)
+
+    // This should timeout quickly
+    // Note: Actual test depends on having a test image file
+}
+
+#[tokio::test]
+async fn test_enhanced_ocr_image_validation() {
+    let _service = ImageOcrService::new();
+
+    // Test that the service can be created
+    // Actual OCR tests would need test images
+}
+
+#[test]
+fn test_error_recovery_classification() {
+    // Test which errors are considered recoverable
+    assert!(OcrError::InsufficientMemory {
+        required: 1000,
+        available: 500
     }
-
-    #[test]
-    fn test_cpu_features_display() {
-        let features = CpuFeatures {
-            sse2: true,
-            sse3: false,
-            sse4_1: true,
-            sse4_2: false,
-            avx: false,
-            avx2: true,
-        };
-
-        // Test that the structure can be created and accessed
-        assert!(features.sse2);
-        assert!(!features.sse3);
-        assert!(features.sse4_1);
-        assert!(!features.sse4_2);
-        assert!(!features.avx);
-        assert!(features.avx2);
+    .is_recoverable());
+    assert!(OcrError::OcrTimeout { seconds: 30 }.is_recoverable());
+    assert!(OcrError::LowConfidence {
+        score: 0.3,
+        threshold: 0.7
     }
+    .is_recoverable());
 
-    #[test]
-    fn test_health_checker_cpu_validation() {
-        let checker = OcrHealthChecker::new();
-        let _features = checker.check_cpu_features();
-        // Just test that the method runs without panicking
-        // Actual CPU features depend on the test environment
+    // Test which errors are not recoverable
+    assert!(!OcrError::TesseractNotInstalled.is_recoverable());
+    assert!(!OcrError::LanguageDataNotFound {
+        lang: "test".to_string()
     }
-
-    #[test]
-    fn test_memory_estimation() {
-        let checker = OcrHealthChecker::new();
-        
-        // Test memory estimation for different image sizes
-        let small_image_mem = checker.estimate_memory_requirement(800, 600);
-        let large_image_mem = checker.estimate_memory_requirement(4000, 3000);
-        
-        // Larger images should require more memory
-        assert!(large_image_mem > small_image_mem);
-        
-        // Should include base overhead
-        assert!(small_image_mem >= 100); // At least 100MB base
+    .is_recoverable());
+    assert!(!OcrError::MissingCpuInstruction {
+        instruction: "SSE2".to_string()
     }
+    .is_recoverable());
 
-    #[test]
-    fn test_temp_space_check() {
-        let checker = OcrHealthChecker::new();
-        let space = checker.check_temp_space();
-        
-        // Should return some positive value
-        assert!(space > 0);
+    // Test configuration errors
+    assert!(OcrError::TesseractNotInstalled.is_configuration_error());
+    assert!(OcrError::LanguageDataNotFound {
+        lang: "test".to_string()
     }
-
-    // tessdata path detection test removed - no longer managing tessdata paths
-
-    #[test]
-    fn test_language_detection() {
-        let checker = OcrHealthChecker::new();
-        
-        // Test that language detection methods exist and return proper types
-        // These may fail in CI environments without tesseract, but should not panic
-        let _available_languages_result = checker.get_available_languages();
-        let _validate_result = checker.validate_language("eng");
+    .is_configuration_error());
+    assert!(OcrError::MissingCpuInstruction {
+        instruction: "SSE2".to_string()
     }
+    .is_configuration_error());
 
-    #[tokio::test]
-    async fn test_enhanced_ocr_timeout() {
-        let _service = ImageOcrService::new()
-            .with_timeout(1); // Very short timeout (1 second)
-        
-        // This should timeout quickly
-        // Note: Actual test depends on having a test image file
+    assert!(!OcrError::InsufficientMemory {
+        required: 1000,
+        available: 500
     }
+    .is_configuration_error());
+    assert!(!OcrError::OcrTimeout { seconds: 30 }.is_configuration_error());
+}
 
-    #[tokio::test]
-    async fn test_enhanced_ocr_image_validation() {
-        let _service = ImageOcrService::new();
-        
-        // Test that the service can be created
-        // Actual OCR tests would need test images
-    }
+#[test]
+fn test_image_size_validation() {
+    let checker = OcrHealthChecker::new();
 
-    #[test]
-    fn test_error_recovery_classification() {
-        // Test which errors are considered recoverable
-        assert!(OcrError::InsufficientMemory { required: 1000, available: 500 }.is_recoverable());
-        assert!(OcrError::OcrTimeout { seconds: 30 }.is_recoverable());
-        assert!(OcrError::LowConfidence { score: 0.3, threshold: 0.7 }.is_recoverable());
-        
-        // Test which errors are not recoverable
-        assert!(!OcrError::TesseractNotInstalled.is_recoverable());
-        assert!(!OcrError::LanguageDataNotFound { lang: "test".to_string() }.is_recoverable());
-        assert!(!OcrError::MissingCpuInstruction { instruction: "SSE2".to_string() }.is_recoverable());
-        
-        // Test configuration errors
-        assert!(OcrError::TesseractNotInstalled.is_configuration_error());
-        assert!(OcrError::LanguageDataNotFound { lang: "test".to_string() }.is_configuration_error());
-        assert!(OcrError::MissingCpuInstruction { instruction: "SSE2".to_string() }.is_configuration_error());
-        
-        assert!(!OcrError::InsufficientMemory { required: 1000, available: 500 }.is_configuration_error());
-        assert!(!OcrError::OcrTimeout { seconds: 30 }.is_configuration_error());
-    }
+    // Test memory validation for different image sizes
+    // Note: This might fail in low-memory environments, but shouldn't panic
+    let result = checker.validate_memory_for_image(800, 600);
 
-    #[test]
-    fn test_image_size_validation() {
-        let checker = OcrHealthChecker::new();
-        
-        // Test memory validation for different image sizes
-        // Note: This might fail in low-memory environments, but shouldn't panic
-        let result = checker.validate_memory_for_image(800, 600);
-        
-        // Should either succeed or fail with InsufficientMemory
-        match result {
-            Ok(_) => {
-                // Memory validation passed
-            }
-            Err(OcrError::InsufficientMemory { required, available }) => {
-                assert!(required > available);
-            }
-            Err(_) => {
-                panic!("Expected InsufficientMemory error, got: {:?}", result);
-            }
+    // Should either succeed or fail with InsufficientMemory
+    match result {
+        Ok(_) => {
+            // Memory validation passed
+        }
+        Err(OcrError::InsufficientMemory {
+            required,
+            available,
+        }) => {
+            assert!(required > available);
+        }
+        Err(_) => {
+            panic!("Expected InsufficientMemory error, got: {:?}", result);
         }
     }
+}
 
-    #[test]
-    fn test_get_language_display_name() {
-        let health_checker = OcrHealthChecker::new();
-        
-        // Test known language display names
-        assert_eq!(health_checker.get_language_display_name("eng"), "English");
-        assert_eq!(health_checker.get_language_display_name("spa"), "Spanish");
-        assert_eq!(health_checker.get_language_display_name("fra"), "French");
-        assert_eq!(health_checker.get_language_display_name("deu"), "German");
-        assert_eq!(health_checker.get_language_display_name("chi_sim"), "Chinese (Simplified)");
-        
-        // Test unknown language (should return the code itself)
-        assert_eq!(health_checker.get_language_display_name("unknown"), "unknown");
+#[test]
+fn test_get_language_display_name() {
+    let health_checker = OcrHealthChecker::new();
+
+    // Test known language display names
+    assert_eq!(health_checker.get_language_display_name("eng"), "English");
+    assert_eq!(health_checker.get_language_display_name("spa"), "Spanish");
+    assert_eq!(health_checker.get_language_display_name("fra"), "French");
+    assert_eq!(health_checker.get_language_display_name("deu"), "German");
+    assert_eq!(
+        health_checker.get_language_display_name("chi_sim"),
+        "Chinese (Simplified)"
+    );
+
+    // Test unknown language (should return the code itself)
+    assert_eq!(
+        health_checker.get_language_display_name("unknown"),
+        "unknown"
+    );
+}
+
+/// Flags that do not exist in ocrmypdf and must never be used.
+/// See: https://github.com/readur/readur/issues/604
+const OCRMYPDF_INVALID_FLAGS: &[&str] = &[
+    "--fix-metadata", // never existed in any version
+    "--continue-on-soft-render-error",
+    "--no-update-metadata",
+];
+
+#[test]
+fn test_ocrmypdf_strategy1_uses_only_supported_flags() {
+    let args = crate::ocr::enhanced::ocrmypdf_strategy1_args();
+    for arg in &args {
+        assert!(
+            !OCRMYPDF_INVALID_FLAGS.contains(arg),
+            "ocrmypdf strategy 1 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
+            arg
+        );
     }
+}
 
-    /// Flags that do not exist in ocrmypdf and must never be used.
-    /// See: https://github.com/readur/readur/issues/604
-    const OCRMYPDF_INVALID_FLAGS: &[&str] = &[
-        "--fix-metadata",           // never existed in any version
-        "--continue-on-soft-render-error",
-        "--no-update-metadata",
-    ];
-
-    #[test]
-    fn test_ocrmypdf_strategy1_uses_only_supported_flags() {
-        let args = crate::ocr::enhanced::ocrmypdf_strategy1_args();
-        for arg in &args {
-            assert!(
-                !OCRMYPDF_INVALID_FLAGS.contains(arg),
-                "ocrmypdf strategy 1 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
-                arg
-            );
-        }
+#[test]
+fn test_ocrmypdf_strategy2_uses_only_supported_flags() {
+    let args = crate::ocr::enhanced::ocrmypdf_strategy2_args();
+    for arg in &args {
+        assert!(
+            !OCRMYPDF_INVALID_FLAGS.contains(arg),
+            "ocrmypdf strategy 2 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
+            arg
+        );
     }
+}
 
-    #[test]
-    fn test_ocrmypdf_strategy2_uses_only_supported_flags() {
-        let args = crate::ocr::enhanced::ocrmypdf_strategy2_args();
-        for arg in &args {
-            assert!(
-                !OCRMYPDF_INVALID_FLAGS.contains(arg),
-                "ocrmypdf strategy 2 contains unsupported flag '{}' — not available in ocrmypdf 14.x (Docker image version)",
-                arg
-            );
-        }
-    }
+#[test]
+fn test_ocrmypdf_strategies_contain_required_flags() {
+    let s1 = crate::ocr::enhanced::ocrmypdf_strategy1_args();
+    assert!(
+        s1.contains(&"--force-ocr"),
+        "Strategy 1 must include --force-ocr"
+    );
+    assert!(
+        s1.contains(&"--language"),
+        "Strategy 1 must include --language"
+    );
+    assert!(s1.contains(&"eng"), "Strategy 1 must include eng language");
 
-    #[test]
-    fn test_ocrmypdf_strategies_contain_required_flags() {
-        let s1 = crate::ocr::enhanced::ocrmypdf_strategy1_args();
-        assert!(s1.contains(&"--force-ocr"), "Strategy 1 must include --force-ocr");
-        assert!(s1.contains(&"--language"), "Strategy 1 must include --language");
-        assert!(s1.contains(&"eng"), "Strategy 1 must include eng language");
+    let s2 = crate::ocr::enhanced::ocrmypdf_strategy2_args();
+    assert!(
+        s2.contains(&"--force-ocr"),
+        "Strategy 2 must include --force-ocr"
+    );
+    assert!(
+        s2.contains(&"--language"),
+        "Strategy 2 must include --language"
+    );
+    assert!(s2.contains(&"eng"), "Strategy 2 must include eng language");
+}
 
-        let s2 = crate::ocr::enhanced::ocrmypdf_strategy2_args();
-        assert!(s2.contains(&"--force-ocr"), "Strategy 2 must include --force-ocr");
-        assert!(s2.contains(&"--language"), "Strategy 2 must include --language");
-        assert!(s2.contains(&"eng"), "Strategy 2 must include eng language");
-    }
-
-    #[test]
-    fn test_ocrmypdf_ocr_command_writes_sidecar_in_the_ocr_run() {
-        let args = crate::ocr::enhanced::ocrmypdf_ocr_command_args(
-            &crate::ocr::enhanced::ocrmypdf_strategy1_args(),
+#[test]
+fn test_ocrmypdf_ocr_command_writes_sidecar_in_the_ocr_run() {
+    let args = crate::ocr::enhanced::ocrmypdf_ocr_command_args(
+        &crate::ocr::enhanced::ocrmypdf_strategy1_args(),
+        "/tmp/out.pdf.txt",
+        "/tmp/in.pdf",
+        "/tmp/out.pdf",
+    );
+    let n = args.len();
+    assert_eq!(
+        &args[n - 4..],
+        [
+            "--sidecar",
             "/tmp/out.pdf.txt",
             "/tmp/in.pdf",
-            "/tmp/out.pdf",
-        );
-        let n = args.len();
-        assert_eq!(&args[n - 4..], ["--sidecar", "/tmp/out.pdf.txt", "/tmp/in.pdf", "/tmp/out.pdf"]);
-        assert!(args.contains(&"--force-ocr".to_string()));
-        // --skip-text would skip every page and leave only "[OCR skipped on page(s) N]" in the sidecar
-        assert!(!args.contains(&"--skip-text".to_string()));
-    }
+            "/tmp/out.pdf"
+        ]
+    );
+    assert!(args.contains(&"--force-ocr".to_string()));
+    // --skip-text would skip every page and leave only "[OCR skipped on page(s) N]" in the sidecar
+    assert!(!args.contains(&"--skip-text".to_string()));
+}
 
-    /// Runs the real ocrmypdf (skipped when it is not installed) the way
-    /// extract_text_from_pdf_with_ocr does, and checks the sidecar holds the page text.
-    #[test]
-    fn test_ocrmypdf_sidecar_holds_recognised_text() {
-        use crate::ocr::enhanced::{ocrmypdf_ocr_command_args, ocrmypdf_strategy1_args, ocrmypdf_strategy2_args};
-        if std::process::Command::new("ocrmypdf").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
-            eprintln!("ocrmypdf not installed; skipping");
-            return;
-        }
-        let input = concat!(env!("CARGO_MANIFEST_DIR"), "/frontend/test_data/multilingual/english_test.pdf");
-        let dir = tempfile::tempdir().unwrap();
-        let output = dir.path().join("out.pdf");
-        let sidecar = dir.path().join("out.pdf.txt");
-        let ok = [ocrmypdf_strategy1_args(), ocrmypdf_strategy2_args()].iter().any(|strategy| {
+/// Runs the real ocrmypdf (skipped when it is not installed) the way
+/// extract_text_from_pdf_with_ocr does, and checks the sidecar holds the page text.
+#[test]
+fn test_ocrmypdf_sidecar_holds_recognised_text() {
+    use crate::ocr::enhanced::{
+        ocrmypdf_ocr_command_args, ocrmypdf_strategy1_args, ocrmypdf_strategy2_args,
+    };
+    if std::process::Command::new("ocrmypdf")
+        .arg("--version")
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(true)
+    {
+        eprintln!("ocrmypdf not installed; skipping");
+        return;
+    }
+    let input = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/frontend/test_data/multilingual/english_test.pdf"
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let output = dir.path().join("out.pdf");
+    let sidecar = dir.path().join("out.pdf.txt");
+    let ok = [ocrmypdf_strategy1_args(), ocrmypdf_strategy2_args()]
+        .iter()
+        .any(|strategy| {
             std::process::Command::new("ocrmypdf")
-                .args(ocrmypdf_ocr_command_args(strategy, sidecar.to_str().unwrap(), input, output.to_str().unwrap()))
+                .args(ocrmypdf_ocr_command_args(
+                    strategy,
+                    sidecar.to_str().unwrap(),
+                    input,
+                    output.to_str().unwrap(),
+                ))
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false)
         });
-        assert!(ok, "ocrmypdf failed on {}", input);
-        let text = std::fs::read_to_string(&sidecar).unwrap();
-        assert!(!text.contains("OCR skipped"), "sidecar holds the skip placeholder: {text}");
-        assert!(text.contains("English"), "sidecar lacks the page text: {text}");
+    assert!(ok, "ocrmypdf failed on {}", input);
+    let text = std::fs::read_to_string(&sidecar).unwrap();
+    assert!(
+        !text.contains("OCR skipped"),
+        "sidecar holds the skip placeholder: {text}"
+    );
+    assert!(
+        text.contains("English"),
+        "sidecar lacks the page text: {text}"
+    );
+}
+
+#[test]
+fn test_language_validation_integration() {
+    let health_checker = OcrHealthChecker::new();
+
+    // Test that the new Tesseract-based validation methods exist and can be called
+    // Note: These may fail if tesseract is not installed in test environment,
+    // but we're testing the API exists and returns proper error types
+
+    let result = health_checker.get_available_languages();
+    match result {
+        Ok(languages) => {
+            // Tesseract may legitimately list no languages (no traineddata
+            // installed), so the list is checked for shape, not size: the
+            // header line is dropped and entries are clean, sorted codes.
+            assert!(
+                languages
+                    .iter()
+                    .all(|l| !l.is_empty() && !l.contains(char::is_whitespace)),
+                "every language code is a single non-empty token: {languages:?}"
+            );
+            assert!(
+                !languages.iter().any(|l| l.contains("List of")),
+                "the --list-langs header is not reported as a language: {languages:?}"
+            );
+            assert!(
+                languages.windows(2).all(|w| w[0] <= w[1]),
+                "languages are sorted: {languages:?}"
+            );
+        }
+        Err(OcrError::TesseractNotInstalled) => {
+            // This is expected in CI environments without tesseract
+        }
+        Err(e) => panic!("Unexpected error: {:?}", e),
     }
 
-    #[test]
-    fn test_language_validation_integration() {
-        let health_checker = OcrHealthChecker::new();
-        
-        // Test that the new Tesseract-based validation methods exist and can be called
-        // Note: These may fail if tesseract is not installed in test environment,
-        // but we're testing the API exists and returns proper error types
-        
-        let result = health_checker.get_available_languages();
-        match result {
-            Ok(languages) => {
-                // If tesseract is installed, we should get a list
-                assert!(languages.len() >= 0);
-            }
-            Err(OcrError::TesseractNotInstalled) => {
-                // This is expected in CI environments without tesseract
-            }
-            Err(e) => panic!("Unexpected error: {:?}", e),
+    let result = health_checker.check_language_data("eng");
+    match result {
+        Ok(_) => {
+            // Language is available
         }
-        
-        let result = health_checker.check_language_data("eng");
-        match result {
-            Ok(_) => {
-                // Language is available
-            }
-            Err(OcrError::TesseractNotInstalled) => {
-                // Expected in CI without tesseract
-            }
-            Err(OcrError::LanguageDataNotFound { lang }) => {
-                assert_eq!(lang, "eng");
-            }
-            Err(e) => panic!("Unexpected error: {:?}", e),
+        Err(OcrError::TesseractNotInstalled) => {
+            // Expected in CI without tesseract
         }
+        Err(OcrError::LanguageDataNotFound { lang }) => {
+            assert_eq!(lang, "eng");
+        }
+        Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }

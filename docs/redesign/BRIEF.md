@@ -106,8 +106,8 @@ Every text/background pair has been checked at ≥4.5:1. Don't invent new colour
   - `frontend/src/services/api/index.ts`
   - Exception: tasks that explicitly own one of these files may edit it.
 - **Generated API types:** `frontend/src/types/generated/**` is generated from the Rust models by [ts-rs](https://github.com/Aleph-Alpha/ts-rs). Import them with `import type` from the `index.ts` barrel in that folder, and never edit them by hand.
-  - Regenerate after changing any Rust type that derives `TS`: `scripts/generate-ts-bindings.sh`, then commit the result. On a host without leptonica/tesseract/libclang/openssl, run `READUR_USE_NIX=1 scripts/generate-ts-bindings.sh` to build inside nix-shell.
-  - `scripts/check-ts-bindings.sh` regenerates and fails if the committed files drift (modified, deleted or new). It takes `READUR_USE_NIX=1` too.
+  - Regenerate after changing any Rust type that derives `TS`: `scripts/generate-ts-bindings.sh`, then commit the result. On a host without leptonica/tesseract/libclang/openssl, the script can build inside nix-shell: set READUR_USE_NIX=1 in the environment when running it (a switch read by the script itself, not a Readur setting).
+  - `scripts/check-ts-bindings.sh` regenerates and fails if the committed files drift (modified, deleted or new). It honours the same READUR_USE_NIX=1 switch.
   - Adding an API type in Rust: derive `TS` next to `ToSchema` and add `#[ts(export)]`. If the TS name would clash with another exported type, add `rename = "..."`.
   - Mapping rules:
     - Integers (`i64`, `u64`, `usize`, …) are `number` (`TS_RS_LARGE_INT = "number"` in `.cargo/config.toml`); `bigint` never appears. Dates and UUIDs are `string`. `serde_json::Value` is `JsonValue`.

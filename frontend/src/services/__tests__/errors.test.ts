@@ -1,6 +1,8 @@
 import { describe, test, expect, vi } from 'vitest';
 import {
   ErrorHelper,
+  apiErrorMessage,
+  parseApiError,
   ErrorCodes,
   type ApiErrorResponse,
   type AxiosErrorWithCode,
@@ -8,6 +10,34 @@ import {
 } from '../errors';
 
 describe('ErrorHelper', () => {
+  describe('parseApiError and apiErrorMessage', () => {
+    test('parse the unified error body', () => {
+      expect(parseApiError({ error: 'Label not found', code: 'NOT_FOUND', status: 404 })).toEqual({
+        error: 'Label not found',
+        code: 'NOT_FOUND',
+        status: 404,
+      });
+      expect(parseApiError({ error: 'Only a message' }, 400)).toEqual({
+        error: 'Only a message',
+        code: '',
+        status: 400,
+      });
+      expect(parseApiError({ message: 'not ours' })).toBeNull();
+      expect(parseApiError('<html>Bad gateway</html>')).toBeNull();
+      expect(parseApiError(null)).toBeNull();
+    });
+
+    test('apiErrorMessage reads only the error field', () => {
+      const failure = (data: unknown) => ({ response: { status: 400, data }, isAxiosError: true });
+      expect(
+        apiErrorMessage(failure({ error: 'Bad name', code: 'BAD_REQUEST', status: 400 })),
+      ).toBe('Bad name');
+      expect(apiErrorMessage(failure({ message: 'Bad name' }))).toBeNull();
+      expect(apiErrorMessage(failure({ error: '   ', code: 'X', status: 400 }))).toBeNull();
+      expect(apiErrorMessage(new Error('offline'))).toBeNull();
+    });
+  });
+
   describe('getErrorInfo', () => {
     test('should handle structured API error response', () => {
       const structuredError = {
@@ -31,23 +61,20 @@ describe('ErrorHelper', () => {
       });
     });
 
-    test('should handle legacy error format with message', () => {
-      const legacyError = {
-        response: {
-          data: {
-            message: 'Legacy error message',
-          },
+    test('ignores bodies that are not the API error shape', () => {
+      // The API answers every error with { error, code, status }; a `message`
+      // or `error_code` field is not part of it and is not shown.
+      for (const data of [{ message: 'Legacy error message' }, { error_code: 'X', detail: 'Y' }]) {
+        const error = {
+          message: 'Request failed with status code 500',
+          response: { data, status: 500 },
+          isAxiosError: true,
+        };
+        expect(ErrorHelper.getErrorInfo(error)).toEqual({
+          message: 'Request failed with status code 500',
           status: 500,
-        },
-        isAxiosError: true,
-      };
-
-      const result = ErrorHelper.getErrorInfo(legacyError);
-
-      expect(result).toEqual({
-        message: 'Legacy error message',
-        status: 500,
-      });
+        });
+      }
     });
 
     test('should handle axios errors without structured data', () => {

@@ -38,7 +38,6 @@ COPY Cargo.toml Cargo.lock ./
 # This significantly speeds up the first cargo-watch build
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/main.rs && \
-    echo "fn main() {}" > src/bin/test_runner.rs && \
     echo "fn main() {}" > src/bin/analyze-webdav-performance.rs && \
     cargo build && \
     rm -rf src target

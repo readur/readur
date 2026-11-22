@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
-use tracing::{info, warn};
-use std::env;
-use std::path::{Path, PathBuf};
 use crate::db::Database;
 use crate::models::CreateUser;
 use crate::utils::security::generate_secure_password;
+use anyhow::{Context, Result};
+use std::env;
+use std::path::{Path, PathBuf};
+use tracing::{info, warn};
 
 /// File name of the generated first-run admin password.
 pub const INITIAL_ADMIN_PASSWORD_FILE: &str = "initial-admin-password";
@@ -29,6 +29,25 @@ pub fn initial_admin_password_path(upload_path: &str) -> PathBuf {
         .join(INITIAL_ADMIN_PASSWORD_FILE)
 }
 
+/// Username of the admin account when `ADMIN_USERNAME` is unset or blank.
+pub const DEFAULT_ADMIN_USERNAME: &str = "admin";
+
+/// The admin account's username: `ADMIN_USERNAME`, or [`DEFAULT_ADMIN_USERNAME`].
+/// The seed, `reset-admin-password` and the global watch folder's owner all
+/// read it here, so they always name the same account.
+pub fn admin_username() -> String {
+    admin_username_from(env::var("ADMIN_USERNAME").ok())
+}
+
+/// [`admin_username`] for an explicit value: trimmed, and blank means unset
+/// (compose passes `${ADMIN_USERNAME:-}` through as an empty string).
+pub fn admin_username_from(value: Option<String>) -> String {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_ADMIN_USERNAME.to_string())
+}
+
 /// Default admin email: `ADMIN_EMAIL`, or `<username>@localhost`.
 pub fn admin_email(admin_username: &str) -> String {
     env::var("ADMIN_EMAIL")
@@ -41,7 +60,9 @@ pub fn admin_email(admin_username: &str) -> String {
 /// passes `${ADMIN_PASSWORD:-}` through as an empty string).
 pub fn configured_admin_password(value: Option<String>) -> Result<Option<String>> {
     match value.filter(|p| !p.trim().is_empty()) {
-        Some(pwd) if pwd.len() < 8 => anyhow::bail!("ADMIN_PASSWORD must be at least 8 characters long"),
+        Some(pwd) if pwd.len() < 8 => {
+            anyhow::bail!("ADMIN_PASSWORD must be at least 8 characters long")
+        }
         other => Ok(other),
     }
 }
@@ -95,8 +116,16 @@ fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
 pub fn restrict_password_file_permissions(path: &Path, restrict_parent: bool) {
     use std::os::unix::fs::PermissionsExt;
 
-    let is_regular = |p: &Path| std::fs::symlink_metadata(p).map(|m| m.file_type().is_file()).unwrap_or(false);
-    let is_dir = |p: &Path| std::fs::symlink_metadata(p).map(|m| m.file_type().is_dir()).unwrap_or(false);
+    let is_regular = |p: &Path| {
+        std::fs::symlink_metadata(p)
+            .map(|m| m.file_type().is_file())
+            .unwrap_or(false)
+    };
+    let is_dir = |p: &Path| {
+        std::fs::symlink_metadata(p)
+            .map(|m| m.file_type().is_dir())
+            .unwrap_or(false)
+    };
     if !is_regular(path) {
         return;
     }
@@ -107,12 +136,18 @@ pub fn restrict_password_file_permissions(path: &Path, restrict_parent: bool) {
     for (target, mode) in targets {
         // Skip targets already at the right mode: a no-op chmod still emits a
         // metadata-change event, which restarts file watchers such as cargo-watch.
-        let current = std::fs::metadata(target).map(|m| m.permissions().mode() & 0o777).ok();
+        let current = std::fs::metadata(target)
+            .map(|m| m.permissions().mode() & 0o777)
+            .ok();
         if current == Some(mode) {
             continue;
         }
         if let Err(e) = std::fs::set_permissions(target, std::fs::Permissions::from_mode(mode)) {
-            warn!("Failed to restrict permissions of {}: {}", target.display(), e);
+            warn!(
+                "Failed to restrict permissions of {}: {}",
+                target.display(),
+                e
+            );
         }
     }
     warn!(
@@ -132,9 +167,12 @@ pub fn restrict_password_file_permissions(_path: &Path, _restrict_parent: bool) 
 pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
     let password_path = initial_admin_password_path(upload_path);
     let default_dir = Path::new(upload_path).join(INITIAL_ADMIN_PASSWORD_DIR);
-    restrict_password_file_permissions(&password_path, password_path.parent() == Some(default_dir.as_path()));
+    restrict_password_file_permissions(
+        &password_path,
+        password_path.parent() == Some(default_dir.as_path()),
+    );
 
-    let admin_username = env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
+    let admin_username = admin_username();
     let admin_email = admin_email(&admin_username);
 
     match db.get_user_by_username(&admin_username).await {
@@ -149,23 +187,24 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
         }
     }
 
-    let (admin_password, password_file) = match configured_admin_password(env::var("ADMIN_PASSWORD").ok())? {
-        Some(pwd) => (pwd, None),
-        None => {
-            let pwd = generate_secure_password(24);
-            let path = password_path;
-            // Persist before creating the account so a failure here never
-            // leaves an admin whose password nobody knows.
-            write_secret_file(&path, &pwd).with_context(|| {
-                format!(
-                    "Failed to write the generated admin password to {}. Set ADMIN_PASSWORD, \
+    let (admin_password, password_file) =
+        match configured_admin_password(env::var("ADMIN_PASSWORD").ok())? {
+            Some(pwd) => (pwd, None),
+            None => {
+                let pwd = generate_secure_password(24);
+                let path = password_path;
+                // Persist before creating the account so a failure here never
+                // leaves an admin whose password nobody knows.
+                write_secret_file(&path, &pwd).with_context(|| {
+                    format!(
+                        "Failed to write the generated admin password to {}. Set ADMIN_PASSWORD, \
                      or ADMIN_PASSWORD_FILE to a writable location",
-                    path.display()
-                )
-            })?;
-            (pwd, Some(path))
-        }
-    };
+                        path.display()
+                    )
+                })?;
+                (pwd, Some(path))
+            }
+        };
 
     let create_user = CreateUser {
         username: admin_username.clone(),
@@ -176,7 +215,10 @@ pub async fn seed_admin_user(db: &Database, upload_path: &str) -> Result<()> {
 
     match db.create_user(create_user).await {
         Ok(user) => {
-            info!("✅ Created admin user '{}' ({}, id {})", admin_username, admin_email, user.id);
+            info!(
+                "✅ Created admin user '{}' ({}, id {})",
+                admin_username, admin_email, user.id
+            );
             match password_file {
                 Some(path) => info!(
                     "🔑 The generated admin password was written to {} - sign in, change it, then delete the file",
@@ -208,6 +250,28 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    #[test]
+    fn admin_username_defaults_when_unset_or_blank() {
+        assert_eq!(admin_username_from(None), DEFAULT_ADMIN_USERNAME);
+        assert_eq!(
+            admin_username_from(Some(String::new())),
+            DEFAULT_ADMIN_USERNAME
+        );
+        assert_eq!(
+            admin_username_from(Some("  ".into())),
+            DEFAULT_ADMIN_USERNAME
+        );
+    }
+
+    #[test]
+    fn admin_username_uses_the_configured_name_trimmed() {
+        assert_eq!(admin_username_from(Some("root".into())), "root");
+        assert_eq!(
+            admin_username_from(Some(" ops-admin \n".into())),
+            "ops-admin"
+        );
+    }
+
     fn mode(path: &Path) -> u32 {
         std::fs::metadata(path).unwrap().permissions().mode() & 0o777
     }
@@ -215,7 +279,10 @@ mod tests {
     #[test]
     fn blank_admin_password_counts_as_unset() {
         assert_eq!(configured_admin_password(None).unwrap(), None);
-        assert_eq!(configured_admin_password(Some(String::new())).unwrap(), None);
+        assert_eq!(
+            configured_admin_password(Some(String::new())).unwrap(),
+            None
+        );
         assert_eq!(configured_admin_password(Some("   ".into())).unwrap(), None);
     }
 

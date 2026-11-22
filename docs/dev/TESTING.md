@@ -1,133 +1,66 @@
 # Testing Guide
 
-This document provides comprehensive instructions for running tests in the Readur OCR document management system.
+How Readur's tests are organised and how to run them. Browser tests are covered separately in the [E2E Testing Guide](README-E2E.md), and the shared test helpers in [Test Infrastructure](test-infrastructure.md).
 
-## 🧪 Testing Strategy
+## Overview
 
-We have a comprehensive three-tier testing approach:
-
-1. **Unit Tests** (Rust) - Fast, no dependencies, test individual components
-2. **Integration Tests** (Rust) - Test against running services, complete user workflow validation  
-3. **Frontend Tests** (TypeScript/React) - Component and API integration testing
+| Kind | Where | Run with |
+|------|-------|----------|
+| Rust unit tests | `#[cfg(test)]` modules next to the code, plus `src/tests/` | `cargo test --lib` |
+| Rust integration tests | `tests/*.rs` (one test binary per file) | `cargo test --test '*'` |
+| Frontend unit tests | `frontend/src/**/__tests__/*.test.ts(x)` | `npm run test:unit` |
+| Frontend integration tests | `frontend/src/**/*.integration.test.tsx` | `npm run test:integration` |
+| E2E tests | `frontend/e2e/*.spec.ts` | `npm run test:e2e` |
 
 ## Prerequisites
 
-### Backend Testing
-- Rust toolchain (1.70+)
-- PostgreSQL database (for integration tests)
-- Tesseract OCR library (optional, for OCR feature tests)
+- A Rust toolchain. The default features include `ocr`, which links against Tesseract and Leptonica, so their development packages (and `clang`/`libclang` for bindgen) must be installed to build. CI installs `tesseract-ocr`, `libtesseract-dev`, `libleptonica-dev`, `pkg-config`, `libclang-dev` and `clang`, plus `ocrmypdf` and `poppler-utils` for the PDF tests.
+- Docker, for tests that need PostgreSQL (a container is started automatically), or an existing PostgreSQL server (see [Test databases](#test-databases)).
+- Node.js and npm for the frontend tests (CI uses Node 26).
 
-### Frontend Testing
-- Node.js (18+)
-- npm package manager
+## Rust tests
 
-## 🚀 Quick Start
-
-### Backend Tests
+### Unit tests
 
 ```bash
-# Run all backend tests (unit + integration)
-cargo test
-
-# Run only unit tests (fast, no dependencies)
 cargo test --lib
-
-# Run only integration tests (requires running infrastructure)
-cargo test --test integration_integration_tests
-
-# Run with detailed output
-RUST_BACKTRACE=1 cargo test -- --nocapture
 ```
 
-### Frontend Tests
+Most unit tests sit in `#[cfg(test)] mod tests` blocks in the file they test. `src/tests/` holds a few cross-cutting modules: `config_tests`, `document_response_serialization_tests`, `layering_tests`, `ocr_tests`, `regression_tests` and `route_compilation_tests`. Filter by name as usual:
 
 ```bash
-# Navigate to frontend directory
-cd frontend
-
-# Run all frontend tests
-npm test -- --run
-
-# Run tests in watch mode (development)
-npm test
-
-# Run with coverage
-npm run test:coverage
+cargo test --lib priority          # every unit test whose path contains "priority"
+cargo test --lib -- --nocapture    # show println! output
 ```
 
-### Using the Test Runner (Automated)
-```bash
-# Run all tests using the custom test runner
-cargo run --bin test_runner
+### Integration tests
 
-# Run specific test types
-cargo run --bin test_runner unit         # Unit tests only
-cargo run --bin test_runner integration  # Integration tests only  
-cargo run --bin test_runner frontend     # Frontend tests only
-```
-
-## 📋 Test Categories
-
-## Backend Testing (Rust)
-
-### Unit Tests
-
-Unit tests are located throughout the `src/tests/` directory and test individual components in isolation.
-
-#### Available Test Modules
+Each file in `tests/` is its own test binary, named after the file:
 
 ```bash
-# Database operations
-cargo test tests::db_tests
-
-# Authentication and JWT
-cargo test tests::auth_tests
-
-# OCR processing and queue management
-cargo test tests::ocr_tests
-
-# Document handling and metadata
-cargo test tests::documents_tests
-
-# Search functionality and ranking
-cargo test tests::enhanced_search_tests
-
-# User management
-cargo test tests::users_tests
-
-# Settings and configuration
-cargo test tests::settings_tests
-
-# File service operations
-cargo test tests::file_service_tests
+cargo test --test '*'                              # all of them
+cargo test --test integration_labels_tests         # one file
+cargo test --test integration_labels_tests create  # matching tests in one file
 ```
 
-#### Running Specific Tests
+The files follow a naming convention: `integration_*` for tests that exercise the app end to end, `unit_*` for isolated tests that need more setup than an inline module, `*migration*` for migration tests, and `webdav_*` for WebDAV tests. Supporting directories:
+
+- `tests/support/`: shared helpers for the documentation tests (`api_routes.rs`, `api_reference_examples.rs`, `markdown.rs`).
+- `tests/integration_labels/`: a submodule of the label tests.
+- `tests/performance/`: WebDAV performance tests.
+- `tests/fixtures/`, `tests/test_images/`, `tests/test_pdfs/`: test data.
+
+`tests/webdav_stress_tests.rs` needs the `stress-testing` feature:
 
 ```bash
-# Run all unit tests
-cargo test --lib
-
-# Run tests by pattern
-cargo test user                    # All tests with "user" in the name
-cargo test tests::auth_tests       # Specific module
-cargo test test_create_user        # Specific test function
-
-# Run with output
-cargo test test_name -- --nocapture
-
-# Run single-threaded (for debugging)
-cargo test -- --test-threads=1
+cargo test --test webdav_stress_tests --features stress-testing
 ```
 
-### Integration Tests (`tests/integration_integration_tests.rs`)
+The test helpers are compiled with the `test-utils` feature, which the `readur` dev-dependency in `Cargo.toml` enables for all tests, so no flag is needed for them.
 
-Integration tests run against the complete system and require:
-- ✅ Running PostgreSQL database
-- ✅ Server infrastructure
-- ✅ Full OCR processing pipeline
+Most integration tests build the app in process with `TestContext` (from `src/test_utils.rs`) and send requests to its router; they need only a database. A smaller group (for example `integration_integration_tests.rs`, `integration_ocr_retry_tests.rs`, `integration_prometheus_metrics_tests.rs`, `integration_mcp_live_server_tests.rs`) talks over HTTP to a separately running server: the API_URL variable (default `http://localhost:8000`) and `TEST_DATABASE_URL` (falling back to `DATABASE_URL`) must point at that server and its database. These fail if no server is running.
 
-#### Test databases
+### Test databases
 
 Tests that need PostgreSQL get their own database from `readur::test_db::TestDatabase` (used by `TestContext`). Each test process starts one server, runs the migrations once into a template database, and clones it per test with `CREATE DATABASE … TEMPLATE …`, which takes milliseconds. Tests of the migrations themselves use `TestDatabase::empty()`.
 
@@ -139,623 +72,86 @@ export READUR_TEST_POSTGRES_URL=postgresql://readur:readur@localhost:5432/readur
 
 The container, or on an existing server the per-test databases, are removed when the test process exits. The template is kept on an existing server and reused until the migrations change.
 
-#### What Integration Tests Cover
+`TEST_REQUIRES_LARGER_POOL` (any value) gives each `TestContext` a pool of 15 connections instead of 5.
 
-```bash
-# Complete user workflow tests
-cargo test --test integration_integration_tests
+### What CI runs
 
-# Specific integration tests
-cargo test --test integration_integration_tests test_complete_ocr_workflow
-cargo test --test integration_integration_tests test_document_list_structure
-cargo test --test integration_integration_tests test_ocr_error_handling
-```
+- `.github/workflows/test-unit.yml`: `cargo test --lib --no-fail-fast`, then `cargo test --tests unit_tests --no-fail-fast` (every test whose name contains `unit_tests`), a check that the generated TypeScript bindings are current (`scripts/check-ts-bindings.sh`), and the frontend type checks and unit tests with coverage.
+- `.github/workflows/test-integration.yml`: one job builds every integration test binary once, with the `stress-testing` feature, into a cargo-nextest archive (`cargo nextest archive --test '*'`), and another builds the release server. Four jobs then run the in-process suites from the archive, one hash partition each (`--partition hash:N/4`), with PostgreSQL as a service (`READUR_TEST_POSTGRES_URL`); a fifth starts the Readur server and the Dufs WebDAV server and runs the suites that need them. Those suites are listed in `.config/live-server-suites`, which `scripts/ci/live-server-filterset.sh` turns into the nextest filterset both sides use (`-E "$filterset"` and `-E "not ($filterset)"`), so every suite runs exactly once; `tests/integration_tooling_env_tests.rs` fails when a suite that talks to a live server is missing from the list. Each job runs one test at a time (`--profile ci`, `.config/nextest.toml`), and nextest runs every test in its own process. The `Integration Tests` check passes only when all of these jobs succeed. A separate job runs `npm run test:integration`.
 
-**Integration Test Features:**
-- 🔒 **Type Safety** - Uses same models/types as main application
-- 🚀 **Performance** - Faster execution than external scripts
-- 🛠️ **IDE Support** - Full autocomplete and refactoring support
-- 🔗 **Code Reuse** - Can import validation logic and test helpers
-- 👥 **Unique Users** - Each test creates unique timestamped users to avoid conflicts
+  To run the CI split locally: `cargo nextest run --features "test-utils stress-testing" -E "not ($(scripts/ci/live-server-filterset.sh))"` for the in-process suites, and with `-E "$(scripts/ci/live-server-filterset.sh)"` against a running server for the rest.
 
-### Test Configuration and Environment
-
-#### Environment Variables
-
-```bash
-# Required for integration tests
-export DATABASE_URL="postgresql://user:password@localhost/readur_test"
-export JWT_SECRET="readur-local-testing-only-jwt-secret-0123456789"  # published test value
-export READUR_INSECURE_DEV_MODE=true  # required to accept the test value above
-export RUST_BACKTRACE=1
-
-# Optional OCR configuration
-export TESSERACT_PATH="/usr/bin/tesseract"
-```
-
-#### Running Tests with Features
-
-```bash
-# Run tests with OCR features enabled
-cargo test --features ocr
-
-# Run tests without default features
-cargo test --no-default-features
-
-# Run specific feature combinations
-cargo test --features "ocr,webdav"
-```
-
-## Frontend Testing (TypeScript/React)
-
-### Setup
+## Frontend tests
 
 ```bash
 cd frontend
 npm install
+npm run test:unit            # unit tests, once
+npm run test:unit:watch      # unit tests, watch mode
+npm run test:unit:coverage   # unit tests with coverage
+npm run test:integration     # *.integration.test.tsx
+npm run type-check           # tsc for the app
+npm run type-check:test      # tsc for the tests
 ```
 
-### Test Categories
+`npm test` runs Vitest with `vitest.config.ts`, which re-exports the unit config; add `--run` to run once instead of watching. To run one file: `npm run test:unit -- src/features/library/__tests__/LibraryPage.test.tsx` (any path or name filter works).
 
-#### Component Tests
+Configuration:
+
+- `vitest.unit.config.ts`: jsdom environment, globals, setup file `src/test/setup.ts`; excludes `e2e/`, `*.e2e.test.*` and `*.integration.test.*`. Coverage uses the v8 provider over `src/**/*.{ts,tsx}` (excluding tests, `src/test/`, type declarations and `src/main.tsx`), reports text summary, JSON summary and HTML, and fails below the thresholds set in the file (statements 86, branches 80, functions 84, lines 88).
+- `vitest.integration.config.ts`: same environment and setup, includes only `**/*.integration.test.{js,jsx,ts,tsx}`.
+
+Tests live in `__tests__` directories next to the code they test, mostly under `frontend/src/features/` and `frontend/src/services/`.
+
+## The Docker test runner
+
+`./run-tests.sh` runs the suites against containers from `docker-compose.test.yml` (PostgreSQL on port 5433, Readur on port 8001), saving output under `test-results/`:
 
 ```bash
-# All component tests
-npm test -- src/components/__tests__/
-
-# Specific components
-npm test -- Dashboard.test.tsx
-npm test -- Login.test.tsx
-npm test -- DocumentList.test.tsx
-npm test -- FileUpload.test.tsx
+./run-tests.sh unit           # cargo test --lib against the test database
+./run-tests.sh integration    # cargo test --test '*' against the containers
+./run-tests.sh frontend       # Vitest in a node container
+./run-tests.sh all
+./run-tests.sh integration keep-running   # leave the containers up afterwards
 ```
 
-#### Page Tests
+The Readur container's admin password is `ADMIN_PASSWORD` from your shell, default `readur-test-admin-password`; the script exports the same value to the tests, so the two always agree. `./run-tests.sh e2e` runs the Playwright suite against these containers; see the [E2E Testing Guide](README-E2E.md), which also describes `scripts/run-e2e-local.sh`, the variant without Docker.
+
+The old `test_runner` binary has been removed; use the commands above.
+
+## Debugging failures
 
 ```bash
-# All page tests
-npm test -- src/pages/__tests__/
-
-# Specific pages
-npm test -- SearchPage.test.tsx
-npm test -- DocumentDetailsPage.test.tsx
-npm test -- SettingsPage.test.tsx
+RUST_BACKTRACE=1 cargo test --test integration_labels_tests -- --nocapture
+cargo test --lib -- --test-threads=1      # run serially
+RUST_LOG=readur=debug cargo test --test integration_labels_tests -- --nocapture
 ```
 
-#### Service Tests
+- `Failed to connect to test database` or testcontainer errors: Docker is not available. Start it, or set `READUR_TEST_POSTGRES_URL`.
+- Live-server tests failing with connection errors: start a server and set API_URL and `TEST_DATABASE_URL` as described above.
+- Build errors in `tesseract-sys` or `leptonica-sys`: install the Tesseract/Leptonica development packages and `libclang`.
 
-```bash
-# API service tests
-npm test -- src/services/__tests__/
+## Adding tests
 
-# Specific service tests
-npm test -- api.test.ts
-```
-
-### Frontend Test Configuration
-
-Frontend tests use **Vitest** with the following setup:
-
-```typescript
-// vitest.config.ts
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
-    mockReset: true,
-    clearMocks: true,
-    restoreMocks: true,
-  },
-})
-```
-
-#### Global Mocking Setup
-
-The frontend tests use comprehensive API mocking to avoid real HTTP requests:
-
-```typescript
-// src/test/setup.ts
-vi.mock('axios', () => ({
-  default: {
-    create: vi.fn(() => ({
-      get: vi.fn(() => Promise.resolve({ data: [] })),
-      post: vi.fn(() => Promise.resolve({ data: {} })),
-      put: vi.fn(() => Promise.resolve({ data: {} })),
-      delete: vi.fn(() => Promise.resolve({ data: {} })),
-      defaults: { headers: { common: {} } },
-    })),
-  },
-}))
-```
-
-### Running Frontend Tests
-
-```bash
-# Run all tests once
-npm test -- --run
-
-# Run in watch mode (for development)
-npm test
-
-# Run with coverage report
-npm run test:coverage
-
-# Run specific test file
-npm test -- Dashboard.test.tsx
-
-# Run tests matching pattern
-npm test -- --grep "Login"
-
-# Debug mode with verbose output
-npm test -- --reporter=verbose
-```
-
-## 🔧 Test Configuration
-
-### Integration Test Requirements
-
-Integration tests expect the server running at:
-- **URL:** `http://localhost:8000`
-- **Health endpoint:** `/api/health` returns `{"status": "ok"}`
-
-### Test Data Strategy
-
-Integration tests use unique data to avoid conflicts:
-- **Test users:** `rust_integration_test_{timestamp}@example.com`
-- **Test documents:** Simple text files with known content
-- **Timeouts:** 30 seconds for OCR processing
-- **Unique identifiers:** Timestamps prevent user registration conflicts
-
-## 📊 Test Coverage
-
-### What We Test
-
-**OCR Functionality:**
-- Document upload → OCR processing → text retrieval
-- OCR metadata validation (confidence, word count, timing)
-- Error handling for failed OCR processing
-
-**API Endpoints:**
-- Authentication flow (register/login)
-- Document management (upload/list)
-- OCR text retrieval (`/api/documents/{id}/ocr`)
-- Error responses (401, 404, 500)
-
-**Data Models:**
-- Type safety and field validation
-- Response structure consistency
-- Security (no password leaks)
-
-**Frontend Components:**
-- OCR dialog behavior
-- API integration and error handling
-- User interaction flows
-
-### What We Don't Test
-- Tesseract OCR accuracy (external library)
-- Database schema migrations (handled by SQLx)
-- File system operations (handled by OS)
-- Network failures (covered by error handling)
-
-## 🐛 Debugging Test Failures
-
-### Backend Test Debugging
-
-#### Unit Test Failures
-Unit tests should never fail due to external dependencies. If they do:
-
-```bash
-# Run with detailed output
-cargo test failing_test_name -- --nocapture
-
-# Run with backtrace
-RUST_BACKTRACE=1 cargo test
-
-# Run single-threaded for easier debugging
-cargo test -- --test-threads=1
-```
-
-Common unit test issues:
-1. **Compilation errors in models** - Check recent type changes
-2. **Type definitions mismatch** - Verify model consistency  
-3. **Data structure changes** - Update test data to match new schemas
-
-#### Integration Test Failures
-
-```bash
-# Run with full debugging
-RUST_BACKTRACE=full cargo test --test integration_integration_tests -- --nocapture
-
-# Test server health first
-curl http://localhost:8000/api/health
-```
-
-**Common Integration Test Issues:**
-
-**"Server is not running":** The integration tests require a running server instance to connect to.
-   ```bash
-   # Start the server first
-   cargo run
-   # Then run tests in another terminal
-   cargo test --test integration_integration_tests
-   ```
-
-2. **"Registration failed" errors**
-   - **Fixed Issue**: Tests now use unique timestamped usernames
-   - **Previous Problem**: Hardcoded usernames caused UNIQUE constraint violations
-   - **Solution**: Each test creates users like `rust_integration_test_1701234567890`
-
-3. **"OCR processing timed out"**
-   - Check server logs for OCR errors
-   - Ensure Tesseract is installed: `sudo apt-get install tesseract-ocr`
-   - Verify OCR feature is enabled: `cargo test --features ocr`
-
-4. **"Processing time should be positive" (Fixed)**
-   - **Previous Issue**: Test expected `processing_time_ms > 0`
-   - **Root Cause**: Text file processing can be 0ms (very fast)
-   - **Fix**: Changed assertion to `processing_time_ms >= 0`
-
-5. **Database connection errors**
-   ```bash
-   # Check DATABASE_URL
-   echo $DATABASE_URL
-   
-   # Verify PostgreSQL is running
-   sudo systemctl status postgresql
-   
-   # Test database connection
-   psql $DATABASE_URL -c "SELECT 1;"
-   ```
-
-### Frontend Test Debugging
-
-#### Common Issues and Solutions
-
-**"vi is not defined" errors:** This occurs when test files use the wrong testing framework imports.
-   ```bash
-   # Fixed: Updated imports from jest to vitest
-   # Before: import { jest } from '@jest/globals'
-   # After:  import { vi } from 'vitest'
-   ```
-
-**"useAuth must be used within AuthProvider":** React components that use authentication hooks need proper context mocking in tests.
-   ```bash
-   # Fixed: Added proper AuthProvider mocking
-   # Tests now include MockAuthProvider wrapper
-   ```
-
-**API mocking not working:** Tests should not make real HTTP requests and need proper API mocking setup.
-   ```bash
-   # Fixed: Added global axios mock in setup.ts
-   # Prevents real HTTP requests during testing
-   ```
-
-**Module not found errors:** Missing or corrupted dependencies can cause import failures.
-   ```bash
-   # Clear and reinstall dependencies
-   cd frontend
-   rm -rf node_modules package-lock.json
-   npm install
-   ```
-
-#### Frontend Debugging Commands
-
-```bash
-# Run with verbose output
-npm test -- --reporter=verbose
-
-# Debug specific test file  
-npm test -- --run Dashboard.test.tsx
-
-# Check test configuration
-cat vitest.config.ts
-cat src/test/setup.ts
-
-# Verify test environment
-npm test -- --run src/components/__tests__/simple.test.tsx
-```
-
-### Test Coverage Analysis
-
-#### Backend Coverage
-
-```bash
-# Install coverage tool
-cargo install cargo-tarpaulin
-
-# Generate coverage report  
-cargo tarpaulin --out Html --output-dir coverage/
-
-# View coverage
-open coverage/tarpaulin-report.html
-```
-
-#### Frontend Coverage
-
-```bash
-# Generate coverage report
-cd frontend
-npm run test:coverage
-
-# View coverage report
-open coverage/index.html
-```
-
-## 🔄 Continuous Integration
-
-### GitHub Actions Example
-
-```yaml
-name: Test Suite
-
-on: [push, pull_request]
-
-jobs:
-  backend-tests:
-    runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: readur_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-    
-    - name: Install Tesseract
-      run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
-    
-    - name: Run Unit Tests
-      run: cargo test --lib
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
-        READUR_INSECURE_DEV_MODE: "true"
-    
-    - name: Start Server
-      run: cargo run &
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
-        READUR_INSECURE_DEV_MODE: "true"
-    
-    - name: Wait for Server Health
-      run: |
-        timeout 60s bash -c 'until curl -s http://localhost:8000/api/health | grep -q "ok"; do 
-          echo "Waiting for server..."
-          sleep 2
-        done'
-    
-    - name: Run Integration Tests  
-      run: cargo test --test integration_integration_tests
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost/readur_test
-        JWT_SECRET: readur-ci-testing-only-jwt-secret-0123456789
-        READUR_INSECURE_DEV_MODE: "true"
-
-  frontend-tests:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-    
-    - name: Install Dependencies
-      working-directory: frontend
-      run: npm install
-    
-    - name: Run Frontend Tests
-      working-directory: frontend
-      run: npm test -- --run
-    
-    - name: Generate Coverage
-      working-directory: frontend  
-      run: npm run test:coverage
-```
-
-### Local CI Testing
-
-```bash
-# Test the full pipeline locally
-./scripts/test-ci.sh
-
-# Or run each step manually:
-
-# 1. Backend unit tests
-cargo test --lib
-
-# 2. Start infrastructure
-docker-compose up -d
-
-# 3. Wait for health
-timeout 60s bash -c 'until curl -s http://localhost:8000/api/health | grep -q "ok"; do sleep 2; done'
-
-# 4. Integration tests
-cargo test --test integration_integration_tests
-
-# 5. Frontend tests
-cd frontend && npm test -- --run
-```
-
-## 📈 Adding New Tests
-
-### For New API Endpoints
-
-**Unit Tests:** Add focused tests for business logic in the appropriate module under `src/tests/`.
-   ```rust
-   #[test]
-   fn test_new_endpoint_data_model() {
-       let request = NewRequest { /* ... */ };
-       let response = process_request(request);
-       assert!(response.is_ok());
-   }
-   ```
-
-**Integration Tests:** Add full workflow tests that exercise the complete API endpoint in `tests/integration_integration_tests.rs`.
-   ```rust
-   #[tokio::test]
-   async fn test_new_endpoint_workflow() {
-       let mut client = TestClient::new();
-       let token = client.register_and_login(/* ... */).await.unwrap();
-       
-       let response = client.client
-           .post(&format!("{}/api/new-endpoint", BASE_URL))
-           .header("Authorization", format!("Bearer {}", token))
-           .json(&request_data)
-           .send()
-           .await
-           .unwrap();
-           
-       assert_eq!(response.status(), 200);
-   }
-   ```
-
-**Frontend Tests:** Add component tests when the feature includes user interface changes.
-   ```typescript
-   test('new feature component renders correctly', () => {
-     render(<NewFeatureComponent />)
-     expect(screen.getByText('New Feature')).toBeInTheDocument()
-   })
-   ```
-
-### For New OCR Features
-
-**Happy Path Testing:** Test the successful flow from document upload through OCR processing to result retrieval.
-   ```rust
-   #[tokio::test]
-   async fn test_new_ocr_feature_success() {
-       // Test: document → processing → retrieval
-       let document = upload_test_document().await;
-       let ocr_result = process_ocr_with_new_feature(document.id).await;
-       assert!(ocr_result.is_ok());
-   }
-   ```
-
-**Error Condition Testing:** Verify that the feature handles invalid inputs and edge cases gracefully.
-   ```rust
-   #[test]
-   fn test_new_ocr_feature_invalid_format() {
-       let result = new_ocr_feature("invalid.xyz");
-       assert!(result.is_err());
-   }
-   ```
-
-**Performance Testing:** Ensure that OCR features meet performance requirements and handle large documents efficiently.
-   ```rust
-   #[tokio::test]
-   async fn test_new_ocr_feature_performance() {
-       let start = Instant::now();
-       let result = process_large_document().await;
-       let duration = start.elapsed();
-       
-       assert!(result.is_ok());
-       assert!(duration.as_secs() < 30); // Should complete within 30s
-   }
-   ```
-
-### Test Data Management
+- Put unit tests in a `#[cfg(test)]` module next to the code.
+- For API behaviour, add a file `tests/integration_<area>_tests.rs` that uses `TestContext` and its `TestAuthHelper` (see [Test Infrastructure](test-infrastructure.md)):
 
 ```rust
-// Use builders for consistent test data
-fn create_test_user_with_timestamp() -> CreateUser {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-        
-    CreateUser {
-        username: format!("test_user_{}", timestamp),
-        email: format!("test_{}@example.com", timestamp),
-        password: "test_password".to_string(),
-        role: Some(UserRole::User),
-    }
+use readur::test_utils::TestContext;
+
+#[tokio::test]
+async fn lists_labels_for_a_new_user() {
+    let ctx = TestContext::new().await;
+    let auth_helper = ctx.auth_helper();
+    let user = auth_helper.create_test_user().await;
+    let token = auth_helper.login_user(&user.username, &user.password).await;
+
+    let body = auth_helper
+        .make_authenticated_request("GET", "/api/labels", None, &token)
+        .await;
+    let labels: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(labels.is_array());
 }
 ```
 
-## 📊 Test Status Summary
-
-### Current Test Status (as of latest fixes)
-
-#### ✅ Backend Tests - ALL PASSING
-- **Unit Tests**: 93 passed, 0 failed, 9 ignored
-- **Integration Tests**: 5 passed, 0 failed
-- **Key Fixes Applied**:
-  - Fixed database schema issues (webdav columns, user roles)
-  - Fixed unique username conflicts in integration tests
-  - Fixed OCR processing time validation logic
-
-#### 🔄 Frontend Tests - SIGNIFICANT IMPROVEMENT  
-- **Status**: 28 passed, 47 failed (75 total)
-- **Key Fixes Applied**:
-  - Migrated from Jest to Vitest
-  - Fixed import statements (`vi` instead of `jest`)
-  - Added global axios mocking
-  - Fixed AuthProvider context issues
-  - Simplified test expectations to match actual component behavior
-
-### Recent Bug Fixes
-
-1. **Integration Test User Registration Conflicts** ✅
-   - **Issue**: Tests failed with "Registration failed" due to duplicate usernames
-   - **Root Cause**: Hardcoded usernames like "rust_integration_test"
-   - **Fix**: Added unique timestamps to usernames: `rust_integration_test_{timestamp}`
-
-2. **OCR Processing Time Validation** ✅
-   - **Issue**: Test failed with "Processing time should be positive"
-   - **Root Cause**: Text file processing can be 0ms (very fast operations)
-   - **Fix**: Changed assertion from `> 0` to `>= 0`
-
-3. **Frontend Vitest Migration** ✅
-   - **Issue**: Tests failed with "jest is not defined"
-   - **Root Cause**: Migration from Jest to Vitest incomplete
-   - **Fix**: Updated all imports and mocking syntax
-
-## 🎯 Test Philosophy
-
-**Fast Feedback:** Unit tests run in milliseconds, integration tests in seconds.
-
-**Real User Scenarios:** Integration tests simulate actual user workflows using the same types as the application.
-
-**Maintainable:** Tests use builders, unique data, and clear naming conventions.
-
-**Reliable:** Tests pass consistently and fail for good reasons - no flaky tests due to data conflicts.
-
-**Comprehensive:** Critical paths are covered, edge cases are handled, and both happy path and error scenarios are tested.
-
-**Type Safety:** Rust integration tests use the same models and types as the main application, ensuring consistency.
-
-## 🔗 Additional Resources
-
-- **Rust Testing Guide**: https://doc.rust-lang.org/book/ch11-00-testing.html
-- **Vitest Documentation**: https://vitest.dev/
-- **Testing Library React**: https://testing-library.com/docs/react-testing-library/intro/
-- **Cargo Test Documentation**: https://doc.rust-lang.org/cargo/commands/cargo-test.html
-
-## 📞 Getting Help
-
-If you encounter issues with tests:
-1. Check this documentation for common solutions
-2. Review recent changes that might have affected tests
-3. Run tests with detailed output using `--nocapture` and `RUST_BACKTRACE=1`
-4. For frontend issues, check the browser console and test setup files
-
-The test suite is designed to be reliable and maintainable. Most failures indicate actual issues that need to be addressed rather than test infrastructure problems.
+- Frontend: add `*.test.tsx` in a `__tests__` directory next to the component; name it `*.integration.test.tsx` if it belongs to the integration suite.

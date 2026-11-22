@@ -46,7 +46,7 @@ Sign in, change the password, then delete the file.
 
 To reset the admin password later:
 ```bash
-docker compose exec readur readur reset-admin-password
+docker compose exec readur /app/readur reset-admin-password
 ```
 
 ### What You Get
@@ -152,8 +152,7 @@ ALLOWED_FILE_TYPES=pdf,png,jpg,jpeg,gif,bmp,tiff,txt,rtf,doc,docx
 3. **Build and Run Backend**:
 ```bash
 # Install dependencies and run
-cargo build --release
-cargo run
+cargo run --release --bin readur
 ```
 
 ### Frontend Setup
@@ -183,9 +182,9 @@ For manual installations, reset the admin password using:
 ./target/release/readur reset-admin-password
 ```
 
-Or if running via `cargo run`:
+Or from a source checkout with `cargo`:
 ```bash
-cargo run -- reset-admin-password
+cargo run --release --bin readur -- reset-admin-password
 ```
 
 ## Verifying Installation

@@ -1,816 +1,151 @@
 # Backup and Recovery Guide
 
-This guide provides comprehensive backup strategies, procedures, and recovery plans for Readur deployments to ensure business continuity and data protection.
+Readur has no built-in backup feature. Everything it stores is in two places, and both are backed up with standard tools:
 
-## Backup Strategy Overview
+1. **The PostgreSQL database**: users, document records and extracted text, labels, sources (including their credentials), settings, API keys, shared links, the OCR queue, and the generated JWT signing key when `JWT_SECRET` is not set.
+2. **The document files**: with local storage, the directory in `UPLOAD_PATH` (`/app/uploads` in the Docker image); with S3 storage, the bucket in `S3_BUCKET_NAME` (below `S3_PREFIX` if set).
 
-Readur requires backing up three critical components:
-1. **PostgreSQL Database** - Document metadata, user data, settings
-2. **File Storage** - Uploaded documents and processed files
-3. **Configuration** - Environment variables and settings
+Also keep a copy of the environment you run Readur with (compose file, `.env`, Helm values), since secrets such as `JWT_SECRET`, OIDC client secrets and S3 credentials live there and not in the database. The watch folder (`WATCH_FOLDER`) holds the files you dropped in; Readur copies them into its storage and never changes or deletes the originals, so backing it up is optional.
+
+For a Docker Compose walk-through with a ready-made script, see [Backup Strategies](self-hosting/backup.md).
 
 ## Database Backup
 
-### Automated Database Backups
+### pg_dump
 
-#### Using pg_dump
-
-Create a backup script:
+`pg_dump` takes a consistent snapshot while Readur keeps running:
 
 ```bash
-#!/bin/bash
-# backup-database.sh
-set -e  # Exit on error
-
-# Configuration
-BACKUP_DIR="/backups/database"
-DB_NAME="readur"
-DB_USER="readur"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/readur_db_${TIMESTAMP}.sql.gz"
-RETENTION_DAYS=30
-
-# Create backup directory
-mkdir -p ${BACKUP_DIR}
-
-# Perform backup with proper authentication
-# Note: Use PGPASSWORD environment variable or .pgpass file for authentication
-PGPASSWORD="${DB_PASSWORD}" pg_dump -h localhost -U ${DB_USER} -d ${DB_NAME} --no-owner --clean --if-exists | gzip > ${BACKUP_FILE}
-
-# Verify backup
-if [ $? -eq 0 ]; then
-    echo "Backup successful: ${BACKUP_FILE}"
-    echo "Size: $(du -h ${BACKUP_FILE} | cut -f1)"
-    
-    # Test restore capability
-    gunzip -c ${BACKUP_FILE} | head -n 100 > /dev/null
-    if [ $? -eq 0 ]; then
-        echo "Backup file verified"
-    else
-        echo "WARNING: Backup file may be corrupted"
-        exit 1
-    fi
-else
-    echo "Backup failed!"
-    exit 1
-fi
-
-# Remove old backups
-find ${BACKUP_DIR} -name "readur_db_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
-echo "Cleaned up backups older than ${RETENTION_DAYS} days"
+pg_dump "postgresql://readur:password@localhost:5432/readur" -Fc -f readur-$(date +%Y%m%d-%H%M%S).dump
 ```
 
-#### Using pg_basebackup for Physical Backups
+Use the same host, database, user and password as Readur (`DATABASE_URL`, or the `POSTGRES_*` variables). To avoid a password on the command line, use a `~/.pgpass` file or `PGPASSWORD`.
+
+The custom format (`-Fc`) is compressed and lets `pg_restore` restore selectively. A plain SQL dump (`-Fp`, restored with `psql`) works too.
+
+### Scheduling
 
 ```bash
-#!/bin/bash
-# physical-backup.sh
-
-BACKUP_DIR="/backups/physical"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_PATH="${BACKUP_DIR}/readur_base_${TIMESTAMP}"
-
-# Enable archive mode in PostgreSQL first
-# In postgresql.conf:
-# wal_level = replica
-# archive_mode = on
-# archive_command = 'cp %p /archive/%f'
-
-# Perform physical backup
-pg_basebackup -D ${BACKUP_PATH} -Ft -z -P -U replication_user
-
-# Create restore point
-psql -U readur -d readur -c "SELECT pg_create_restore_point('backup_${TIMESTAMP}');"
+# crontab: daily dump at 02:00, keep 14 days
+0 2 * * * pg_dump "postgresql://readur@localhost/readur" -Fc -f /backup/readur/db-$(date +\%Y\%m\%d).dump && find /backup/readur -name 'db-*.dump' -mtime +14 -delete
 ```
 
-#### Continuous Archiving with WAL
+(`%` must be escaped as `\%` inside a crontab.)
 
-```yaml
-# docker-compose.yml addition for WAL archiving
-services:
-  postgres:
-    environment:
-      POSTGRES_INITDB_WALDIR: /var/lib/postgresql/wal
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - postgres_wal:/var/lib/postgresql/wal
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
-```
+### Point-in-time recovery
 
-PostgreSQL configuration:
-```ini
-# postgresql.conf
-wal_level = replica
-archive_mode = on
-archive_command = 'test ! -f /archive/%f && cp %p /archive/%f'
-archive_timeout = 300  # Force WAL switch every 5 minutes
-```
-
-### Database Backup Scheduling
-
-#### Using Cron
-
-```bash
-# Add to crontab
-# Daily backup at 2 AM
-# IMPORTANT: Set DB_PASSWORD environment variable in crontab or use .pgpass file
-0 2 * * * DB_PASSWORD='your_password' /opt/readur/scripts/backup-database.sh >> /var/log/readur-backup.log 2>&1
-
-# Hourly incremental backup
-0 * * * * /opt/readur/scripts/backup-incremental.sh >> /var/log/readur-backup.log 2>&1
-
-# Weekly full backup on Sunday
-0 3 * * 0 /opt/readur/scripts/backup-full.sh >> /var/log/readur-backup.log 2>&1
-```
-
-#### Using Kubernetes CronJob
-
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: readur-db-backup
-spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-          - name: backup
-            image: postgres:15
-            env:
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: readur-db-secret
-                  key: password
-            command:
-            - /bin/bash
-            - -c
-            - |
-              pg_dump -h readur-db -U readur -d readur | \
-              gzip | \
-              aws s3 cp - s3://backups/readur/db/$(date +%Y%m%d_%H%M%S).sql.gz
-          restartPolicy: OnFailure
-```
+If losing up to a day of changes is too much, use PostgreSQL's continuous archiving (WAL archiving with a base backup) or a tool built on it such as pgBackRest, Barman or WAL-G, or the backup feature of your managed database service. Readur uses an ordinary PostgreSQL database and needs nothing special from these tools. See the PostgreSQL documentation on continuous archiving for the setup.
 
 ## File Storage Backup
 
-### Local Storage Backup
+### Local storage
 
-#### Using rsync
+The upload directory contains:
 
-```bash
-#!/bin/bash
-# backup-files.sh
-set -e  # Exit on error
+| Path | Contents |
+|------|----------|
+| `documents/` | The stored documents |
+| `thumbnails/` | Generated thumbnails |
+| `processed_images/` | Images produced during OCR preprocessing |
+| `temp/` | Files in transit; does not need backing up |
+| `.readur/initial-admin-password` | The generated initial admin password, if one was generated |
 
-SOURCE_DIR="/var/readur/uploads"
-BACKUP_DIR="/backups/files"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_PATH="${BACKUP_DIR}/readur_files_${TIMESTAMP}"
-
-# Create incremental backup using rsync
-rsync -avz --link-dest=${BACKUP_DIR}/latest \
-  ${SOURCE_DIR}/ ${BACKUP_PATH}/
-
-# Update latest symlink
-rm -f ${BACKUP_DIR}/latest
-ln -s ${BACKUP_PATH} ${BACKUP_DIR}/latest
-
-# Calculate backup size
-BACKUP_SIZE=$(du -sh ${BACKUP_PATH} | cut -f1)
-echo "Backup completed: ${BACKUP_PATH} (${BACKUP_SIZE})"
-```
-
-#### Using tar with compression
+Back up the whole directory with rsync, tar, restic, borg or a filesystem snapshot:
 
 ```bash
-#!/bin/bash
-# archive-files.sh
-set -e  # Exit on error
-
-SOURCE_DIR="/var/readur/uploads"
-BACKUP_DIR="/backups/archives"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/readur_files_${TIMESTAMP}.tar.gz"
-
-# Create compressed archive
-tar -czf ${BACKUP_FILE} \
-  --exclude='*.tmp' \
-  --exclude='thumbnails/*' \
-  -C ${SOURCE_DIR} .
-
-# Verify archive
-tar -tzf ${BACKUP_FILE} > /dev/null
-if [ $? -eq 0 ]; then
-    echo "Archive verified: ${BACKUP_FILE}"
-else
-    echo "Archive verification failed!"
-    exit 1
-fi
+rsync -a --delete --exclude temp/ /srv/readur/uploads/ /backup/readur/uploads/
 ```
-
-### S3 Storage Backup
-
-#### S3 to S3 Replication
-
-```yaml
-# AWS S3 bucket replication configuration
-{
-  "Role": "arn:aws:iam::123456789012:role/replication-role",
-  "Rules": [
-    {
-      "ID": "ReplicateAll",
-      "Priority": 1,
-      "Status": "Enabled",
-      "Filter": {},
-      "Destination": {
-        "Bucket": "arn:aws:s3:::readur-backup-bucket",
-        "ReplicationTime": {
-          "Status": "Enabled",
-          "Time": {
-            "Minutes": 15
-          }
-        },
-        "StorageClass": "GLACIER_IR"
-      },
-      "DeleteMarkerReplication": {
-        "Status": "Enabled"
-      }
-    }
-  ]
-}
-```
-
-#### S3 to Local Backup
 
 ```bash
-#!/bin/bash
-# backup-s3-to-local.sh
-
-S3_BUCKET="readur-documents"
-LOCAL_BACKUP="/backups/s3"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_PATH="${LOCAL_BACKUP}/${TIMESTAMP}"
-
-# Sync S3 to local
-aws s3 sync s3://${S3_BUCKET} ${BACKUP_PATH}/ \
-  --storage-class STANDARD_IA \
-  --include "*" \
-  --exclude "*.tmp"
-
-# Create manifest
-aws s3api list-objects-v2 \
-  --bucket ${S3_BUCKET} \
-  --query 'Contents[].{Key:Key,Size:Size,ETag:ETag}' \
-  --output json > ${BACKUP_PATH}/manifest.json
+tar -czf /backup/readur/uploads-$(date +%Y%m%d).tar.gz --exclude ./temp -C /srv/readur/uploads .
 ```
 
-## Configuration Backup
+### S3 storage
 
-### Environment and Secrets Backup
+Readur stores object keys in the database (as `s3://...` paths) and does not copy the bucket anywhere. Use the bucket's own protection, such as versioning, replication or provider snapshots, or copy it with a generic tool:
 
 ```bash
-#!/bin/bash
-# backup-config.sh
-
-CONFIG_DIR="/etc/readur"
-BACKUP_DIR="/backups/config"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/readur_config_${TIMESTAMP}.tar.gz.gpg"
-
-# Collect configuration files
-mkdir -p /tmp/config_backup
-cp ${CONFIG_DIR}/.env /tmp/config_backup/
-cp ${CONFIG_DIR}/readur.yml /tmp/config_backup/
-cp /etc/nginx/sites-available/readur /tmp/config_backup/nginx.conf
-
-# Export Kubernetes secrets
-kubectl get secret readur-secrets -o yaml > /tmp/config_backup/k8s-secrets.yaml
-
-# Encrypt and archive
-tar -czf - -C /tmp/config_backup . | \
-  gpg --symmetric --cipher-algo AES256 --output ${BACKUP_FILE}
-
-# Clean up
-rm -rf /tmp/config_backup
-
-echo "Encrypted config backup: ${BACKUP_FILE}"
+rclone sync s3remote:readur-documents /backup/readur/s3
 ```
 
-## Backup Verification
+## Keeping Database and Files Consistent
 
-### Automated Backup Testing
+The database records where each file is stored. A database restored together with files from a different point in time can reference files that do not exist (those documents fail to open or download) or leave files that no document references (harmless, they only take space).
+
+- Dump the database **before** copying the files, so the files are at least as new as the database.
+- For a fully consistent pair, stop the Readur server (PostgreSQL can keep running) while you take both, then start it again.
+
+## Verifying Backups
+
+A backup you have never restored is a guess. At a minimum, check that each dump is readable:
 
 ```bash
-#!/bin/bash
-# verify-backups.sh
-
-BACKUP_DIR="/backups"
-TEST_DIR="/tmp/backup_test"
-LOG_FILE="/var/log/backup_verification.log"
-
-# Function to test database backup
-test_db_backup() {
-    local backup_file=$1
-    local test_db="readur_test_restore"
-    
-    echo "Testing database backup: ${backup_file}" >> ${LOG_FILE}
-    
-    # Create test database
-    createdb ${test_db}
-    
-    # Restore backup
-    gunzip -c ${backup_file} | psql -d ${test_db} -q
-    
-    # Verify tables exist
-    table_count=$(psql -d ${test_db} -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'")
-    
-    # Clean up
-    dropdb ${test_db}
-    
-    if [ ${table_count} -gt 0 ]; then
-        echo "Database backup verified: ${table_count} tables found" >> ${LOG_FILE}
-        return 0
-    else
-        echo "Database backup verification failed!" >> ${LOG_FILE}
-        return 1
-    fi
-}
-
-# Function to test file backup
-test_file_backup() {
-    local backup_file=$1
-    
-    echo "Testing file backup: ${backup_file}" >> ${LOG_FILE}
-    
-    # Extract sample files
-    mkdir -p ${TEST_DIR}
-    tar -xzf ${backup_file} -C ${TEST_DIR} --wildcards '*.pdf' --limit=10
-    
-    # Verify files
-    file_count=$(find ${TEST_DIR} -name "*.pdf" | wc -l)
-    
-    # Clean up
-    rm -rf ${TEST_DIR}
-    
-    if [ ${file_count} -gt 0 ]; then
-        echo "File backup verified: ${file_count} files extracted" >> ${LOG_FILE}
-        return 0
-    else
-        echo "File backup verification failed!" >> ${LOG_FILE}
-        return 1
-    fi
-}
-
-# Run verification
-latest_db_backup=$(ls -t ${BACKUP_DIR}/database/*.sql.gz | head -1)
-latest_file_backup=$(ls -t ${BACKUP_DIR}/files/*.tar.gz | head -1)
-
-test_db_backup ${latest_db_backup}
-test_file_backup ${latest_file_backup}
+pg_restore --list readur-20261117.dump > /dev/null && echo "dump OK"
 ```
+
+Better, restore into a scratch database and count rows:
+
+```bash
+createdb -U readur readur_restore_test
+pg_restore -U readur -d readur_restore_test --no-owner readur-20261117.dump
+psql -U readur -d readur_restore_test -c "SELECT COUNT(*) FROM documents;"
+psql -U readur -d readur_restore_test -c "SELECT COUNT(*) FROM users;"
+dropdb -U readur readur_restore_test
+```
+
+The best test is a full restore on a separate machine: start Readur against the restored database and files, log in, and open a few documents.
 
 ## Recovery Procedures
 
-### Database Recovery
+### Full database restore
 
-#### Point-in-Time Recovery
+1. Stop the Readur server so nothing writes to the database.
+2. Recreate the database and restore the dump:
 
-```bash
-#!/bin/bash
-# restore-to-point-in-time.sh
+   ```bash
+   dropdb -U readur --if-exists readur
+   createdb -U readur -O readur readur
+   pg_restore -U readur -d readur --no-owner readur-20261117.dump
+   ```
 
-RESTORE_TIME="2025-01-15 14:30:00"
-BACKUP_FILE="/backups/database/readur_db_20250115_020000.sql.gz"
-WAL_ARCHIVE="/archive"
+   The schema needs the `pg_trgm` extension, which the dump recreates. The restoring role must be allowed to create it (a superuser, or the database owner on PostgreSQL 13 and later, where `pg_trgm` is a trusted extension).
 
-# Stop application
-docker-compose stop readur
+3. Restore the matching document files (below).
+4. Start Readur. It checks the schema and applies any migrations the restored database is missing, then logs `SQLx migrations completed successfully`.
 
-# Restore base backup
-gunzip -c ${BACKUP_FILE} | psql -U readur -d readur
+A dump taken from an older Readur version can be restored under a newer one; the missing migrations are applied at startup. An older Readur does not start on a database that a newer version has already migrated, so to go back to an older version, restore a dump taken before the upgrade.
 
-# Apply WAL logs up to restore time
-cat > /tmp/recovery.conf <<EOF
-restore_command = 'cp ${WAL_ARCHIVE}/%f %p'
-recovery_target_time = '${RESTORE_TIME}'
-recovery_target_action = 'promote'
-EOF
+### File restore
 
-# Start PostgreSQL in recovery mode
-pg_ctl start -D /var/lib/postgresql/data -o "-c recovery_config_file=/tmp/recovery.conf"
-
-# Wait for recovery
-while [ -f /var/lib/postgresql/data/recovery.signal ]; do
-    sleep 5
-    echo "Recovery in progress..."
-done
-
-echo "Recovery completed to ${RESTORE_TIME}"
-```
-
-#### Full Database Restore
+Local storage: put the backed-up directory back in place of `UPLOAD_PATH`:
 
 ```bash
-#!/bin/bash
-# full-restore.sh
-
-BACKUP_FILE=$1
-
-if [ -z "${BACKUP_FILE}" ]; then
-    echo "Usage: $0 <backup_file>"
-    exit 1
-fi
-
-# Confirm restoration
-read -p "This will replace the entire database. Continue? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 1
-fi
-
-# Stop application
-systemctl stop readur
-
-# Drop and recreate database
-psql -U postgres <<EOF
-DROP DATABASE IF EXISTS readur;
-CREATE DATABASE readur OWNER readur;
-EOF
-
-# Restore backup
-gunzip -c ${BACKUP_FILE} | psql -U readur -d readur
-
-# Verify restoration
-psql -U readur -d readur -c "SELECT COUNT(*) FROM documents;"
-
-# Restart application
-systemctl start readur
-
-echo "Database restored from ${BACKUP_FILE}"
+rsync -a --delete /backup/readur/uploads/ /srv/readur/uploads/
 ```
 
-### File Storage Recovery
+S3 storage: restore the objects to the same bucket and prefix (from bucket versions, a replica, or your copy), so the keys stored in the database resolve again.
 
-#### Local Storage Recovery
+### Restoring onto a new server
 
-```bash
-#!/bin/bash
-# restore-files.sh
+1. Install Readur as described in the [Installation Guide](installation.md), with the same configuration as before (in particular `JWT_SECRET` if you set one, and the same storage backend settings), but do not start it yet.
+2. Restore the database into the new PostgreSQL server.
+3. Restore the files into the new `UPLOAD_PATH` or bucket.
+4. Start Readur and check `GET /api/health`, then log in and open a few documents.
 
-BACKUP_PATH=$1
-RESTORE_PATH="/var/readur/uploads"
+If `JWT_SECRET` was not set, the signing key is in the database and comes along with it. If the key differs from before, existing login sessions end and users log in again; API keys keep working because they are not signed with it.
 
-if [ -z "${BACKUP_PATH}" ]; then
-    echo "Usage: $0 <backup_path>"
-    exit 1
-fi
+### Lost admin password
 
-# Create restore point
-mv ${RESTORE_PATH} ${RESTORE_PATH}.old
+Not a backup matter, but often asked for during recovery: reset it with the `readur reset-admin-password` command (see [CLI Tools](administration/cli-tools.md)).
 
-# Restore files
-if [[ ${BACKUP_PATH} == *.tar.gz ]]; then
-    # Extract archive
-    mkdir -p ${RESTORE_PATH}
-    tar -xzf ${BACKUP_PATH} -C ${RESTORE_PATH}
-else
-    # Copy directory
-    cp -r ${BACKUP_PATH} ${RESTORE_PATH}
-fi
+## Monitoring Backups
 
-# Fix permissions
-chown -R readur:readur ${RESTORE_PATH}
-chmod -R 755 ${RESTORE_PATH}
-
-# Verify restoration
-file_count=$(find ${RESTORE_PATH} -type f | wc -l)
-echo "Restored ${file_count} files to ${RESTORE_PATH}"
-
-# Clean up old backup
-read -p "Remove old backup? (y/N) " -n 1 -r
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -rf ${RESTORE_PATH}.old
-fi
-```
-
-#### S3 Recovery
-
-```bash
-#!/bin/bash
-# restore-s3.sh
-
-SOURCE_BUCKET="readur-backup"
-DEST_BUCKET="readur-documents"
-RESTORE_DATE="2025-01-15"
-
-# List available backups
-echo "Available backups:"
-aws s3 ls s3://${SOURCE_BUCKET}/ --recursive | grep ${RESTORE_DATE}
-
-# Restore specific backup
-aws s3 sync s3://${SOURCE_BUCKET}/${RESTORE_DATE}/ s3://${DEST_BUCKET}/ \
-  --delete \
-  --exact-timestamps
-
-# Verify restoration
-object_count=$(aws s3 ls s3://${DEST_BUCKET}/ --recursive | wc -l)
-echo "Restored ${object_count} objects to ${DEST_BUCKET}"
-```
-
-## Disaster Recovery Plan
-
-### RTO and RPO Targets
-
-| Component | RPO (Recovery Point Objective) | RTO (Recovery Time Objective) |
-|-----------|-------------------------------|------------------------------|
-| Database | 1 hour | 2 hours |
-| File Storage | 4 hours | 4 hours |
-| Full System | 4 hours | 8 hours |
-
-### Recovery Runbook
-
-#### Phase 1: Assessment (15 minutes)
-```bash
-#!/bin/bash
-# assess-damage.sh
-
-echo "=== Disaster Recovery Assessment ==="
-echo "Time: $(date)"
-
-# Check database
-pg_isready -h localhost -p 5432 -U readur
-DB_STATUS=$?
-
-# Check file storage
-df -h /var/readur/uploads
-STORAGE_STATUS=$?
-
-# Check application
-curl -f http://localhost:8080/health
-APP_STATUS=$?
-
-echo "Database status: ${DB_STATUS}"
-echo "Storage status: ${STORAGE_STATUS}"
-echo "Application status: ${APP_STATUS}"
-
-if [ ${DB_STATUS} -ne 0 ]; then
-    echo "ACTION: Database recovery required"
-fi
-if [ ${STORAGE_STATUS} -ne 0 ]; then
-    echo "ACTION: Storage recovery required"
-fi
-if [ ${APP_STATUS} -ne 0 ]; then
-    echo "ACTION: Application recovery required"
-fi
-```
-
-#### Phase 2: Recovery Execution
-
-```bash
-#!/bin/bash
-# execute-recovery.sh
-
-RECOVERY_LOG="/var/log/disaster_recovery_$(date +%Y%m%d_%H%M%S).log"
-
-# Function to log with timestamp
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a ${RECOVERY_LOG}
-}
-
-log "Starting disaster recovery"
-
-# 1. Restore database
-log "Restoring database..."
-latest_db_backup=$(ls -t /backups/database/*.sql.gz | head -1)
-./full-restore.sh ${latest_db_backup} >> ${RECOVERY_LOG} 2>&1
-
-# 2. Restore files
-log "Restoring file storage..."
-latest_file_backup=$(ls -t /backups/files/*.tar.gz | head -1)
-./restore-files.sh ${latest_file_backup} >> ${RECOVERY_LOG} 2>&1
-
-# 3. Restore configuration
-log "Restoring configuration..."
-latest_config_backup=$(ls -t /backups/config/*.tar.gz.gpg | head -1)
-gpg --decrypt ${latest_config_backup} | tar -xzf - -C /etc/readur/
-
-# 4. Start services
-log "Starting services..."
-systemctl start postgresql
-systemctl start readur
-systemctl start nginx
-
-# 5. Verify recovery
-log "Verifying recovery..."
-sleep 30
-./health-check.sh >> ${RECOVERY_LOG} 2>&1
-
-log "Disaster recovery completed"
-```
-
-## Important Architecture Note
-
-**Readur is designed as a single-instance application.** It does not support high availability configurations with multiple server instances, database replication, or clustering. For reliability:
-
-- Implement regular automated backups
-- Use reliable storage (RAID, cloud storage)
-- Monitor system health
-- Have a tested recovery procedure
-
-### Single-Instance Best Practices
-
-1. **Regular Backups**: Schedule frequent backups based on your RPO requirements
-2. **Monitoring**: Set up alerts for system failures
-3. **Quick Recovery**: Keep recovery scripts ready and tested
-4. **Hardware Redundancy**: Use RAID for storage, redundant power supplies
-5. **Cloud Deployment**: Consider cloud platforms with built-in reliability features
-
-## Backup Storage Management
-
-### Retention Policies
-
-```bash
-#!/bin/bash
-# manage-retention.sh
-
-# Retention periods (days)
-DAILY_RETENTION=7
-WEEKLY_RETENTION=28
-MONTHLY_RETENTION=365
-
-BACKUP_DIR="/backups"
-
-# Keep daily backups for 7 days
-find ${BACKUP_DIR}/daily -mtime +${DAILY_RETENTION} -delete
-
-# Keep weekly backups for 4 weeks
-find ${BACKUP_DIR}/weekly -mtime +${WEEKLY_RETENTION} -delete
-
-# Keep monthly backups for 1 year
-find ${BACKUP_DIR}/monthly -mtime +${MONTHLY_RETENTION} -delete
-
-# Archive old backups to glacier
-find ${BACKUP_DIR}/monthly -mtime +30 -name "*.tar.gz" | while read file; do
-    aws s3 cp ${file} s3://readur-archive/ --storage-class GLACIER
-    rm ${file}
-done
-```
-
-### Storage Monitoring
-
-```bash
-#!/bin/bash
-# monitor-backup-storage.sh
-
-BACKUP_DIR="/backups"
-THRESHOLD=80  # Alert when usage exceeds 80%
-
-# Check disk usage
-usage=$(df ${BACKUP_DIR} | awk 'NR==2 {print int($5)}')
-
-if [ ${usage} -gt ${THRESHOLD} ]; then
-    echo "WARNING: Backup storage at ${usage}% capacity"
-    
-    # Send alert
-    curl -X POST https://alerts.example.com/webhook \
-      -H "Content-Type: application/json" \
-      -d "{\"message\": \"Backup storage critical: ${usage}% used\"}"
-    
-    # Trigger cleanup
-    ./manage-retention.sh
-fi
-
-# Report backup statistics
-echo "=== Backup Storage Report ==="
-echo "Total backups: $(find ${BACKUP_DIR} -type f | wc -l)"
-echo "Storage used: $(du -sh ${BACKUP_DIR} | cut -f1)"
-echo "Oldest backup: $(ls -t ${BACKUP_DIR}/**/*.gz | tail -1)"
-echo "Latest backup: $(ls -t ${BACKUP_DIR}/**/*.gz | head -1)"
-```
-
-## Testing and Validation
-
-### Disaster Recovery Drill
-
-```bash
-#!/bin/bash
-# dr-drill.sh
-
-# Schedule: Run quarterly
-# Purpose: Validate recovery procedures
-
-TEST_ENV="dr-test"
-START_TIME=$(date +%s)
-
-echo "=== Starting Disaster Recovery Drill ==="
-date
-
-# 1. Create test environment
-docker-compose -f docker-compose.test.yml up -d
-
-# 2. Restore from backup
-./execute-recovery.sh --env ${TEST_ENV}
-
-# 3. Validate data integrity
-psql -h localhost -p 5433 -U readur -d readur_test <<EOF
-SELECT COUNT(*) as document_count FROM documents;
-SELECT COUNT(*) as user_count FROM users;
-SELECT COUNT(DISTINCT file_hash) as unique_files FROM documents;
-EOF
-
-# 4. Test application functionality
-curl -f http://localhost:8081/health
-curl -f http://localhost:8081/api/documents
-
-# 5. Clean up
-docker-compose -f docker-compose.test.yml down
-
-END_TIME=$(date +%s)
-DURATION=$((END_TIME - START_TIME))
-
-echo "=== Disaster Recovery Drill Completed ==="
-echo "Duration: ${DURATION} seconds"
-echo "Target RTO: 8 hours (28800 seconds)"
-
-if [ ${DURATION} -lt 28800 ]; then
-    echo "✓ RTO target met"
-else
-    echo "✗ RTO target exceeded"
-fi
-```
-
-## Security Considerations
-
-### Backup Encryption
-
-```bash
-# Encrypt backups at rest
-openssl enc -aes-256-cbc -salt -in backup.tar.gz -out backup.tar.gz.enc
-
-# Decrypt for restoration
-openssl enc -aes-256-cbc -d -in backup.tar.gz.enc -out backup.tar.gz
-```
-
-### Access Control
-
-```bash
-# Set proper permissions
-chmod 600 /backups/database/*.sql.gz
-chmod 600 /backups/config/*.gpg
-chown -R backup:backup /backups
-
-# Restrict backup script execution
-chmod 750 /opt/readur/scripts/backup-*.sh
-```
-
-## Monitoring and Alerting
-
-### Backup Monitoring
-
-```yaml
-# Prometheus alert rules
-groups:
-  - name: backup_alerts
-    rules:
-      - alert: BackupFailed
-        expr: backup_last_success_timestamp < (time() - 86400)
-        annotations:
-          summary: "Backup has not succeeded in 24 hours"
-          
-      - alert: BackupStorageFull
-        expr: backup_storage_usage_percent > 90
-        annotations:
-          summary: "Backup storage is {{ $value }}% full"
-          
-      - alert: BackupVerificationFailed
-        expr: backup_verification_success == 0
-        annotations:
-          summary: "Backup verification failed"
-```
+Readur does not know about your backups, so watch them from the backup side: alert when the newest dump is older than expected, or when the backup job exits with an error. Readur's own health and metrics endpoints are described in [Monitoring](self-hosting/monitoring.md).
 
 ## Checklist
 
-### Daily Tasks
-- [ ] Verify overnight backups completed
-- [ ] Check backup storage capacity
-- [ ] Review backup logs for errors
-
-### Weekly Tasks
-- [ ] Test restore procedure with sample data
-- [ ] Verify backup retention policy
-- [ ] Update backup documentation
-
-### Monthly Tasks
-- [ ] Full backup verification
-- [ ] Review and update RTO/RPO targets
-- [ ] Test failover procedures
-
-### Quarterly Tasks
-- [ ] Complete disaster recovery drill
-- [ ] Review and update recovery runbooks
-- [ ] Audit backup security and encryption
+- The database is dumped regularly, and the dumps are copied off the server.
+- The upload directory or bucket is backed up on the same schedule, after the database.
+- The compose file, `.env` or Helm values are backed up, with their secrets stored securely.
+- Backups are encrypted or kept on storage with restricted access.
+- A restore has actually been tested, ideally on a separate machine.

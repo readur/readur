@@ -3,15 +3,16 @@ use chrono::Utc;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
+use tracing::{error, info, warn};
 use uuid::Uuid;
-use tracing::{info, warn, error};
 
 use crate::models::Document;
 use crate::services::s3_service::S3Service;
-use crate::storage::{StorageBackend, StorageConfig, factory};
+use crate::storage::local::LocalStorageBackend;
+use crate::storage::{factory, read_limited, LimitedRead, StorageBackend, StorageConfig};
 
 #[cfg(feature = "ocr")]
-use image::{DynamicImage, ImageFormat, imageops::FilterType};
+use image::{imageops::FilterType, DynamicImage, ImageFormat};
 
 #[derive(Clone)]
 pub struct FileService {
@@ -27,9 +28,8 @@ impl FileService {
     /// Create a new FileService with local storage (backward compatible)
     #[deprecated(note = "Use from_config() with storage factory pattern instead")]
     pub fn new(upload_path: String) -> Self {
-        use crate::storage::local::LocalStorageBackend;
         let local_backend = LocalStorageBackend::new(upload_path.clone());
-        Self { 
+        Self {
             upload_path,
             storage: Arc::new(local_backend),
             s3_service: None,
@@ -40,13 +40,13 @@ impl FileService {
     #[deprecated(note = "Use from_config() with storage factory pattern instead")]
     pub fn new_with_s3(upload_path: String, s3_service: Arc<S3Service>) -> Self {
         let storage_backend = s3_service.clone() as Arc<dyn StorageBackend>;
-        Self { 
+        Self {
             upload_path,
             storage: storage_backend,
             s3_service: Some(s3_service),
         }
     }
-    
+
     /// Create a new FileService with a specific storage backend (new API)
     pub fn with_storage(upload_path: String, storage: Arc<dyn StorageBackend>) -> Self {
         Self {
@@ -55,7 +55,7 @@ impl FileService {
             s3_service: None, // New API doesn't need legacy S3 reference
         }
     }
-    
+
     /// Create FileService from storage configuration (factory pattern)
     pub async fn from_config(config: StorageConfig, upload_path: String) -> Result<Self> {
         let storage = factory::create_storage_backend(config).await?;
@@ -67,7 +67,7 @@ impl FileService {
         // Check if storage backend is S3 type
         self.storage.storage_type() == "s3" || self.s3_service.is_some()
     }
-    
+
     /// Get the storage backend type
     pub fn storage_type(&self) -> &'static str {
         self.storage.storage_type()
@@ -79,34 +79,40 @@ impl FileService {
         self.storage.initialize().await?;
         Ok(())
     }
-    
+
     /// Initialize the upload directory structure (legacy method for local storage)
     pub async fn initialize_directory_structure(&self) -> Result<()> {
         // For non-local storage, this is a no-op
         if self.storage.storage_type() != "local" {
-            info!("Skipping directory structure initialization for {} storage", self.storage.storage_type());
+            info!(
+                "Skipping directory structure initialization for {} storage",
+                self.storage.storage_type()
+            );
             return Ok(());
         }
         let base_path = Path::new(&self.upload_path);
-        
+
         // Create subdirectories for organized file storage
         let directories = [
             "documents",        // Final uploaded documents
             "thumbnails",       // Document thumbnails
             "processed_images", // OCR processed images for review
-            "temp",            // Temporary files during processing
-            "backups",         // Document backups
+            "temp",             // Temporary files during processing
+            "backups",          // Document backups
         ];
-        
+
         for dir in directories.iter() {
             let dir_path = base_path.join(dir);
             if let Err(e) = fs::create_dir_all(&dir_path).await {
                 error!("Failed to create directory {:?}: {}", dir_path, e);
-                return Err(anyhow::anyhow!("Failed to create directory structure: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to create directory structure: {}",
+                    e
+                ));
             }
             info!("Ensured directory exists: {:?}", dir_path);
         }
-        
+
         Ok(())
     }
 
@@ -140,22 +146,22 @@ impl FileService {
         let base_path = Path::new(&self.upload_path);
         let documents_dir = self.get_documents_path();
         let thumbnails_dir = self.get_thumbnails_path();
-        
+
         info!("Starting migration of existing files to structured directories...");
         let mut migrated_count = 0;
         let mut thumbnail_count = 0;
-        
+
         // Read all files in the base upload directory
         let mut entries = fs::read_dir(base_path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let file_path = entry.path();
-            
+
             // Skip directories and already structured subdirectories
             if file_path.is_dir() {
                 continue;
             }
-            
+
             if let Some(filename) = file_path.file_name().and_then(|n| n.to_str()) {
                 // Handle thumbnail files
                 if filename.ends_with("_thumb.jpg") {
@@ -179,9 +185,11 @@ impl FileService {
                 }
             }
         }
-        
-        info!("Migration completed: {} documents, {} thumbnails moved to structured directories", 
-              migrated_count, thumbnail_count);
+
+        info!(
+            "Migration completed: {} documents, {} thumbnails moved to structured directories",
+            migrated_count, thumbnail_count
+        );
         Ok(())
     }
 
@@ -191,49 +199,81 @@ impl FileService {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        
+
         let saved_filename = if extension.is_empty() {
             file_id.to_string()
         } else {
             format!("{}.{}", file_id, extension)
         };
-        
+
         // Save to documents subdirectory
         let documents_dir = self.get_documents_path();
         let file_path = documents_dir.join(&saved_filename);
-        
+
         // Ensure the documents directory exists
         if let Err(e) = fs::create_dir_all(&documents_dir).await {
             error!("Failed to create documents directory: {}", e);
-            return Err(anyhow::anyhow!("Failed to create documents directory: {}", e));
+            return Err(anyhow::anyhow!(
+                "Failed to create documents directory: {}",
+                e
+            ));
         }
-        
+
         fs::write(&file_path, data).await?;
-        
+
         Ok(file_path.to_string_lossy().to_string())
     }
 
     /// Save file for a specific document (works with both local and S3)
-    pub async fn save_document_file(&self, user_id: Uuid, document_id: Uuid, filename: &str, data: &[u8]) -> Result<String> {
-        let storage_path = self.storage.store_document(user_id, document_id, filename, data).await?;
+    pub async fn save_document_file(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<String> {
+        let storage_path = self
+            .storage
+            .store_document(user_id, document_id, filename, data)
+            .await?;
         info!("Saved document via storage backend: {}", storage_path);
         Ok(storage_path)
     }
 
     /// Save thumbnail (works with both local and S3)
-    pub async fn save_thumbnail(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        let storage_path = self.storage.store_thumbnail(user_id, document_id, data).await?;
+    pub async fn save_thumbnail(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String> {
+        let storage_path = self
+            .storage
+            .store_thumbnail(user_id, document_id, data)
+            .await?;
         info!("Saved thumbnail via storage backend: {}", storage_path);
         Ok(storage_path)
     }
 
     /// Save processed image (works with both local and S3)
-    pub async fn save_processed_image(&self, user_id: Uuid, document_id: Uuid, data: &[u8]) -> Result<String> {
-        let storage_path = self.storage.store_processed_image(user_id, document_id, data).await?;
-        info!("Saved processed image via storage backend: {}", storage_path);
+    pub async fn save_processed_image(
+        &self,
+        user_id: Uuid,
+        document_id: Uuid,
+        data: &[u8],
+    ) -> Result<String> {
+        let storage_path = self
+            .storage
+            .store_processed_image(user_id, document_id, data)
+            .await?;
+        info!(
+            "Saved processed image via storage backend: {}",
+            storage_path
+        );
         Ok(storage_path)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_document(
         &self,
         filename: &str,
@@ -274,6 +314,7 @@ impl FileService {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_document_with_id(
         &self,
         document_id: Uuid,
@@ -329,10 +370,7 @@ impl FileService {
     }
 
     pub fn is_allowed_file_type(&self, filename: &str, allowed_types: &[String]) -> bool {
-        if let Some(extension) = Path::new(filename)
-            .extension()
-            .and_then(|ext| ext.to_str())
-        {
+        if let Some(extension) = Path::new(filename).extension().and_then(|ext| ext.to_str()) {
             let ext_lower = extension.to_lowercase();
             allowed_types.contains(&ext_lower)
         } else {
@@ -346,27 +384,36 @@ impl FileService {
         if Path::new(file_path).exists() {
             return Ok(file_path.to_string());
         }
-        
+
         // Try to find the file in the new structured directory
         if file_path.starts_with("./uploads/") && !file_path.contains("/documents/") {
             let new_path = file_path.replace("./uploads/", "./uploads/documents/");
             if Path::new(&new_path).exists() {
-                info!("Found file in new structured directory: {} -> {}", file_path, new_path);
+                info!(
+                    "Found file in new structured directory: {} -> {}",
+                    file_path, new_path
+                );
                 return Ok(new_path);
             }
         }
-        
+
         // Try without the ./ prefix
         if file_path.starts_with("uploads/") && !file_path.contains("/documents/") {
             let new_path = file_path.replace("uploads/", "uploads/documents/");
             if Path::new(&new_path).exists() {
-                info!("Found file in new structured directory: {} -> {}", file_path, new_path);
+                info!(
+                    "Found file in new structured directory: {} -> {}",
+                    file_path, new_path
+                );
                 return Ok(new_path);
             }
         }
-        
+
         // File not found in any expected location
-        Err(anyhow::anyhow!("File not found: {} (checked original path and structured directory)", file_path))
+        Err(anyhow::anyhow!(
+            "File not found: {} (checked original path and structured directory)",
+            file_path
+        ))
     }
 
     pub async fn read_file(&self, file_path: &str) -> Result<Vec<u8>> {
@@ -390,14 +437,47 @@ impl FileService {
         }
     }
 
+    /// [`read_file`](Self::read_file), reading at most `max_bytes + 1` bytes
+    /// on every path (storage backend and legacy fallback alike), so a file
+    /// over the limit is reported as [`LimitedRead::TooLarge`] without being
+    /// loaded.
+    pub async fn read_file_limited(&self, file_path: &str, max_bytes: u64) -> Result<LimitedRead> {
+        if let Some(storage_key) = file_path.strip_prefix("s3://") {
+            return self
+                .storage
+                .retrieve_file_limited(storage_key, max_bytes)
+                .await;
+        }
+
+        match self
+            .storage
+            .retrieve_file_limited(file_path, max_bytes)
+            .await
+        {
+            Ok(read) => Ok(read),
+            Err(_) => {
+                let resolved_path = self.resolve_file_path(file_path).await?;
+                let file = fs::File::open(&resolved_path).await?;
+                Ok(read_limited(file, max_bytes).await?)
+            }
+        }
+    }
+
     #[cfg(feature = "ocr")]
-    pub async fn get_or_generate_thumbnail(&self, file_path: &str, filename: &str) -> Result<Vec<u8>> {
+    pub async fn get_or_generate_thumbnail(
+        &self,
+        file_path: &str,
+        filename: &str,
+    ) -> Result<Vec<u8>> {
         // Use the structured thumbnails directory
         let thumbnails_dir = self.get_thumbnails_path();
         if !thumbnails_dir.exists() {
             if let Err(e) = fs::create_dir_all(&thumbnails_dir).await {
                 error!("Failed to create thumbnails directory: {}", e);
-                return Err(anyhow::anyhow!("Failed to create thumbnails directory: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to create thumbnails directory: {}",
+                    e
+                ));
             }
         }
 
@@ -416,17 +496,17 @@ impl FileService {
         // generate_thumbnail reads via read_file, which handles both s3://
         // paths and legacy local path resolution — no pre-resolution needed.
         let thumbnail_data = self.generate_thumbnail(file_path, filename).await?;
-        
+
         // Save thumbnail to cache
         fs::write(&thumbnail_path, &thumbnail_data).await?;
-        
+
         Ok(thumbnail_data)
     }
 
     #[cfg(feature = "ocr")]
     async fn generate_thumbnail(&self, file_path: &str, filename: &str) -> Result<Vec<u8>> {
         let file_data = self.read_file(file_path).await?;
-        
+
         // Determine file type from extension
         let extension = Path::new(filename)
             .extension()
@@ -438,18 +518,13 @@ impl FileService {
             "jpg" | "jpeg" | "png" | "bmp" | "tiff" | "gif" => {
                 self.generate_image_thumbnail(&file_data).await
             }
-            "pdf" => {
-                self.generate_pdf_thumbnail(&file_data).await
-            }
-            "txt" => {
-                self.generate_text_thumbnail(&file_data).await
-            }
-            "doc" | "docx" => {
-                self.generate_placeholder_thumbnail("DOC").await
-            }
+            "pdf" => self.generate_pdf_thumbnail(&file_data).await,
+            "txt" => self.generate_text_thumbnail(&file_data).await,
+            "doc" | "docx" => self.generate_placeholder_thumbnail("DOC").await,
             _ => {
                 // For other file types, generate a placeholder
-                self.generate_placeholder_thumbnail(&extension.to_uppercase()).await
+                self.generate_placeholder_thumbnail(&extension.to_uppercase())
+                    .await
             }
         }
     }
@@ -458,24 +533,21 @@ impl FileService {
     async fn generate_image_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
         let img = image::load_from_memory(file_data)?;
         let thumbnail = img.resize(200, 200, FilterType::Lanczos3);
-        
+
         // Convert to RGB if the image has an alpha channel (RGBA)
         // JPEG doesn't support transparency, so we need to remove the alpha channel
         let rgb_thumbnail = match thumbnail {
             image::DynamicImage::ImageRgba8(_) => {
                 // Convert RGBA to RGB by compositing against a white background
-                let rgb_img = image::DynamicImage::ImageRgb8(
-                    thumbnail.to_rgb8()
-                );
-                rgb_img
-            },
+                image::DynamicImage::ImageRgb8(thumbnail.to_rgb8())
+            }
             _ => thumbnail, // Already RGB or other compatible format
         };
-        
+
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
         rgb_thumbnail.write_to(&mut cursor, ImageFormat::Jpeg)?;
-        
+
         Ok(buffer)
     }
 
@@ -484,32 +556,37 @@ impl FileService {
         use std::process::Command;
         use tokio::fs;
         use uuid::Uuid;
-        
+
         // Create a temporary file for the PDF
         let temp_id = Uuid::new_v4();
-        let temp_pdf_path = format!("/tmp/pdf_thumb_{}.pdf", temp_id);
-        let temp_png_path = format!("/tmp/pdf_thumb_{}.png", temp_id);
-        
+        let temp_prefix = crate::config::temp_dir().join(format!("pdf_thumb_{}", temp_id));
+        let temp_prefix = temp_prefix.to_string_lossy();
+        let temp_pdf_path = format!("{}.pdf", temp_prefix);
+        let temp_png_path = format!("{}.png", temp_prefix);
+
         // Write PDF data to temporary file
         if let Err(e) = fs::write(&temp_pdf_path, file_data).await {
             error!("Failed to write temporary PDF file: {}", e);
             return self.generate_placeholder_thumbnail("PDF").await;
         }
-        
+
         // Use pdftoppm to convert first page to PNG
         let output = Command::new("pdftoppm")
-            .arg("-f").arg("1")          // First page only
-            .arg("-l").arg("1")          // Last page (same as first)
-            .arg("-scale-to").arg("200") // Scale to 200px width
-            .arg("-png")                 // Output as PNG
-            .arg("-singlefile")          // Omit the page-number suffix
+            .arg("-f")
+            .arg("1") // First page only
+            .arg("-l")
+            .arg("1") // Last page (same as first)
+            .arg("-scale-to")
+            .arg("200") // Scale to 200px width
+            .arg("-png") // Output as PNG
+            .arg("-singlefile") // Omit the page-number suffix
             .arg(&temp_pdf_path)
-            .arg(&format!("/tmp/pdf_thumb_{}", temp_id)) // Output prefix
+            .arg(temp_prefix.as_ref()) // Output prefix
             .output();
-        
+
         // Clean up temporary PDF file
         let _ = fs::remove_file(&temp_pdf_path).await;
-        
+
         match output {
             Ok(result) if result.status.success() => {
                 // Read the generated PNG file
@@ -517,13 +594,14 @@ impl FileService {
                     Ok(png_data) => {
                         // Clean up temporary PNG file
                         let _ = fs::remove_file(&temp_png_path).await;
-                        
+
                         // Convert PNG to JPEG thumbnail
                         match image::load_from_memory(&png_data) {
                             Ok(img) => {
                                 // Resize to 200x200 maintaining aspect ratio
-                                let thumbnail = img.resize(200, 200, image::imageops::FilterType::Lanczos3);
-                                
+                                let thumbnail =
+                                    img.resize(200, 200, image::imageops::FilterType::Lanczos3);
+
                                 // Convert to JPEG
                                 let mut buffer = Vec::new();
                                 let mut cursor = std::io::Cursor::new(&mut buffer);
@@ -553,173 +631,150 @@ impl FileService {
     #[cfg(feature = "ocr")]
     async fn generate_text_thumbnail(&self, file_data: &[u8]) -> Result<Vec<u8>> {
         use image::Rgb;
-        
+
         // Convert bytes to text
         let text = String::from_utf8_lossy(file_data);
-        self.generate_text_based_thumbnail(&text, "TXT", Rgb([34, 139, 34])).await
+        self.generate_text_based_thumbnail(&text, "TXT", Rgb([34, 139, 34]))
+            .await
     }
 
     #[cfg(feature = "ocr")]
-    async fn generate_text_based_thumbnail(&self, text: &str, file_type: &str, bg_color: image::Rgb<u8>) -> Result<Vec<u8>> {
-        use image::{RgbImage, Rgb, DynamicImage, ImageFormat};
-        
+    async fn generate_text_based_thumbnail(
+        &self,
+        text: &str,
+        file_type: &str,
+        bg_color: image::Rgb<u8>,
+    ) -> Result<Vec<u8>> {
+        use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+
         let width = 200;
         let height = 200;
         let mut img = RgbImage::new(width, height);
-        
+
         // Fill background
         for pixel in img.pixels_mut() {
             *pixel = bg_color;
         }
-        
+
         // Add file type indicator at the top
         let text_color = Rgb([255, 255, 255]); // White text
-        let preview_text = if text.len() > 300 {
-            format!("{}\n{}", file_type, &text[..300].trim())
-        } else {
-            format!("{}\n{}", file_type, text.trim())
-        };
-        
+                                               // Cut on a character boundary: slicing bytes panics inside a
+                                               // multi-byte character.
+        let preview: String = text.chars().take(300).collect();
+        let preview_text = format!("{}\n{}", file_type, preview.trim());
+
         // Simple text rendering - just place some characters as visual indicators
         // For a more sophisticated approach, you'd use a text rendering library
         let lines: Vec<&str> = preview_text.lines().take(15).collect();
         for (line_idx, line) in lines.iter().enumerate() {
             let y_offset = 20 + (line_idx * 12);
-            if y_offset >= height as usize - 10 { break; }
-            
+            if y_offset >= height as usize - 10 {
+                break;
+            }
+
             // Simple character placement (very basic text rendering)
             for (char_idx, _) in line.chars().take(25).enumerate() {
                 let x_offset = 10 + (char_idx * 7);
-                if x_offset >= width as usize - 10 { break; }
-                
+                if x_offset >= width as usize - 10 {
+                    break;
+                }
+
                 // Draw a simple "character" representation as white pixels
                 if x_offset < width as usize && y_offset < height as usize {
-                    if let Some(pixel) = img.get_pixel_mut_checked(x_offset as u32, y_offset as u32) {
+                    if let Some(pixel) = img.get_pixel_mut_checked(x_offset as u32, y_offset as u32)
+                    {
                         *pixel = text_color;
                     }
                     // Add some thickness
-                    if let Some(pixel) = img.get_pixel_mut_checked(x_offset as u32 + 1, y_offset as u32) {
+                    if let Some(pixel) =
+                        img.get_pixel_mut_checked(x_offset as u32 + 1, y_offset as u32)
+                    {
                         *pixel = text_color;
                     }
                 }
             }
         }
-        
+
         let dynamic_img = DynamicImage::ImageRgb8(img);
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
         dynamic_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-        
+
         Ok(buffer)
     }
 
     #[cfg(feature = "ocr")]
     async fn generate_placeholder_thumbnail(&self, file_type: &str) -> Result<Vec<u8>> {
         // Create a simple colored rectangle as placeholder
-        use image::{RgbImage, Rgb};
-        
+        use image::{Rgb, RgbImage};
+
         let mut img = RgbImage::new(200, 200);
-        
+
         // Different colors for different file types
         let color = match file_type {
-            "PDF" => Rgb([220, 38, 27]),   // Red for PDF
-            "TXT" => Rgb([34, 139, 34]),   // Green for text
+            "PDF" => Rgb([220, 38, 27]),           // Red for PDF
+            "TXT" => Rgb([34, 139, 34]),           // Green for text
             "DOC" | "DOCX" => Rgb([41, 128, 185]), // Blue for Word docs
-            _ => Rgb([108, 117, 125]),     // Gray for unknown
+            _ => Rgb([108, 117, 125]),             // Gray for unknown
         };
-        
+
         // Fill with solid color
         for pixel in img.pixels_mut() {
             *pixel = color;
         }
-        
+
         let dynamic_img = DynamicImage::ImageRgb8(img);
         let mut buffer = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut buffer);
         dynamic_img.write_to(&mut cursor, ImageFormat::Jpeg)?;
-        
+
         Ok(buffer)
     }
 
     #[cfg(not(feature = "ocr"))]
-    pub async fn get_or_generate_thumbnail(&self, _file_path: &str, _filename: &str) -> Result<Vec<u8>> {
+    pub async fn get_or_generate_thumbnail(
+        &self,
+        _file_path: &str,
+        _filename: &str,
+    ) -> Result<Vec<u8>> {
         anyhow::bail!("Thumbnail generation requires OCR feature")
     }
 
+    /// Delete a document's stored file and everything derived from it.
+    ///
+    /// The storage backend deletes the file recorded in `document.file_path`
+    /// (never a recomputed path) plus its own derived objects. Thumbnails and
+    /// OCR review images are cached on local disk whatever the backend, so
+    /// for a remote backend the local cleanup runs as well; it also removes a
+    /// document file still on local disk from before the backend was switched.
+    /// Files that are already gone are not errors; every other failure is
+    /// reported, and both cleanups run even when one fails.
     pub async fn delete_document_files(&self, document: &Document) -> Result<()> {
-        // Use storage backend for deletion - it handles both S3 and local storage
-        match self.storage.delete_document_files(document.user_id, document.id, &document.filename).await {
-            Ok(_) => {
-                info!("Successfully deleted files for document {} via storage backend", document.id);
-                return Ok(());
-            }
-            Err(e) => {
-                warn!("Storage backend deletion failed for document {}: {}. Falling back to legacy deletion.", document.id, e);
-                // Fall back to legacy deletion logic for backward compatibility
-            }
-        }
-
-        // Handle local file deletion
-        let mut deleted_files = Vec::new();
-        let mut serious_errors = Vec::new();
-
-        // Helper function to safely delete a file, handling concurrent deletion scenarios
-        async fn safe_delete(path: &Path, serious_errors: &mut Vec<String>) -> Option<String> {
-            match fs::remove_file(path).await {
-                Ok(_) => {
-                    info!("Deleted file: {}", path.display());
-                    Some(path.to_string_lossy().to_string())
-                }
-                Err(e) => {
-                    match e.kind() {
-                        std::io::ErrorKind::NotFound => {
-                            // File already deleted (possibly by concurrent request) - this is fine
-                            info!("File already deleted: {}", path.display());
-                            None
-                        }
-                        _ => {
-                            // Other errors (permissions, I/O errors, etc.) are serious
-                            warn!("Failed to delete file {}: {}", path.display(), e);
-                            serious_errors.push(format!("Failed to delete file {}: {}", path.display(), e));
-                            None
-                        }
-                    }
-                }
-            }
-        }
-
-        // Delete main document file
-        let main_file = Path::new(&document.file_path);
-        if let Some(deleted_path) = safe_delete(&main_file, &mut serious_errors).await {
-            deleted_files.push(deleted_path);
-        }
-
-        // Delete thumbnail if it exists
-        let thumbnail_filename = format!("{}_thumb.jpg", document.id);
-        let thumbnail_path = self.get_thumbnails_path().join(&thumbnail_filename);
-        if let Some(deleted_path) = safe_delete(&thumbnail_path, &mut serious_errors).await {
-            deleted_files.push(deleted_path);
-        }
-
-        // Delete processed image if it exists
-        let processed_image_filename = format!("{}_processed.png", document.id);
-        let processed_image_path = self.get_processed_images_path().join(&processed_image_filename);
-        if let Some(deleted_path) = safe_delete(&processed_image_path, &mut serious_errors).await {
-            deleted_files.push(deleted_path);
-        }
-
-        // Only fail if there were serious errors (not "file not found")
-        if !serious_errors.is_empty() {
-            error!("Serious errors occurred while deleting files for document {}: {}", document.id, serious_errors.join("; "));
-            return Err(anyhow::anyhow!("File deletion errors: {}", serious_errors.join("; ")));
-        }
-
-        if deleted_files.is_empty() {
-            info!("No files needed deletion for document {} (all files already removed)", document.id);
+        let backend = self
+            .storage
+            .delete_document_files(document.user_id, document.id, &document.file_path)
+            .await;
+        let local = if self.storage.storage_type() == "local" {
+            Ok(())
         } else {
-            info!("Successfully deleted {} files for document {} via legacy method", deleted_files.len(), document.id);
-        }
+            LocalStorageBackend::new(self.upload_path.clone())
+                .delete_document_files(document.user_id, document.id, &document.file_path)
+                .await
+        };
 
-        Ok(())
+        match (backend, local) {
+            (Ok(()), Ok(())) => {
+                info!(
+                    "Deleted files for document {} via {} storage",
+                    document.id,
+                    self.storage.storage_type()
+                );
+                Ok(())
+            }
+            (Err(e), Ok(())) | (Ok(()), Err(e)) => Err(e),
+            (Err(backend), Err(local)) => {
+                Err(anyhow::anyhow!("{}; local cleanup: {}", backend, local))
+            }
+        }
     }
 }

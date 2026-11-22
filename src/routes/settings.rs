@@ -11,7 +11,11 @@ use ts_rs::TS;
 use crate::{
     auth::{AdminUser, AuthUser},
     errors::settings::SettingsError,
-    models::{normalize_endpoint_for_comparison, SecretReuseRefused, Settings, SettingsResponse, UpdateSettings},
+    models::{
+        normalize_endpoint_for_comparison, SecretReuseRefused, Settings, SettingsResponse,
+        UpdateSettings,
+    },
+    services::settings::settings_response_for_user,
     utils::outbound::validate_outbound_url_for_config,
     AppState,
 };
@@ -40,75 +44,15 @@ async fn get_settings(
     auth_user: AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SettingsResponse>, SettingsError> {
-    let settings = state
-        .db
-        .get_user_settings(auth_user.user.id)
+    let response = settings_response_for_user(&state.db, auth_user.user.id)
         .await
-        .map_err(|e| SettingsError::invalid_value("database", &format!("Failed to fetch settings: {}", e), "Settings must be accessible"))?;
-
-    let response = match settings {
-        Some(s) => s.into(),
-        None => {
-            let default = crate::models::Settings::default();
-            SettingsResponse {
-                ocr_language: default.ocr_language,
-                preferred_languages: default.preferred_languages,
-                primary_language: default.primary_language,
-                auto_detect_language_combination: default.auto_detect_language_combination,
-                concurrent_ocr_jobs: default.concurrent_ocr_jobs,
-                ocr_timeout_seconds: default.ocr_timeout_seconds,
-                max_file_size_mb: default.max_file_size_mb,
-                allowed_file_types: default.allowed_file_types,
-                auto_rotate_images: default.auto_rotate_images,
-                enable_image_preprocessing: default.enable_image_preprocessing,
-                search_results_per_page: default.search_results_per_page,
-                search_snippet_length: default.search_snippet_length,
-                fuzzy_search_threshold: default.fuzzy_search_threshold,
-                retention_days: default.retention_days,
-                enable_auto_cleanup: default.enable_auto_cleanup,
-                enable_compression: default.enable_compression,
-                memory_limit_mb: default.memory_limit_mb,
-                cpu_priority: default.cpu_priority,
-                enable_background_ocr: default.enable_background_ocr,
-                ocr_page_segmentation_mode: default.ocr_page_segmentation_mode,
-                ocr_engine_mode: default.ocr_engine_mode,
-                ocr_min_confidence: default.ocr_min_confidence,
-                ocr_dpi: default.ocr_dpi,
-                ocr_enhance_contrast: default.ocr_enhance_contrast,
-                ocr_remove_noise: default.ocr_remove_noise,
-                ocr_detect_orientation: default.ocr_detect_orientation,
-                ocr_whitelist_chars: default.ocr_whitelist_chars,
-                ocr_blacklist_chars: default.ocr_blacklist_chars,
-                ocr_brightness_boost: default.ocr_brightness_boost,
-                ocr_contrast_multiplier: default.ocr_contrast_multiplier,
-                ocr_noise_reduction_level: default.ocr_noise_reduction_level,
-                ocr_sharpening_strength: default.ocr_sharpening_strength,
-                ocr_morphological_operations: default.ocr_morphological_operations,
-                ocr_adaptive_threshold_window_size: default.ocr_adaptive_threshold_window_size,
-                ocr_histogram_equalization: default.ocr_histogram_equalization,
-                ocr_upscale_factor: default.ocr_upscale_factor,
-                ocr_max_image_width: default.ocr_max_image_width,
-                ocr_max_image_height: default.ocr_max_image_height,
-                save_processed_images: default.save_processed_images,
-                ocr_quality_threshold_brightness: default.ocr_quality_threshold_brightness,
-                ocr_quality_threshold_contrast: default.ocr_quality_threshold_contrast,
-                ocr_quality_threshold_noise: default.ocr_quality_threshold_noise,
-                ocr_quality_threshold_sharpness: default.ocr_quality_threshold_sharpness,
-                ocr_skip_enhancement: default.ocr_skip_enhancement,
-                webdav_enabled: default.webdav_enabled,
-                webdav_server_url: default.webdav_server_url,
-                webdav_username: default.webdav_username,
-                has_webdav_password: false,
-                webdav_watch_folders: default.webdav_watch_folders,
-                webdav_file_extensions: default.webdav_file_extensions,
-                webdav_auto_sync: default.webdav_auto_sync,
-                webdav_sync_interval_minutes: default.webdav_sync_interval_minutes,
-                // Office document extraction configuration
-                office_extraction_timeout_seconds: default.office_extraction_timeout_seconds,
-                office_extraction_enable_detailed_logging: default.office_extraction_enable_detailed_logging,
-            }
-        },
-    };
+        .map_err(|e| {
+            SettingsError::invalid_value(
+                "database",
+                &format!("Failed to fetch settings: {}", e),
+                "Settings must be accessible",
+            )
+        })?;
 
     Ok(Json(response))
 }
@@ -145,11 +89,11 @@ async fn update_settings(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if !stored_webdav_password_reusable(stored.as_ref(), &update_data) {
-            return Ok((
+            return Ok(crate::errors::error_response(
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": SecretReuseRefused::MESSAGE })),
-            )
-                .into_response());
+                "SECRET_REUSE_REFUSED",
+                SecretReuseRefused::MESSAGE,
+            ));
         }
     }
     if let Some(Some(url)) = &update_data.webdav_server_url {
@@ -174,7 +118,7 @@ async fn update_settings(
 /// username it was entered for must stay the same.
 fn stored_webdav_password_reusable(stored: Option<&Settings>, update: &UpdateSettings) -> bool {
     let Some(stored) = stored else { return true };
-    if stored.webdav_password.as_deref().map_or(true, str::is_empty) {
+    if stored.webdav_password.as_deref().is_none_or(str::is_empty) {
         return true;
     }
     let effective = |update: &Option<Option<String>>, current: &Option<String>| match update {
@@ -184,30 +128,36 @@ fn stored_webdav_password_reusable(stored: Option<&Settings>, update: &UpdateSet
     let new_url = effective(&update.webdav_server_url, &stored.webdav_server_url);
     let new_username = effective(&update.webdav_username, &stored.webdav_username);
     normalize_endpoint_for_comparison(&new_url)
-        == normalize_endpoint_for_comparison(stored.webdav_server_url.as_deref().unwrap_or_default())
+        == normalize_endpoint_for_comparison(
+            stored.webdav_server_url.as_deref().unwrap_or_default(),
+        )
         && new_username.trim() == stored.webdav_username.as_deref().unwrap_or_default().trim()
 }
 
+/// The server-wide configuration (environment variables), for administrators.
+/// Per-user settings are under `GET /api/settings`.
 #[derive(Debug, Serialize, utoipa::ToSchema, TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 struct ServerConfiguration {
+    /// `MAX_FILE_SIZE_MB`: no upload may be larger, whatever a user's own limit.
     max_file_size_mb: u64,
-    concurrent_ocr_jobs: i32,
-    ocr_timeout_seconds: i32,
-    memory_limit_mb: u64,
-    cpu_priority: String,
+    /// `CONCURRENT_OCR_JOBS`: OCR jobs the worker runs at once.
+    concurrent_ocr_jobs: u64,
+    /// `OCR_TIMEOUT_SECONDS`: the OCR timeout for documents whose owner has no settings saved.
+    ocr_timeout_seconds: u64,
     server_host: String,
     server_port: u16,
     jwt_secret_set: bool,
     upload_path: String,
     watch_folder: Option<String>,
+    /// `OCR_LANGUAGE`: the default OCR language.
     ocr_language: String,
+    /// `ALLOWED_FILE_TYPES`: extensions the watch folder and batch import accept.
     allowed_file_types: Vec<String>,
     watch_interval_seconds: Option<u64>,
     file_stability_check_ms: Option<u64>,
     max_file_age_hours: Option<u64>,
-    enable_background_ocr: bool,
     version: String,
     build_info: Option<String>,
 }
@@ -227,51 +177,43 @@ struct ServerConfiguration {
     )
 )]
 async fn get_server_configuration(
-    auth_user: AdminUser,
+    _admin: AdminUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ServerConfiguration>, StatusCode> {
-    let config = &state.config;
+    Ok(Json(server_configuration(&state.config)))
+}
 
-    // Get user settings from database, fallback to defaults
-    let user_settings = state
-        .db
-        .get_user_settings(auth_user.user.id)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(crate::models::Settings::default);
-    
+/// What `GET /api/settings/config` reports: the server's own configuration,
+/// never the calling administrator's user settings.
+fn server_configuration(config: &crate::config::Config) -> ServerConfiguration {
     // Parse server_address to get host and port
     let (server_host, server_port) = if let Some(colon_pos) = config.server_address.rfind(':') {
         let host = config.server_address[..colon_pos].to_string();
-        let port = config.server_address[colon_pos + 1..].parse::<u16>().unwrap_or(8000);
+        let port = config.server_address[colon_pos + 1..]
+            .parse::<u16>()
+            .unwrap_or(8000);
         (host, port)
     } else {
         (config.server_address.clone(), 8000)
     };
-    
-    let server_config = ServerConfiguration {
-        max_file_size_mb: user_settings.max_file_size_mb as u64,
-        concurrent_ocr_jobs: user_settings.concurrent_ocr_jobs,
-        ocr_timeout_seconds: user_settings.ocr_timeout_seconds,
-        memory_limit_mb: user_settings.memory_limit_mb as u64,
-        cpu_priority: user_settings.cpu_priority,
+
+    ServerConfiguration {
+        max_file_size_mb: config.max_file_size_mb,
+        concurrent_ocr_jobs: config.concurrent_ocr_jobs as u64,
+        ocr_timeout_seconds: config.ocr_timeout_seconds,
         server_host,
         server_port,
         jwt_secret_set: !config.jwt_secret.is_empty(),
         upload_path: config.upload_path.clone(),
         watch_folder: Some(config.watch_folder.clone()),
-        ocr_language: user_settings.ocr_language,
-        allowed_file_types: user_settings.allowed_file_types,
+        ocr_language: config.ocr_language.clone(),
+        allowed_file_types: config.allowed_file_types.clone(),
         watch_interval_seconds: Some(config.effective_watch_interval_seconds()),
         file_stability_check_ms: Some(config.effective_file_stability_check_ms()),
         max_file_age_hours: config.max_file_age_hours,
-        enable_background_ocr: user_settings.enable_background_ocr,
         version: env!("CARGO_PKG_VERSION").to_string(),
         build_info: option_env!("BUILD_INFO").map(|s| s.to_string()),
-    };
-
-    Ok(Json(server_config))
+    }
 }
 
 #[cfg(test)]
@@ -292,9 +234,35 @@ mod tests {
     }
 
     #[test]
+    fn server_configuration_reports_the_environment_configuration() {
+        let config = crate::test_utils::TestConfigBuilder::default()
+            .with_concurrent_ocr_jobs(3)
+            .with_max_file_size_mb(77)
+            .build("postgres://unused".to_string());
+        let reported = serde_json::to_value(server_configuration(&config)).unwrap();
+        assert_eq!(reported["concurrent_ocr_jobs"], 3);
+        assert_eq!(reported["max_file_size_mb"], 77);
+        assert_eq!(reported["ocr_timeout_seconds"], config.ocr_timeout_seconds);
+        assert_eq!(reported["ocr_language"], config.ocr_language.as_str());
+        assert_eq!(
+            reported["allowed_file_types"],
+            serde_json::json!(config.allowed_file_types)
+        );
+        for gone in ["memory_limit_mb", "cpu_priority", "enable_background_ocr"] {
+            assert!(
+                reported.get(gone).is_none(),
+                "{gone} is not server configuration"
+            );
+        }
+    }
+
+    #[test]
     fn stored_password_is_kept_for_the_same_server_and_account() {
         let s = stored("https://dav.example/remote.php/dav", "alice", Some("pw"));
-        assert!(stored_webdav_password_reusable(Some(&s), &update(serde_json::json!({}))));
+        assert!(stored_webdav_password_reusable(
+            Some(&s),
+            &update(serde_json::json!({}))
+        ));
         assert!(stored_webdav_password_reusable(
             Some(&s),
             &update(serde_json::json!({

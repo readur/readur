@@ -1620,11 +1620,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_sessions_total",
+          "expr": "readur_webdav_sources",
           "refId": "A"
         }
       ],
-      "title": "Total WebDAV Sessions",
+      "title": "WebDAV Sources",
       "type": "stat"
     },
     {
@@ -1687,11 +1687,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_success_rate",
+          "expr": "100 * (readur_webdav_sources_enabled - readur_webdav_sources_error) / clamp_min(readur_webdav_sources_enabled, 1)",
           "refId": "A"
         }
       ],
-      "title": "WebDAV Success Rate",
+      "title": "WebDAV Sources Healthy",
       "type": "gauge"
     },
     {
@@ -1748,11 +1748,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_files_processed",
+          "expr": "readur_webdav_files_synced",
           "refId": "A"
         }
       ],
-      "title": "Files Processed",
+      "title": "Files Synced",
       "type": "stat"
     },
     {
@@ -1783,7 +1783,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -1817,11 +1817,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_avg_request_duration_ms",
+          "expr": "readur_webdav_oldest_sync_age_seconds",
           "refId": "A"
         }
       ],
-      "title": "Avg Request Duration",
+      "title": "Oldest Sync Age",
       "type": "stat"
     },
     {
@@ -1852,7 +1852,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "none"
         },
         "overrides": []
       },
@@ -1886,11 +1886,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_error_rate_last_hour",
+          "expr": "readur_webdav_sources_error",
           "refId": "A"
         }
       ],
-      "title": "Error Rate (Last Hour)",
+      "title": "Sources in Error",
       "type": "stat"
     },
     {
@@ -1947,11 +1947,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_bytes_processed",
+          "expr": "readur_webdav_bytes_synced",
           "refId": "A"
         }
       ],
-      "title": "Bytes Processed",
+      "title": "Bytes Synced",
       "type": "stat"
     },
     {
@@ -2036,8 +2036,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_sessions_successful",
-          "legendFormat": "Successful",
+          "expr": "readur_webdav_sources_enabled",
+          "legendFormat": "Enabled",
           "refId": "A"
         },
         {
@@ -2046,8 +2046,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_sessions_failed",
-          "legendFormat": "Failed",
+          "expr": "readur_webdav_sources_error",
+          "legendFormat": "Error",
           "refId": "B"
         },
         {
@@ -2056,12 +2056,12 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_sessions_active_last_hour",
-          "legendFormat": "Active (Last Hour)",
+          "expr": "readur_webdav_sources_syncing",
+          "legendFormat": "Syncing",
           "refId": "C"
         }
       ],
-      "title": "WebDAV Session Status",
+      "title": "WebDAV Source Status",
       "type": "timeseries"
     },
     {
@@ -2119,7 +2119,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -2150,8 +2150,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_avg_request_duration_ms",
-          "legendFormat": "Avg Request Duration",
+          "expr": "readur_webdav_oldest_sync_age_seconds",
+          "legendFormat": "Oldest sync age",
           "refId": "A"
         },
         {
@@ -2160,12 +2160,12 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_avg_session_duration_seconds * 1000",
-          "legendFormat": "Avg Session Duration",
+          "expr": "max_over_time(readur_webdav_oldest_sync_age_seconds[24h])",
+          "legendFormat": "Worst in the last 24h",
           "refId": "B"
         }
       ],
-      "title": "WebDAV Performance Metrics",
+      "title": "WebDAV Sync Freshness",
       "type": "timeseries"
     },
     {
@@ -2250,8 +2250,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_success_rate",
-          "legendFormat": "Session Success Rate",
+          "expr": "100 * (readur_webdav_sources_enabled - readur_webdav_sources_error) / clamp_min(readur_webdav_sources_enabled, 1)",
+          "legendFormat": "Healthy sources",
           "refId": "A"
         },
         {
@@ -2260,8 +2260,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_request_success_rate",
-          "legendFormat": "Request Success Rate",
+          "expr": "100 * readur_webdav_sources_syncing / clamp_min(readur_webdav_sources_enabled, 1)",
+          "legendFormat": "Syncing sources",
           "refId": "B"
         },
         {
@@ -2270,12 +2270,12 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_error_rate_last_hour",
-          "legendFormat": "Error Rate (Last Hour)",
+          "expr": "100 * readur_webdav_sources_error / clamp_min(readur_webdav_sources, 1)",
+          "legendFormat": "Sources in error",
           "refId": "C"
         }
       ],
-      "title": "WebDAV Success & Error Rates",
+      "title": "WebDAV Sources Healthy Over Time",
       "type": "timeseries"
     },
     {
@@ -2360,8 +2360,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_http_requests_total",
-          "legendFormat": "Total HTTP Requests",
+          "expr": "readur_webdav_files_synced",
+          "legendFormat": "Files synced",
           "refId": "A"
         },
         {
@@ -2370,12 +2370,12 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "readur_webdav_avg_processing_rate",
-          "legendFormat": "Processing Rate (files/sec)",
+          "expr": "rate(readur_webdav_files_synced[15m]) * 60",
+          "legendFormat": "Files synced per minute",
           "refId": "B"
         }
       ],
-      "title": "WebDAV Throughput Metrics",
+      "title": "WebDAV Sync Throughput",
       "type": "timeseries"
     }
   ],

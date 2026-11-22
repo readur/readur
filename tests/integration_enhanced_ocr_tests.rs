@@ -56,12 +56,12 @@ mod tests {
         
         // Test normal whitespace-separated text
         let text = "Hello world this is a test";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert_eq!(count, 6);
         
         // Test with extra whitespace
         let text = "  Hello   world  \n  test  ";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert_eq!(count, 3);
     }
 
@@ -74,12 +74,12 @@ mod tests {
         
         // Test continuous text without spaces (like some PDF extractions)
         let text = "HelloWorldThisIsAContinuousText";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect words even without whitespace");
         
         // Test mixed alphanumeric without spaces
         let text = "ABC123DEF456GHI789";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect alphanumeric patterns as words");
     }
 
@@ -100,7 +100,7 @@ mod tests {
         
         // Test only punctuation
         let text = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         // Since there are no alphabetic or alphanumeric chars, should be 0
         assert_eq!(count, 0, "Pure punctuation should not count as words, got {}", count);
         
@@ -110,7 +110,7 @@ mod tests {
         
         // Test mixed content with low alphanumeric ratio
         let text = "A!!!B@@@C###D$$$E%%%";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count > 0, "Should detect words in mixed content");
     }
 
@@ -140,17 +140,17 @@ mod tests {
         
         // Test letter transition detection
         let text = "OneWordAnotherWordFinalWord";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count >= 3, "Should detect at least 3 words from transitions: got {}", count);
         
         // Test alphanumeric estimation fallback
         let text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 26 chars, should estimate ~5-6 words
-        let count = service.count_words_safely(&text);
-        assert!(count >= 1 && count <= 10, "Should estimate reasonable word count: got {}", count);
+        let count = service.count_words_safely(text);
+        assert!((1..=10).contains(&count), "Should estimate reasonable word count: got {}", count);
         
         // Test mixed case with numbers
         let text = "ABC123def456GHI789jkl";
-        let count = service.count_words_safely(&text);
+        let count = service.count_words_safely(text);
         assert!(count >= 1, "Should detect words in mixed alphanumeric: got {}", count);
     }
 
@@ -194,7 +194,9 @@ mod tests {
         assert_eq!(ocr_result.text.trim(), test_content);
         assert_eq!(ocr_result.confidence, 100.0); // Plain text should be 100% confident
         assert_eq!(ocr_result.word_count, 9); // "This is a test text file with multiple words"
-        assert!(ocr_result.processing_time_ms >= 0);
+        // A plain-text read is a file read: a duration in the seconds would mean the
+        // timer measured something else (or wrapped).
+        assert!(ocr_result.processing_time_ms < 5_000, "plain-text read took {} ms", ocr_result.processing_time_ms);
         assert!(ocr_result.preprocessing_applied.contains(&"Plain text read".to_string()));
     }
 
@@ -569,9 +571,6 @@ startxref
     #[tokio::test]
     async fn test_concurrent_ocr_processing() {
         let temp_dir = create_temp_dir();
-        let temp_path = temp_dir.path().to_str().unwrap().to_string();
-        let file_service = create_test_file_service(&temp_path).await;
-        let service = EnhancedOcrService::new(temp_path, file_service, 100, 100, 300);
         let settings = create_test_settings();
 
         let mut handles = vec![];

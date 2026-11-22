@@ -1,4 +1,4 @@
-use sqlx::{Row, QueryBuilder, Postgres};
+use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
 use crate::db::sanitize::strip_nul_vec;
@@ -54,11 +54,7 @@ pub fn map_row_to_document(row: &sqlx::postgres::PgRow) -> Document {
 
 /// Applies role-based filtering to a query builder
 /// Admins can see all documents, regular users only see their own
-pub fn apply_role_based_filter(
-    query: &mut QueryBuilder<Postgres>, 
-    user_id: Uuid, 
-    role: UserRole
-) {
+pub fn apply_role_based_filter(query: &mut QueryBuilder<Postgres>, user_id: Uuid, role: UserRole) {
     match role {
         UserRole::Admin => {
             // Admins can see all documents - no additional filter needed
@@ -202,40 +198,17 @@ pub fn apply_sort(
     }
 }
 
-/// Helper to determine if a character is a word boundary for snippet generation
-pub fn is_word_boundary(c: char) -> bool {
-    c.is_whitespace() || c.is_ascii_punctuation()
-}
-
-/// Finds word boundary for snippet generation
-pub fn find_word_boundary(text: &str, position: usize, search_forward: bool) -> usize {
-    let chars: Vec<char> = text.chars().collect();
-    let start_pos = if position >= chars.len() { chars.len() - 1 } else { position };
-    
-    if search_forward {
-        for i in start_pos..chars.len() {
-            if is_word_boundary(chars[i]) {
-                return text.char_indices().nth(i).map(|(idx, _)| idx).unwrap_or(text.len());
-            }
-        }
-        text.len()
-    } else {
-        for i in (0..=start_pos).rev() {
-            if is_word_boundary(chars[i]) {
-                return text.char_indices().nth(i).map(|(idx, _)| idx).unwrap_or(0);
-            }
-        }
-        0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const BASE: &str = "SELECT id FROM documents WHERE 1=1";
 
-    fn order_by_sql(sort: Option<DocumentSortField>, order: Option<SortOrder>, has_rank: bool) -> String {
+    fn order_by_sql(
+        sort: Option<DocumentSortField>,
+        order: Option<SortOrder>,
+        has_rank: bool,
+    ) -> String {
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_sort(&mut query, sort, order, has_rank);
         query.sql().as_str()[BASE.len()..].to_string()
@@ -243,17 +216,30 @@ mod tests {
 
     #[test]
     fn explicit_sort_uses_only_the_whitelisted_column() {
-        let all_columns: Vec<&str> = DocumentSortField::ALL.iter().map(|f| f.sql_column()).collect();
+        let all_columns: Vec<&str> = DocumentSortField::ALL
+            .iter()
+            .map(|f| f.sql_column())
+            .collect();
         for field in DocumentSortField::ALL {
             for order in [SortOrder::Asc, SortOrder::Desc] {
                 let sql = order_by_sql(Some(field), Some(order), false);
                 let dir = order.sql();
                 assert_eq!(
                     sql,
-                    format!(" ORDER BY {} {} NULLS LAST, id {}", field.sql_column(), dir, dir)
+                    format!(
+                        " ORDER BY {} {} NULLS LAST, id {}",
+                        field.sql_column(),
+                        dir,
+                        dir
+                    )
                 );
                 for other in all_columns.iter().filter(|c| **c != field.sql_column()) {
-                    assert!(!sql.contains(other), "{:?} sort leaked column {}", field, other);
+                    assert!(
+                        !sql.contains(other),
+                        "{:?} sort leaked column {}",
+                        field,
+                        other
+                    );
                 }
             }
         }
@@ -261,12 +247,18 @@ mod tests {
 
     #[test]
     fn filename_sorts_by_original_filename() {
-        assert_eq!(DocumentSortField::Filename.sql_column(), "original_filename");
+        assert_eq!(
+            DocumentSortField::Filename.sql_column(),
+            "original_filename"
+        );
     }
 
     #[test]
     fn default_sorts_match_previous_behaviour() {
-        assert_eq!(order_by_sql(None, None, false), " ORDER BY created_at DESC, id DESC");
+        assert_eq!(
+            order_by_sql(None, None, false),
+            " ORDER BY created_at DESC, id DESC"
+        );
         assert_eq!(
             order_by_sql(None, None, true),
             " ORDER BY search_rank DESC, created_at DESC, id DESC"
@@ -275,7 +267,10 @@ mod tests {
             order_by_sql(Some(DocumentSortField::FileSize), None, true),
             " ORDER BY file_size DESC NULLS LAST, id DESC"
         );
-        assert_eq!(order_by_sql(None, Some(SortOrder::Asc), false), " ORDER BY created_at ASC, id ASC");
+        assert_eq!(
+            order_by_sql(None, Some(SortOrder::Asc), false),
+            " ORDER BY created_at ASC, id ASC"
+        );
     }
 
     #[test]
@@ -293,11 +288,24 @@ mod tests {
         };
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
-        apply_sort(&mut query, Some(DocumentSortField::MimeType), Some(SortOrder::Asc), false);
+        apply_sort(
+            &mut query,
+            Some(DocumentSortField::MimeType),
+            Some(SortOrder::Asc),
+            false,
+        );
         let sql = query.sql().as_str().to_owned();
 
-        assert!(!sql.contains("DROP"), "user input reached SQL text: {}", sql);
-        assert!(!sql.contains('\''), "unexpected literal in SQL text: {}", sql);
+        assert!(
+            !sql.contains("DROP"),
+            "user input reached SQL text: {}",
+            sql
+        );
+        assert!(
+            !sql.contains('\''),
+            "unexpected literal in SQL text: {}",
+            sql
+        );
         for fragment in [
             "ocr_status = $1",
             "mime_type = ANY($2)",
@@ -315,15 +323,24 @@ mod tests {
 
     #[test]
     fn pending_status_also_matches_null() {
-        let filters = DocumentFilters { ocr_status: Some("pending".to_string()), ..Default::default() };
+        let filters = DocumentFilters {
+            ocr_status: Some("pending".to_string()),
+            ..Default::default()
+        };
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
-        assert!(query.sql().as_str().contains("AND (ocr_status IS NULL OR ocr_status = $1)"));
+        assert!(query
+            .sql()
+            .as_str()
+            .contains("AND (ocr_status IS NULL OR ocr_status = $1)"));
     }
 
     #[test]
     fn source_types_without_direct_upload_do_not_match_null_sources() {
-        let filters = DocumentFilters { source_types: Some(vec!["webdav".to_string()]), ..Default::default() };
+        let filters = DocumentFilters {
+            source_types: Some(vec!["webdav".to_string()]),
+            ..Default::default()
+        };
         let mut query = QueryBuilder::<Postgres>::new(BASE);
         apply_document_filters(&mut query, &filters);
         let sql = query.sql().as_str().to_owned();

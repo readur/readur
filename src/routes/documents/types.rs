@@ -1,11 +1,16 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::{ToSchema, IntoParams};
-use uuid::Uuid;
 use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 use crate::models::search::{deserialize_comma_separated, deserialize_comma_separated_uuids};
 use crate::models::{DocumentFilters, DocumentSortField, SortOrder};
+
+// Response types the document routes share with `services::documents`; they live in `models`.
+pub use crate::models::{
+    DocumentPaginationInfo, DocumentUploadResponse, PaginatedDocumentsResponse,
+};
 
 #[derive(Debug, Deserialize, ToSchema, TS, IntoParams)]
 #[ts(export, optional_fields)]
@@ -91,15 +96,60 @@ pub struct RetryOcrRequest {
     pub languages: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema, TS)]
+/// Answer to `POST /api/documents/{id}/ocr/retry`.
+///
+/// `success` is true whenever the request was handled; `queued` says whether
+/// it added a new OCR job (true) or found the document already queued or in
+/// progress, so it left the existing job alone (false).
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
 #[ts(export)]
-pub struct DocumentUploadResponse {
-    pub id: uuid::Uuid,
-    pub filename: String,
-    pub file_size: i64,
-    pub mime_type: String,
-    pub status: String,
+pub struct RetryOcrResponse {
+    pub success: bool,
+    pub queued: bool,
     pub message: String,
+}
+
+impl From<crate::services::documents::OcrRetryOutcome> for RetryOcrResponse {
+    fn from(outcome: crate::services::documents::OcrRetryOutcome) -> Self {
+        Self {
+            success: true,
+            queued: outcome.queued,
+            message: outcome.message,
+        }
+    }
+}
+
+/// Response for `POST /api/documents/{id}/ocr/stop`.
+///
+/// `success` is true whenever the request was handled; `cancelled` says
+/// whether a queued or running OCR job was cancelled (true) or the document
+/// had none (false). `document_status` is the document's `ocr_status`
+/// afterwards: a cancelled document without OCR text is 'failed' (reason
+/// 'cancelled') and can be retried; one whose earlier OCR had completed (a
+/// re-OCR was cancelled) stays 'completed' and keeps its text.
+#[derive(Debug, Serialize, Deserialize, ToSchema, TS)]
+#[ts(export)]
+pub struct CancelOcrResponse {
+    pub success: bool,
+    pub cancelled: bool,
+    /// True when a worker was already running the job; it is stopped and
+    /// its result discarded.
+    pub was_running: bool,
+    /// The document's `ocr_status` after the request.
+    pub document_status: Option<String>,
+    pub message: String,
+}
+
+impl From<crate::services::documents::OcrCancelOutcome> for CancelOcrResponse {
+    fn from(outcome: crate::services::documents::OcrCancelOutcome) -> Self {
+        Self {
+            success: true,
+            cancelled: outcome.cancelled,
+            was_running: outcome.was_running,
+            document_status: outcome.document_status,
+            message: outcome.message,
+        }
+    }
 }
 
 #[derive(Serialize, ToSchema, TS)]
@@ -130,22 +180,6 @@ pub struct DocumentDebugInfo {
     pub readable: bool,
     pub permissions: Option<String>,
     pub user_settings: Option<crate::models::SettingsResponse>,
-}
-
-#[derive(Serialize, Deserialize, ToSchema, TS)]
-#[ts(export)]
-pub struct DocumentPaginationInfo {
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-    pub has_more: bool,
-}
-
-#[derive(Serialize, Deserialize, ToSchema, TS)]
-#[ts(export)]
-pub struct PaginatedDocumentsResponse {
-    pub documents: Vec<crate::models::DocumentResponse>,
-    pub pagination: DocumentPaginationInfo,
 }
 
 impl Default for PaginationQuery {
@@ -205,7 +239,10 @@ mod tests {
         assert_eq!(q.sort_order, Some(SortOrder::Asc));
         let filters = q.filters();
         assert_eq!(filters.label_ids, Some(vec![label]));
-        assert_eq!(filters.source_types, Some(vec!["direct_upload".to_string()]));
+        assert_eq!(
+            filters.source_types,
+            Some(vec!["direct_upload".to_string()])
+        );
         assert!(filters.validate().is_ok());
     }
 

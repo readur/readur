@@ -634,7 +634,7 @@ async fn list_filters_counts_roles_and_progress() {
     ] {
         let (status, body) = get(&ctx, &format!("/api/documents?{}", bad), &fx.user_token).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{}", bad);
-        assert_eq!(body["error_code"], "INVALID_QUERY", "{} -> {}", bad, body);
+        assert_eq!(body["code"], "INVALID_QUERY", "{} -> {}", bad, body);
     }
 
     // Role isolation: users only see their own documents, admins see all

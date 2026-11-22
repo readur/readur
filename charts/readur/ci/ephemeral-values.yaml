@@ -1,0 +1,8 @@
+# Throwaway install: emptyDir uploads, no watch folder, existing auth Secret.
+auth:
+  existingSecret: readur-auth-managed
+persistence:
+  uploads:
+    type: emptyDir
+  watch:
+    enabled: false

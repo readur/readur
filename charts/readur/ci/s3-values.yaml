@@ -1,0 +1,27 @@
+# Documents in S3, no uploads volume, no watch folder.
+controllers:
+  main:
+    containers:
+      readur:
+        env:
+          S3_ENABLED: "true"
+          S3_BUCKET_NAME: readur
+          S3_ENDPOINT_URL: http://minio.minio.svc:9000
+          S3_ACCESS_KEY_ID:
+            valueFrom:
+              secretKeyRef:
+                name: readur-s3
+                key: access-key
+          S3_SECRET_ACCESS_KEY:
+            valueFrom:
+              secretKeyRef:
+                name: readur-s3
+                key: secret-key
+        envFrom:
+          - secretRef:
+              name: readur-db
+persistence:
+  uploads:
+    enabled: false
+  watch:
+    enabled: false

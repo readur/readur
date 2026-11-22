@@ -1,8 +1,8 @@
 # Configuration Guide
 
-This guide covers all configuration options available in Readur through environment variables and runtime settings.
+This guide covers the most used environment variables and how to combine them. Readur reads its environment once at startup, after loading a `.env` file from the working directory (variables already set in the environment win).
 
-> 📖 **See Also**: For a complete reference of all configuration options including S3 storage and advanced settings, see the [Configuration Reference](configuration-reference.md).
+> 📖 **See Also**: The [Configuration Reference](configuration-reference.md) lists every variable Readur reads, including OIDC, S3 storage and per-user watch directories.
 
 ## Table of Contents
 
@@ -11,8 +11,8 @@ This guide covers all configuration options available in Readur through environm
   - [File Storage & Upload](#file-storage-upload)
   - [Watch Folder Configuration](#watch-folder-configuration)
   - [OCR & Processing Settings](#ocr-processing-settings)
-  - [Search & Performance](#search-performance)
-  - [Data Management](#data-management)
+  - [Resources](#resources)
+  - [AI Assistants (MCP)](#ai-assistants-mcp)
 - [Port Configuration](#port-configuration)
 - [Example Configurations](#example-configurations)
 - [Configuration Priority](#configuration-priority)
@@ -21,7 +21,7 @@ This guide covers all configuration options available in Readur through environm
 
 ## Environment Variables
 
-All application settings can be configured via environment variables:
+Variables not listed here or in the [Configuration Reference](configuration-reference.md) are ignored.
 
 ### Core Configuration
 
@@ -29,7 +29,8 @@ All application settings can be configured via environment variables:
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string |
 | `JWT_SECRET` | _(generated, stored in the database)_ | Secret used to sign JWT tokens. Optional: when unset, a key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). When set to a value of at least 32 bytes that is not a published example, it takes precedence; a shorter or example value is ignored with a startup warning and the stored key is used. Generate with `openssl rand -hex 32` |
-| `SERVER_ADDRESS` | `0.0.0.0:8000` | Server bind address and port |
+| `SERVER_ADDRESS` | `0.0.0.0:8000` | Server bind address and port (or set `SERVER_HOST` and `SERVER_PORT`) |
+| `RUST_LOG` | `info` | Log level filter, e.g. `debug` or `readur=debug,sqlx=warn` |
 
 ### Security and Access Control
 
@@ -37,7 +38,7 @@ All application settings can be configured via environment variables:
 |----------|---------|-------------|
 | `READUR_INSECURE_DEV_MODE` | `false` | Allows startup with a short or example `JWT_SECRET`. Throwaway local development and CI only; never in production |
 | `JWT_TTL_HOURS` | `12` | Lifetime of login tokens in hours (1-720) |
-| `ADMIN_USERNAME` | `admin` | Username of the initial admin account |
+| `ADMIN_USERNAME` | `admin` | Username of the initial admin account, which also owns files imported from `WATCH_FOLDER` |
 | `ADMIN_EMAIL` | `<username>@localhost` | Email of the initial admin account |
 | `ADMIN_PASSWORD` | _(none)_ | Initial admin password (min 8 chars). If unset, a random 24-character password is generated and written to a file instead of the logs |
 | `ADMIN_PASSWORD_FILE` | `<UPLOAD_PATH>/.readur/initial-admin-password` | Location of the generated admin password file (mode `0600`); `/app/uploads/.readur/initial-admin-password` in the Docker image |
@@ -55,8 +56,11 @@ See the [Configuration Reference](configuration-reference.md#security-and-access
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `UPLOAD_PATH` | `./uploads` | Document storage directory |
-| `ALLOWED_FILE_TYPES` | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated allowed file extensions |
+| `UPLOAD_PATH` | `./uploads` | Document storage directory (local storage) |
+| `ALLOWED_FILE_TYPES` | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated file extensions imported from watch folders |
+| `MAX_FILE_SIZE_MB` | `50` | Maximum upload size |
+
+To store documents in S3 or an S3-compatible service instead, see [S3 Storage](configuration-reference.md#s3-storage).
 
 ### Watch Folder Configuration
 
@@ -64,43 +68,38 @@ See the [Configuration Reference](configuration-reference.md#security-and-access
 |----------|---------|-------------|
 | `WATCH_FOLDER` | `./watch` | Directory to monitor for new files |
 | `WATCH_INTERVAL_SECONDS` | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems |
-| `FILE_STABILITY_CHECK_MS` | `500` | Time to wait for file write completion (milliseconds) |
+| `FILE_STABILITY_CHECK_MS` | `1000` | How long a file's size must stay unchanged before import (milliseconds) |
 | `MAX_FILE_AGE_HOURS` | _(none)_ | Skip files older than this many hours |
-| `FORCE_POLLING_WATCH` | _(none)_ | Force polling mode even for local filesystems |
+| `FORCE_POLLING_WATCH` | _(unset)_ | Poll even on local filesystems. Any value turns it on; unset it to turn it off |
+| `ENABLE_PER_USER_WATCH` | `false` | Give each user a watch directory under `USER_WATCH_BASE_DIR` (default `./user_watch`) |
 
 ### OCR & Processing Settings
 
-*Note: These settings can also be configured per-user via the web interface*
+Users can choose their own OCR language in Settings; `OCR_LANGUAGE` is the default.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OCR_LANGUAGE` | `eng` | OCR language code (eng, fra, deu, spa, etc.) |
-| `CONCURRENT_OCR_JOBS` | `4` | Maximum parallel OCR processes |
+| `OCR_LANGUAGE` | `eng` | OCR language code(s) (eng, fra, deu, spa, etc.; `eng+deu` for several) |
+| `CONCURRENT_OCR_JOBS` | `4` | Documents OCRed in parallel (1-15) |
 | `OCR_TIMEOUT_SECONDS` | `300` | OCR processing timeout per file |
-| `MAX_FILE_SIZE_MB` | `50` | Maximum file size for upload |
 | `MAX_PDF_SIZE_MB` | `100` | Maximum PDF file size for OCR processing |
 | `MAX_OFFICE_DOCUMENT_SIZE_MB` | `100` | Maximum Office document size for text extraction |
-| `AUTO_ROTATE_IMAGES` | `true` | Automatically rotate images for better OCR |
-| `ENABLE_IMAGE_PREPROCESSING` | `true` | Apply image enhancement before OCR |
 
-### Search & Performance
+The fuzzy search threshold is not an environment variable: each user sets it under Settings (Search configuration), default 0.5. See [Fuzzy search](advanced-search.md#fuzzy-search-similar-spelling).
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SEARCH_RESULTS_PER_PAGE` | `25` | Default number of search results per page |
-| `SEARCH_SNIPPET_LENGTH` | `200` | Length of text snippets in search results |
-| `FUZZY_SEARCH_THRESHOLD` | `0.8` | Similarity threshold for fuzzy search (0.0-1.0) |
-| `MEMORY_LIMIT_MB` | `512` | Memory limit for OCR processes |
-| `CPU_PRIORITY` | `normal` | CPU priority: `low`, `normal`, `high` |
-
-### Data Management
+### Resources
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RETENTION_DAYS` | _(none)_ | Auto-delete documents after N days |
-| `ENABLE_AUTO_CLEANUP` | `false` | Enable automatic cleanup of old documents |
-| `ENABLE_COMPRESSION` | `false` | Compress stored documents to save space |
-| `ENABLE_BACKGROUND_OCR` | `true` | Process OCR in background queue |
+
+### AI Assistants (MCP)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_ENABLED` | `true` | Serve the Model Context Protocol endpoint at `/api/mcp` (requires an API key or session token) |
+| `MCP_ALLOW_DELETE` | `false` | Offer the `delete_document` tool to MCP clients |
+
+See [AI Assistants (MCP)](mcp-guide.md) for connecting Claude and other clients.
 
 ## Port Configuration
 
@@ -114,7 +113,7 @@ SERVER_ADDRESS=0.0.0.0:8000
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 
-# For development: Configure frontend port
+# Frontend development server only (read by frontend/vite.config.ts)
 CLIENT_PORT=5173
 BACKEND_PORT=8000
 ```
@@ -159,23 +158,7 @@ OCR_LANGUAGE=eng
 CONCURRENT_OCR_JOBS=8
 OCR_TIMEOUT_SECONDS=600
 MAX_FILE_SIZE_MB=200
-AUTO_ROTATE_IMAGES=true
-ENABLE_IMAGE_PREPROCESSING=true
-
-# Performance tuning
-MEMORY_LIMIT_MB=2048
-CPU_PRIORITY=high
-ENABLE_COMPRESSION=true
-ENABLE_BACKGROUND_OCR=true
-
-# Search optimization
-SEARCH_RESULTS_PER_PAGE=50
-SEARCH_SNIPPET_LENGTH=300
-FUZZY_SEARCH_THRESHOLD=0.7
-
-# Data management
-RETENTION_DAYS=2555  # 7 years
-ENABLE_AUTO_CLEANUP=true
+MAX_PDF_SIZE_MB=200
 ```
 
 ### Network Filesystem Configuration
@@ -248,12 +231,12 @@ ALTER SYSTEM SET default_text_search_config = 'pg_catalog.english';
 JWT_SECRET=$(openssl rand -hex 32)
 
 # Generate secure database password
-DB_PASSWORD=$(openssl rand -base64 32)
+POSTGRES_PASSWORD=$(openssl rand -hex 24)
 
 # Save to .env file
 cat > .env << EOF
 JWT_SECRET=${JWT_SECRET}
-DB_PASSWORD=${DB_PASSWORD}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 EOF
 ```
 

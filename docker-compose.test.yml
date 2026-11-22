@@ -12,7 +12,7 @@ services:
       - type: tmpfs
         target: /var/lib/postgresql
     ports:
-      - "5433:5432"  # Different port to avoid conflict
+      - "5433:5432" # Different port to avoid conflict
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U readur_test"]
       interval: 5s
@@ -29,66 +29,65 @@ services:
     environment:
       # Database configuration
       DATABASE_URL: postgresql://readur_test:readur_test@postgres_test/readur_test
-      
+
       # Server configuration
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8001  # Different port from dev
-      
+      SERVER_PORT: 8001 # Different port from dev
+
       # Security
       # Published test-only secret; accepted only with READUR_INSECURE_DEV_MODE
       JWT_SECRET: readur-test-environment-only-jwt-secret-0123456789
       READUR_INSECURE_DEV_MODE: "true"
-      # Known admin password so test tooling can provision users
+      # Seeded admin; test tooling provisions users through it. run-tests.sh exports
+      # ADMIN_PASSWORD with this same default (tests/integration_tooling_env_tests.rs keeps the
+      # two in step), so the server and the suites always agree on it.
+      ADMIN_USERNAME: admin
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-readur-test-admin-password}
-      
+
       # File paths (using temporary directories)
       UPLOAD_PATH: /tmp/test_uploads
       WATCH_FOLDER: /tmp/test_watch
-      
+
       # OCR configuration
       OCR_LANGUAGE: eng
-      CONCURRENT_OCR_JOBS: 2  # Lower for tests
-      OCR_TIMEOUT_SECONDS: 60  # Shorter timeout for tests
-      MAX_FILE_SIZE_MB: 10  # Smaller for tests
-      
+      CONCURRENT_OCR_JOBS: 2 # Lower for tests
+      OCR_TIMEOUT_SECONDS: 60 # Shorter timeout for tests
+      MAX_FILE_SIZE_MB: 10 # Smaller for tests
+
       # Performance (reduced for testing)
-      MEMORY_LIMIT_MB: 256
-      CPU_PRIORITY: normal
-      
+
       # File watching
       ALLOWED_FILE_TYPES: pdf,txt,doc,docx,png,jpg,jpeg
-      WATCH_INTERVAL_SECONDS: 5  # Faster for tests
+      WATCH_INTERVAL_SECONDS: 5 # Faster for tests
       FILE_STABILITY_CHECK_MS: 500
       MAX_FILE_AGE_HOURS: 1
-      
-      # Test-specific environment variables
+
+      # Logging
       RUST_LOG: debug
       RUST_BACKTRACE: 1
-      TEST_ENV: true
-    
+
     ports:
-      - "8001:8001"  # Different port from dev
-    
+      - "8001:8001" # Different port from dev
+
     volumes:
       # Using tmpfs for faster test execution
       - type: tmpfs
         target: /tmp/test_uploads
       - type: tmpfs
         target: /tmp/test_watch
-      # Mount migrations for SQLx
-      - ./migrations:/app/migrations:ro
-    
+      # No migrations mount: sqlx::migrate! compiles them into the binary.
+
     depends_on:
       postgres_test:
         condition: service_healthy
-    
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
-    
+
     networks:
       - readur_test_network
 
@@ -96,15 +95,23 @@ services:
   frontend_test:
     image: node:26-alpine
     container_name: readur_frontend_test
-    working_dir: /app
+    working_dir: /work/frontend
     environment:
       NODE_ENV: test
-      VITE_API_BASE_URL: http://readur_test:8001
       CI: true
+    # The sources are copied out of a read-only mount of the checkout (frontend/ without the
+    # host's node_modules and dist, plus the scripts/ and docs/ files some frontend tests read)
+    # and installed inside the container, so the run never writes into the checkout and works
+    # whether or not the host has installed node_modules. test:unit is the unit suite CI runs;
+    # plain `vitest` would also pick up the Playwright specs.
     volumes:
-      - ./frontend:/app:ro
-      - /app/node_modules  # Prevent mounting host node_modules
-    command: ["sh", "-c", "npm install && npm test -- --run --reporter=verbose"]
+      - .:/src:ro
+    command:
+      [
+        "sh",
+        "-c",
+        "tar -C /src --exclude=frontend/node_modules --exclude=frontend/dist -cf - frontend scripts docs | tar -xf - -C /work && npm ci && npm run test:unit -- --reporter=verbose",
+      ]
     networks:
       - readur_test_network
     profiles:
@@ -114,16 +121,21 @@ services:
   frontend_dev:
     image: node:26-alpine
     container_name: readur_frontend_dev
-    working_dir: /app
+    working_dir: /work/frontend
     environment:
       NODE_ENV: development
-      VITE_API_BASE_URL: http://readur_test:8001
-      VITE_HOST: 0.0.0.0
-      VITE_PORT: 5174
+      # vite.config.ts proxies /api (HTTP and WebSocket) here; the host and port come from
+      # the command line below.
+      VITE_API_PROXY_TARGET: http://readur_test:8001
+    # Copied out of a read-only mount, as for frontend_test above.
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5174"]
+      - ./frontend:/src/frontend:ro
+    command:
+      [
+        "sh",
+        "-c",
+        "tar -C /src --exclude=frontend/node_modules --exclude=frontend/dist -cf - frontend | tar -xf - -C /work && npm ci && npm run dev -- --host 0.0.0.0 --port 5174 --strictPort",
+      ]
     ports:
       - "5174:5174"
     networks:
@@ -152,7 +164,16 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--auth-no-challenge", "--http-user=webdav_user", "--http-password=webdav_pass", "http://localhost:8080/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "--auth-no-challenge",
+          "--http-user=webdav_user",
+          "--http-password=webdav_pass",
+          "http://localhost:8080/",
+        ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -161,7 +182,6 @@ services:
       - readur_test_network
     profiles:
       - webdav-stress
-
 
   # WebDAV stress test orchestrator
   webdav_stress_orchestrator:
@@ -176,7 +196,6 @@ services:
       - WEBDAV_PASSWORD=webdav_pass
       - STRESS_TEST_DURATION=300
       - LOOP_DETECTION_TIMEOUT=60
-      - MAX_DIRECTORY_DEPTH=20
     volumes:
       - ./tests/stress:/app/tests/stress:ro
       - type: tmpfs

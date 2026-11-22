@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api } from '../../../services/api';
+import { api, apiErrorMessage } from '../../../services/api';
 import type { DebugInfo } from './types';
 
 const POLL_MS = 2000;
 const MONITOR_LIMIT_MS = 300000;
 const MAX_NOT_FOUND_RETRIES = 3;
 
-type Err = { response?: { status?: number; data?: { message?: string } }; message?: string };
+type Err = { response?: { status?: number; data?: unknown }; message?: string };
 
 /**
  * Debug state: fetch diagnostics for a document id (retrying 404s while a new upload settles),
@@ -25,7 +25,10 @@ export function useDebugSession() {
   const [uploadedDocumentId, setUploadedDocumentId] = useState('');
   const [processingStatus, setProcessingStatus] = useState('');
   const [monitoring, setMonitoring] = useState(false);
-  const timers = useRef<{ poll?: ReturnType<typeof setInterval>; stop?: ReturnType<typeof setTimeout> }>({});
+  const timers = useRef<{
+    poll?: ReturnType<typeof setInterval>;
+    stop?: ReturnType<typeof setTimeout>;
+  }>({});
 
   const stopMonitor = useCallback(() => {
     if (timers.current.poll) clearInterval(timers.current.poll);
@@ -59,7 +62,7 @@ export function useDebugSession() {
         setError(
           err.response?.status === 404
             ? t('debug.errors.documentNotFound', { documentId: target })
-            : err.response?.data?.message || t('debug.errors.fetchFailed', { message: err.message }),
+            : apiErrorMessage(err) || t('debug.errors.fetchFailed', { message: err.message }),
         );
         setDebugInfo(null);
         setLoading(false);
@@ -76,12 +79,16 @@ export function useDebugSession() {
         try {
           const doc = (await api.get(`/documents/${docId}`)).data;
           if (doc.ocr_status === 'completed' || doc.ocr_status === 'failed') {
-            setProcessingStatus(t('debug.monitoring.processingComplete', { status: doc.ocr_status }));
+            setProcessingStatus(
+              t('debug.monitoring.processingComplete', { status: doc.ocr_status }),
+            );
             stopMonitor();
             // Give the server a moment to persist the result before reading diagnostics.
             setTimeout(() => void fetchDebugInfo(docId), POLL_MS);
-          } else if (doc.ocr_status === 'processing') setProcessingStatus(t('debug.monitoring.ocrInProgress'));
-          else if (doc.ocr_status === 'pending') setProcessingStatus(t('debug.monitoring.queuedForOcr'));
+          } else if (doc.ocr_status === 'processing')
+            setProcessingStatus(t('debug.monitoring.ocrInProgress'));
+          else if (doc.ocr_status === 'pending')
+            setProcessingStatus(t('debug.monitoring.queuedForOcr'));
           else setProcessingStatus(t('debug.monitoring.checkingStatus'));
         } catch {
           /* keep polling; a transient failure should not end monitoring */
@@ -115,7 +122,8 @@ export function useDebugSession() {
       formData.append('file', selectedFile);
       const response = await api.post('/documents', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => setUploadProgress(e.total ? Math.round((e.loaded * 100) / e.total) : 0),
+        onUploadProgress: (e) =>
+          setUploadProgress(e.total ? Math.round((e.loaded * 100) / e.total) : 0),
       });
       const id = response.data.id as string;
       setUploadedDocumentId(id);
@@ -123,7 +131,7 @@ export function useDebugSession() {
       setProcessingStatus(t('debug.upload.uploadedStartingOcr'));
       startMonitor(id);
     } catch (e) {
-      setError((e as Err).response?.data?.message || t('debug.upload.uploadFailed'));
+      setError(apiErrorMessage(e) || t('debug.upload.uploadFailed'));
       setProcessingStatus(t('debug.upload.uploadFailedStatus'));
     } finally {
       setUploading(false);

@@ -1,220 +1,88 @@
-# 🔔 Notifications Guide
+# Notifications Guide
 
-Readur provides comprehensive real-time notifications to keep you informed about document processing, sync events, and system status.
+Readur has two separate kinds of notifications:
 
-## Notification Types
+- **Server notifications** are stored in the database for each user when a background job finishes (mainly source syncs). They are read through the API.
+- **Browser notifications** appear under the bell icon in the web interface. They are kept in the open browser tab only.
 
-### Document Processing
+Readur does not send email, chat (Slack, Teams) or webhook notifications, and there are no notification settings.
 
-- **OCR Completion**  
-  Text extraction finished for uploaded documents
-  
-- **Processing Errors**  
-  Failed OCR or document processing alerts
-  
-- **Batch Processing**  
-  Status updates for multiple document uploads
-  
-- **Quality Warnings**  
-  Low-quality OCR results requiring attention
+## Browser notifications (the bell)
 
-### Sync Events
+The bell in the top bar shows an unread count and opens a list of recent notifications. These are created by the web interface itself while you use it, currently when files you upload in that tab finish uploading: one notification for a single file ("File Uploaded" / "Upload Failed"), or one summary ("Batch Upload Complete") when several files finish within about two seconds of each other.
 
-- **Source Sync Complete**  
-  WebDAV, S3, or local folder synchronization finished
-  
-- **New Documents Found**  
-  Fresh documents discovered during sync
-  
-- **Sync Errors**  
-  Connection issues or permission problems
-  
-- **Conflict Resolution**  
-  File conflicts requiring user intervention
+The list keeps the 50 most recent entries. **Mark all as read** and **Clear all** act on this list only. It is not saved anywhere: reloading the page, logging in on another device or opening another tab starts with an empty list. The bell does not show server notifications.
 
-### System Status
+## Server notifications
 
-- **Health Alerts**  
-  System performance warnings or failures
-  
-- **Maintenance Windows**  
-  Scheduled maintenance notifications
-  
-- **Security Events**  
-  Login attempts, permission changes
-  
-- **Storage Warnings**  
-  Disk space or quota limitations
+The server stores a notification for the owner of a source or sync when one of these happens:
 
-## Notification Delivery
+| Event | `notification_type` | Title |
+|-------|---------------------|-------|
+| A source sync (scheduled or started by hand) imported new files | `success` | Source Sync Completed |
+| A source sync finished, but some files or folders failed | `warning` | Source Sync Finished With Errors |
+| A source sync failed | `error` | Source Sync Failed |
+| A deep scan of a WebDAV source completed | `success` | Deep Scan Completed |
+| A deep scan finished with errors | `warning` | Deep Scan Finished With Errors |
+| A deep scan failed | `error` | Deep Scan Failed |
+| A source health check found serious problems (see [Health Monitoring](health-monitoring-guide.md#source-health-checks)) | `warning` or `error` | Source Validation Warning / Source Validation Failed |
+| A scheduled sync of the WebDAV connection in the user's settings imported files | `success` | WebDAV Sync Completed |
+| That scheduled WebDAV sync failed | `error` | WebDAV Sync Failed |
+| A manually started settings WebDAV sync finished or failed | `success` / `error` | Manual WebDAV Sync Completed / Manual WebDAV Sync Failed |
+| A running settings WebDAV sync was cancelled | `info` | WebDAV Sync Cancelled |
 
-### In-App Notifications
+A source sync that imports nothing new and has no errors, or that is cancelled, does not create a notification. After every source sync that was not cancelled, Readur also runs the source's health check. Uploads, OCR results and logins do not create server notifications. Notifications are kept until the user deletes them.
 
-- **Real-time Badge**  
-  Notification counter in the top navigation
-  
-- **Notification Panel**  
-  Expandable list of recent alerts
-  
-- **Toast Messages**  
-  Immediate pop-up notifications for urgent items
-  
-- **Dashboard Widgets**  
-  Status cards showing notification summaries
+### Reading them through the API
 
-### Email Notifications
+| Endpoint | What it does |
+|----------|--------------|
+| `GET /api/notifications` | The user's notifications, newest first. `limit` (default 25) and `offset` page through them |
+| `GET /api/notifications/summary` | The number of unread notifications and the 5 most recent ones |
+| `POST /api/notifications/{id}/read` | Mark one notification read |
+| `POST /api/notifications/read/all` | Mark all of the user's notifications read |
+| `DELETE /api/notifications/{id}` | Delete one notification |
 
-- **Immediate Alerts**  
-  Critical system or processing failures
-  
-- **Daily Digest**  
-  Summary of processing activity and status
-  
-- **Weekly Reports**  
-  System health and usage statistics
-  
-- **Custom Triggers**  
-  User-configured alert conditions
+Every endpoint needs a session token or API key and acts only on the caller's own notifications; an administrator cannot read other users' notifications. Marking or deleting an ID that does not exist (or belongs to someone else) changes nothing and still answers `200 OK`.
 
-## Notification Settings
+```bash
+token="readur_pat_..."   # an API key from Settings -> API keys
 
-### User Preferences
-Access notification settings through:
-1. Click your profile in the top-right corner
-2. Select "Notification Settings"
-3. Configure your preferences for each notification type
+# Unread count and the five newest notifications
+curl -s https://readur.example.com/api/notifications/summary \
+  -H "Authorization: Bearer $token"
 
-### Notification Categories
-
-- **Critical**  
-  System failures, security alerts (always enabled)
-  
-- **Important**  
-  Processing errors, sync failures
-  
-- **Informational**  
-  Completion notifications, status updates
-  
-- **Promotional**  
-  Feature updates, tips (can be disabled)
-
-### Delivery Preferences
-
-- **In-App Only**  
-  Notifications appear only within Readur
-  
-- **Email + In-App**  
-  Notifications sent to both locations
-  
-- **Email Only**  
-  Notifications sent only via email
-  
-- **Disabled**  
-  No notifications for this category
-
-## Advanced Configuration
-
-### Admin Settings
-Administrators can configure system-wide notification policies:
-
-```env
-# Email notification settings
-SMTP_HOST=smtp.your-domain.com
-SMTP_PORT=587
-SMTP_USERNAME=notifications@your-domain.com
-SMTP_PASSWORD=your-password
-
-# Notification thresholds
-CRITICAL_ERROR_THRESHOLD=5
-WARNING_BATCH_SIZE=100
-DIGEST_FREQUENCY=daily
-
-# Webhook integrations
-SLACK_WEBHOOK_URL=https://hooks.slack.com/...
-TEAMS_WEBHOOK_URL=https://your-org.webhook.office.com/...
+# Mark everything read
+curl -s -X POST https://readur.example.com/api/notifications/read/all \
+  -H "Authorization: Bearer $token"
 ```
 
-### Webhook Integration
-Send notifications to external systems:
+A notification looks like this:
 
-#### Slack Integration
 ```json
 {
-  "channel": "#readur-alerts",
-  "username": "Readur Bot",
-  "text": "OCR processing completed for 15 documents",
-  "attachments": [
-    {
-      "color": "good",
-      "fields": [
-        {"title": "Success Rate", "value": "93%", "short": true},
-        {"title": "Processing Time", "value": "2m 34s", "short": true}
-      ]
-    }
-  ]
+  "id": "4b5c6d7e-8f9a-4b0c-9d1e-2f3a4b5c6d7e",
+  "user_id": "0b9e8d7c-6a5f-4e3d-2c1b-0a9f8e7d6c5b",
+  "notification_type": "warning",
+  "title": "Source Sync Finished With Errors",
+  "message": "Office NAS: 2 of 40 files failed",
+  "read": false,
+  "action_url": "/sources",
+  "metadata": {
+    "source_type": "webdav",
+    "source_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "files_processed": 38,
+    "files_failed": 2,
+    "folders_failed": 0
+  },
+  "created_at": "2026-04-21T12:34:56Z"
 }
 ```
 
-#### Teams Integration
-```json
-{
-  "@type": "MessageCard",
-  "themeColor": "0076D7",
-  "summary": "Readur Notification",
-  "sections": [{
-    "activityTitle": "Document Processing Complete",
-    "activitySubtitle": "15 documents processed successfully",
-    "facts": [
-      {"name": "Success Rate", "value": "93%"},
-      {"name": "Processing Time", "value": "2m 34s"}
-    ]
-  }]
-}
-```
+- `notification_type` is `success`, `info`, `warning` or `error`.
+- `action_url` is a path in the web interface related to the event (`/documents`, `/sources` or `/settings`).
+- `metadata` holds event details such as the source ID and type; its keys depend on the event and may be `null`.
 
-## Managing Notifications
+`GET /api/notifications/summary` answers `{"unread_count": <number>, "recent_notifications": [...]}` with the same objects. See [Notification Endpoints](api-reference.md#notification-endpoints) in the API Reference.
 
-### Notification History
-
-- **View All**  
-  Complete history of notifications
-  
-- **Filter by Type**  
-  Show only specific notification categories
-  
-- **Search**  
-  Find notifications by content or date
-  
-- **Archive**  
-  Mark notifications as read or hide them
-
-### Bulk Actions
-
-- **Mark All Read**  
-  Clear all unread notification badges
-  
-- **Delete Old**  
-  Remove notifications older than specified date
-  
-- **Export**  
-  Download notification history as CSV or JSON
-
-## Troubleshooting
-
-### Missing Notifications
-- Check notification settings in your profile
-- Verify email address is correct and confirmed
-- Check spam/junk folder for email notifications
-- Ensure browser notifications are enabled
-
-### Too Many Notifications
-- Adjust notification thresholds in settings
-- Disable informational categories
-- Switch to daily digest mode for non-critical items
-- Use filters to focus on important notifications
-
-### Email Delivery Issues
-- Verify SMTP configuration (admin only)
-- Check email server reputation and SPF records
-- Test email delivery with notification test feature
-- Review email bounce logs in admin panel
+To be alerted outside Readur, poll `GET /api/notifications/summary` from a script with an API key, or monitor the server with Prometheus (see [Health Monitoring](health-monitoring-guide.md)).

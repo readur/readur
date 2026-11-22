@@ -1,622 +1,276 @@
-# Monitoring and Observability Guide
+# Monitoring
 
-## Overview
+Readur exposes three things you can monitor from outside:
 
-This guide covers setting up comprehensive monitoring for Readur, including metrics collection, log aggregation, alerting, and dashboard creation.
+| What | Where | Access |
+|------|-------|--------|
+| Liveness check | `GET /api/health` | public |
+| Metrics in Prometheus text format | `GET /metrics` | admin session or admin API key, or `Authorization: Bearer <METRICS_TOKEN>` |
+| Metrics as JSON | `GET /api/metrics` | admin session or admin API key |
 
-## Monitoring Stack Components
+Logs are written to standard output. There is no built-in alerting, dashboard or notification sender; use the endpoints below with the monitoring tools you already run.
 
-### Core Components
-
-1. **Metrics Collection**: Prometheus + Node Exporter
-2. **Visualization**: Grafana
-3. **Log Aggregation**: Loki or ELK Stack
-4. **Alerting**: AlertManager
-5. **Application Monitoring**: Custom metrics and health checks
-6. **Uptime Monitoring**: Uptime Kuma or Pingdom
-
-## Health Monitoring
-
-### Built-in Health Endpoints
+## Health Check
 
 ```bash
-# Basic health check
-curl http://localhost:8000/health
-
-# Detailed health status
-curl http://localhost:8000/health/detailed
-
-# Response format
-{
-  "status": "healthy",
-  "database": "connected",
-  "redis": "connected",
-  "storage": "accessible",
-  "ocr_queue": 45,
-  "version": "2.5.4",
-  "uptime": 345600
-}
+curl -f http://localhost:8000/api/health
 ```
-
-### Custom Health Checks
-
-```python
-# health_checks.py
-from typing import Dict, Any
-
-class HealthMonitor:
-    @staticmethod
-    def check_database() -> Dict[str, Any]:
-        try:
-            db.session.execute("SELECT 1")
-            return {"status": "healthy", "response_time": 0.005}
-        except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}
-    
-    @staticmethod
-    def check_storage() -> Dict[str, Any]:
-        try:
-            # Check if storage is accessible
-            storage.list_files(limit=1)
-            return {"status": "healthy", "available_space": storage.get_free_space()}
-        except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}
-    
-    @staticmethod
-    def check_ocr_workers() -> Dict[str, Any]:
-        active = celery.control.inspect().active()
-        return {
-            "status": "healthy" if active else "degraded",
-            "active_workers": len(active or {}),
-            "queue_length": redis.llen("ocr_queue")
-        }
-```
-
-## Prometheus Setup
-
-### Installation and Configuration
-
-```yaml
-# docker-compose.monitoring.yml
-version: '3.8'
-
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-    networks:
-      - monitoring
-
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: node-exporter
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    ports:
-      - "9100:9100"
-    networks:
-      - monitoring
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    container_name: postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://readur:password@postgres:5432/readur?sslmode=disable"
-    ports:
-      - "9187:9187"
-    networks:
-      - monitoring
-
-  redis-exporter:
-    image: oliver006/redis_exporter:latest
-    container_name: redis-exporter
-    environment:
-      REDIS_ADDR: "redis://redis:6379"
-    ports:
-      - "9121:9121"
-    networks:
-      - monitoring
-
-networks:
-  monitoring:
-    external: true
-
-volumes:
-  prometheus_data:
-```
-
-### Prometheus Configuration
-
-```yaml
-# prometheus/prometheus.yml
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-  external_labels:
-    monitor: 'readur-monitor'
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - alertmanager:9093
-
-rule_files:
-  - '/etc/prometheus/alerts/*.yml'
-
-scrape_configs:
-  - job_name: 'readur'
-    static_configs:
-      - targets: ['readur:8000']
-    metrics_path: '/metrics'
-    # /metrics requires authentication. Set METRICS_TOKEN (min 16 chars) on
-    # Readur and put the same value in this file.
-    authorization:
-      type: Bearer
-      credentials_file: /etc/prometheus/readur-metrics-token
-
-  - job_name: 'node'
-    static_configs:
-      - targets: ['node-exporter:9100']
-
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres-exporter:9187']
-
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis-exporter:9121']
-```
-
-## Grafana Dashboards
-
-### Setup Grafana
-
-```yaml
-# Add to docker-compose.monitoring.yml
-grafana:
-  image: grafana/grafana:latest
-  container_name: grafana
-  environment:
-    - GF_SECURITY_ADMIN_USER=admin
-    - GF_SECURITY_ADMIN_PASSWORD=changeme
-    - GF_SERVER_ROOT_URL=https://grafana.readur.company.com
-    - GF_INSTALL_PLUGINS=redis-datasource
-  volumes:
-    - grafana_data:/var/lib/grafana
-    - ./grafana/provisioning:/etc/grafana/provisioning
-  ports:
-    - "3000:3000"
-  networks:
-    - monitoring
-```
-
-### Dashboard Configuration
 
 ```json
-# grafana/provisioning/dashboards/readur.json
 {
-  "dashboard": {
-    "title": "Readur Performance Dashboard",
-    "panels": [
-      {
-        "title": "Request Rate",
-        "targets": [{
-          "expr": "rate(readur_requests_total[5m])"
-        }]
-      },
-      {
-        "title": "Response Time",
-        "targets": [{
-          "expr": "histogram_quantile(0.95, rate(readur_request_duration_seconds_bucket[5m]))"
-        }]
-      },
-      {
-        "title": "OCR Queue",
-        "targets": [{
-          "expr": "readur_ocr_queue_length"
-        }]
-      },
-      {
-        "title": "Database Connections",
-        "targets": [{
-          "expr": "pg_stat_database_numbackends{datname='readur'}"
-        }]
-      }
-    ]
-  }
+  "status": "ok"
 }
 ```
 
-## Application Metrics
+The endpoint answers `200 OK` as long as the HTTP server is running. It does not query the database or the storage backend, so it tells you the process is up, not that everything behind it works. To check the database too, scrape `/metrics` or call `/api/metrics`: both run database queries and return `500` when the database cannot be reached.
 
-### Custom Metrics Implementation
-
-```python
-# metrics.py
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
-
-# Define metrics
-request_count = Counter('readur_requests_total', 'Total requests', ['method', 'endpoint'])
-request_duration = Histogram('readur_request_duration_seconds', 'Request duration')
-ocr_queue_length = Gauge('readur_ocr_queue_length', 'OCR queue length')
-active_users = Gauge('readur_active_users', 'Active users in last 5 minutes')
-document_count = Gauge('readur_documents_total', 'Total documents', ['status'])
-
-# Middleware to track requests
-class MetricsMiddleware:
-    def __init__(self, app):
-        self.app = app
-    
-    def __call__(self, environ, start_response):
-        path = environ.get('PATH_INFO', '/')
-        method = environ.get('REQUEST_METHOD', 'GET')
-        
-        with request_duration.time():
-            request_count.labels(method=method, endpoint=path).inc()
-            return self.app(environ, start_response)
-
-# Metrics endpoint
-@app.route('/metrics')
-def metrics():
-    # Update gauges
-    ocr_queue_length.set(redis.llen('ocr_queue'))
-    active_users.set(get_active_user_count())
-    document_count.labels(status='processed').set(get_document_count('processed'))
-    
-    return generate_latest(), 200, {'Content-Type': 'text/plain'}
-```
-
-## Log Aggregation
-
-### Loki Setup
+The bundled `docker-compose.yml` already uses the health endpoint as the container health check:
 
 ```yaml
-# Add to docker-compose.monitoring.yml
-loki:
-  image: grafana/loki:latest
-  container_name: loki
-  ports:
-    - "3100:3100"
-  volumes:
-    - ./loki/loki-config.yml:/etc/loki/loki-config.yml
-    - loki_data:/loki
-  command: -config.file=/etc/loki/loki-config.yml
-  networks:
-    - monitoring
-
-promtail:
-  image: grafana/promtail:latest
-  container_name: promtail
-  volumes:
-    - /var/log:/var/log:ro
-    - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml
-  command: -config.file=/etc/promtail/promtail-config.yml
-  networks:
-    - monitoring
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
 ```
 
-### Log Configuration
+`curl` is included in the Readur image, so this works without extra tools. The same URL works for uptime checkers and for Kubernetes liveness and readiness probes.
+
+## Prometheus Metrics
+
+`GET /metrics` returns the metrics in the Prometheus text exposition format (`text/plain; version=0.0.4`). Every figure is computed when the endpoint is called, mostly from database queries; Readur keeps no metric history of its own.
+
+### Authentication
+
+Set `METRICS_TOKEN` (at least 16 characters) and let Prometheus send it as a bearer token:
+
+```bash
+openssl rand -hex 32
+```
+
+Without `METRICS_TOKEN`, the endpoint accepts only an admin session token or an admin API key. A missing credential gets `401`, a non-admin one `403`.
+
+```bash
+curl -H "Authorization: Bearer $metrics_token" http://localhost:8000/metrics
+```
+
+### Scrape Configuration
 
 ```yaml
-# promtail/promtail-config.yml
-server:
-  http_listen_port: 9080
-  grpc_listen_port: 0
-
-positions:
-  filename: /tmp/positions.yaml
-
-clients:
-  - url: http://loki:3100/loki/api/v1/push
-
+# prometheus.yml
 scrape_configs:
   - job_name: readur
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-        filters:
-          - name: label
-            values: ["com.docker.compose.project=readur"]
-    relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/(.*)'
-        target_label: 'container'
-      - source_labels: ['__meta_docker_container_log_stream']
-        target_label: 'logstream'
+    metrics_path: /metrics
+    scrape_interval: 60s
+    authorization:
+      type: Bearer
+      # File containing the value of METRICS_TOKEN
+      credentials_file: /etc/prometheus/readur-metrics-token
+    static_configs:
+      - targets:
+          - readur.example.com:8000
 ```
 
-## Alerting
+Each scrape runs a set of database queries, so a scrape interval of a minute or more is sensible. Every sample carries an explicit timestamp (milliseconds since the epoch), which Prometheus accepts.
 
-### AlertManager Configuration
+### Metric Reference
+
+All metrics are gauges unless marked as counters. "Today" means since midnight of the current date in the database server's time zone.
+
+**Documents and storage**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_documents_total` | Number of documents |
+| `readur_documents_uploaded_today` | Documents created today |
+| `readur_storage_bytes` | Sum of the file sizes of all documents |
+| `readur_avg_document_size_bytes` | Average document file size |
+| `readur_documents_with_ocr` | Documents that have extracted text |
+| `readur_documents_without_ocr` | Documents without extracted text |
+| `readur_documents_by_type{type="..."}` | Documents per file extension; `type` is `pdf`, `jpeg`, `png`, `gif`, `tiff` or `other` |
+
+**OCR queue**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_ocr_queue_pending` | OCR jobs waiting |
+| `readur_ocr_queue_processing` | OCR jobs running |
+| `readur_ocr_queue_failed` | OCR jobs that failed |
+| `readur_ocr_queue_depth` | Pending plus processing jobs |
+| `readur_ocr_completed_today` | OCR jobs completed today |
+| `readur_ocr_avg_processing_minutes` | Average time jobs waited in the queue. Omitted while there is no value |
+| `readur_ocr_queue_oldest_pending_minutes` | Age of the oldest document waiting for OCR. Omitted while none is waiting |
+| `readur_ocr_stuck_jobs` | Documents in the `processing` state that were last updated more than 30 minutes ago |
+| `readur_ocr_confidence_score` | Average OCR confidence of documents completed in the last hour. Omitted when there are none |
+
+**Users**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_users_total` | Number of user accounts |
+| `readur_users_registered_today` | Accounts created today |
+| `readur_users_active_today` | Users who added at least one document today |
+
+**Database**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_db_connections_total` | Connections currently open in Readur's pool |
+| `readur_db_connections_idle` | Idle connections in the pool |
+| `readur_db_connections_active` | Connections in use |
+| `readur_db_utilization_percent` | Active connections as a percentage of open connections |
+| `readur_db_response_time_ms` | Time a `SELECT 1` took during this scrape |
+
+**Data consistency**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_data_consistency_score` | 100 when the OCR queue and the documents agree; 10 points are subtracted for each queue entry whose document no longer exists and each document marked completed whose queue entry is not |
+
+**Process and storage**
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_uptime_seconds` (counter) | Seconds since the server process started (fractional) |
+| `readur_memory_usage_bytes` | Resident memory of the server process. Omitted where the platform does not report it |
+| `readur_storage_usage_percent` | Used space on the filesystem holding `UPLOAD_PATH`. Omitted with S3 storage, whose usage Readur cannot measure |
+
+**WebDAV sources**
+
+These come from the WebDAV sources' records (the same figures the Sources page shows), summed over all users.
+
+| Metric | Meaning |
+|--------|---------|
+| `readur_webdav_sources` | WebDAV sources configured |
+| `readur_webdav_sources_enabled` | WebDAV sources that are enabled |
+| `readur_webdav_sources_syncing` | WebDAV sources syncing now |
+| `readur_webdav_sources_error` | WebDAV sources whose last sync failed |
+| `readur_webdav_files_synced` | Files synced, as recorded on each source |
+| `readur_webdav_bytes_synced` | Bytes synced, as recorded on each source |
+| `readur_webdav_files_pending` | Files found but not yet synced |
+| `readur_webdav_oldest_sync_age_seconds` | Seconds since the least recently synced enabled source last synced. Omitted until an enabled source has synced |
+
+### Example Alert Rules
+
+These rules only use metrics that carry real values. Adjust the thresholds to your workload.
 
 ```yaml
-# alertmanager/config.yml
-global:
-  smtp_from: 'alertmanager@readur.company.com'
-  smtp_smarthost: 'smtp.company.com:587'
-  smtp_auth_username: 'alertmanager@readur.company.com'
-  smtp_auth_password: 'password'
-
-route:
-  group_by: ['alertname', 'cluster']
-  group_wait: 10s
-  group_interval: 10s
-  repeat_interval: 1h
-  receiver: 'team-admins'
-  
-  routes:
-    - match:
-        severity: critical
-      receiver: 'pagerduty'
-      continue: true
-    
-    - match:
-        severity: warning
-      receiver: 'team-admins'
-
-receivers:
-  - name: 'team-admins'
-    email_configs:
-      - to: 'admin-team@company.com'
-        headers:
-          Subject: 'Readur Alert: {{ .GroupLabels.alertname }}'
-  
-  - name: 'pagerduty'
-    pagerduty_configs:
-      - service_key: 'your-pagerduty-key'
-```
-
-### Alert Rules
-
-```yaml
-# prometheus/alerts/readur.yml
+# readur-alerts.yml
 groups:
   - name: readur
     rules:
-      - alert: HighResponseTime
-        expr: histogram_quantile(0.95, rate(readur_request_duration_seconds_bucket[5m])) > 1
+      - alert: ReadurMetricsDown
+        expr: up{job="readur"} == 0
         for: 5m
-        labels:
-          severity: warning
         annotations:
-          summary: "High response time on {{ $labels.instance }}"
-          description: "95th percentile response time is {{ $value }}s"
-      
-      - alert: DatabaseDown
-        expr: up{job="postgres"} == 0
-        for: 1m
-        labels:
-          severity: critical
+          summary: "Readur metrics cannot be scraped (server down, database unreachable or bad token)"
+      - alert: ReadurOcrStuckJobs
+        expr: readur_ocr_stuck_jobs > 0
+        for: 15m
         annotations:
-          summary: "Database is down"
-          description: "PostgreSQL database is not responding"
-      
-      - alert: HighOCRQueue
-        expr: readur_ocr_queue_length > 1000
-        for: 10m
-        labels:
-          severity: warning
+          summary: "Documents have been in OCR processing for more than 30 minutes"
+      - alert: ReadurOcrBacklog
+        expr: readur_ocr_queue_oldest_pending_minutes > 60
+        for: 15m
         annotations:
-          summary: "OCR queue backlog"
-          description: "OCR queue has {{ $value }} pending items"
-      
-      - alert: DiskSpaceLow
-        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.1
-        for: 5m
-        labels:
-          severity: critical
+          summary: "A document has been waiting for OCR for over an hour"
+      - alert: ReadurOcrFailures
+        expr: readur_ocr_queue_failed > 0
+        for: 1h
         annotations:
-          summary: "Low disk space"
-          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+          summary: "OCR jobs have been in the failed state for an hour"
+      - alert: ReadurDataConsistency
+        expr: readur_data_consistency_score < 100
+        for: 30m
+        annotations:
+          summary: "OCR queue and documents disagree"
 ```
 
-## Performance Monitoring
+Because a failing database query makes `/metrics` return `500`, a database outage shows up as `up == 0` for the Readur job.
 
-### APM Integration
+## JSON Metrics
 
-```python
-# apm_config.py
-from elasticapm import Client
+`GET /api/metrics` (admin only) returns a smaller set of figures as JSON:
 
-# Configure APM
-apm_client = Client({
-    'SERVICE_NAME': 'readur',
-    'SERVER_URL': 'http://apm-server:8200',
-    'ENVIRONMENT': 'production',
-    'SECRET_TOKEN': 'your-secret-token',
-})
-
-# Instrument Flask app
-from elasticapm.contrib.flask import ElasticAPM
-apm = ElasticAPM(app, client=apm_client)
+```bash
+curl -H "Authorization: Bearer $admin_token" http://localhost:8000/api/metrics
 ```
 
-### Custom Performance Metrics
-
-```python
-# performance_metrics.py
-import time
-from contextlib import contextmanager
-
-@contextmanager
-def track_performance(operation_name):
-    start_time = time.time()
-    try:
-        yield
-    finally:
-        duration = time.time() - start_time
-        metrics.record_operation_time(operation_name, duration)
-        
-        if duration > 1.0:  # Log slow operations
-            logger.warning(f"Slow operation: {operation_name} took {duration:.2f}s")
-
-# Usage
-with track_performance("document_processing"):
-    process_document(doc_id)
-```
-
-## Uptime Monitoring
-
-### External Monitoring
-
-```yaml
-# uptime-kuma/docker-compose.yml
-version: '3.8'
-
-services:
-  uptime-kuma:
-    image: louislam/uptime-kuma:latest
-    container_name: uptime-kuma
-    volumes:
-      - uptime-kuma_data:/app/data
-    ports:
-      - "3001:3001"
-    restart: unless-stopped
-
-volumes:
-  uptime-kuma_data:
-```
-
-### Status Page Configuration
-
-```nginx
-# Public status page
-server {
-    listen 443 ssl;
-    server_name status.readur.company.com;
-    
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_set_header Host $host;
-    }
+```json
+{
+  "database": {
+    "active_connections": 5
+  },
+  "ocr": {
+    "pending_jobs": 3,
+    "processing_jobs": 1,
+    "failed_jobs": 0,
+    "completed_today": 42,
+    "avg_processing_time_minutes": 1.5,
+    "queue_depth": 4,
+    "oldest_pending_minutes": 2.0
+  },
+  "documents": {
+    "total_documents": 1250,
+    "documents_uploaded_today": 42,
+    "total_storage_bytes": 734003200,
+    "avg_document_size_bytes": 587202.56,
+    "documents_with_ocr": 1200,
+    "documents_without_ocr": 50
+  },
+  "users": {
+    "total_users": 4,
+    "active_users_today": 2,
+    "new_registrations_today": 0
+  },
+  "system": {
+    "uptime_seconds": 86400,
+    "app_version": "3.1.3",
+    "rust_version": "unknown"
+  },
+  "timestamp": 1763380800
 }
 ```
 
-## Dashboard Examples
+- `database.active_connections` is the number of connections open in the pool.
+- `ocr.avg_processing_time_minutes` is the average queue wait time, like `readur_ocr_avg_processing_minutes`; it and `oldest_pending_minutes` are `null` when there is no value.
+- `system.uptime_seconds` is the time since the server process started; `app_version` is the Readur version.
+- `timestamp` is in Unix seconds.
 
-### Key Metrics Dashboard
+The OCR queue alone is also available from `GET /api/queue/stats` (see [OCR and Queue Endpoints](../api-reference.md#ocr-and-queue-endpoints)).
 
-```sql
--- Query for document processing stats
-SELECT 
-    DATE(created_at) as date,
-    COUNT(*) as documents_processed,
-    AVG(processing_time) as avg_processing_time,
-    MAX(processing_time) as max_processing_time
-FROM documents
-WHERE created_at > NOW() - INTERVAL '30 days'
-GROUP BY DATE(created_at)
-ORDER BY date DESC;
-```
+## Logs
 
-### Real-time Monitoring
-
-```javascript
-// WebSocket monitoring dashboard
-const ws = new WebSocket('wss://readur.company.com/ws/metrics');
-
-ws.onmessage = (event) => {
-    const metrics = JSON.parse(event.data);
-    updateDashboard({
-        activeUsers: metrics.active_users,
-        queueLength: metrics.queue_length,
-        responseTime: metrics.response_time,
-        errorRate: metrics.error_rate
-    });
-};
-```
-
-## Troubleshooting Monitoring Issues
-
-### Prometheus Not Scraping
+Readur logs to standard output in plain text; it writes no log files. Read the logs with your container runtime:
 
 ```bash
-# Check Prometheus targets
-curl http://localhost:9090/api/v1/targets
-
-# Verify metrics endpoint (requires METRICS_TOKEN or an admin token)
-curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics
-
-# Check network connectivity
-docker network inspect monitoring
+docker compose logs -f readur
+kubectl logs -f <readur-pod-name>
 ```
 
-### Missing Metrics
+`RUST_LOG` sets the log level using the tracing `EnvFilter` syntax:
 
-```bash
-# Debug metric collection
-docker-compose exec readur python -c "
-from prometheus_client import REGISTRY
-for collector in REGISTRY._collector_to_names:
-    print(collector)
-"
+```yaml
+environment:
+  RUST_LOG: info                    # the default
+  # RUST_LOG: debug                 # everything at debug level
+  # RUST_LOG: readur=debug,sqlx=warn
 ```
 
-### High Memory Usage
+Without `RUST_LOG`, Readur logs at `info` and quietens two noisy dependencies (the PDF extractor and PostgreSQL notices). Setting `RUST_LOG` replaces that default entirely. To collect logs centrally, point your log shipper (Loki, Fluent Bit, Vector and so on) at the container output.
 
-```bash
-# Check Prometheus storage
-du -sh /var/lib/prometheus
+## Things Worth Watching
 
-# Reduce retention
-docker-compose exec prometheus promtool tsdb analyze /prometheus
-
-# Clean old data
-docker-compose exec prometheus promtool tsdb clean /prometheus
-```
-
-## Best Practices
-
-### Monitoring Strategy
-
-1. **Start Simple**: Begin with basic health checks and expand
-2. **Alert Fatigue**: Only alert on actionable issues
-3. **SLI/SLO Definition**: Define and track service level indicators
-4. **Dashboard Organization**: Create role-specific dashboards
-5. **Log Retention**: Balance storage costs with debugging needs
-6. **Security**: Protect monitoring endpoints and dashboards
-7. **Documentation**: Document alert runbooks and response procedures
-
-### Maintenance
-
-```bash
-# Weekly maintenance tasks
-#!/bin/bash
-
-# Rotate logs
-docker-compose exec readur logrotate -f /etc/logrotate.conf
-
-# Clean up old metrics
-curl -X POST http://localhost:9090/api/v1/admin/tsdb/clean_tombstones
-
-# Backup Grafana dashboards
-docker-compose exec grafana grafana-cli admin export-dashboard
-
-# Update monitoring stack
-docker-compose -f docker-compose.monitoring.yml pull
-docker-compose -f docker-compose.monitoring.yml up -d
-```
+- **Is it up?** `GET /api/health` from an uptime checker, plus `up{job="readur"}` in Prometheus.
+- **Is OCR keeping up?** `readur_ocr_queue_pending`, `readur_ocr_queue_oldest_pending_minutes` and `readur_ocr_stuck_jobs`. Failed jobs can be put back in the queue with `POST /api/queue/requeue/failed`.
+- **Is the disk filling up?** With local storage, alert on `readur_storage_usage_percent` (the filesystem holding `UPLOAD_PATH`). Watch the PostgreSQL data volume, and S3 buckets, with node-exporter or your platform's volume metrics.
+- **Source syncs:** alert on `readur_webdav_sources_error > 0` or a growing `readur_webdav_oldest_sync_age_seconds`; the Sources page shows each source's health and errors.
 
 ## Related Documentation
 
-- [Performance Tuning](./performance.md)
 - [Health Monitoring Guide](../health-monitoring-guide.md)
+- [Configuration Reference](../configuration-reference.md)
+- [API Reference](../api-reference.md#health-metrics-and-mcp-endpoints)
 - [Backup Strategies](./backup.md)
-- [Troubleshooting Guide](../troubleshooting.md)
+- [Performance Tuning](./performance.md)

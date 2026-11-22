@@ -4,8 +4,8 @@ use sqlx::{postgres::PgRow, Row};
 use uuid::Uuid;
 
 use super::labels::seed_default_labels;
-use super::Database;
 use super::sanitize::ToDb;
+use super::Database;
 use crate::models::{AuthProvider, CreateUser, User, UserRole};
 
 /// bcrypt work factor used for all stored password hashes.
@@ -90,10 +90,12 @@ impl Database {
     }
 
     pub async fn get_user_by_id(&self, id: Uuid) -> Result<Option<User>> {
-        let row = sqlx::query(user_sql(format!("SELECT {USER_COLUMNS} FROM users WHERE id = $1")))
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(user_sql(format!(
+            "SELECT {USER_COLUMNS} FROM users WHERE id = $1"
+        )))
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.as_ref().map(user_from_row))
     }
 
@@ -108,6 +110,11 @@ impl Database {
 
     /// Update account fields. Changing the password or deactivating the
     /// account revokes all outstanding session tokens.
+    ///
+    /// Returns `Ok(None)` when no user with `id` exists -- including one
+    /// deleted after the lookup below but before the `UPDATE` ran, which then
+    /// matches no row. Callers map that to "not found" without inspecting
+    /// error text.
     pub async fn update_user(
         &self,
         id: Uuid,
@@ -115,11 +122,10 @@ impl Database {
         email: Option<String>,
         password: Option<String>,
         is_active: Option<bool>,
-    ) -> Result<User> {
-        let user = self
-            .get_user_by_id(id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("User not found"))?;
+    ) -> Result<Option<User>> {
+        let Some(user) = self.get_user_by_id(id).await? else {
+            return Ok(None);
+        };
 
         let username = username.unwrap_or(user.username);
         let email = email.unwrap_or(user.email);
@@ -146,10 +152,10 @@ impl Database {
         .bind(revoke_sessions)
         .bind(password_changed)
         .bind(id)
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(user_from_row(&row))
+        Ok(row.as_ref().map(user_from_row))
     }
 
     /// Replace a user's password and revoke all outstanding session tokens.
@@ -179,13 +185,14 @@ impl Database {
         Ok(())
     }
 
-    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
+    /// Deletes the account. Returns `false` when no account has that id.
+    pub async fn delete_user(&self, id: Uuid) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
 
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn get_user_by_oidc_subject(

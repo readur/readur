@@ -1,41 +1,28 @@
 # Configuration Reference
 
-This document provides a comprehensive reference for all configuration options available in Readur, including environment variables, configuration files, and runtime settings.
+Readur is configured with environment variables, read once at startup; change one and restart the server for it to take effect. A `.env` file in the working directory is loaded first, and variables set in the environment take precedence over it. There is no configuration file and there are no command-line options for these settings. Per-user preferences (OCR language, search defaults and so on) are set in the web interface instead and stored in the database.
+
+Every variable Readur reads is listed below; anything not listed here is ignored. The [Configuration Guide](configuration.md) has worked examples.
 
 ## Environment Variables
 
-### Core Configuration
+### Server and Database
 
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `DATABASE_URL` | String | `postgresql://readur:readur@localhost/readur` | PostgreSQL connection string (takes priority over individual vars) | Yes* |
-| `POSTGRES_HOST` | String | `localhost` | PostgreSQL host (used if DATABASE_URL not set) | No |
-| `POSTGRES_PORT` | String | `5432` | PostgreSQL port (used if DATABASE_URL not set) | No |
-| `POSTGRES_DB` | String | `readur` | PostgreSQL database name (used if DATABASE_URL not set) | No |
-| `POSTGRES_USER` | String | `readur` | PostgreSQL username (used if DATABASE_URL not set) | No |
-| `POSTGRES_PASSWORD` | String | `readur` | PostgreSQL password (used if DATABASE_URL not set) | No |
-| `SERVER_ADDRESS` | String | `0.0.0.0:8080` | Server bind address (host:port) | No |
-| `SERVER_HOST` | String | `0.0.0.0` | Server host (used if SERVER_ADDRESS not set) | No |
-| `SERVER_PORT` | String | `8080` | Server port (used if SERVER_ADDRESS not set) | No |
-| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database (`readur rotate-jwt-secret` replaces it). When set, it takes precedence, must be at least 32 bytes and must not be a published example value. Generate with `openssl rand -hex 32` | No |
-| `SESSION_SECRET` | String | Auto-generated | Secret for session encryption | Recommended |
-| `UPLOAD_PATH` | String | `./uploads` | Directory for file uploads | No |
-| `ALLOWED_FILE_TYPES` | String | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated allowed extensions | No |
-| `LOG_LEVEL` | String | `info` | Logging level (debug, info, warn, error) | No |
-| `LOG_FORMAT` | String | `text` | Log format (text, json) | No |
-
-### Authentication & Security
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `AUTH_ENABLED` | Boolean | `true` | Enable authentication | No |
-| `DEFAULT_USER_ROLE` | String | `viewer` | Default role for new users (admin, editor, viewer) | No |
-| `AUTO_CREATE_USERS` | Boolean | `false` | Auto-create users on first login (OIDC) | No |
-| `SESSION_TIMEOUT` | Integer | `3600` | Session timeout in seconds | No |
-| `PASSWORD_MIN_LENGTH` | Integer | `8` | Minimum password length | No |
-| `REQUIRE_EMAIL_VERIFICATION` | Boolean | `false` | Require email verification | No |
-| `MAX_LOGIN_ATTEMPTS` | Integer | `5` | Maximum failed login attempts | No |
-| `LOCKOUT_DURATION` | Integer | `900` | Account lockout duration (seconds) | No |
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `DATABASE_URL` | String | built from the `POSTGRES_*` variables | PostgreSQL connection string (`postgresql://` or `postgres://`). Takes priority over the `POSTGRES_*` variables |
+| `POSTGRES_HOST` | String | `localhost` | PostgreSQL host, used when `DATABASE_URL` is not set |
+| `POSTGRES_PORT` | String | `5432` | PostgreSQL port, used when `DATABASE_URL` is not set |
+| `POSTGRES_DB` | String | `readur` | PostgreSQL database name, used when `DATABASE_URL` is not set |
+| `POSTGRES_USER` | String | `readur` | PostgreSQL user, used when `DATABASE_URL` is not set |
+| `POSTGRES_PASSWORD` | String | `readur` | PostgreSQL password, used when `DATABASE_URL` is not set |
+| `SERVER_ADDRESS` | String | `<SERVER_HOST>:<SERVER_PORT>` | Bind address as `host:port`. Takes priority over `SERVER_HOST` and `SERVER_PORT` |
+| `SERVER_HOST` | String | `0.0.0.0` | Bind host, used when `SERVER_ADDRESS` is not set |
+| `SERVER_PORT` | String | `8000` | Bind port, used when `SERVER_ADDRESS` is not set |
+| `UPLOAD_PATH` | String | `./uploads` | Directory documents are stored in with local storage |
+| `ALLOWED_FILE_TYPES` | String | `pdf,txt,doc,docx,png,jpg,jpeg` | Comma-separated file extensions imported from watch folders and by batch ingestion; other files there are skipped |
+| `RUST_LOG` | String | `info` (with noisy dependencies quietened) | Log filter in [tracing `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) syntax, e.g. `debug` or `readur=debug,sqlx=warn` |
+| `DEBUG` | Boolean | `false` | Extra diagnostic log lines. Any value other than empty, `0` or `false` turns it on |
 
 ### Security and Access Control
 
@@ -43,10 +30,10 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set, it takes precedence, must be at least 32 bytes and must not be a published example value (such as `your-secret-key`, `change-me` or `secret`). Generate with `openssl rand -hex 32` | No |
-| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Allows the server to start with a short or example `JWT_SECRET`. For throwaway local development and CI only; never set in production | No |
+| `JWT_SECRET` | String | generated, stored in the database | Secret used to sign JWT tokens. When unset, a random key is generated on first start and stored in the database, shared by every instance using that database; run `readur rotate-jwt-secret` to replace it (restart the servers afterwards; all sessions end). When set to a value of at least 32 bytes that is not a published example (such as `your-secret-key`, `change-me` or `secret`), it takes precedence; a shorter or example value is ignored with a startup warning and the stored key is used instead. Generate with `openssl rand -hex 32` | No |
+| `READUR_INSECURE_DEV_MODE` | Boolean | `false` | Uses a short or example `JWT_SECRET` instead of ignoring it. For throwaway local development and CI only; never set in production | No |
 | `JWT_TTL_HOURS` | Integer | `12` | Lifetime of issued login tokens, in hours (1-720) | No |
-| `ADMIN_USERNAME` | String | `admin` | Username of the initial admin account created on first startup | No |
+| `ADMIN_USERNAME` | String | `admin` | Username of the initial admin account created on first startup; files imported from `WATCH_FOLDER` belong to this account | No |
 | `ADMIN_EMAIL` | String | `<username>@localhost` | Email of the initial admin account | No |
 | `ADMIN_PASSWORD` | String | - | Password of the initial admin account (min 8 chars). If unset, a random 24-character password is generated and written to a file (see `ADMIN_PASSWORD_FILE`); it is not written to the logs | No |
 | `ADMIN_PASSWORD_FILE` | String | `<UPLOAD_PATH>/.readur/initial-admin-password` | Where a generated initial admin password is written (mode `0600`). In the Docker image this is `/app/uploads/.readur/initial-admin-password`. An existing file is never overwritten; if one is present when the admin account has to be created, startup stops and asks for it to be removed. The startup log shows the path | No |
@@ -57,185 +44,82 @@ These settings are read at startup. Invalid values (for example a malformed CIDR
 | `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) for Prometheus scrapes of `/metrics`. Without it, `/metrics` requires an admin session or admin API key | No |
 | `PUBLIC_URL` | String | - | Public base URL of the Readur instance (e.g. `https://readur.example.com`). Used to build the post-login OIDC redirect and shared-link URLs; request headers are not used for this. When unset, OIDC falls back to the origin of `OIDC_REDIRECT_URI` and shared links fall back to `http://<SERVER_ADDRESS>` | Recommended behind a proxy |
 | `OIDC_LINK_EXISTING_BY_EMAIL` | Boolean | `false` | Link an OIDC login to an existing local account with the same email address. Only applies when the identity provider reports `email_verified: true` | No |
+| `ALLOW_LOCAL_AUTH` | Boolean | `true` | Allow username/password login (and, with `ALLOW_REGISTRATION`, self-registration). Set to `false` to allow OIDC login only | No |
 
 Related API behavior:
 
 - `POST /api/auth/logout` revokes all sessions of the current user.
 - `POST /api/auth/password` lets a signed-in user change their own password.
-- `/api/ocr/health` requires authentication; `POST /api/ocr/perform` has been removed.
+- `/api/ocr/health` requires authentication, and the endpoint that ran OCR on an arbitrary server path has been removed.
 - Source API responses do not include stored WebDAV passwords or S3 secret keys. The source config instead carries `has_password` / `has_secret_access_key` flags; omit the field or send an empty value on update to keep the stored secret. The settings response likewise has `has_webdav_password` instead of `webdav_password`.
-- Document cleanup endpoints (`DELETE /api/documents/cleanup/low/confidence`, `DELETE /api/documents/cleanup/failed/ocr` and the cleanup preview) act on the caller's own documents, including for admins. An admin can pass `?all_users=true` to act on all users' documents.
+- Document cleanup endpoints (`DELETE /api/documents/cleanup/low/confidence`, including its `preview_only` mode, and `DELETE /api/documents/cleanup/failed/ocr`) act on the caller's own documents, including for admins. An admin can pass `?all_users=true` to act on all users' documents.
 - OIDC login completes at `/auth/callback#code=...`; the frontend exchanges the one-time code at `POST /api/auth/oidc/exchange`. The token is not placed in the URL query.
 
 ### OIDC/SSO Configuration
 
+See the [OIDC Setup Guide](oidc-setup.md) for provider-specific instructions.
+
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `OIDC_ENABLED` | Boolean | `false` | Enable OIDC authentication | No |
+| `OIDC_ENABLED` | Boolean | `false` | Enable OIDC login (`true`, `1`, `yes` or `on`) | No |
 | `OIDC_CLIENT_ID` | String | - | OIDC client ID | If OIDC enabled |
-| `OIDC_CLIENT_SECRET` | String | - | OIDC client secret | If OIDC enabled |
-| `OIDC_ISSUER_URL` | String | - | OIDC issuer URL | If OIDC enabled |
-| `OIDC_REDIRECT_URI` | String | - | OIDC redirect URI | If OIDC enabled |
-| `OIDC_SCOPES` | String | `openid profile email` | OIDC scopes | No |
-| `OIDC_USER_INFO_ENDPOINT` | String | Auto-discovered | User info endpoint | No |
-| `OIDC_TOKEN_ENDPOINT` | String | Auto-discovered | Token endpoint | No |
-| `OIDC_AUTH_ENDPOINT` | String | Auto-discovered | Authorization endpoint | No |
-| `OIDC_LINK_EXISTING_BY_EMAIL` | Boolean | `false` | Link an OIDC login to an existing local account with the same email, only when the IdP reports `email_verified` | No |
-| `PUBLIC_URL` | String | - | Public base URL used to build the post-login OIDC redirect and shared links. When unset, OIDC uses the origin of `OIDC_REDIRECT_URI` | Recommended |
+| `OIDC_CLIENT_SECRET` | String | - | OIDC client secret. Without it Readur acts as a public client (PKCE only) | No |
+| `OIDC_ISSUER_URL` | String | - | Issuer URL of the identity provider; endpoints are discovered from it | If OIDC enabled |
+| `OIDC_REDIRECT_URI` | String | - | Callback URL registered with the provider, e.g. `https://readur.example.com/api/auth/oidc/callback` | If OIDC enabled |
+| `OIDC_AUTO_REGISTER` | Boolean | `false` | Create an account on the first OIDC login of an unknown user | No |
 
-### Storage Configuration
+`OIDC_LINK_EXISTING_BY_EMAIL`, `PUBLIC_URL` and `ALLOW_LOCAL_AUTH` also affect OIDC login; see [Security and Access Control](#security-and-access-control).
 
-#### Local Storage
+### S3 Storage
+
+See the [S3 Storage Guide](s3-storage-guide.md). The S3 backend is used only when it is enabled and the bucket name and both keys are set.
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `LOCAL_STORAGE_PATH` | String | `./uploads` | Local storage directory | No |
-| `TEMP_STORAGE_PATH` | String | `./uploads/temp` | Temporary files directory | No |
-| `THUMBNAIL_PATH` | String | `./uploads/thumbnails` | Thumbnail storage directory | No |
-| `BACKUP_PATH` | String | `./uploads/backups` | Backup directory | No |
+| `S3_ENABLED` | Boolean | `false` | `true` enables the S3 storage backend. Equivalent to `STORAGE_BACKEND=s3` | No |
+| `STORAGE_BACKEND` | String | `local` | `s3` enables the S3 storage backend (equivalent to `S3_ENABLED=true`); anything else keeps the local filesystem | No |
+| `S3_BUCKET_NAME` | String | - | Bucket name | If S3 enabled |
+| `S3_ACCESS_KEY_ID` | String | - | Access key ID | If S3 enabled |
+| `S3_SECRET_ACCESS_KEY` | String | - | Secret access key | If S3 enabled |
+| `S3_REGION` | String | `us-east-1` | Region | No |
+| `S3_ENDPOINT_URL` | String | - | Custom endpoint for S3-compatible services (MinIO, RustFS, etc.). Alias: `S3_ENDPOINT` (used when `S3_ENDPOINT_URL` is not set) | No |
+| `S3_ENDPOINT` | String | - | Alias of `S3_ENDPOINT_URL` | No |
+| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, any other value virtual-hosted style. Unset: path-style when a custom endpoint is set, otherwise virtual-hosted. Alias: `S3_PATH_STYLE` | No |
+| `S3_PATH_STYLE` | Boolean | auto | Alias of `S3_FORCE_PATH_STYLE`, used when that is not set | No |
+| `S3_PREFIX` | String | - | Prefix for every object key the storage backend writes (documents, thumbnails, processed images). Surrounding slashes and spaces are trimmed (`/tenant/a/` is `tenant/a`); empty or `/` means no prefix. Changing it does not move existing objects, which stay readable and deletable under the keys recorded at upload. S3 sources have their own prefix, set per source | No |
 
-#### S3 Storage
+### Watch Folders
 
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `S3_ENABLED` | Boolean | `false` | Enable S3 storage backend. Equivalent to `STORAGE_BACKEND=s3` | No |
-| `STORAGE_BACKEND` | String | `local` | `s3` enables the S3 storage backend (equivalent to `S3_ENABLED=true`); `local` uses the local filesystem | No |
-| `S3_BUCKET_NAME` | String | - | S3 bucket name | If S3 enabled |
-| `S3_ACCESS_KEY_ID` | String | - | AWS Access Key ID | If S3 enabled |
-| `S3_SECRET_ACCESS_KEY` | String | - | AWS Secret Access Key | If S3 enabled |
-| `S3_REGION` | String | `us-east-1` | AWS region | No |
-| `S3_ENDPOINT_URL` | String | - | Custom S3 endpoint for S3-compatible services (MinIO, RustFS, etc.). Alias: `S3_ENDPOINT` | No |
-| `S3_FORCE_PATH_STYLE` | Boolean | auto | `true` forces path-style addressing, `false` forces virtual-hosted. Unset = path-style when a custom endpoint is set, otherwise the AWS default of virtual-hosted style. Alias: `S3_PATH_STYLE` | No |
-| `S3_PREFIX` | String | - | S3 key prefix | No |
-| `S3_USE_SSL` | Boolean | `true` | Use HTTPS for S3 | No |
-| `S3_VERIFY_SSL` | Boolean | `true` | Verify SSL certificates | No |
-| `S3_STORAGE_CLASS` | String | `STANDARD` | S3 storage class | No |
-| `S3_SERVER_SIDE_ENCRYPTION` | String | - | Server-side encryption (AES256, aws:kms) | No |
-| `S3_KMS_KEY_ID` | String | - | KMS key ID for encryption | No |
-
-### Watch Directory Configuration
+See [Watch Folder](WATCH_FOLDER.md) and [Per-User Watch Directories](per-user-watch-directories.md).
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `WATCH_FOLDER` | String | `./watch` | Global watch directory | No |
-| `USER_WATCH_BASE_DIR` | String | `./user_watch` | Base directory for per-user folders | No |
-| `ENABLE_PER_USER_WATCH` | Boolean | `false` | Enable per-user watch directories | No |
-| `WATCH_INTERVAL_SECONDS` | Integer | `30` | Minimum interval between re-processing the same file; also controls polling frequency for network filesystems | No |
-| `FILE_STABILITY_CHECK_MS` | Integer | `2000` | File stability check delay (ms) | No |
-| `MAX_FILE_AGE_HOURS` | Integer | `24` | Maximum file age to process | No |
-| `WATCH_RECURSIVE` | Boolean | `true` | Watch subdirectories recursively | No |
-| `WATCH_FILE_PATTERNS` | String | `*` | File patterns to watch (glob) | No |
-| `WATCH_IGNORE_PATTERNS` | String | `.*,~*,*.tmp` | Patterns to ignore | No |
-| `MOVE_AFTER_PROCESSING` | Boolean | `false` | Move files after processing | No |
-| `PROCESSED_FILES_DIR` | String | `./processed` | Directory for processed files | No |
+| `WATCH_FOLDER` | String | `./watch` | Directory whose new files are imported automatically | No |
+| `WATCH_INTERVAL_SECONDS` | Integer | `30` | Minimum interval between re-processing the same file; also the polling interval for network filesystems | No |
+| `FILE_STABILITY_CHECK_MS` | Integer | `1000` | How long a file's size must stay unchanged before it is imported (milliseconds) | No |
+| `MAX_FILE_AGE_HOURS` | Integer | - (no limit) | Skip files last modified longer ago than this many hours | No |
+| `FORCE_POLLING_WATCH` | Flag | unset | Poll instead of using filesystem events, even on local filesystems. Any value turns it on (even `false`); unset it to turn it off. Paths that look like NFS/SMB/CIFS mounts are always polled | No |
+| `ENABLE_PER_USER_WATCH` | Boolean | `false` | Give each user a watch directory under `USER_WATCH_BASE_DIR` (`true`, `1`, `yes` or `on`) | No |
+| `USER_WATCH_BASE_DIR` | String | `./user_watch` | Parent directory of the per-user watch directories | No |
 
-### OCR Configuration
+### OCR and Processing
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `OCR_ENABLED` | Boolean | `true` | Enable OCR processing | No |
-| `OCR_LANGUAGE` | String | `eng` | Default OCR language(s) | No |
-| `OCR_ENGINE` | String | `tesseract` | OCR engine (tesseract, cloud) | No |
-| `CONCURRENT_OCR_JOBS` | Integer | `4` | Concurrent OCR workers (1–15) | No |
-| `OCR_TIMEOUT_SECONDS` | Integer | `300` | OCR timeout per document | No |
-| `OCR_RETRY_ATTEMPTS` | Integer | `3` | OCR retry attempts | No |
-| `OCR_RETRY_DELAY` | Integer | `60` | Delay between retries (seconds) | No |
-| `OCR_CONFIDENCE_THRESHOLD` | Float | `0.6` | Minimum OCR confidence | No |
-| `MAX_FILE_SIZE_MB` | Integer | `50` | Maximum file size for upload | No |
-| `MAX_PDF_SIZE_MB` | Integer | `100` | Maximum PDF file size for OCR processing | No |
-| `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Maximum Office document size for text extraction | No |
-| `OCR_DPI` | Integer | `300` | DPI for image processing | No |
-| `OCR_PSM` | Integer | `3` | Tesseract page segmentation mode | No |
-| `OCR_OEM` | Integer | `1` | Tesseract OCR engine mode | No |
-| `TESSERACT_DATA_PATH` | String | `/usr/share/tesseract-ocr/4.00/tessdata` | Tesseract data directory | No |
+| `OCR_LANGUAGE` | String | `eng` | Default Tesseract language code(s), e.g. `eng` or `eng+deu`; users can choose their own in Settings | No |
+| `CONCURRENT_OCR_JOBS` | Integer | `4` | Documents OCRed in parallel, clamped to 1-15 | No |
+| `OCR_TIMEOUT_SECONDS` | Integer | `300` | Time limit for processing one document whose owner has not saved their own OCR timeout in Settings; at most 600 takes effect | No |
+| `MAX_FILE_SIZE_MB` | Integer | `50` | Largest accepted request body, and so the largest upload; a user's own Max File Size can only be lower | No |
+| `MAX_PDF_SIZE_MB` | Integer | `100` | Largest PDF that is processed for text | No |
+| `MAX_OFFICE_DOCUMENT_SIZE_MB` | Integer | `100` | Largest Office document that is processed for text | No |
+| `TEMP_DIR` | String | the platform temporary directory (`TMPDIR`, else `/tmp`) | Directory for temporary files: OCR scratch images, PDF page renders, ocrmypdf output and thumbnails. Created if missing | No |
 
-### Database Configuration
+### AI Assistants (MCP)
 
 | Variable | Type | Default | Description | Required |
 |----------|------|---------|-------------|----------|
-| `DATABASE_MAX_CONNECTIONS` | Integer | `32` | Maximum database connections | No |
-| `DATABASE_MIN_CONNECTIONS` | Integer | `5` | Minimum idle connections | No |
-| `DATABASE_CONNECT_TIMEOUT` | Integer | `5` | Connection timeout (seconds) | No |
-| `DATABASE_ACQUIRE_TIMEOUT` | Integer | `10` | Acquire timeout (seconds) | No |
-| `DATABASE_IDLE_TIMEOUT` | Integer | `600` | Idle connection timeout | No |
-| `DATABASE_MAX_LIFETIME` | Integer | `1800` | Max connection lifetime | No |
-| `DATABASE_SSL_MODE` | String | `prefer` | SSL mode (disable, prefer, require) | No |
-| `DATABASE_SSL_CERT` | String | - | Path to SSL certificate | No |
-| `DATABASE_SSL_KEY` | String | - | Path to SSL key | No |
-| `DATABASE_SSL_ROOT_CERT` | String | - | Path to root certificate | No |
-
-### Performance & Resources
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `MEMORY_LIMIT_MB` | Integer | `2048` | Memory limit in MB | No |
-| `CPU_CORES` | Integer | Auto-detect | Number of CPU cores to use | No |
-| `WORKER_THREADS` | Integer | CPU cores | Worker thread count | No |
-| `BLOCKING_THREADS` | Integer | `512` | Blocking thread pool size | No |
-| `CACHE_SIZE_MB` | Integer | `256` | In-memory cache size | No |
-| `BATCH_SIZE` | Integer | `100` | Default batch processing size | No |
-| `PARALLEL_UPLOADS` | Integer | `5` | Concurrent file uploads | No |
-| `REQUEST_TIMEOUT` | Integer | `30` | HTTP request timeout (seconds) | No |
-| `RATE_LIMIT_ENABLED` | Boolean | `true` | Enable rate limiting | No |
-| `RATE_LIMIT_PER_MINUTE` | Integer | `100` | Requests per minute limit | No |
-
-### Notification Configuration
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `NOTIFICATIONS_ENABLED` | Boolean | `true` | Enable notifications | No |
-| `EMAIL_ENABLED` | Boolean | `false` | Enable email notifications | No |
-| `SMTP_HOST` | String | - | SMTP server host | If email enabled |
-| `SMTP_PORT` | Integer | `587` | SMTP server port | No |
-| `SMTP_USERNAME` | String | - | SMTP username | If email enabled |
-| `SMTP_PASSWORD` | String | - | SMTP password | If email enabled |
-| `SMTP_FROM_ADDRESS` | String | - | From email address | If email enabled |
-| `SMTP_USE_TLS` | Boolean | `true` | Use TLS for SMTP | No |
-| `WEBHOOK_ENABLED` | Boolean | `false` | Enable webhook notifications | No |
-| `WEBHOOK_URL` | String | - | Webhook endpoint URL | If webhook enabled |
-| `WEBHOOK_SECRET` | String | - | Webhook signing secret | No |
-
-### Monitoring & Metrics
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `METRICS_ENABLED` | Boolean | `true` | Enable metrics collection | No |
-| `PROMETHEUS_ENABLED` | Boolean | `false` | Enable Prometheus metrics | No |
-| `PROMETHEUS_PORT` | Integer | `9090` | Prometheus metrics port | No |
-| `HEALTH_CHECK_PATH` | String | `/health` | Health check endpoint | No |
-| `READY_CHECK_PATH` | String | `/ready` | Readiness check endpoint | No |
-| `METRICS_PATH` | String | `/metrics` | Metrics endpoint | No |
-| `METRICS_TOKEN` | String | - | Bearer token (min 16 chars) accepted on `/metrics` for Prometheus scrapes. Without it, `/metrics` requires an admin session or admin API key | No |
-| `TRACING_ENABLED` | Boolean | `false` | Enable distributed tracing | No |
-| `JAEGER_ENDPOINT` | String | - | Jaeger collector endpoint | If tracing enabled |
-| `TRACE_SAMPLE_RATE` | Float | `0.1` | Trace sampling rate (0-1) | No |
-
-### Network Configuration
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `CORS_ENABLED` | Boolean | `true` | Enable CORS | No |
-| `CORS_ALLOWED_ORIGINS` | String | - (none) | Comma-separated origins (`scheme://host[:port]`) allowed to make cross-origin requests; invalid entries stop startup. Not needed for the bundled frontend, which is served from the same origin | No |
-| `CORS_ALLOWED_METHODS` | String | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods | No |
-| `CORS_ALLOWED_HEADERS` | String | `*` | Allowed headers | No |
-| `CORS_MAX_AGE` | Integer | `3600` | CORS preflight cache (seconds) | No |
-| `PROXY_COUNT` | Integer | `0` | Number of reverse proxies | No |
-| `TRUSTED_PROXIES` | String | loopback and private networks | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` header is used to determine the client IP (for example, for rate limiting). When unset, loopback and private networks are trusted; `none` or an empty value trusts no proxy | No |
-| `WEBSOCKET_ENABLED` | Boolean | `true` | Enable WebSocket support | No |
-| `WEBSOCKET_MAX_CONNECTIONS` | Integer | `1000` | Maximum WebSocket connections | No |
-
-### Feature Flags
-
-| Variable | Type | Default | Description | Required |
-|----------|------|---------|-------------|----------|
-| `FEATURE_ADVANCED_SEARCH` | Boolean | `true` | Enable advanced search | No |
-| `FEATURE_LABELS` | Boolean | `true` | Enable document labels | No |
-| `FEATURE_SOURCES` | Boolean | `true` | Enable external sources | No |
-| `FEATURE_ANALYTICS` | Boolean | `true` | Enable analytics dashboard | No |
-| `FEATURE_NOTIFICATIONS` | Boolean | `true` | Enable notifications | No |
-| `FEATURE_MULTI_LANGUAGE_OCR` | Boolean | `true` | Enable multi-language OCR | No |
-| `FEATURE_WEBDAV` | Boolean | `true` | Enable WebDAV sync | No |
-| `FEATURE_API_V2` | Boolean | `false` | Enable API v2 endpoints | No |
+| `MCP_ENABLED` | Boolean | `true` | Serve the Model Context Protocol endpoint at `/api/mcp`. Every request still needs an API key or session token. When `false`, the endpoint returns `404`. See [AI Assistants (MCP)](mcp-guide.md) | No |
+| `MCP_ALLOW_DELETE` | Boolean | `false` | Offer the `delete_document` tool to MCP clients | No |
 
 ## Database Connection Priority
 
@@ -260,95 +144,7 @@ This flexibility allows for easy deployment across different platforms:
 - **Heroku/Railway**: Typically provide `DATABASE_URL`
 - **Local Development**: Use either method based on preference
 
-## Configuration Files
-
-### Main Configuration (readur.yml)
-
-```yaml
-# readur.yml - Main configuration file
-server:
-  address: 0.0.0.0
-  port: 8080
-  workers: 4
-
-database:
-  url: postgresql://readur:password@localhost/readur
-  max_connections: 32
-  min_connections: 5
-
-storage:
-  type: s3  # or 'local'
-  s3:
-    bucket: readur-documents
-    region: us-east-1
-    prefix: documents/
-
-ocr:
-  enabled: true
-  language: eng+fra+deu
-  concurrent_jobs: 4
-  timeout: 300
-
-auth:
-  jwt_secret: ${JWT_SECRET}
-  session_timeout: 3600
-  
-oidc:
-  enabled: false
-  client_id: ${OIDC_CLIENT_ID}
-  client_secret: ${OIDC_CLIENT_SECRET}
-  issuer_url: https://auth.example.com
-```
-
-### Docker Compose Override
-
-```yaml
-# docker-compose.override.yml
-version: '3.8'
-services:
-  readur:
-    environment:
-      - DATABASE_URL=postgresql://readur:${DB_PASSWORD}@db:5432/readur
-      - JWT_SECRET=${JWT_SECRET}
-      - S3_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - S3_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - LOG_LEVEL=debug
-    volumes:
-      - ./config/readur.yml:/app/config/readur.yml:ro
-```
-
-### Kubernetes ConfigMap
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: readur-config
-data:
-  SERVER_PORT: "8080"
-  DATABASE_MAX_CONNECTIONS: "50"
-  OCR_LANGUAGE: "eng+spa+fra"
-  CONCURRENT_OCR_JOBS: "8"
-  LOG_LEVEL: "info"
-  CORS_ALLOWED_ORIGINS: "https://app.example.com"
-```
-
-### Kubernetes Secret
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: readur-secrets
-type: Opaque
-stringData:
-  DATABASE_URL: "postgresql://readur:password@postgres:5432/readur"
-  JWT_SECRET: "<output of: openssl rand -hex 32>"
-  S3_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
-  S3_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-```
-
-### Helm Chart Values
+## Helm Chart Values
 
 The Helm chart (`charts/readur`) manages the initial `ADMIN_PASSWORD` in a Secret named `<release>-auth`. When no value is given, it is generated randomly on install and kept on upgrade. The Secret has `helm.sh/resource-policy: keep`, so it also remains after `helm uninstall`. `JWT_SECRET` is optional: set `auth.jwtSecret` (or include it in `auth.existingSecret`) to manage it yourself; otherwise Readur keeps a generated key in its database. A `JWT_SECRET` already stored in the Secret by an earlier chart version is kept.
 
@@ -365,236 +161,46 @@ The Helm chart (`charts/readur`) manages the initial `ADMIN_PASSWORD` in a Secre
 kubectl get secret <release>-auth -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d
 ```
 
-## Configuration Precedence
+## Command-Line Commands
 
-Configuration values are loaded in the following order (later sources override earlier ones):
+The `readur` binary starts the server by default (`readur` or `readur serve`). It also has two maintenance commands, which read the same environment variables:
 
-1. **Default values** (built into application)
-2. **Configuration file** (`readur.yml`)
-3. **Environment variables**
-4. **Command-line arguments**
-5. **Database settings** (for user-specific settings)
+- `readur reset-admin-password`: sets the password of the `ADMIN_USERNAME` account to `ADMIN_PASSWORD`, or to a new random password printed to the terminal.
+- `readur rotate-jwt-secret`: replaces the JWT signing key stored in the database (all sessions end; restart the servers afterwards).
 
-## Multi-Environment Configuration
+## Kubernetes Example
 
-### Development
-
-```bash
-# .env.development
-DATABASE_URL=postgresql://readur:readur@localhost/readur_dev
-SERVER_PORT=8080
-LOG_LEVEL=debug
-OCR_ENABLED=false
-S3_ENABLED=false
-CORS_ALLOWED_ORIGINS=http://localhost:3000
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: readur-config
+data:
+  SERVER_PORT: "8000"
+  OCR_LANGUAGE: "eng+spa+fra"
+  CONCURRENT_OCR_JOBS: "8"
+  RUST_LOG: "info"
+  CORS_ALLOWED_ORIGINS: "https://app.example.com"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: readur-secrets
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://readur:password@postgres:5432/readur"
+  S3_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
+  S3_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 ```
-
-### Staging
-
-```bash
-# .env.staging
-DATABASE_URL=postgresql://readur:${DB_PASSWORD}@db-staging.internal/readur_staging
-SERVER_PORT=8080
-LOG_LEVEL=info
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-staging
-CORS_ALLOWED_ORIGINS=https://staging.readur.app
-```
-
-### Production
-
-```bash
-# .env.production
-DATABASE_URL=postgresql://readur:${DB_PASSWORD}@db-prod.internal/readur_prod
-SERVER_PORT=8080
-LOG_LEVEL=warn
-S3_ENABLED=true
-S3_BUCKET_NAME=readur-production
-CORS_ALLOWED_ORIGINS=https://readur.app
-RATE_LIMIT_ENABLED=true
-PROMETHEUS_ENABLED=true
-```
-
-## Dynamic Configuration
-
-Some settings can be changed at runtime without restart:
-
-### User Settings (per-user)
-- Theme preference
-- Language preference
-- Items per page
-- Email notifications
-- OCR default language
-
-### System Settings (admin only)
-- OCR concurrent jobs
-- Rate limits
-- Feature flags
-- Notification settings
-
-Access via API:
-```bash
-# Get current settings
-GET /api/settings
-
-# Update settings
-PUT /api/settings
-{
-  "ocr_concurrent_jobs": 6,
-  "rate_limit_per_minute": 200
-}
-```
-
-## Configuration Validation
-
-Readur validates configuration on startup:
-
-```bash
-# Test configuration
-readur --config-test
-
-# Validate specific file
-readur --config-file readur.yml --validate
-
-# Show effective configuration
-readur --show-config
-```
-
-Common validation errors:
-
-**Invalid database URL:** The database connection string format is incorrect or malformed.
-   ```
-   Error: Invalid DATABASE_URL format
-   Expected: postgresql://user:pass@host:port/database
-   ```
-
-2. **Missing required S3 credentials**
-   ```
-   Error: S3_ENABLED=true but S3_ACCESS_KEY_ID not set
-   ```
-
-3. **Path conflicts**
-   ```
-   Error: UPLOAD_PATH and WATCH_FOLDER cannot be the same directory
-   ```
-
-## Best Practices
-
-### Security
-
-**Never commit secrets:** Always use environment variables or secret management systems to protect sensitive information.
-   ```bash
-   # Use environment variables
-   JWT_SECRET=${JWT_SECRET}
-   
-   # Or use secret management
-   JWT_SECRET=$(vault kv get -field=jwt_secret secret/readur)
-   ```
-
-**Use strong secrets:** Generate cryptographically secure secrets with sufficient entropy.
-   ```bash
-   # Generate secure secrets
-   openssl rand -hex 32
-   ```
-
-**Rotate secrets regularly:** Implement a schedule for rotating sensitive credentials.
-   ```bash
-   # Quarterly rotation
-   0 0 1 */3 * /scripts/rotate-secrets.sh
-   ```
-
-### Performance
-
-**Tune database connections:** Configure the optimal number of database connections based on your system's resources.
-   ```bash
-   # Formula: connections = (worker_threads * 2) + management_connections
-   DATABASE_MAX_CONNECTIONS=$(($(nproc) * 2 + 5))
-   ```
-
-**Optimize OCR workers:** Set the appropriate number of concurrent OCR workers to balance performance and resource usage.
-   ```bash
-   # Formula: ocr_workers = cpu_cores / 2
-   CONCURRENT_OCR_JOBS=$(($(nproc) / 2))
-   ```
-
-**Configure caching:** Set up appropriate cache sizes to improve response times while managing memory usage.
-   ```bash
-   # Cache size based on available memory
-   CACHE_SIZE_MB=$(($(free -m | awk 'NR==2{print $7}') / 4))
-   ```
-
-### Monitoring
-
-**Enable metrics in production:** Turn on metrics collection to monitor system performance and health.
-   ```bash
-   METRICS_ENABLED=true
-   PROMETHEUS_ENABLED=true
-   ```
-
-**Set appropriate log levels:** Configure logging verbosity based on your environment and debugging needs.
-   ```bash
-   # Production
-   LOG_LEVEL=warn
-   
-   # Debugging
-   LOG_LEVEL=debug
-   ```
-
-**Configure alerts:** Set up alerting to be notified of critical system events.
-   ```bash
-   WEBHOOK_URL=https://alerts.example.com/readur
-   ```
 
 ## Troubleshooting Configuration
 
-### Debug Configuration Loading
+At startup the server prints the settings it loaded, marking which came from the environment and which are defaults. Invalid security settings stop startup with an error; invalid numbers fall back to the default with a warning in that log.
 
 ```bash
-# Enable verbose configuration logging
-RUST_LOG=readur::config=debug readur
-
-# Show configuration sources
-readur --config-sources
+# More detailed logs
+RUST_LOG=debug readur
 ```
 
-### Common Issues
-
-1. **Environment variable not loading**
-   - Check variable name (must match exactly)
-   - Verify no spaces around `=`
-   - Check for quotes in values
-
-2. **Configuration file ignored**
-   - Verify file path
-   - Check YAML syntax
-   - Ensure proper permissions
-
-3. **Settings not taking effect**
-   - Check configuration precedence
-   - Verify no overrides
-   - Some settings require restart
-
-## Migration from Previous Versions
-
-### From v1.x to v2.x
-
-```bash
-# Migration script
-#!/bin/bash
-
-# Update environment variables
-sed -i 's/STORAGE_PATH/UPLOAD_PATH/g' .env
-sed -i 's/OCR_WORKERS/CONCURRENT_OCR_JOBS/g' .env
-
-# Add new required variables
-echo "S3_ENABLED=false" >> .env
-echo "ENABLE_PER_USER_WATCH=false" >> .env
-```
-
-### From v2.x to v3.x
-
-```bash
-# New variables in v3.x
-echo "OIDC_ENABLED=false" >> .env
-echo "FEATURE_MULTI_LANGUAGE_OCR=true" >> .env
-```
+- **A variable has no effect:** check the name against the tables above (anything else is ignored), that there are no spaces around `=`, and that the server was restarted.
+- **A `.env` value is ignored:** a variable set in the environment (for example by Docker Compose) takes precedence over `.env`.

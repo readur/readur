@@ -1,20 +1,32 @@
-{{- define "readur.hardcodedValues" -}}
+{{- /*
+Settings the chart applies on top of the bjw-s common library defaults that
+are not exposed in values.yaml. They are defaults, not overrides: any value a
+user sets (including false, "" and empty lists) wins, see the merge below.
+*/ -}}
+{{- define "readur.baseValues" -}}
 controllers:
   main:
     initContainers:
       fixperms:
         image:
           repository: busybox
-          tag: latest
+          tag: "1.37.0"
         command:
           - sh
           - -c
           - |
             echo "Fixing permissions for Readur directories, this may take some time..."
-            chown -R 1000:1000 /app/uploads /app/watch
-            # uploads/.readur holds owner-only files (e.g. a generated admin
-            # password); keep their modes.
-            find /app/uploads /app/watch -path /app/uploads/.readur -prune -o -exec chmod 755 {} +
+            for dir in /app/uploads /app/watch; do
+              # A volume may be disabled (e.g. no watch folder): skip it.
+              if [ ! -d "$dir" ]; then
+                echo "$dir is not mounted, skipping"
+                continue
+              fi
+              chown -R 1000:1000 "$dir"
+              # uploads/.readur holds owner-only files (e.g. a generated admin
+              # password); keep their modes.
+              find "$dir" -path /app/uploads/.readur -prune -o -exec chmod 755 {} +
+            done
             echo "Permissions fixed successfully"
         securityContext:
           runAsUser: 0
@@ -28,11 +40,6 @@ controllers:
               - FOWNER
     containers:
       readur:
-        image:
-          repository: readur/readur
-          tag: latest
-          pullPolicy: IfNotPresent
-
         env:
           # Optional: without it Readur keeps a generated key in its database.
           JWT_SECRET:
@@ -83,40 +90,20 @@ controllers:
               httpGet: *probesPath
           liveness: *probes
 
-persistence:
-  uploads:
-    enabled: true
-    type: persistentVolumeClaim
-    size: 10Gi
-    retain: true
-    accessMode: ReadWriteOnce
-    globalMounts:
-      - path: /app/uploads
-        readOnly: false
-  
-  watch:
-    enabled: true
-    type: persistentVolumeClaim
-    size: 5Gi
-    retain: true
-    accessMode: ReadWriteOnce
-    globalMounts:
-      - path: /app/watch
-        readOnly: false
-
-service:
-  main:
-    controller: main
-    enabled: true
-    ports:
-      http:
-        port: 8000
-        targetPort: 8000
-
 {{ end }}
 
+{{- /*
+User values win over the base values. `mergeOverwrite` lets explicit false,
+"" and [] from values.yaml or --set replace a base default; sprig's `merge`
+treats those as unset, which made e.g. `persistence.watch.enabled=false`
+impossible to apply.
+*/ -}}
 {{- $ctx := deepCopy . -}}
-# Merge with ALL the values in `values.yaml`
-{{- $_ := mergeOverwrite .Values $ctx.Values -}}
-{{- $_ = include "readur.hardcodedValues" . | fromYaml | merge $ctx.Values -}}
+{{- $values := mergeOverwrite (include "readur.baseValues" . | fromYaml) (deepCopy .Values) -}}
+{{- /* An empty image tag means the Readur release this chart ships (appVersion). */ -}}
+{{- $image := dig "controllers" "main" "containers" "readur" "image" dict $values -}}
+{{- if and (kindIs "map" $image) (not $image.tag) -}}
+  {{- $_ := set $image "tag" (toString .Chart.AppVersion) -}}
+{{- end -}}
+{{- $_ := set $ctx "Values" $values -}}
 {{- include "bjw-s.common.loader.all" $ctx }}

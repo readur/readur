@@ -5,6 +5,9 @@
 
 set -e  # Exit on error
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,9 +18,17 @@ NC='\033[0m' # No Color
 # Configuration
 COMPOSE_FILE="docker-compose.test.yml"
 COMPOSE_PROJECT_NAME="readur_test"
-TEST_TIMEOUT=600  # 10 minutes timeout for all tests
 TEST_RESULTS_DIR="test-results"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+# Default of the readur_test service's ADMIN_PASSWORD in docker-compose.test.yml; the two must
+# match (tests/integration_tooling_env_tests.rs checks it).
+DEFAULT_ADMIN_PASSWORD="readur-test-admin-password"
+# Matches readur_test's ADMIN_USERNAME in docker-compose.test.yml.
+ADMIN_USERNAME_IN_COMPOSE="admin"
+
+# The Playwright install shared with scripts/run-e2e-local.sh.
+# shellcheck source=scripts/lib/playwright-browsers.sh
+. "$REPO_ROOT/scripts/lib/playwright-browsers.sh"
 
 # Function to print colored output
 print_status() {
@@ -47,7 +58,8 @@ save_output() {
     local output=$2
     local status=$3
     local output_file="${TEST_RESULTS_DIR}/${test_type}/${TIMESTAMP}_${test_type}_${status}.log"
-    
+
+    mkdir -p "${TEST_RESULTS_DIR}/${test_type}"
     echo "$output" | strip_ansi > "$output_file"
     echo "Results saved to: $output_file"
 }
@@ -55,10 +67,10 @@ save_output() {
 # Function to cleanup test environment
 cleanup() {
     print_status "Cleaning up test environment..."
-    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME down -v --remove-orphans 2>/dev/null || true
-    
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" --profile '*' down -v --remove-orphans 2>/dev/null || true
+
     # Force remove any lingering containers with our test names
-    docker rm -f readur_postgres_test readur_app_test readur_frontend_test 2>/dev/null || true
+    docker rm -f readur_postgres_test readur_app_test readur_frontend_test readur_frontend_dev 2>/dev/null || true
     
     # Force remove the test network if it exists
     docker network rm readur_test_network 2>/dev/null || true
@@ -76,7 +88,7 @@ wait_for_service() {
     print_status "Waiting for $service to be healthy..."
     
     while [ $attempt -lt $max_attempts ]; do
-        if docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME ps | grep -q "${service}.*healthy"; then
+        if docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" ps | grep -q "${service}.*healthy"; then
             print_success "$service is healthy"
             return 0
         fi
@@ -106,22 +118,29 @@ main() {
     
     # Extra cleanup for stubborn resources
     print_status "Removing any conflicting resources..."
-    docker ps -a | grep -E "readur_(postgres|app|frontend)_test" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a | grep -E "readur_(postgres_test|app_test|frontend_test|frontend_dev)" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
     docker network ls | grep "readur_test_network" | awk '{print $1}' | xargs -r docker network rm 2>/dev/null || true
     
     # Load test environment variables
     if [ -f .env.test ]; then
         print_status "Loading test environment variables..."
-        export $(grep -v '^#' .env.test | xargs)
+        set -a
+        # shellcheck source=.env.test disable=SC1091
+        . ./.env.test
+        set +a
     fi
+
+    # One admin password for everything this script starts: compose interpolates it into
+    # readur_test, the integration tests read it, and the E2E suite logs in with it.
+    export ADMIN_PASSWORD="${ADMIN_PASSWORD:-$DEFAULT_ADMIN_PASSWORD}"
     
     # Build test images
     print_status "Building test images..."
-    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME build
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" build
     
     # Start test infrastructure
     print_status "Starting test infrastructure..."
-    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME up -d postgres_test
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" up -d postgres_test
     
     # Wait for PostgreSQL to be ready
     wait_for_service "postgres_test"
@@ -131,7 +150,7 @@ main() {
     
     # Start the application
     print_status "Starting Readur test instance..."
-    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME up -d readur_test
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" up -d readur_test
     
     # Wait for application to be ready
     wait_for_service "readur_test"
@@ -182,17 +201,16 @@ run_unit_tests() {
     
     # Run tests locally with test database URL and capture output
     local output
-    local exit_code
-    
+    local exit_code=0
+
     output=$(DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
         RUST_BACKTRACE=1 \
-        cargo test --lib --no-fail-fast 2>&1)
-    exit_code=$?
+        cargo test --lib --no-fail-fast 2>&1) || exit_code=$?
     
     # Display output in terminal
     echo "$output"
     
-    if [ $exit_code -eq 0 ]; then
+    if [ "$exit_code" -eq 0 ]; then
         print_success "Unit tests passed"
         save_output "unit" "$output" "passed"
     else
@@ -207,7 +225,8 @@ run_integration_tests() {
     print_status "Running integration tests..."
     
     # Create a temporary file for output
-    local output_file=$(mktemp)
+    local output_file
+    output_file=$(mktemp)
     local exit_code
     
     # Run integration tests with real-time output
@@ -218,19 +237,19 @@ run_integration_tests() {
     DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     TEST_DATABASE_URL="postgresql://readur_test:readur_test@localhost:5433/readur_test" \
     API_URL="http://localhost:8001" \
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-test-admin-password}" \
     RUST_BACKTRACE=1 \
     cargo test --test '*' --no-fail-fast 2>&1 | tee "$output_file"
     
     exit_code=${PIPESTATUS[0]}
     
     # Read the full output for saving
-    local output=$(cat "$output_file")
+    local output
+    output=$(cat "$output_file")
     rm -f "$output_file"
     
     echo ""
     
-    if [ $exit_code -eq 0 ]; then
+    if [ "$exit_code" -eq 0 ]; then
         print_success "Integration tests passed"
         save_output "integration" "$output" "passed"
     else
@@ -246,16 +265,15 @@ run_frontend_tests() {
     
     # Run frontend tests in a separate container
     local output
-    local exit_code
-    
-    output=$(docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME \
-        --profile frontend-tests run --rm frontend_test 2>&1)
-    exit_code=$?
+    local exit_code=0
+
+    output=$(docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" \
+        --profile frontend-tests run --rm frontend_test 2>&1) || exit_code=$?
     
     # Display output in terminal
     echo "$output"
     
-    if [ $exit_code -eq 0 ]; then
+    if [ "$exit_code" -eq 0 ]; then
         print_success "Frontend tests passed"
         save_output "frontend" "$output" "passed"
     else
@@ -268,67 +286,64 @@ run_frontend_tests() {
 # Function to run E2E tests
 run_e2e_tests() {
     print_status "Running E2E tests..."
-    
-    # Start frontend container for E2E tests
+
+    # Start frontend container for E2E tests. Its Vite dev server proxies /api to readur_test
+    # (VITE_API_PROXY_TARGET in docker-compose.test.yml).
     print_status "Starting frontend development server for E2E tests..."
-    docker compose -f $COMPOSE_FILE -p $COMPOSE_PROJECT_NAME --profile e2e-tests up -d frontend_dev
-    
-    # Wait for frontend to be ready
-    local max_attempts=30
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" --profile e2e-tests up -d frontend_dev
+
+    # The container runs `npm install` before Vite starts, so allow a few minutes.
+    local max_attempts=150
     local attempt=0
-    
+
     print_status "Waiting for frontend to be ready..."
     while [ $attempt -lt $max_attempts ]; do
-        if curl -f http://localhost:5174 >/dev/null 2>&1; then
-            print_success "Frontend is ready"
+        if curl -fsS http://localhost:5174/api/health >/dev/null 2>&1; then
+            print_success "Frontend is ready and proxies /api to the backend"
             break
         fi
-        
+
         attempt=$((attempt + 1))
         sleep 2
     done
-    
+
     if [ $attempt -eq $max_attempts ]; then
-        print_error "Frontend failed to start within expected time"
+        print_error "Frontend failed to start (or to proxy /api to readur_test) within expected time"
         exit 1
     fi
-    
-    # Run E2E tests
+
     local output
-    local exit_code
-    
-    # Run tests in frontend directory with proper environment variables
-    cd frontend
-    
-    # Install dependencies if not already installed
-    if [ ! -d "node_modules" ]; then
+    local exit_code=0
+
+    # Playwright runs on the host against the containerised dev server. The server was seeded
+    # with ADMIN_PASSWORD (exported in main) and the compose file's admin username, so the
+    # suite gets exactly those, whatever E2E_ADMIN_* the calling shell has.
+    # Installs run outside the captured subshell below, so a failure stops the run with its
+    # own error instead of surfacing as a failed test run (or not at all).
+    if [ ! -d "frontend/node_modules" ]; then
         print_status "Installing frontend dependencies..."
-        npm install
+        (cd frontend && npm ci) || {
+            print_error "npm ci failed in frontend/"
+            exit 1
+        }
     fi
-    
-    # Install Playwright browsers if not already installed
-    if [ ! -d "node_modules/@playwright" ]; then
-        print_status "Installing Playwright browsers..."
-        npx playwright install --with-deps
-    fi
-    
-    # Set environment variables for E2E tests
-    export PLAYWRIGHT_BASE_URL="http://localhost:5174"
-    export API_BASE_URL="http://localhost:8001"
-    # Seeded admin from docker-compose.test.yml; the suite creates test admins through it
-    export E2E_ADMIN_USERNAME="${E2E_ADMIN_USERNAME:-admin}"
-    export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-test-admin-password}"
-    
-    output=$(npm run test:e2e 2>&1)
-    exit_code=$?
-    
-    # Return to root directory
-    cd ..
-    
+    (cd frontend && install_playwright_browsers) || {
+        print_error "Could not prepare the Playwright browsers (see the error above)"
+        exit 1
+    }
+
+    output=$(
+        cd frontend || exit 1
+        PLAYWRIGHT_BASE_URL="http://localhost:5174" \
+            E2E_ADMIN_USERNAME="$ADMIN_USERNAME_IN_COMPOSE" \
+            E2E_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+            npm run test:e2e -- --project=chromium --project=chromium-websocket 2>&1
+    ) || exit_code=$?
+
     # Display output in terminal
     echo "$output"
-    
-    if [ $exit_code -eq 0 ]; then
+
+    if [ "$exit_code" -eq 0 ]; then
         print_success "E2E tests passed"
         save_output "e2e" "$output" "passed"
     else
@@ -341,6 +356,7 @@ run_e2e_tests() {
 # Function to generate detailed test report
 generate_test_report() {
     local report_file="${TEST_RESULTS_DIR}/reports/${TIMESTAMP}_test_report.html"
+    mkdir -p "${TEST_RESULTS_DIR}/reports"
     
     print_status "Generating test report..."
     
@@ -384,32 +400,19 @@ EOF
     local passed_tests=0
     local failed_tests=0
     
-    # Count test results from saved files
-    if ls "${TEST_RESULTS_DIR}"/unit/*_passed.log > /dev/null 2>&1; then
-        passed_tests=$((passed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    if ls "${TEST_RESULTS_DIR}"/unit/*_failed.log > /dev/null 2>&1; then
-        failed_tests=$((failed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    if ls "${TEST_RESULTS_DIR}"/integration/*_passed.log > /dev/null 2>&1; then
-        passed_tests=$((passed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    if ls "${TEST_RESULTS_DIR}"/integration/*_failed.log > /dev/null 2>&1; then
-        failed_tests=$((failed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    if ls "${TEST_RESULTS_DIR}"/frontend/*_passed.log > /dev/null 2>&1; then
-        passed_tests=$((passed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    if ls "${TEST_RESULTS_DIR}"/frontend/*_failed.log > /dev/null 2>&1; then
-        failed_tests=$((failed_tests + 1))
-        total_tests=$((total_tests + 1))
-    fi
-    
+    # Count this run's results (earlier runs' logs in the same directories are ignored)
+    local test_type
+    for test_type in unit integration frontend e2e; do
+        if ls "${TEST_RESULTS_DIR}/${test_type}/${TIMESTAMP}"_*_passed.log > /dev/null 2>&1; then
+            passed_tests=$((passed_tests + 1))
+            total_tests=$((total_tests + 1))
+        fi
+        if ls "${TEST_RESULTS_DIR}/${test_type}/${TIMESTAMP}"_*_failed.log > /dev/null 2>&1; then
+            failed_tests=$((failed_tests + 1))
+            total_tests=$((total_tests + 1))
+        fi
+    done
+
     cat >> "$report_file" << EOF
         <div class="summary">
             <div class="summary-box">
@@ -428,10 +431,11 @@ EOF
 EOF
 
     # Add test results sections
-    for test_type in unit integration frontend; do
-        for log_file in "${TEST_RESULTS_DIR}/${test_type}"/${TIMESTAMP}_*.log; do
+    for test_type in unit integration frontend e2e; do
+        for log_file in "${TEST_RESULTS_DIR}/${test_type}/${TIMESTAMP}"_*.log; do
             if [ -f "$log_file" ]; then
-                local basename=$(basename "$log_file")
+                local basename
+                basename=$(basename "$log_file")
                 local status=""
                 if [[ "$basename" == *"_passed.log" ]]; then
                     status="passed"
@@ -442,7 +446,7 @@ EOF
                 cat >> "$report_file" << EOF
         <div class="test-section">
             <div class="test-title">
-                $(echo "${test_type^}" | sed 's/_/ /g') Tests 
+                ${test_type^} Tests
                 <span class="status-$status">[$status]</span>
             </div>
             <div class="log-output">
@@ -475,10 +479,11 @@ Failed: $failed_tests
 Individual Results:
 EOF
 
-    for test_type in unit integration frontend; do
-        for log_file in "${TEST_RESULTS_DIR}/${test_type}"/${TIMESTAMP}_*.log; do
+    for test_type in unit integration frontend e2e; do
+        for log_file in "${TEST_RESULTS_DIR}/${test_type}/${TIMESTAMP}"_*.log; do
             if [ -f "$log_file" ]; then
-                local basename=$(basename "$log_file")
+                local basename
+                basename=$(basename "$log_file")
                 local status=""
                 if [[ "$basename" == *"_passed.log" ]]; then
                     status="✓ PASSED"
@@ -490,9 +495,11 @@ EOF
         done
     done
     
-    echo "" >> "$summary_file"
-    echo "Detailed logs available in: ${TEST_RESULTS_DIR}/" >> "$summary_file"
-    echo "HTML Report: $report_file" >> "$summary_file"
+    {
+        echo ""
+        echo "Detailed logs available in: ${TEST_RESULTS_DIR}/"
+        echo "HTML Report: $report_file"
+    } >> "$summary_file"
     
     print_success "Summary saved: $summary_file"
 }

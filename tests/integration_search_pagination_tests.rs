@@ -7,9 +7,8 @@
 mod tests {
     use anyhow::Result;
     use chrono::Utc;
-    use readur::models::{CreateUser, Document, SearchRequest, UserRole};
+    use readur::models::{CreateUser, Document, FuzzyThreshold, SearchRequest, UserRole};
     use readur::test_utils::TestContext;
-    use sqlx;
     use std::collections::HashSet;
     use uuid::Uuid;
 
@@ -115,7 +114,12 @@ mod tests {
             };
 
             let count = db
-                .count_search_documents(user.id, UserRole::User, &request)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             let results = db.search_documents(user.id, &request).await?;
 
@@ -166,7 +170,12 @@ mod tests {
                     ..Default::default()
                 };
                 let count = db
-                    .count_search_documents(user.id, UserRole::User, &request)
+                    .count_search_documents(
+                        user.id,
+                        UserRole::User,
+                        &request,
+                        FuzzyThreshold::default(),
+                    )
                     .await?;
                 assert_eq!(
                     count, 20,
@@ -277,7 +286,12 @@ mod tests {
             };
 
             let count = db
-                .count_search_documents(user.id, UserRole::User, &request)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(
                 count, 10,
@@ -298,7 +312,12 @@ mod tests {
             };
 
             let count_pdf = db
-                .count_search_documents(user.id, UserRole::User, &request_pdf)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request_pdf,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count_pdf, 5, "Count should be 5 (only PDFs)");
 
@@ -344,7 +363,12 @@ mod tests {
             };
 
             let count = db
-                .count_search_documents(user.id, UserRole::User, &request)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             let results = db.search_documents(user.id, &request).await?;
 
@@ -391,7 +415,12 @@ mod tests {
             };
 
             let count = db
-                .count_search_documents(user.id, UserRole::User, &request)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             let results = db.search_documents(user.id, &request).await?;
 
@@ -451,7 +480,12 @@ mod tests {
                 };
 
                 let count = db
-                    .count_search_documents(user.id, UserRole::User, &request)
+                    .count_search_documents(
+                        user.id,
+                        UserRole::User,
+                        &request,
+                        FuzzyThreshold::default(),
+                    )
                     .await?;
                 assert_eq!(
                     count, 25,
@@ -510,19 +544,34 @@ mod tests {
 
             // User A should see only their 10 documents
             let count_a = db
-                .count_search_documents(user_a.id, UserRole::User, &request)
+                .count_search_documents(
+                    user_a.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count_a, 10, "User A should see only their 10 documents");
 
             // User B should see only their 5 documents
             let count_b = db
-                .count_search_documents(user_b.id, UserRole::User, &request)
+                .count_search_documents(
+                    user_b.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count_b, 5, "User B should see only their 5 documents");
 
             // Admin should see all 15 documents
             let count_admin = db
-                .count_search_documents(admin.id, UserRole::Admin, &request)
+                .count_search_documents(
+                    admin.id,
+                    UserRole::Admin,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count_admin, 15, "Admin should see all 15 documents");
 
@@ -571,7 +620,12 @@ mod tests {
             };
 
             let count_apple = db
-                .count_search_documents(user.id, UserRole::User, &request_apple)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request_apple,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             let results_apple = db.search_documents(user.id, &request_apple).await?;
 
@@ -592,7 +646,12 @@ mod tests {
             };
 
             let count_orange = db
-                .count_search_documents(user.id, UserRole::User, &request_orange)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request_orange,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count_orange, 4, "Should find 4 documents with 'orange'");
 
@@ -661,7 +720,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let count = db.count_search_documents(user.id, UserRole::User, &request).await?;
+            let count = db.count_search_documents(user.id, UserRole::User, &request, FuzzyThreshold::default()).await?;
             let results = db.search_documents(user.id, &request).await?;
 
             assert_eq!(count, 6, "Count should be 6 (only labeled docs), not 10 (all docs)");
@@ -680,7 +739,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let count_none = db.count_search_documents(user.id, UserRole::User, &request_none).await?;
+            let count_none = db.count_search_documents(user.id, UserRole::User, &request_none, FuzzyThreshold::default()).await?;
             assert_eq!(count_none, 0, "Count should be 0 for non-existent label");
 
             Ok(())
@@ -726,7 +785,12 @@ mod tests {
             };
 
             let count = db
-                .count_search_documents(user.id, UserRole::User, &request)
+                .count_search_documents(
+                    user.id,
+                    UserRole::User,
+                    &request,
+                    FuzzyThreshold::default(),
+                )
                 .await?;
             assert_eq!(count, 4, "Should count 4 PNG images with empty query");
 

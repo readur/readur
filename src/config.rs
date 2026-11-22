@@ -3,21 +3,28 @@ use std::env;
 
 use crate::models::S3SourceConfig;
 
+mod logged;
+mod mcp;
 mod parsing;
-use parsing::{env_flag, env_list, read_jwt_setting, normalize_cors_origin};
-pub use parsing::{validate_jwt_secret, DEFAULT_FILE_STABILITY_CHECK_MS, DEFAULT_WATCH_INTERVAL_SECONDS, MIN_JWT_SECRET_BYTES};
-
-/// S3 storage is enabled by S3_ENABLED=true or the documented STORAGE_BACKEND=s3.
-fn s3_storage_enabled(s3_enabled: Option<&str>, storage_backend: Option<&str>) -> bool {
-    s3_enabled.map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false)
-        || storage_backend.map(|v| v.trim().eq_ignore_ascii_case("s3")).unwrap_or(false)
-}
-
-/// S3_FORCE_PATH_STYLE with documented legacy alias S3_PATH_STYLE.
-/// None (unset) means path-style for custom endpoints, virtual-hosted otherwise.
-fn parse_force_path_style(primary: Option<&str>, legacy: Option<&str>) -> Option<bool> {
-    primary.or(legacy).map(|v| v.trim().eq_ignore_ascii_case("true"))
-}
+mod security;
+mod server;
+mod storage;
+mod temp;
+mod validation;
+use logged::{
+    logged_number, logged_optional, logged_optional_number, logged_string, logged_switch,
+    logged_tristate,
+};
+pub use mcp::McpConfig;
+use parsing::read_jwt_setting;
+pub use parsing::{
+    validate_jwt_secret, DEFAULT_FILE_STABILITY_CHECK_MS, DEFAULT_WATCH_INTERVAL_SECONDS,
+    MIN_JWT_SECRET_BYTES,
+};
+pub use security::SecurityConfig;
+#[cfg(test)]
+use storage::{parse_force_path_style, s3_storage_enabled};
+pub use temp::{resolve_temp_dir, temp_dir, temp_dir_string};
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -32,7 +39,7 @@ pub struct Config {
     pub watch_interval_seconds: Option<u64>,
     pub file_stability_check_ms: Option<u64>,
     pub max_file_age_hours: Option<u64>,
-    
+
     // OCR Configuration
     pub ocr_language: String,
     pub concurrent_ocr_jobs: usize,
@@ -42,9 +49,7 @@ pub struct Config {
     pub max_office_document_size_mb: u64,
 
     // Performance
-    pub memory_limit_mb: usize,
-    pub cpu_priority: String,
-    
+
     // OIDC Configuration
     pub oidc_enabled: bool,
     pub oidc_client_id: Option<String>,
@@ -55,7 +60,7 @@ pub struct Config {
 
     // Authentication Configuration
     pub allow_local_auth: Option<bool>,
-    
+
     // S3 Configuration
     pub s3_enabled: bool,
     pub s3_config: Option<S3SourceConfig>,
@@ -65,127 +70,9 @@ pub struct Config {
 
     // Authentication / authorization hardening knobs
     pub security: SecurityConfig,
-}
 
-/// Authentication and authorization settings. `Default` is the most
-/// restrictive configuration.
-#[derive(Clone)]
-pub struct SecurityConfig {
-    /// Allow unauthenticated self-registration (`ALLOW_REGISTRATION`).
-    pub allow_registration: bool,
-    /// Self-registered accounts start disabled until an admin enables them.
-    /// Always on in production; only test harnesses turn it off.
-    pub registration_requires_approval: bool,
-    /// Lifetime of issued session tokens (`JWT_TTL_HOURS`).
-    pub jwt_ttl_hours: i64,
-    /// Canonicalized roots under which local-folder sources may point
-    /// (`LOCAL_SOURCE_ALLOWED_PATHS`). Empty means admin-only, any path.
-    pub local_source_allowed_paths: Vec<std::path::PathBuf>,
-    /// Reverse proxies whose `X-Forwarded-For` is trusted (`TRUSTED_PROXIES`).
-    pub trusted_proxies: Vec<ipnet::IpNet>,
-    /// Origins allowed to make cross-origin requests (`CORS_ALLOWED_ORIGINS`).
-    pub cors_allowed_origins: Vec<String>,
-    /// Bearer token accepted on `/metrics` (`METRICS_TOKEN`).
-    pub metrics_token: Option<String>,
-    /// Link an OIDC identity to an existing local account with the same
-    /// verified email (`OIDC_LINK_EXISTING_BY_EMAIL`).
-    pub oidc_link_existing_by_email: bool,
-}
-
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            allow_registration: false,
-            registration_requires_approval: true,
-            jwt_ttl_hours: 12,
-            local_source_allowed_paths: Vec::new(),
-            trusted_proxies: Vec::new(),
-            cors_allowed_origins: Vec::new(),
-            metrics_token: None,
-            oidc_link_existing_by_email: false,
-        }
-    }
-}
-
-impl std::fmt::Debug for SecurityConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SecurityConfig")
-            .field("allow_registration", &self.allow_registration)
-            .field("registration_requires_approval", &self.registration_requires_approval)
-            .field("jwt_ttl_hours", &self.jwt_ttl_hours)
-            .field("local_source_allowed_paths", &self.local_source_allowed_paths)
-            .field("trusted_proxies", &self.trusted_proxies)
-            .field("cors_allowed_origins", &self.cors_allowed_origins)
-            .field("metrics_token", &self.metrics_token.as_ref().map(|_| "***"))
-            .field("oidc_link_existing_by_email", &self.oidc_link_existing_by_email)
-            .finish()
-    }
-}
-
-impl SecurityConfig {
-    pub fn from_env() -> Result<Self> {
-        let defaults = Self::default();
-
-        let allow_registration = env_flag("ALLOW_REGISTRATION", defaults.allow_registration)?;
-        println!("🔑 ALLOW_REGISTRATION: {}", allow_registration);
-
-        let jwt_ttl_hours = match env::var("JWT_TTL_HOURS") {
-            Ok(v) => match v.trim().parse::<i64>() {
-                Ok(h) if (1..=24 * 30).contains(&h) => h,
-                _ => return Err(anyhow::anyhow!("JWT_TTL_HOURS must be an integer between 1 and 720")),
-            },
-            Err(_) => defaults.jwt_ttl_hours,
-        };
-        println!("🔑 JWT_TTL_HOURS: {}", jwt_ttl_hours);
-
-        let mut local_source_allowed_paths = Vec::new();
-        for raw in env_list("LOCAL_SOURCE_ALLOWED_PATHS") {
-            let canonical = std::path::Path::new(&raw).canonicalize().map_err(|e| {
-                anyhow::anyhow!("LOCAL_SOURCE_ALLOWED_PATHS entry '{}' is not accessible: {}", raw, e)
-            })?;
-            local_source_allowed_paths.push(canonical);
-        }
-        if local_source_allowed_paths.is_empty() {
-            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: not set (local folder sources are admin-only)");
-        } else {
-            println!("📂 LOCAL_SOURCE_ALLOWED_PATHS: {:?}", local_source_allowed_paths);
-        }
-
-        let proxy_setting = env::var("TRUSTED_PROXIES").ok();
-        let proxy_ranges = crate::utils::client_ip::parse_proxy_ranges(proxy_setting.as_deref())?;
-        println!("🌐 TRUSTED_PROXIES: {}", crate::utils::client_ip::describe_proxy_ranges(proxy_setting.as_deref()));
-
-        let cors_allowed_origins = env_list("CORS_ALLOWED_ORIGINS")
-            .iter()
-            .map(|origin| normalize_cors_origin(origin))
-            .collect::<Result<Vec<_>>>()?;
-        println!("🌐 CORS_ALLOWED_ORIGINS: {:?}", cors_allowed_origins);
-
-        let metrics_token = env::var("METRICS_TOKEN").ok().filter(|t| !t.trim().is_empty());
-        if let Some(token) = &metrics_token {
-            if token.len() < 16 {
-                return Err(anyhow::anyhow!("METRICS_TOKEN must be at least 16 characters"));
-            }
-        }
-        println!(
-            "📈 METRICS_TOKEN: {}",
-            if metrics_token.is_some() { "configured" } else { "not set (/metrics requires an admin session)" }
-        );
-
-        let oidc_link_existing_by_email =
-            env_flag("OIDC_LINK_EXISTING_BY_EMAIL", defaults.oidc_link_existing_by_email)?;
-
-        Ok(Self {
-            allow_registration,
-            registration_requires_approval: true,
-            jwt_ttl_hours,
-            local_source_allowed_paths,
-            trusted_proxies: proxy_ranges,
-            cors_allowed_origins,
-            metrics_token,
-            oidc_link_existing_by_email,
-        })
-    }
+    // Model Context Protocol endpoint (/api/mcp)
+    pub mcp: McpConfig,
 }
 
 impl Config {
@@ -195,847 +82,118 @@ impl Config {
             Ok(path) => println!("🔧 Loaded environment variables from: {}", path.display()),
             Err(_) => println!("🔧 No .env file found, using system environment variables"),
         }
-        
+
         // Log all environment variable loading with detailed information
         println!("\n📋 CONFIGURATION LOADING:");
         println!("{}", "=".repeat(50));
-        
-        // Database Configuration
-        let database_url = match env::var("DATABASE_URL") {
-            Ok(val) => {
-                println!("✅ DATABASE_URL: configured (loaded from env)");
-                val
-            }
-            Err(_) => {
-                // Try to construct from individual env vars
-                let db_host = env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_string());
-                let db_port = env::var("POSTGRES_PORT").unwrap_or_else(|_| "5432".to_string());
-                let db_name = env::var("POSTGRES_DB").unwrap_or_else(|_| "readur".to_string());
-                let db_user = env::var("POSTGRES_USER").unwrap_or_else(|_| "readur".to_string());
-                let db_password = env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "readur".to_string());
 
-                // Check if any individual env vars were set
-                let using_individual_vars = env::var("POSTGRES_HOST").is_ok()
-                    || env::var("POSTGRES_PORT").is_ok()
-                    || env::var("POSTGRES_DB").is_ok()
-                    || env::var("POSTGRES_USER").is_ok()
-                    || env::var("POSTGRES_PASSWORD").is_ok();
-
-                if using_individual_vars {
-                    println!("📊 Constructing DATABASE_URL from individual environment variables:");
-                    if env::var("POSTGRES_HOST").is_ok() {
-                        println!("  ✅ POSTGRES_HOST: {}", db_host);
-                    } else {
-                        println!("  ⚠️  POSTGRES_HOST: {} (using default)", db_host);
-                    }
-                    if env::var("POSTGRES_PORT").is_ok() {
-                        println!("  ✅ POSTGRES_PORT: {}", db_port);
-                    } else {
-                        println!("  ⚠️  POSTGRES_PORT: {} (using default)", db_port);
-                    }
-                    if env::var("POSTGRES_DB").is_ok() {
-                        println!("  ✅ POSTGRES_DB: {}", db_name);
-                    } else {
-                        println!("  ⚠️  POSTGRES_DB: {} (using default)", db_name);
-                    }
-                    if env::var("POSTGRES_USER").is_ok() {
-                        println!("  ✅ POSTGRES_USER: {}", db_user);
-                    } else {
-                        println!("  ⚠️  POSTGRES_USER: {} (using default)", db_user);
-                    }
-                    if env::var("POSTGRES_PASSWORD").is_ok() {
-                        println!("  ✅ POSTGRES_PASSWORD: ***hidden*** ({} chars)", db_password.len());
-                    } else {
-                        println!("  ⚠️  POSTGRES_PASSWORD: using default");
-                    }
-                }
-
-                let constructed_url = format!(
-                    "postgresql://{}:{}@{}:{}/{}",
-                    db_user, db_password, db_host, db_port, db_name
-                );
-
-                if using_individual_vars {
-                    println!("🔗 Constructed DATABASE_URL: postgresql://{}:***@{}:{}/{}",
-                             db_user, db_host, db_port, db_name);
-                } else {
-                    println!("⚠️  DATABASE_URL: postgresql://readur:***@localhost:5432/readur (using all defaults - no env vars set)");
-                }
-
-                constructed_url
-            }
-        };
-        
+        let database_url = server::database_url();
         // S3 storage can be enabled via S3_ENABLED=true or the documented
         // STORAGE_BACKEND=s3 alias; computed once and reused below.
-        let s3_storage_on = s3_storage_enabled(
+        let s3_storage_on = storage::s3_storage_enabled(
             env::var("S3_ENABLED").ok().as_deref(),
             env::var("STORAGE_BACKEND").ok().as_deref(),
         );
 
         let config = Config {
             database_url,
-            server_address: {
-                // Support both SERVER_ADDRESS (full address) and SERVER_PORT (just port)
-                match env::var("SERVER_ADDRESS") {
-                    Ok(addr) => {
-                        println!("✅ SERVER_ADDRESS: {} (loaded from env)", addr);
-                        addr
-                    }
-                    Err(_) => {
-                        let host = match env::var("SERVER_HOST") {
-                            Ok(h) => {
-                                println!("✅ SERVER_HOST: {} (loaded from env)", h);
-                                h
-                            }
-                            Err(_) => {
-                                let default_host = "0.0.0.0".to_string();
-                                println!("⚠️  SERVER_HOST: {} (using default - env var not set)", default_host);
-                                default_host
-                            }
-                        };
-                        
-                        let port = match env::var("SERVER_PORT") {
-                            Ok(p) => {
-                                println!("✅ SERVER_PORT: {} (loaded from env)", p);
-                                p
-                            }
-                            Err(_) => {
-                                let default_port = "8000".to_string();
-                                println!("⚠️  SERVER_PORT: {} (using default - env var not set)", default_port);
-                                default_port
-                            }
-                        };
-                        
-                        let combined_address = format!("{}:{}", host, port);
-                        println!("🔗 Combined server_address: {}", combined_address);
-                        combined_address
-                    }
-                }
-            },
+            server_address: server::server_address(),
             jwt_secret: read_jwt_setting()?,
-            upload_path: match env::var("UPLOAD_PATH") {
-                Ok(path) => {
-                    println!("✅ UPLOAD_PATH: {} (loaded from env)", path);
-                    path
-                }
-                Err(_) => {
-                    let default_path = "./uploads".to_string();
-                    println!("⚠️  UPLOAD_PATH: {} (using default - env var not set)", default_path);
-                    default_path
-                }
-            },
-            watch_folder: match env::var("WATCH_FOLDER") {
-                Ok(folder) => {
-                    println!("✅ WATCH_FOLDER: {} (loaded from env)", folder);
-                    folder
-                }
-                Err(_) => {
-                    let default_folder = "./watch".to_string();
-                    println!("⚠️  WATCH_FOLDER: {} (using default - env var not set)", default_folder);
-                    default_folder
-                }
-            },
-            user_watch_base_dir: match env::var("USER_WATCH_BASE_DIR") {
-                Ok(dir) => {
-                    println!("✅ USER_WATCH_BASE_DIR: {} (loaded from env)", dir);
-                    dir
-                }
-                Err(_) => {
-                    let default_dir = "./user_watch".to_string();
-                    println!("⚠️  USER_WATCH_BASE_DIR: {} (using default - env var not set)", default_dir);
-                    default_dir
-                }
-            },
-            enable_per_user_watch: match env::var("ENABLE_PER_USER_WATCH") {
-                Ok(val) => match val.to_lowercase().as_str() {
-                    "true" | "1" | "yes" | "on" => {
-                        println!("✅ ENABLE_PER_USER_WATCH: true (loaded from env)");
-                        true
-                    }
-                    _ => {
-                        println!("✅ ENABLE_PER_USER_WATCH: false (loaded from env)");
-                        false
-                    }
-                },
-                Err(_) => {
-                    println!("⚠️  ENABLE_PER_USER_WATCH: false (using default - env var not set)");
-                    false
-                }
-            },
-            allowed_file_types: {
-                let file_types_str = match env::var("ALLOWED_FILE_TYPES") {
-                    Ok(types) => {
-                        println!("✅ ALLOWED_FILE_TYPES: {} (loaded from env)", types);
-                        types
-                    }
-                    Err(_) => {
-                        let default_types = "pdf,txt,doc,docx,png,jpg,jpeg".to_string();
-                        println!("⚠️  ALLOWED_FILE_TYPES: {} (using default - env var not set)", default_types);
-                        default_types
-                    }
-                };
-                
-                let types_vec: Vec<String> = file_types_str
-                    .split(',')
-                    .map(|s| s.trim().to_lowercase())
-                    .collect();
-                    
-                println!("📄 Parsed file types: {:?}", types_vec);
-                types_vec
-            },
+            upload_path: logged_string("UPLOAD_PATH", env::var("UPLOAD_PATH"), "./uploads"),
+            watch_folder: logged_string("WATCH_FOLDER", env::var("WATCH_FOLDER"), "./watch"),
+            user_watch_base_dir: logged_string(
+                "USER_WATCH_BASE_DIR",
+                env::var("USER_WATCH_BASE_DIR"),
+                "./user_watch",
+            ),
+            enable_per_user_watch: logged_switch(
+                "ENABLE_PER_USER_WATCH",
+                env::var("ENABLE_PER_USER_WATCH"),
+            ),
+            allowed_file_types: server::allowed_file_types(),
             // Watcher Configuration
-            watch_interval_seconds: {
-                match env::var("WATCH_INTERVAL_SECONDS") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ WATCH_INTERVAL_SECONDS: {} (loaded from env)", parsed);
-                            Some(parsed)
-                        }
-                        Err(e) => {
-                            println!("❌ WATCH_INTERVAL_SECONDS: Invalid value '{}' - {}, using default", val, e);
-                            None
-                        }
-                    },
-                    Err(_) => {
-                        println!("⚠️  WATCH_INTERVAL_SECONDS: Not set, using default behavior");
-                        None
-                    }
-                }
-            },
-            file_stability_check_ms: {
-                match env::var("FILE_STABILITY_CHECK_MS") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ FILE_STABILITY_CHECK_MS: {} (loaded from env)", parsed);
-                            Some(parsed)
-                        }
-                        Err(e) => {
-                            println!("❌ FILE_STABILITY_CHECK_MS: Invalid value '{}' - {}, using default", val, e);
-                            None
-                        }
-                    },
-                    Err(_) => {
-                        println!("⚠️  FILE_STABILITY_CHECK_MS: Not set, using default behavior");
-                        None
-                    }
-                }
-            },
-            max_file_age_hours: {
-                match env::var("MAX_FILE_AGE_HOURS") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ MAX_FILE_AGE_HOURS: {} (loaded from env)", parsed);
-                            Some(parsed)
-                        }
-                        Err(e) => {
-                            println!("❌ MAX_FILE_AGE_HOURS: Invalid value '{}' - {}, using unlimited", val, e);
-                            None
-                        }
-                    },
-                    Err(_) => {
-                        println!("⚠️  MAX_FILE_AGE_HOURS: Not set, files will not expire");
-                        None
-                    }
-                }
-            },
-                
+            watch_interval_seconds: logged_optional_number(
+                "WATCH_INTERVAL_SECONDS",
+                env::var("WATCH_INTERVAL_SECONDS"),
+                "using default",
+                "Not set, using default behavior",
+            ),
+            file_stability_check_ms: logged_optional_number(
+                "FILE_STABILITY_CHECK_MS",
+                env::var("FILE_STABILITY_CHECK_MS"),
+                "using default",
+                "Not set, using default behavior",
+            ),
+            max_file_age_hours: logged_optional_number(
+                "MAX_FILE_AGE_HOURS",
+                env::var("MAX_FILE_AGE_HOURS"),
+                "using unlimited",
+                "Not set, files will not expire",
+            ),
+
             // OCR Configuration
-            ocr_language: match env::var("OCR_LANGUAGE") {
-                Ok(lang) => {
-                    println!("✅ OCR_LANGUAGE: {} (loaded from env)", lang);
-                    lang
-                }
-                Err(_) => {
-                    let default_lang = "eng".to_string();
-                    println!("⚠️  OCR_LANGUAGE: {} (using default - env var not set)", default_lang);
-                    default_lang
-                }
-            },
-            concurrent_ocr_jobs: {
-                match env::var("CONCURRENT_OCR_JOBS") {
-                    Ok(val) => match val.parse::<usize>() {
-                        Ok(parsed) => {
-                            println!("✅ CONCURRENT_OCR_JOBS: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_jobs = 4;
-                            println!("❌ CONCURRENT_OCR_JOBS: Invalid value '{}' - {}, using default {}", val, e, default_jobs);
-                            default_jobs
-                        }
-                    },
-                    Err(_) => {
-                        let default_jobs = 4;
-                        println!("⚠️  CONCURRENT_OCR_JOBS: {} (using default - env var not set)", default_jobs);
-                        default_jobs
-                    }
-                }
-            },
-            ocr_timeout_seconds: {
-                match env::var("OCR_TIMEOUT_SECONDS") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ OCR_TIMEOUT_SECONDS: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_timeout = 300;
-                            println!("❌ OCR_TIMEOUT_SECONDS: Invalid value '{}' - {}, using default {}", val, e, default_timeout);
-                            default_timeout
-                        }
-                    },
-                    Err(_) => {
-                        let default_timeout = 300;
-                        println!("⚠️  OCR_TIMEOUT_SECONDS: {} (using default - env var not set)", default_timeout);
-                        default_timeout
-                    }
-                }
-            },
-            max_file_size_mb: {
-                match env::var("MAX_FILE_SIZE_MB") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ MAX_FILE_SIZE_MB: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_size = 50;
-                            println!("❌ MAX_FILE_SIZE_MB: Invalid value '{}' - {}, using default {}", val, e, default_size);
-                            default_size
-                        }
-                    },
-                    Err(_) => {
-                        let default_size = 50;
-                        println!("⚠️  MAX_FILE_SIZE_MB: {} (using default - env var not set)", default_size);
-                        default_size
-                    }
-                }
-            },
-            max_pdf_size_mb: {
-                match env::var("MAX_PDF_SIZE_MB") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ MAX_PDF_SIZE_MB: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_size = 100;
-                            println!("❌ MAX_PDF_SIZE_MB: Invalid value '{}' - {}, using default {}", val, e, default_size);
-                            default_size
-                        }
-                    },
-                    Err(_) => {
-                        let default_size = 100;
-                        println!("⚠️  MAX_PDF_SIZE_MB: {} (using default - env var not set)", default_size);
-                        default_size
-                    }
-                }
-            },
-            max_office_document_size_mb: {
-                match env::var("MAX_OFFICE_DOCUMENT_SIZE_MB") {
-                    Ok(val) => match val.parse::<u64>() {
-                        Ok(parsed) => {
-                            println!("✅ MAX_OFFICE_DOCUMENT_SIZE_MB: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_size = 100;
-                            println!("❌ MAX_OFFICE_DOCUMENT_SIZE_MB: Invalid value '{}' - {}, using default {}", val, e, default_size);
-                            default_size
-                        }
-                    },
-                    Err(_) => {
-                        let default_size = 100;
-                        println!("⚠️  MAX_OFFICE_DOCUMENT_SIZE_MB: {} (using default - env var not set)", default_size);
-                        default_size
-                    }
-                }
-            },
+            ocr_language: logged_string("OCR_LANGUAGE", env::var("OCR_LANGUAGE"), "eng"),
+            concurrent_ocr_jobs: logged_number(
+                "CONCURRENT_OCR_JOBS",
+                env::var("CONCURRENT_OCR_JOBS"),
+                4,
+            ),
+            ocr_timeout_seconds: logged_number(
+                "OCR_TIMEOUT_SECONDS",
+                env::var("OCR_TIMEOUT_SECONDS"),
+                300,
+            ),
+            max_file_size_mb: logged_number("MAX_FILE_SIZE_MB", env::var("MAX_FILE_SIZE_MB"), 50),
+            max_pdf_size_mb: logged_number("MAX_PDF_SIZE_MB", env::var("MAX_PDF_SIZE_MB"), 100),
+            max_office_document_size_mb: logged_number(
+                "MAX_OFFICE_DOCUMENT_SIZE_MB",
+                env::var("MAX_OFFICE_DOCUMENT_SIZE_MB"),
+                100,
+            ),
 
             // Performance Configuration
-            memory_limit_mb: {
-                match env::var("MEMORY_LIMIT_MB") {
-                    Ok(val) => match val.parse::<usize>() {
-                        Ok(parsed) => {
-                            println!("✅ MEMORY_LIMIT_MB: {} (loaded from env)", parsed);
-                            parsed
-                        }
-                        Err(e) => {
-                            let default_memory = 512;
-                            println!("❌ MEMORY_LIMIT_MB: Invalid value '{}' - {}, using default {}", val, e, default_memory);
-                            default_memory
-                        }
-                    },
-                    Err(_) => {
-                        let default_memory = 512;
-                        println!("⚠️  MEMORY_LIMIT_MB: {} (using default - env var not set)", default_memory);
-                        default_memory
-                    }
-                }
-            },
-            cpu_priority: match env::var("CPU_PRIORITY") {
-                Ok(priority) => {
-                    println!("✅ CPU_PRIORITY: {} (loaded from env)", priority);
-                    priority
-                }
-                Err(_) => {
-                    let default_priority = "normal".to_string();
-                    println!("⚠️  CPU_PRIORITY: {} (using default - env var not set)", default_priority);
-                    default_priority
-                }
-            },
-            
+
             // OIDC Configuration
-            oidc_enabled: match env::var("OIDC_ENABLED") {
-                Ok(val) => match val.to_lowercase().as_str() {
-                    "true" | "1" | "yes" | "on" => {
-                        println!("✅ OIDC_ENABLED: true (loaded from env)");
-                        true
-                    }
-                    _ => {
-                        println!("✅ OIDC_ENABLED: false (loaded from env)");
-                        false
-                    }
-                },
-                Err(_) => {
-                    println!("⚠️  OIDC_ENABLED: false (using default - env var not set)");
-                    false
-                }
-            },
-            oidc_client_id: match env::var("OIDC_CLIENT_ID") {
-                Ok(client_id) => {
-                    println!("✅ OIDC_CLIENT_ID: {} (loaded from env)", client_id);
-                    Some(client_id)
-                }
-                Err(_) => {
-                    println!("⚠️  OIDC_CLIENT_ID: Not set");
-                    None
-                }
-            },
-            oidc_client_secret: match env::var("OIDC_CLIENT_SECRET") {
-                Ok(secret) => {
-                    println!("✅ OIDC_CLIENT_SECRET: ***hidden*** (loaded from env, {} chars)", secret.len());
-                    Some(secret)
-                }
-                Err(_) => {
-                    println!("⚠️  OIDC_CLIENT_SECRET: Not set");
-                    None
-                }
-            },
-            oidc_issuer_url: match env::var("OIDC_ISSUER_URL") {
-                Ok(url) => {
-                    println!("✅ OIDC_ISSUER_URL: {} (loaded from env)", url);
-                    Some(url)
-                }
-                Err(_) => {
-                    println!("⚠️  OIDC_ISSUER_URL: Not set");
-                    None
-                }
-            },
-            oidc_redirect_uri: match env::var("OIDC_REDIRECT_URI") {
-                Ok(uri) => {
-                    println!("✅ OIDC_REDIRECT_URI: {} (loaded from env)", uri);
-                    Some(uri)
-                }
-                Err(_) => {
-                    println!("⚠️  OIDC_REDIRECT_URI: Not set");
-                    None
-                }
-            },
-            oidc_auto_register: match env::var("OIDC_AUTO_REGISTER") {
-                Ok(val) => match val.to_lowercase().as_str() {
-                    "true" | "1" | "yes" | "on" => {
-                        println!("✅ OIDC_AUTO_REGISTER: true (loaded from env)");
-                        Some(true)
-                    }
-                    "false" | "0" | "no" | "off" => {
-                        println!("✅ OIDC_AUTO_REGISTER: false (loaded from env)");
-                        Some(false)
-                    }
-                    _ => {
-                        println!("⚠️  OIDC_AUTO_REGISTER: Invalid value '{}', using default (false)", val);
-                        None
-                    }
-                },
-                Err(_) => {
-                    println!("⚠️  OIDC_AUTO_REGISTER: Not set, will use default (false)");
-                    None
-                }
-            },
+            oidc_enabled: logged_switch("OIDC_ENABLED", env::var("OIDC_ENABLED")),
+            oidc_client_id: logged_optional("OIDC_CLIENT_ID", env::var("OIDC_CLIENT_ID"), false),
+            oidc_client_secret: logged_optional(
+                "OIDC_CLIENT_SECRET",
+                env::var("OIDC_CLIENT_SECRET"),
+                true,
+            ),
+            oidc_issuer_url: logged_optional("OIDC_ISSUER_URL", env::var("OIDC_ISSUER_URL"), false),
+            oidc_redirect_uri: logged_optional(
+                "OIDC_REDIRECT_URI",
+                env::var("OIDC_REDIRECT_URI"),
+                false,
+            ),
+            oidc_auto_register: logged_tristate(
+                "OIDC_AUTO_REGISTER",
+                env::var("OIDC_AUTO_REGISTER"),
+                "false",
+            ),
 
             // Authentication Configuration
-            allow_local_auth: match env::var("ALLOW_LOCAL_AUTH") {
-                Ok(val) => match val.to_lowercase().as_str() {
-                    "true" | "1" | "yes" | "on" => {
-                        println!("✅ ALLOW_LOCAL_AUTH: true (loaded from env)");
-                        Some(true)
-                    }
-                    "false" | "0" | "no" | "off" => {
-                        println!("✅ ALLOW_LOCAL_AUTH: false (loaded from env)");
-                        Some(false)
-                    }
-                    _ => {
-                        println!("⚠️  ALLOW_LOCAL_AUTH: Invalid value '{}', using default (true)", val);
-                        None
-                    }
-                },
-                Err(_) => {
-                    println!("⚠️  ALLOW_LOCAL_AUTH: Not set, will use default (true)");
-                    None
-                }
-            },
+            allow_local_auth: logged_tristate(
+                "ALLOW_LOCAL_AUTH",
+                env::var("ALLOW_LOCAL_AUTH"),
+                "true",
+            ),
 
             // S3 Configuration
-            //
-            // S3 storage can be enabled via S3_ENABLED=true or the documented
-            // STORAGE_BACKEND=s3 alias.
-            s3_enabled: {
-                if s3_storage_on {
-                    if env::var("S3_ENABLED").ok().as_deref().map(|v| v.trim().eq_ignore_ascii_case("true")).unwrap_or(false) {
-                        println!("✅ S3_ENABLED: true (loaded from env)");
-                    } else {
-                        println!("✅ STORAGE_BACKEND: s3 (loaded from env, enables S3 storage)");
-                    }
-                } else if env::var("S3_ENABLED").is_ok() {
-                    // Explicitly set but not "true" (e.g. S3_ENABLED=false) - distinct
-                    // from the var simply being unset.
-                    println!("✅ S3_ENABLED: false (loaded from env)");
-                } else {
-                    println!("⚠️  S3_ENABLED: false (using default - env var not set)");
-                }
-                s3_storage_on
-            },
-            s3_config: if s3_storage_on {
-                // Only load S3 config if S3 is enabled
-                let bucket_name = env::var("S3_BUCKET_NAME").unwrap_or_default();
-                let region = env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
-                let access_key_id = env::var("S3_ACCESS_KEY_ID").unwrap_or_default();
-                let secret_access_key = env::var("S3_SECRET_ACCESS_KEY").unwrap_or_default();
-                // S3_ENDPOINT is the documented var name; S3_ENDPOINT_URL is kept for
-                // backward compatibility and takes precedence if both are set.
-                let endpoint_url = env::var("S3_ENDPOINT_URL").ok().or_else(|| env::var("S3_ENDPOINT").ok());
-                let prefix = env::var("S3_PREFIX").ok();
-                let force_path_style = parse_force_path_style(
-                    env::var("S3_FORCE_PATH_STYLE").ok().as_deref(),
-                    env::var("S3_PATH_STYLE").ok().as_deref(),
-                );
-
-                if !bucket_name.is_empty() && !access_key_id.is_empty() && !secret_access_key.is_empty() {
-                    println!("✅ S3_BUCKET_NAME: {} (loaded from env)", bucket_name);
-                    println!("✅ S3_REGION: {} (loaded from env)", region);
-                    println!("✅ S3_ACCESS_KEY_ID: configured (loaded from env)");
-                    println!("✅ S3_SECRET_ACCESS_KEY: configured (loaded from env)");
-                    if let Some(ref endpoint) = endpoint_url {
-                        println!("✅ S3_ENDPOINT_URL: {} (loaded from env)", endpoint);
-                    }
-                    if let Some(ref pref) = prefix {
-                        println!("✅ S3_PREFIX: {} (loaded from env)", pref);
-                    }
-                    if let Some(force_path_style_value) = force_path_style {
-                        println!("✅ S3_FORCE_PATH_STYLE: {} (loaded from env)", force_path_style_value);
-                    }
-
-                    Some(S3SourceConfig {
-                        bucket_name,
-                        region,
-                        access_key_id,
-                        secret_access_key,
-                        endpoint_url,
-                        force_path_style,
-                        prefix,
-                        watch_folders: vec![], // Will be configured separately for sources
-                        file_extensions: vec![], // Will be configured separately for sources
-                        auto_sync: false, // Not used for general storage
-                        sync_interval_minutes: 0, // Not used for general storage
-                    })
-                } else {
-                    println!("❌ S3 enabled but missing required configuration (bucket_name, access_key_id, or secret_access_key)");
-                    None
-                }
-            } else {
-                None
-            },
+            s3_enabled: storage::s3_enabled_from_env(),
+            s3_config: storage::s3_config_from_env(s3_storage_on),
             public_url: env::var("PUBLIC_URL").ok().map(|url| {
                 let url = url.trim_end_matches('/').to_string();
                 println!("✅ PUBLIC_URL: {} (loaded from env)", url);
                 url
             }),
             security: SecurityConfig::from_env()?,
+            mcp: McpConfig::from_env()?,
         };
 
-        println!("\n🔍 CONFIGURATION VALIDATION:");
-        println!("{}", "=".repeat(50));
-        
-        // Validate server address format
-        if !config.server_address.contains(':') {
-            println!("❌ SERVER_ADDRESS: Invalid format '{}' - missing port", config.server_address);
-            return Err(anyhow::anyhow!(
-                "Invalid server address format: '{}'. Expected format: 'host:port' (e.g., '0.0.0.0:8000')", 
-                config.server_address
-            ));
-        }
-        
-        // Validate database URL format
-        if !config.database_url.starts_with("postgresql://") && !config.database_url.starts_with("postgres://") {
-            println!("❌ DATABASE_URL: Invalid format - must start with 'postgresql://' or 'postgres://'");
-            return Err(anyhow::anyhow!(
-                "Invalid database URL format. Must start with 'postgresql://' or 'postgres://'"
-            ));
-        }
-        
-        // Validate configuration to prevent recursion issues
-        println!("🔍 Validating directory paths for conflicts...");
-        config.validate_paths()?;
-        
-        println!("\n📊 CONFIGURATION SUMMARY:");
-        println!("{}", "=".repeat(50));
-        println!("🌐 Server will bind to: {}", config.server_address);
-        println!("📁 Upload directory: {}", config.upload_path);
-        println!("👁️  Watch directory: {}", config.watch_folder);
-        println!("👥 Per-user watch enabled: {}", config.enable_per_user_watch);
-        if config.enable_per_user_watch {
-            println!("📂 User watch base directory: {}", config.user_watch_base_dir);
-        }
-        println!("📄 Allowed file types: {:?}", config.allowed_file_types);
-        println!("🧠 OCR language: {}", config.ocr_language);
-        println!("⚙️  Concurrent OCR jobs: {}", config.concurrent_ocr_jobs);
-        println!("⏱️  OCR timeout: {}s", config.ocr_timeout_seconds);
-        println!("📏 Max file size: {}MB", config.max_file_size_mb);
-        println!("📄 Max PDF size: {}MB", config.max_pdf_size_mb);
-        println!("📑 Max Office document size: {}MB", config.max_office_document_size_mb);
-        println!("💾 Memory limit: {}MB", config.memory_limit_mb);
-        
-        // Warning checks
-        println!("\n⚠️  CONFIGURATION WARNINGS:");
-        println!("{}", "=".repeat(50));
-        if config.server_address.starts_with("0.0.0.0") {
-            println!("🌍 INFO: Server will listen on all interfaces (0.0.0.0)");
-        }
-        if config.max_file_size_mb > 100 {
-            println!("📏 INFO: Large file size limit ({}MB) may impact performance", config.max_file_size_mb);
-        }
-        if config.concurrent_ocr_jobs > 8 {
-            println!("⚙️  INFO: High OCR concurrency ({}) may use significant CPU/memory", config.concurrent_ocr_jobs);
-        }
-        
-        // OIDC validation
-        if config.oidc_enabled {
-            println!("🔐 OIDC is enabled");
-            println!("🔓 OIDC auto-registration: {}", config.oidc_auto_register.unwrap_or(false));
-            if config.oidc_client_id.is_none() {
-                println!("❌ OIDC_CLIENT_ID is required when OIDC is enabled");
-            }
-            if config.oidc_client_secret.is_none() {
-                println!("ℹ️  OIDC_CLIENT_SECRET not set: using public-client (PKCE-only) flow");
-            }
-            if config.oidc_issuer_url.is_none() {
-                println!("❌ OIDC_ISSUER_URL is required when OIDC is enabled");
-            }
-            if config.oidc_redirect_uri.is_none() {
-                println!("❌ OIDC_REDIRECT_URI is required when OIDC is enabled");
-            }
-        } else {
-            println!("🔐 OIDC is disabled");
-        }
-
-        // Authentication method validation
-        let allow_local_auth = config.allow_local_auth.unwrap_or(true);
-        println!("🔑 Local authentication (username/password): {}",
-            if allow_local_auth { "enabled" } else { "disabled" });
-
-        if !config.oidc_enabled && !allow_local_auth {
-            println!("❌ WARNING: Both OIDC and local authentication are disabled!");
-            println!("   You will not be able to log in. Enable at least one authentication method.");
-            return Err(anyhow::anyhow!(
-                "Invalid authentication configuration: Both OIDC and local auth are disabled. \
-                Enable at least one authentication method (OIDC_ENABLED=true or ALLOW_LOCAL_AUTH=true)"
-            ));
-        }
-        
-        println!("✅ Configuration validation completed successfully!\n");
-        
+        config.validate_and_report()?;
         Ok(config)
-    }
-    
-    fn validate_paths(&self) -> Result<()> {
-        use std::path::Path;
-        
-        let upload_path = Path::new(&self.upload_path);
-        let watch_path = Path::new(&self.watch_folder);
-        let user_watch_path = Path::new(&self.user_watch_base_dir);
-        
-        println!("📁 Checking upload directory: {}", self.upload_path);
-        println!("👁️  Checking watch directory: {}", self.watch_folder);
-        if self.enable_per_user_watch {
-            println!("👥 Checking user watch base directory: {}", self.user_watch_base_dir);
-        }
-        
-        // Check if paths exist and are accessible
-        if !upload_path.exists() {
-            println!("⚠️  Upload directory does not exist yet: {}", self.upload_path);
-        } else if !upload_path.is_dir() {
-            println!("❌ Upload path exists but is not a directory: {}", self.upload_path);
-            return Err(anyhow::anyhow!(
-                "Upload path '{}' exists but is not a directory", self.upload_path
-            ));
-        } else {
-            println!("✅ Upload directory exists and is accessible");
-        }
-        
-        if !watch_path.exists() {
-            println!("⚠️  Watch directory does not exist yet: {}", self.watch_folder);
-        } else if !watch_path.is_dir() {
-            println!("❌ Watch path exists but is not a directory: {}", self.watch_folder);
-            return Err(anyhow::anyhow!(
-                "Watch folder '{}' exists but is not a directory", self.watch_folder
-            ));
-        } else {
-            println!("✅ Watch directory exists and is accessible");
-        }
-        
-        if self.enable_per_user_watch {
-            if !user_watch_path.exists() {
-                println!("⚠️  User watch base directory does not exist yet: {}", self.user_watch_base_dir);
-            } else if !user_watch_path.is_dir() {
-                println!("❌ User watch base path exists but is not a directory: {}", self.user_watch_base_dir);
-                return Err(anyhow::anyhow!(
-                    "User watch base directory '{}' exists but is not a directory", self.user_watch_base_dir
-                ));
-            } else {
-                println!("✅ User watch base directory exists and is accessible");
-            }
-        }
-        
-        // Normalize paths to handle relative paths and symlinks
-        let upload_canonical = upload_path.canonicalize()
-            .unwrap_or_else(|_| {
-                println!("⚠️  Could not canonicalize upload path, using as-is");
-                upload_path.to_path_buf()
-            });
-        let watch_canonical = watch_path.canonicalize()
-            .unwrap_or_else(|_| {
-                println!("⚠️  Could not canonicalize watch path, using as-is");
-                watch_path.to_path_buf()
-            });
-        let user_watch_canonical = if self.enable_per_user_watch {
-            Some(user_watch_path.canonicalize()
-                .unwrap_or_else(|_| {
-                    println!("⚠️  Could not canonicalize user watch path, using as-is");
-                    user_watch_path.to_path_buf()
-                }))
-        } else {
-            None
-        };
-            
-        println!("📍 Canonical upload path: {}", upload_canonical.display());
-        println!("📍 Canonical watch path: {}", watch_canonical.display());
-        if let Some(ref user_watch) = user_watch_canonical {
-            println!("📍 Canonical user watch path: {}", user_watch.display());
-        }
-        
-        // Check if paths are the same
-        if upload_canonical == watch_canonical {
-            println!("❌ CRITICAL ERROR: Upload and watch directories are the same!");
-            return Err(anyhow::anyhow!(
-                "❌ Configuration Error: UPLOAD_PATH and WATCH_FOLDER cannot be the same directory.\n\
-                 This would cause infinite recursion where WebDAV files are downloaded to the upload \n\
-                 directory and then immediately reprocessed by the watcher.\n\
-                 Current config:\n\
-                 - UPLOAD_PATH: {}\n\
-                 - WATCH_FOLDER: {}\n\
-                 Please set them to different directories.",
-                self.upload_path, self.watch_folder
-            ));
-        }
-        
-        // Check if watch folder is inside upload folder
-        if watch_canonical.starts_with(&upload_canonical) {
-            println!("❌ CRITICAL ERROR: Watch folder is inside upload directory!");
-            return Err(anyhow::anyhow!(
-                "❌ Configuration Error: WATCH_FOLDER cannot be inside UPLOAD_PATH.\n\
-                 This would cause recursion where WebDAV files downloaded to uploads are \n\
-                 detected by the watcher as new files.\n\
-                 Current config:\n\
-                 - UPLOAD_PATH: {}\n\
-                 - WATCH_FOLDER: {}\n\
-                 Please move the watch folder outside the upload directory.",
-                self.upload_path, self.watch_folder
-            ));
-        }
-        
-        // Check if upload folder is inside watch folder
-        if upload_canonical.starts_with(&watch_canonical) {
-            println!("❌ CRITICAL ERROR: Upload directory is inside watch folder!");
-            return Err(anyhow::anyhow!(
-                "❌ Configuration Error: UPLOAD_PATH cannot be inside WATCH_FOLDER.\n\
-                 This would cause recursion where files from the watch folder are \n\
-                 copied to uploads (inside the watch folder) and reprocessed.\n\
-                 Current config:\n\
-                 - UPLOAD_PATH: {}\n\
-                 - WATCH_FOLDER: {}\n\
-                 Please move the upload directory outside the watch folder.",
-                self.upload_path, self.watch_folder
-            ));
-        }
-        
-        // Additional validation for user watch directory if enabled
-        if let Some(ref user_watch) = user_watch_canonical {
-            // Check if user watch is same as upload or watch
-            if user_watch == &upload_canonical {
-                println!("❌ CRITICAL ERROR: User watch base directory is same as upload directory!");
-                return Err(anyhow::anyhow!(
-                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be the same as UPLOAD_PATH.\n\
-                     Current config:\n\
-                     - UPLOAD_PATH: {}\n\
-                     - USER_WATCH_BASE_DIR: {}\n\
-                     Please set them to different directories.",
-                    self.upload_path, self.user_watch_base_dir
-                ));
-            }
-            
-            if user_watch == &watch_canonical {
-                println!("❌ CRITICAL ERROR: User watch base directory is same as global watch directory!");
-                return Err(anyhow::anyhow!(
-                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be the same as WATCH_FOLDER.\n\
-                     Current config:\n\
-                     - WATCH_FOLDER: {}\n\
-                     - USER_WATCH_BASE_DIR: {}\n\
-                     Please set them to different directories.",
-                    self.watch_folder, self.user_watch_base_dir
-                ));
-            }
-            
-            // Check if user watch is inside upload or vice versa
-            if user_watch.starts_with(&upload_canonical) {
-                println!("❌ CRITICAL ERROR: User watch base directory is inside upload directory!");
-                return Err(anyhow::anyhow!(
-                    "❌ Configuration Error: USER_WATCH_BASE_DIR cannot be inside UPLOAD_PATH.\n\
-                     This would cause recursion issues.\n\
-                     Current config:\n\
-                     - UPLOAD_PATH: {}\n\
-                     - USER_WATCH_BASE_DIR: {}\n\
-                     Please move the user watch directory outside the upload directory.",
-                    self.upload_path, self.user_watch_base_dir
-                ));
-            }
-            
-            if upload_canonical.starts_with(user_watch) {
-                println!("❌ CRITICAL ERROR: Upload directory is inside user watch base directory!");
-                return Err(anyhow::anyhow!(
-                    "❌ Configuration Error: UPLOAD_PATH cannot be inside USER_WATCH_BASE_DIR.\n\
-                     This would cause recursion issues.\n\
-                     Current config:\n\
-                     - UPLOAD_PATH: {}\n\
-                     - USER_WATCH_BASE_DIR: {}\n\
-                     Please move the upload directory outside the user watch directory.",
-                    self.upload_path, self.user_watch_base_dir
-                ));
-            }
-        }
-        
-        println!("✅ Directory path validation passed - no conflicts detected");
-        Ok(())
     }
 }
 

@@ -809,16 +809,8 @@
       "ocrConfiguration": {
         "title": "Configuration OCR",
         "description": "Configurez les langues pour l'extraction de texte OCR. Plusieurs langues aident avec les documents multilingues.",
-        "autoDetectLanguageCombination": "Détection automatique des combinaisons de langues",
-        "autoDetectLanguageCombinationHelper": "Suggérer automatiquement des combinaisons de langues optimales basées sur l'analyse du contenu du document",
-        "concurrentOcrJobs": "Tâches OCR simultanées",
-        "concurrentOcrJobsHelper": "Nombre de tâches OCR pouvant s'exécuter simultanément",
         "ocrTimeout": "Délai d'expiration OCR (secondes)",
-        "ocrTimeoutHelper": "Temps maximum pour le traitement OCR par fichier",
-        "cpuPriority": "Priorité CPU",
-        "cpuPriorityLow": "Faible",
-        "cpuPriorityNormal": "Normale",
-        "cpuPriorityHigh": "Élevée"
+        "ocrTimeoutHelper": "Durée maximale de l'OCR pour chacun de vos documents, 10 minutes (600 secondes) au plus"
       },
       "ocrControls": {
         "title": "Contrôles de traitement OCR (Administrateur uniquement)",
@@ -834,9 +826,7 @@
       "fileProcessing": {
         "title": "Traitement des fichiers",
         "maxFileSize": "Taille maximale du fichier (Mo)",
-        "maxFileSizeHelper": "Taille maximale de fichier autorisée pour les chargements",
-        "memoryLimit": "Limite de mémoire (Mo)",
-        "memoryLimitHelper": "Limite de mémoire par tâche OCR",
+        "maxFileSizeHelper": "Le plus gros fichier que vous pouvez charger. Laissez vide pour utiliser la limite du serveur, qui plafonne aussi toute valeur définie ici.",
         "autoRotateImages": "Rotation automatique des images",
         "autoRotateImagesHelper": "Détecter et corriger automatiquement l'orientation de l'image",
         "enableImagePreprocessing": "Activer le prétraitement d'image",
@@ -847,24 +837,13 @@
       },
       "searchConfiguration": {
         "title": "Configuration de recherche",
-        "resultsPerPage": "Résultats par page",
-        "snippetLength": "Longueur de l'extrait",
-        "snippetLengthHelper": "Caractères à afficher dans les aperçus des résultats de recherche",
         "fuzzySearchThreshold": "Seuil de recherche floue",
-        "fuzzySearchThresholdHelper": "Tolérance pour les fautes d'orthographe (0.0-1.0)"
-      },
-      "storageManagement": {
-        "title": "Gestion du stockage",
-        "retentionDays": "Jours de rétention",
-        "retentionDaysHelper": "Supprimer automatiquement les documents après X jours (laisser vide pour désactiver)",
-        "enableAutoCleanup": "Activer le nettoyage automatique",
-        "enableAutoCleanupHelper": "Supprimer automatiquement les fichiers orphelins et nettoyer le stockage",
-        "enableCompression": "Activer la compression",
-        "enableCompressionHelper": "Compresser les documents stockés pour économiser de l'espace disque"
+        "fuzzySearchThresholdHelper": "Degré de ressemblance exigé entre un mot et la requête en recherche orthographe proche : 1.0 n'accepte que l'orthographe exacte, une valeur plus basse tolère plus de fautes (0.5 par défaut)"
       }
     },
     "ocrSettings": {
       "title": "Paramètres de traitement d'image OCR",
+      "preprocessingOnlyNote": "Ces réglages ne s'appliquent que si le prétraitement des images est activé (Général → Traitement des fichiers).",
       "enhancementControls": {
         "title": "Contrôles d'amélioration",
         "skipEnhancement": "Ignorer toute amélioration d'image (Utiliser uniquement les images originales)",
@@ -967,12 +946,7 @@
         "title": "Configuration du traitement OCR",
         "concurrentOcrJobs": "Tâches OCR simultanées",
         "ocrTimeout": "Délai d'expiration OCR",
-        "memoryLimit": "Limite de mémoire",
-        "ocrLanguage": "Langue OCR",
-        "cpuPriority": "Priorité CPU",
-        "backgroundOcr": "OCR en arrière-plan",
-        "enabled": "Activé",
-        "disabled": "Désactivé"
+        "ocrLanguage": "Langue OCR"
       },
       "serverInformation": {
         "title": "Informations sur le serveur",
@@ -1043,6 +1017,7 @@
       "copied": "Copiée",
       "copiedStatus": "Copiée dans le presse-papiers",
       "copy": "Copier la clé API",
+      "keyLabel": "Clé API",
       "copyFailed": "Échec de la copie. Sélectionnez et copiez la clé manuellement.",
       "create": "Créer une clé API",
       "createFailed": "Impossible de créer la clé API.",
@@ -1080,7 +1055,23 @@
       "revoked": "Révoquée",
       "saved": "Je l'ai enregistrée",
       "status": "Statut",
-      "usage": "Utilisation :"
+      "usage": "Utilisation :",
+      "mcp": {
+        "title": "Connecter un assistant IA",
+        "intro": "Readur parle le Model Context Protocol : des assistants comme Claude peuvent rechercher, lire, importer et étiqueter vos documents. Créez une clé d'API ci-dessus, puis ajoutez ce serveur à votre client. L'assistant peut faire tout ce que la clé autorise.",
+        "endpoint": "Point de terminaison MCP",
+        "clients": "Configuration du client",
+        "claudeCode": "Claude Code",
+        "json": "Autres clients",
+        "command": "Commande Claude Code",
+        "config": "Configuration MCP",
+        "jsonHelp": "Pour les clients qui se connectent à des serveurs distants en HTTP et lisent un fichier de configuration mcpServers.",
+        "copyNamed": "Copier {{name}}",
+        "revealHelp": "Ajoutez Readur à un client MCP avec cette clé :",
+        "claudeDesktop": "Claude Desktop",
+        "desktopConfig": "Configuration de Claude Desktop",
+        "desktopHelp": "Ajoutez-le à claude_desktop_config.json, puis redémarrez Claude Desktop. La connexion passe par le pont mcp-remote, qui nécessite Node.js."
+      }
     },
     "appearance": {
       "dark": "Sombre",
@@ -1153,22 +1144,19 @@
     },
     "summary": {
       "advanced": "fenêtre {{w}} · morphologie {{m}} · égalisation {{h}} · images {{s}}",
-      "days_one": "{{count}} jour",
-      "days_other": "{{count}} jours",
       "defaultLanguage": "par défaut",
       "enhancement": "luminosité {{b}} · contraste {{c}}× · bruit {{n}} · netteté {{s}}",
       "enhancementSkipped": "ignorée · images originales uniquement",
-      "fileProcessing": "{{size}} Mo max · {{memory}} Mo de mémoire · rotation {{rotate}}",
-      "forever": "indéfiniment",
+      "fileProcessing": "{{size}} · rotation {{rotate}}",
+      "maxSize": "{{size}} Mo max",
       "imageSize": "{{w}} × {{h}} px · agrandissement {{u}}×",
-      "languages": "{{languages}} · détection auto {{auto}}",
       "off": "non",
       "on": "oui",
       "paused": "en pause",
-      "processing": "{{jobs}} tâches · {{timeout}} s · priorité {{priority}}",
+      "processing": "{{timeout}} s par document",
       "running": "en cours",
-      "search": "{{perPage}} par page · {{snippet}} caractères · approx. {{fuzzy}}",
-      "storage": "conserver {{retention}} · nettoyage {{cleanup}} · compression {{compression}}",
+      "serverLimit": "limite du serveur",
+      "search": "approx. {{fuzzy}}",
       "thresholds": "luminosité {{b}} · contraste {{c}} · bruit {{n}} · netteté {{s}}"
     },
     "users": {
@@ -2071,6 +2059,7 @@
     "toast": {
       "downloadFailed": "Impossible de télécharger le fichier",
       "retryQueued": "OCR remis en file d’attente",
+      "retryAlreadyQueued": "Déjà dans la file OCR",
       "retryFailed": "Impossible de remettre l’OCR en file d’attente",
       "deleted": "Document supprimé",
       "deleteFailed": "Impossible de supprimer le document",
@@ -2366,15 +2355,15 @@
       "boolean": "Opérateurs",
       "booleanHint": "Utilisez & (et), | (ou), ! (sauf)",
       "exampleAnd": "Les deux mots",
-      "exampleFuzzy": "Tolère les fautes de frappe",
+      "exampleFuzzy": "Trouve « invoice » malgré la faute",
       "exampleNot": "Exclure un mot",
       "exampleOr": "L’un ou l’autre mot",
       "examplePhrase": "Une expression exacte",
       "exampleWord": "Documents qui mentionnent un mot",
       "examples": "Essayer",
       "fuzzy": "Orthographe proche",
-      "fuzzyHint": "Trouve aussi les correspondances proches et les coquilles",
-      "intro": "La recherche porte sur les noms de fichiers et le texte lu dans chaque document.",
+      "fuzzyHint": "Mots dont l'orthographe est proche de la vôtre, selon le seuil de vos paramètres",
+      "intro": "La recherche porte sur le texte lu dans chaque document, pas sur les noms de fichiers ni les étiquettes.",
       "match": "Correspondance",
       "open": "Aide à la recherche",
       "phrase": "Expression exacte",
@@ -2411,7 +2400,7 @@
       "selectAll_one": "Sélectionner le seul résultat",
       "selectAll_other": "Sélectionner les {{formatted}} résultats",
       "selectPage": "Tout sélectionner sur cette page",
-      "startHint": "Readur cherche dans les noms de fichiers et dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
+      "startHint": "Readur cherche dans chaque mot lu dans vos numérisations et PDF. Essayez un nom, un lieu ou un sujet, comme « épaule » ou « facture 2024 ».",
       "startTitle": "Retrouvez tout dans vos documents",
       "title": "Recherche avancée"
     },
@@ -2557,6 +2546,7 @@
       "retryPartial": "Certains documents n’ont pas été mis en file d’attente. Vérifiez-les et réessayez.",
       "retryQueued": "{{queued}} documents sur {{matched}} en file d’attente",
       "retryStarted": "Nouvelle tentative OCR en file d’attente",
+      "retryAlreadyQueued": "Déjà dans la file OCR",
       "retryWait": "{{name}} · environ {{minutes}} min",
       "size": "Taille",
       "source": "Source",
