@@ -143,7 +143,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:19
         env:
           POSTGRES_USER: readur
           POSTGRES_PASSWORD: readur
@@ -269,7 +269,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:19
         env:
           POSTGRES_USER: readur
           POSTGRES_PASSWORD: readur
