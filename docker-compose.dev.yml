@@ -1,7 +1,7 @@
 # Docker Compose configuration for development with hot-reloading
 services:
   postgres:
-    image: postgres:18
+    image: postgres:19
     environment:
       POSTGRES_USER: readur
       POSTGRES_PASSWORD: readur
