@@ -41,7 +41,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
 futures = "0.3"
-notify = "8"
+notify = "9"
 mime_guess = "2"
 infer = "0.22"
 tesseract = { version = "0.15", optional = true }
