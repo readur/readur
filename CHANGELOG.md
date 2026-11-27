@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.1.5](https://github.com/readur/readur/compare/v3.1.4...v3.1.5) (2026-11-27)
+
+
+### Miscellaneous Chores
+
+* **github-action:** Update action github/codeql-action (v4.39.3 ➔ v4.39.4) ([#1116](https://github.com/readur/readur/issues/1116)) ([6c98264](https://github.com/readur/readur/commit/6c98264febacbd23735cfaade6ab21687955f029))
+* **github-action:** Update action int128/diff-action (v2.43.0 ➔ v2.44.0) ([#1123](https://github.com/readur/readur/issues/1123)) ([ff2c859](https://github.com/readur/readur/commit/ff2c8592969e972baa212f1b579d020c8f8b687e))
+* **github-action:** Update action taiki-e/install-action (v2.87.32 ➔ v2.90.6) ([#1112](https://github.com/readur/readur/issues/1112)) ([58f535b](https://github.com/readur/readur/commit/58f535b93d2e5edd122f95a29213bfcb804dd496))
+* **github-action:** Update github-actions ([#1121](https://github.com/readur/readur/issues/1121)) ([286f859](https://github.com/readur/readur/commit/286f85987eed0e4c29e3cb66010b710bf1e64606))
+* **mise:** Update tool aqua:zizmorcore/zizmor (1.32.0 ➔ 1.33.1) ([#1124](https://github.com/readur/readur/issues/1124)) ([f04cb56](https://github.com/readur/readur/commit/f04cb565960c97cc051ec09609525c4f69dfbd4c))
+* **npm:** Update dependency i18next-http-backend (4.1.0 ➔ 4.1.1) ([#1122](https://github.com/readur/readur/issues/1122)) ([c984535](https://github.com/readur/readur/commit/c984535019c0040e84b01925c99175592843efa1))
+* **npm:** Update dependency lucide-react (1.76.0 ➔ 1.77.0) ([#1118](https://github.com/readur/readur/issues/1118)) ([2a837d9](https://github.com/readur/readur/commit/2a837d93ded43d1dde8f36adf8b46af14c4d43bb))
+* **npm:** Update dependency lucide-react (1.77.0 ➔ 1.78.0) ([#1128](https://github.com/readur/readur/issues/1128)) ([0b5a359](https://github.com/readur/readur/commit/0b5a3591fd9058dca80200cafe0b5374fa3615d2))
+* **npm:** Update dependency lucide-react (1.78.0 ➔ 1.79.0) ([#1130](https://github.com/readur/readur/issues/1130)) ([14a3f96](https://github.com/readur/readur/commit/14a3f9674fc94f96c5e744c00c53d0fa678e9487))
+* **rust:** Update crate anyhow (1.0.104 ➔ 1.0.105) ([#1126](https://github.com/readur/readur/issues/1126)) ([86c90ad](https://github.com/readur/readur/commit/86c90ad805c803a891e177de3ffe1f5f4a84baf1))
+* **rust:** Update crate clap (4.6.8 ➔ 4.6.9) ([#1114](https://github.com/readur/readur/issues/1114)) ([7b5fbb2](https://github.com/readur/readur/commit/7b5fbb255da0e6af2c6e9ebc814c7634017176dd))
+* **rust:** Update crate hyper (1.12.0 ➔ 1.13.0) ([#1129](https://github.com/readur/readur/issues/1129)) ([762e1be](https://github.com/readur/readur/commit/762e1be3b5359178b7664a381cefb14ea0882020))
+* **rust:** Update crate rust_xlsxwriter (0.103.0 ➔ 0.104.0) ([#1125](https://github.com/readur/readur/issues/1125)) ([508a660](https://github.com/readur/readur/commit/508a6606ac1750a046af564c6f2b2fa3dffb3317))
+* **rust:** Update crate schemars (1.2.2 ➔ 1.2.3) ([#1111](https://github.com/readur/readur/issues/1111)) ([2d952e9](https://github.com/readur/readur/commit/2d952e9e49601dea4971da4d0f0ec32c2e3bc937))
+* **rust:** Update crate url (2.5.8 ➔ 2.5.9) ([#1119](https://github.com/readur/readur/issues/1119)) ([106a4b8](https://github.com/readur/readur/commit/106a4b887ec5ff57f48da10b0eeab9c752b6fd43))
+* **rust:** Update crate walkdir (2.5.0 ➔ 2.5.1) ([#1120](https://github.com/readur/readur/issues/1120)) ([43647f0](https://github.com/readur/readur/commit/43647f046760d12f0e2916548bb83ec26b5b709e))
+* **rust:** Update crate zip (9.7.3 ➔ 9.8.0) ([#1115](https://github.com/readur/readur/issues/1115)) ([9abe15b](https://github.com/readur/readur/commit/9abe15bf4f7358c472793ee0dac761999313ace4))
+* **rust:** Update crate zip (9.8.0 ➔ 9.8.1) ([#1117](https://github.com/readur/readur/issues/1117)) ([b8095fb](https://github.com/readur/readur/commit/b8095fb5ee8f62fb1d6aa2100c42943564e4ecb8))
+* **rust:** Update crate zip (9.8.1 ➔ 9.8.2) ([#1127](https://github.com/readur/readur/issues/1127)) ([24bf0b1](https://github.com/readur/readur/commit/24bf0b17c321a47fc8daea3d0b02ba7534219cbc))
+
 ## [3.1.4](https://github.com/readur/readur/compare/v3.1.3...v3.1.4) (2026-11-22)
 
 
