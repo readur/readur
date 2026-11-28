@@ -11,7 +11,7 @@ description: >-
 annotations:
   category: Document Management
 version: 0.3.0
-appVersion: 3.1.5
+appVersion: 3.1.6
 kubeVersion: '>= 1.19'
 dependencies:
   - name: common
