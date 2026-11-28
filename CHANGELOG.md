@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.1.6](https://github.com/readur/readur/compare/v3.1.5...v3.1.6) (2026-11-28)
+
+
+### Miscellaneous Chores
+
+* **github-action:** Update action github/codeql-action (v4.39.4 ➔ v4.39.5) ([#1131](https://github.com/readur/readur/issues/1131)) ([862829e](https://github.com/readur/readur/commit/862829efc0a444f2e77452ba4f6915ec368ce020))
+* **mise:** Update tool lefthook (2.2.2 ➔ 2.2.3) ([#1132](https://github.com/readur/readur/issues/1132)) ([c384feb](https://github.com/readur/readur/commit/c384feb16adf20b63fa44a3feb484384578ff4f5))
+* **npm:** Update dependency @types/node (26.6.6 ➔ 26.6.7) ([#1136](https://github.com/readur/readur/issues/1136)) ([e0ab9f0](https://github.com/readur/readur/commit/e0ab9f0a43c10cd9efc2337dd5f642a872b36222))
+* **npm:** Update dependency @types/node (26.6.7 ➔ 26.6.10) ([#1139](https://github.com/readur/readur/issues/1139)) ([77ff956](https://github.com/readur/readur/commit/77ff95677066c8f10f921b2c55e930b425ed34a9))
+* **npm:** Update dependency i18next-http-backend (4.1.1 ➔ 4.1.2) ([#1140](https://github.com/readur/readur/issues/1140)) ([0accc1e](https://github.com/readur/readur/commit/0accc1e70649f181915408291e0fbd5d183c1da1))
+* **npm:** Update dependency react-router-dom (7.18.6 ➔ 7.18.7) ([#1134](https://github.com/readur/readur/issues/1134)) ([efcb2ba](https://github.com/readur/readur/commit/efcb2baf27357e9e4d28756d2f260b21a3fe6895))
+* **rust:** Update crate aws-smithy-runtime-api (1.22.0 ➔ 1.22.1) ([#1135](https://github.com/readur/readur/issues/1135)) ([60f7a67](https://github.com/readur/readur/commit/60f7a67d8d0202a02df4c6b3823277e751916277))
+* **rust:** Update crate clap (4.6.9 ➔ 4.6.10) ([#1138](https://github.com/readur/readur/issues/1138)) ([4547984](https://github.com/readur/readur/commit/45479843e50364cc2bd40b5b2db9ea8100728fdf))
+
 ## [3.1.5](https://github.com/readur/readur/compare/v3.1.4...v3.1.5) (2026-11-27)
 
 
